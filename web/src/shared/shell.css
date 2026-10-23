@@ -1,0 +1,397 @@
+/* AntCDP shell: quiet warm surfaces, compact navigation and readable Chinese. */
+.sidebar {
+  border-right: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+.brand {
+  color: var(--text-primary);
+  font-size: 23px;
+  letter-spacing: -0.6px;
+  font-weight: 650;
+}
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  color: var(--brand);
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+.brand-mark img,
+.install-page .brand img {
+  filter: none;
+}
+.brand-mark img {
+  display: none;
+}
+.brand-mark {
+  background: var(--brand);
+  mask: url('/logo.svg') center / contain no-repeat;
+}
+.brand-sub {
+  margin-left: 56px;
+  letter-spacing: 0.7px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.nav-item,
+.nav-label,
+.account-username,
+.sidebar .account-more {
+  color: var(--text-muted);
+}
+.nav-item {
+  color: var(--text-secondary);
+}
+.nav-item:hover,
+.sidebar-account:hover {
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+.nav-item.active {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.nav-item.active::before {
+  display: none;
+}
+.account-name {
+  color: var(--text-primary);
+}
+.sidebar-account {
+  gap: 7px;
+}
+.topbar {
+  background: var(--canvas);
+  backdrop-filter: none;
+}
+.breadcrumb a {
+  color: var(--text-muted);
+}
+.breadcrumb .current {
+  color: var(--text-primary);
+}
+.page-heading h1 {
+  font-weight: 550;
+  letter-spacing: 0;
+}
+.panel,
+.stat,
+.overview-shortcut {
+  box-shadow: none;
+}
+.btn.primary,
+.el-button--primary {
+  color: var(--on-accent);
+  box-shadow: none;
+}
+.el-button--danger,
+.btn.danger-btn {
+  color: var(--on-danger);
+}
+.el-button--primary.is-plain,
+.el-button--danger.is-plain {
+  color: var(--el-button-text-color);
+}
+.el-button--primary.is-disabled {
+  color: var(--on-accent);
+}
+.el-button--danger.is-disabled {
+  color: var(--on-danger);
+}
+.overview-shortcut:hover {
+  border-color: var(--border-control);
+  background: var(--surface-subtle);
+  transform: none;
+}
+.stat-icon,
+.shortcut-icon,
+.activity-icon {
+  color: var(--text-secondary);
+  background: var(--surface-subtle);
+}
+.auth-page,
+.install-page {
+  background: var(--canvas);
+}
+.auth-visual {
+  background: var(--sidebar-surface);
+  border-right: 1px solid var(--border);
+}
+.auth-visual::before,
+.auth-visual::after,
+.install-steps-side::before,
+.install-steps-side::after {
+  display: none;
+}
+.auth-message h1 {
+  color: var(--text-primary);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.55;
+}
+.auth-message p,
+.auth-visual .eyebrow,
+.auth-visual-footer {
+  color: var(--text-muted);
+}
+.auth-form h1 {
+  font-weight: 550;
+}
+.auth-main {
+  background: var(--canvas);
+}
+.auth-legal {
+  max-width: 360px;
+  line-height: 1.8;
+}
+.install-sidebar {
+  background: var(--sidebar-surface);
+  color: var(--text-primary);
+  border-right: 1px solid var(--border);
+}
+.install-label,
+.step-copy small,
+.install-sidebar .eyebrow {
+  color: var(--text-muted);
+}
+.install-step {
+  color: var(--text-secondary);
+}
+.install-sidebar h2,
+.install-step.active {
+  color: var(--text-primary);
+}
+.step-number {
+  background: var(--sidebar-surface);
+  color: var(--text-muted);
+  border-color: var(--border-control);
+}
+.install-step.active .step-number {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+  box-shadow: none;
+}
+.install-step.done .step-number {
+  color: var(--success);
+  border-color: var(--success-border);
+  background: var(--success-soft);
+}
+.install-step:not(:last-child)::before {
+  border-color: var(--border-control);
+}
+.install-header .brand {
+  color: var(--text-primary);
+}
+.install-card {
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 48px var(--shadow-color);
+}
+.workspace-welcome {
+  background: var(--surface-subtle);
+  border-color: var(--border);
+}
+.workspace-welcome::after {
+  display: none;
+}
+.workspace-welcome h2 {
+  font-weight: 500;
+}
+.workspace-welcome-icon,
+.welcome-icon {
+  background: var(--brand);
+  mask: url('/logo.svg') center / 65% no-repeat;
+  border: 0;
+  box-shadow: none;
+}
+.workspace-welcome-icon img,
+.welcome-icon img {
+  opacity: 0;
+}
+.workspace-welcome-icon {
+  opacity: 0.7;
+}
+.appearance-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--canvas);
+  flex-shrink: 0;
+}
+.appearance-select:hover,
+.appearance-select:focus-within {
+  border-color: var(--border-control);
+}
+.appearance-select .ui-icon {
+  width: 17px;
+  height: 17px;
+}
+.appearance-select select {
+  font-size: 13px;
+  color: var(--text-secondary);
+  background: var(--canvas);
+  border: 0;
+  min-height: 28px;
+  cursor: pointer;
+  max-width: 105px;
+}
+.public-appearance {
+  position: absolute;
+  top: 18px;
+  right: 22px;
+  z-index: 20;
+}
+.auth-main {
+  padding-top: 80px;
+}
+.install-page {
+  padding-top: 0;
+}
+.el-select__popper,
+.el-picker__popper,
+.el-message-box,
+.el-dropdown-menu,
+.el-dialog {
+  color: var(--text-primary);
+}
+.el-dialog {
+  --el-dialog-bg-color: var(--surface-input);
+}
+.input,
+.search-box {
+  background: var(--surface-input);
+}
+.dropdown {
+  background: var(--surface-overlay);
+}
+.el-message-box {
+  --el-messagebox-content-color: var(--text-secondary);
+}
+.el-table {
+  --el-table-header-bg-color: var(--surface-subtle);
+  --el-table-row-hover-bg-color: var(--surface-subtle);
+  --el-table-border-color: var(--border);
+}
+.table-scroll th {
+  background: var(--surface-subtle);
+}
+.table-scroll tbody tr:hover {
+  background: var(--surface-subtle);
+}
+.input:disabled,
+.input[readonly] {
+  background: var(--surface-disabled);
+}
+.settings-save,
+.install-form-footer,
+.modal-footer,
+.app-dialog .form-footer {
+  background: var(--surface-subtle);
+}
+button:focus-visible,
+a:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.el-popper.is-light,
+.el-popper.is-light > .el-popper__arrow::before {
+  background: var(--surface-overlay);
+  border-color: var(--border);
+}
+@media (max-width: 850px) {
+  .auth-visual {
+    border-right: 0;
+  }
+  .auth-main {
+    padding-top: 85px;
+  }
+  .topbar-right {
+    gap: 8px;
+  }
+}
+@media (max-width: 600px) {
+  .el-picker__popper:has(.el-date-range-picker) {
+    position: fixed !important;
+    top: 12px !important;
+    left: 12px !important;
+    right: 12px !important;
+    transform: none !important;
+    max-width: calc(100vw - 24px);
+  }
+  .el-picker__popper:has(.el-date-range-picker) .el-popper__arrow {
+    display: none;
+  }
+  .el-date-range-picker {
+    width: 100%;
+    max-width: 100%;
+  }
+  .el-date-range-picker .el-picker-panel__body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-height: calc(100dvh - 100px);
+    overflow-y: auto;
+  }
+  .el-date-range-picker .el-date-range-picker__content {
+    width: 100%;
+    float: none;
+    padding: 12px;
+  }
+  .el-date-range-picker .el-date-range-picker__time-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+  .el-date-range-picker__time-header .el-icon {
+    display: none;
+  }
+  .el-date-range-picker__time-header > .el-date-range-picker__time-picker-wrap {
+    padding: 0;
+  }
+  .appearance-select {
+    padding-inline: 4px;
+    gap: 3px;
+  }
+  .appearance-select select {
+    max-width: 93px;
+    min-height: 34px;
+  }
+  .public-appearance {
+    top: 12px;
+    right: 14px;
+  }
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 72px;
+    padding-block: 10px;
+    gap: 8px;
+  }
+  .topbar-leading {
+    gap: 8px;
+  }
+  .topbar-right {
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .breadcrumb {
+    gap: 6px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

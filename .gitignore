@@ -1,0 +1,9 @@
+.vscode/
+.idea/
+.agents/
+
+/dist/
+/web/dist/
+/web/node_modules/
+/data/
+*.test.exe
