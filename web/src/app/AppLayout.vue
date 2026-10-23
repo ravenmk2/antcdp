@@ -5,17 +5,22 @@ import {
   ElDropdown,
   ElDropdownMenu,
   ElDropdownItem,
+  type DropdownInstance,
 } from "element-plus";
 import UiIcon from "../shared/UiIcon.vue";
 import BrandLogo from "../shared/BrandLogo.vue";
 import UserAvatar from "../shared/UserAvatar.vue";
-import AppearanceSelect from "../shared/AppearanceSelect.vue";
+import AppearanceMenuItems from "../shared/AppearanceMenuItems.vue";
+import { useAppearance } from "../shared/appearance";
 import {
   useIdentity,
 } from "../features/identity/store";
 import { useLogout } from "../features/identity/logout";
 const identity = useIdentity();
 const { logout, loggingOut } = useLogout();
+const { setAppearance } = useAppearance();
+const desktopAccountMenu = ref<DropdownInstance>();
+const mobileAccountMenu = ref<DropdownInstance>();
 const route = useRoute();
 const router = useRouter();
 const consoleMode = computed(() => route.path.startsWith("/admin"));
@@ -42,7 +47,11 @@ watch(
   },
 );
 async function userCommand(command: string | number | object) {
-  if (command === "logout") {
+  if (command === "light" || command === "dark" || command === "system") {
+    setAppearance(command);
+    desktopAccountMenu.value?.handleClose();
+    mobileAccountMenu.value?.handleClose();
+  } else if (command === "logout") {
     await logout();
   } else if (typeof command === "string") void router.push(command);
 }
@@ -136,6 +145,8 @@ async function userCommand(command: string | number | object) {
       </nav>
       <div v-if="identity.user" class="sidebar-bottom">
         <ElDropdown
+          ref="desktopAccountMenu"
+          :persistent="false"
           class="sidebar-account-dropdown"
           trigger="click"
           placement="top-start"
@@ -174,6 +185,7 @@ async function userCommand(command: string | number | object) {
                 command="/admin"
                 ><UiIcon name="shield" />控制台</ElDropdownItem
               >
+              <AppearanceMenuItems @select="userCommand" />
               <ElDropdownItem command="logout" divided :disabled="loggingOut"
                 ><UiIcon name="logout" />退出登录</ElDropdownItem
               >
@@ -214,11 +226,12 @@ async function userCommand(command: string | number | object) {
           </nav>
         </div>
         <div class="topbar-right">
-          <AppearanceSelect />
           <nav v-if="consoleMode" class="area-navigation" aria-label="返回导航">
             <RouterLink to="/home"><UiIcon name="back" />返回工作区</RouterLink>
           </nav>
           <ElDropdown
+            ref="mobileAccountMenu"
+            :persistent="false"
             v-if="identity.user"
             class="mobile-account"
             trigger="click"
@@ -228,22 +241,26 @@ async function userCommand(command: string | number | object) {
             <button class="user-chip" aria-label="打开账号菜单">
               <UserAvatar :user="identity.user" />
             </button>
-            <template #dropdown
-              ><ElDropdownMenu
-                ><ElDropdownItem command="/account"
-                  ><UiIcon name="user" />个人设置</ElDropdownItem
-                ><ElDropdownItem
+            <template #dropdown>
+              <ElDropdownMenu>
+                <ElDropdownItem command="/account">
+                  <UiIcon name="user" />个人设置
+                </ElDropdownItem>
+                <ElDropdownItem
                   v-if="
                     identity.isAdmin &&
                     !identity.session?.require_password_change
                   "
                   command="/admin"
-                  ><UiIcon name="shield" />控制台</ElDropdownItem
-                ><ElDropdownItem command="logout" divided :disabled="loggingOut"
-                  ><UiIcon name="logout" />退出登录</ElDropdownItem
-                ></ElDropdownMenu
-              ></template
-            >
+                >
+                  <UiIcon name="shield" />控制台
+                </ElDropdownItem>
+                <AppearanceMenuItems @select="userCommand" />
+                <ElDropdownItem command="logout" divided :disabled="loggingOut">
+                  <UiIcon name="logout" />退出登录
+                </ElDropdownItem>
+              </ElDropdownMenu>
+            </template>
           </ElDropdown>
         </div>
       </header>

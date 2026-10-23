@@ -15,6 +15,8 @@ function apply() {
   root.classList.toggle("dark", dark);
   root.dataset.appearance = preference.value;
   root.style.colorScheme = dark ? "dark" : "light";
+  const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+  if (favicon) favicon.href = dark ? "/logo-inverse.svg" : "/logo.svg";
 }
 
 system.addEventListener("change", apply);

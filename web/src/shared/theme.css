@@ -129,6 +129,12 @@ a:focus-visible {
 .el-button + .el-button {
   margin-left: 0;
 }
+.el-message-box__btns {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .el-button--primary {
   box-shadow: 0 3px 5px var(--shadow-color);
 }
