@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount, reactive, ref, watch } from "vue";
-import { ElButton, ElDatePicker } from "element-plus";
+import { ElDatePicker } from "element-plus";
 import AppLayout from "../../app/AppLayout.vue";
 import UiIcon from "../../shared/UiIcon.vue";
+import PageSizeSelect from "../../shared/PageSizeSelect.vue";
+import { usePageSize } from "../../shared/pageSize";
+import RefreshButton from "../../shared/RefreshButton.vue";
 import { request } from "../../shared/api";
 import { errorMessage, useIdentity } from "../identity/store";
 import AuditDetail from "./AuditDetail.vue";
 import { actionLabels, actionIcon, type AuditEvent } from "./audit";
 import "./audit.css";
 const identity = useIdentity();
+const pageSize = usePageSize("audit");
+watch(pageSize, search);
 const filters = reactive({ q: "", action: "" });
 const dates = ref<[Date, Date] | null>(null);
 const events = ref<AuditEvent[]>([]),
@@ -32,7 +37,7 @@ async function load() {
     loading.value = false;
     return;
   }
-  const params = new URLSearchParams({ limit: "20" });
+  const params = new URLSearchParams({ limit: String(pageSize.value) });
   if (filters.q.trim()) params.set("q", filters.q.trim());
   if (filters.action) params.set("action_prefix", filters.action);
   if (cursors.value[page.value])
@@ -92,17 +97,6 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <AppLayout>
-    <div class="page-heading">
-      <div>
-        <h1>审计日志</h1>
-        <p>关键操作有迹可循，了解系统最近发生的变化。</p>
-      </div>
-      <div class="actions">
-        <ElButton :loading="loading" @click="search"
-          ><UiIcon name="refresh" />刷新</ElButton
-        >
-      </div>
-    </div>
     <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
     <section class="panel" aria-label="审计日志列表" :aria-busy="loading">
       <div class="table-toolbar audit-toolbar">
@@ -126,23 +120,21 @@ onBeforeUnmount(() => {
           <option value="settings.">系统设置</option>
           <option value="auth.">登录与退出</option>
           <option value="installation.">系统安装</option></select
-        ><span class="toolbar-hint">点击记录查看变更详情</span>
-      </div>
-      <div class="audit-time-filter">
-        <span>时间范围</span
-        ><ElDatePicker
-          v-model="dates"
-          type="datetimerange"
-          start-placeholder="开始时间"
-          end-placeholder="结束时间"
-          range-separator="至"
-          :editable="false"
-          :clearable="true"
-          @change="search"
-        /><small
-          >筛选使用浏览器时区；列表按
-          {{ identity.settings.timezone }} 显示。</small
         >
+        <div class="audit-time-filter">
+          <span>时间范围</span
+          ><ElDatePicker
+            v-model="dates"
+            type="datetimerange"
+            start-placeholder="开始时间"
+            end-placeholder="结束时间"
+            range-separator="至"
+            :editable="false"
+            :clearable="true"
+            @change="search"
+          />
+        </div>
+        <RefreshButton :loading="loading" @click="search">刷新</RefreshButton>
       </div>
       <div v-if="events.length" class="table-scroll">
         <table>
@@ -191,7 +183,10 @@ onBeforeUnmount(() => {
         <p v-if="!loading">试试其他事件类型、时间范围或关键词。</p>
       </div>
       <div class="table-footer">
-        <span>本页 {{ events.length }} 条记录 · 每页最多 20 条</span>
+        <div class="list-page-summary">
+          <span>本页 {{ events.length }} 条记录</span>
+          <PageSizeSelect v-model="pageSize" :disabled="loading" />
+        </div>
         <div class="pagination">
           <button
             type="button"
@@ -214,11 +209,6 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </section>
-    <div class="info-note">
-      <UiIcon name="lock" /><span
-        >审计记录仅供查看，密码与主密钥等敏感内容不会写入记录。</span
-      >
-    </div>
     <AuditDetail v-model="detailOpen" :id="selected" />
   </AppLayout>
 </template>

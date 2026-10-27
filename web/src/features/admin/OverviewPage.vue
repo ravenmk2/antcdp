@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
-import { ElButton } from "element-plus";
+import { computed, onMounted, ref } from "vue";
 import AppLayout from "../../app/AppLayout.vue";
 import { api } from "../../shared/api";
 import { useIdentity, errorMessage } from "../identity/store";
+import OverviewMetric from "./OverviewMetric.vue";
+import OverviewSection from "./OverviewSection.vue";
 import AuditDetail from "./AuditDetail.vue";
 import { actionLabels, actionIcon } from "./audit";
 interface Event {
@@ -24,9 +24,24 @@ interface Overview {
   recent_events: Event[];
 }
 import UiIcon from "../../shared/UiIcon.vue";
+import RefreshButton from "../../shared/RefreshButton.vue";
 const identity = useIdentity();
-const router = useRouter();
 const data = ref<Overview>();
+const updatedAt = ref<Date>();
+const updateLabel = computed(() => updatedAt.value
+  ? new Intl.DateTimeFormat("zh-CN", { timeZone: identity.settings.timezone, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(updatedAt.value)
+  : "");
+const metrics = [
+  { key: "users_total", label: "全部用户", hint: "查看用户列表", icon: "users", to: "/admin/users" },
+  { key: "users_active", label: "正常账号", hint: "查看正常账号", icon: "user", to: "/admin/users?status=active" },
+  { key: "users_disabled", label: "已禁用", hint: "查看禁用账号", icon: "block", to: "/admin/users?status=disabled" },
+  { key: "admins_total", label: "管理员", hint: "包含创始人", icon: "shield" },
+] as const;
+const shortcuts = [
+  { label: "添加用户", description: "创建账号并设置身份", icon: "plus", to: "/admin/users?create=1" },
+  { label: "注册与会话", description: "调整加入方式与会话时长", icon: "key", to: "/admin/settings?tab=access" },
+  { label: "系统信息", description: "查看版本与运行配置", icon: "device", to: "/admin/settings?tab=system" },
+] as const;
 const error = ref("");
 const loading = ref(true);
 const detailOpen = ref(false);
@@ -36,10 +51,12 @@ function showEvent(id: string) {
   detailOpen.value = true;
 }
 async function load() {
+  if (loading.value && data.value) return;
   loading.value = true;
   error.value = "";
   try {
     data.value = await api<Overview>("/admin/overview");
+    updatedAt.value = new Date();
   } catch (err) {
     error.value = errorMessage(err);
   } finally {
@@ -50,155 +67,131 @@ onMounted(load);
 </script>
 <template>
   <AppLayout>
-    <div class="page-heading">
-      <div>
-        <h1>系统概览</h1>
-        <p>管理系统用户、访问策略与关键操作。</p>
-      </div>
-      <div class="actions">
-        <ElButton :loading="loading" @click="load"
-          ><UiIcon name="refresh" />刷新</ElButton
-        ><ElButton type="primary" @click="router.push('/admin/users?create=1')"
-          ><UiIcon name="plus" />添加用户</ElButton
-        >
-      </div>
-    </div>
-    <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
-    <template v-if="data">
-      <div class="overview-site">
-        <span class="overview-site-icon"><UiIcon name="shield" /></span>
-        <div>
-          <strong>{{ identity.settings.site_name }}</strong>
+    <div class="console-overview" :aria-busy="loading">
+      <div class="overview-topline">
+        <strong class="overview-system-name">{{ identity.settings.site_name }}</strong>
+        <div class="overview-update">
+          <span v-if="updatedAt" class="update-time">{{ error ? '上次成功更新' : '更新于' }} {{ updateLabel }}</span>
+          <RefreshButton :loading="loading" @click="load" />
         </div>
-        <span class="overview-site-label">控制台</span>
       </div>
-      <div class="stats-grid overview-metrics">
-        <RouterLink class="stat overview-stat" to="/admin/users"
-          ><span
-            ><span class="stat-label">全部用户</span
-            ><span class="stat-value">{{ data.users_total }}</span
-            ><span class="stat-description">查看全部系统成员</span></span
-          ><span class="stat-icon"><UiIcon name="users" /></span
-        ></RouterLink>
-        <RouterLink class="stat overview-stat" to="/admin/users?status=active"
-          ><span
-            ><span class="stat-label">正常账号</span
-            ><span class="stat-value">{{ data.users_active }}</span
-            ><span class="stat-description"
-              >{{ data.users_disabled }} 个账号已禁用</span
-            ></span
-          ><span class="stat-icon green"><UiIcon name="user" /></span
-        ></RouterLink>
-        <RouterLink class="stat overview-stat" to="/admin/users"
-          ><span
-            ><span class="stat-label">管理员</span
-            ><span class="stat-value">{{ data.admins_total }}</span
-            ><span class="stat-description">包含 1 位创始人</span></span
-          ><span class="stat-icon orange"><UiIcon name="shield" /></span
-        ></RouterLink>
-        <RouterLink class="stat overview-stat" to="/admin/settings?tab=access"
-          ><span
-            ><span class="stat-label">自主注册</span
-            ><span class="stat-value">{{
-              data.registration_enabled ? "已开放" : "已关闭"
-            }}</span
-            ><span class="stat-description">查看注册与会话设置</span></span
-          ><span class="stat-icon gray"><UiIcon name="key" /></span
-        ></RouterLink>
-      </div>
-      <div class="overview-shortcuts">
-        <RouterLink class="overview-shortcut" to="/admin/users"
-          ><span class="shortcut-icon"><UiIcon name="users" /></span
-          ><span
-            ><strong>用户管理</strong><small>成员、身份与账号状态</small></span
-          ><UiIcon name="chevron"
-        /></RouterLink>
-        <RouterLink class="overview-shortcut" to="/admin/settings"
-          ><span class="shortcut-icon"><UiIcon name="settings" /></span
-          ><span
-            ><strong>系统设置</strong><small>系统信息与访问策略</small></span
-          ><UiIcon name="chevron"
-        /></RouterLink>
-        <RouterLink class="overview-shortcut" to="/admin/audit"
-          ><span class="shortcut-icon"><UiIcon name="log" /></span
-          ><span
-            ><strong>审计日志</strong><small>关键操作与变更记录</small></span
-          ><UiIcon name="chevron"
-        /></RouterLink>
-      </div>
-      <div class="overview-grid">
-        <section class="panel overview-activity">
-          <div class="overview-panel-heading">
-            <div>
-              <h2>最近操作</h2>
-              <p>系统近期的关键变更</p>
-            </div>
-            <RouterLink class="text-link" to="/admin/audit"
-              >查看全部<UiIcon name="arrow"
-            /></RouterLink>
-          </div>
-          <div v-if="!data.recent_events.length" class="empty">
-            <h3>还没有操作记录</h3>
-            <p>系统的关键操作会显示在这里。</p>
-          </div>
-          <button
-            v-for="event in data.recent_events"
-            :key="event.id"
-            type="button"
-            class="activity-item activity-button"
-            @click="showEvent(event.id)"
-          >
-            <span class="activity-icon"
-              ><UiIcon :name="actionIcon(event.action)" /></span
-            ><span class="activity-copy"
-              ><strong>{{ actionLabels[event.action] ?? event.action }}</strong
-              ><span
-                >{{ event.actor.display_name
-                }}<span class="activity-dot">·</span
-                >{{ event.target.label }}</span
-              ><time :datetime="event.occurred_at">{{
-                identity.date(event.occurred_at)
-              }}</time></span
-            >
-          </button>
+      <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
+      <template v-if="data">
+        <section class="overview-metric-grid" aria-label="账号概况">
+          <OverviewMetric v-for="metric in metrics" :key="metric.key"
+            :label="metric.label" :value="data[metric.key]" :hint="metric.hint" :icon="metric.icon"
+            :to="'to' in metric ? metric.to : undefined" />
         </section>
-        <div class="overview-side">
-          <section class="panel overview-access">
-            <div class="overview-panel-heading">
-              <div>
-                <h2>访问策略</h2>
-                <p>当前生效的账号设置</p>
-              </div>
-              <UiIcon name="lock" />
+        <div class="overview-content-grid">
+          <OverviewSection title="最近操作" class="overview-recent">
+            <template #actions><RouterLink class="overview-text-link" to="/admin/audit">查看全部<UiIcon name="arrow" /></RouterLink></template>
+            <div v-if="!data.recent_events.length" class="overview-empty" role="status">
+              <UiIcon name="log" />
+              <strong>暂无操作记录</strong>
+              <p>用户、设置等关键操作将在这里显示。</p>
             </div>
-            <dl class="overview-status">
-              <div>
-                <dt>用户注册</dt>
-                <dd>
-                  {{
-                    data.registration_enabled ? "允许自主注册" : "由管理员添加"
-                  }}
-                </dd>
-              </div>
-              <div>
-                <dt>会话闲置有效期</dt>
-                <dd>{{ data.session_ttl_days }} 天</dd>
-              </div>
-              <div>
-                <dt>创始人账号</dt>
-                <dd>始终受保护</dd>
-              </div>
-            </dl>
-            <RouterLink
-              class="overview-panel-link"
-              to="/admin/settings?tab=access"
-              >管理注册与会话<UiIcon name="arrow"
-            /></RouterLink>
-          </section>
+            <ul v-else class="overview-event-list">
+              <li v-for="event in data.recent_events" :key="event.id">
+                <button type="button" class="overview-event" @click="showEvent(event.id)">
+                  <span class="overview-event-icon"><UiIcon :name="actionIcon(event.action)" /></span>
+                  <span class="overview-event-copy">
+                    <strong>{{ actionLabels[event.action] ?? event.action }}</strong>
+                    <span>{{ event.actor.display_name }} · {{ event.target.label }}</span>
+                  </span>
+                  <time :datetime="event.occurred_at">{{ identity.date(event.occurred_at) }}</time>
+                  <UiIcon class="overview-event-arrow" name="chevron" />
+                </button>
+              </li>
+            </ul>
+          </OverviewSection>
+          <div class="overview-supporting">
+            <OverviewSection title="常用操作">
+              <nav class="overview-action-list" aria-label="常用操作">
+                <RouterLink v-for="shortcut in shortcuts" :key="shortcut.to" :to="shortcut.to" class="overview-action">
+                  <span class="overview-action-icon"><UiIcon :name="shortcut.icon" /></span>
+                  <span><strong>{{ shortcut.label }}</strong><small>{{ shortcut.description }}</small></span>
+                  <UiIcon name="chevron" />
+                </RouterLink>
+              </nav>
+            </OverviewSection>
+            <OverviewSection title="访问策略">
+              <template #actions><RouterLink class="overview-text-link" to="/admin/settings?tab=access">管理<UiIcon name="arrow" /></RouterLink></template>
+              <dl class="overview-policy-list">
+                <div><dt>自主注册</dt><dd><span class="policy-state" :class="{ open: data.registration_enabled }">{{ data.registration_enabled ? '已开放' : '已关闭' }}</span></dd></div>
+                <div><dt>会话闲置有效期</dt><dd>{{ data.session_ttl_days }} 天</dd></div>
+                <div><dt>系统时区</dt><dd>{{ identity.settings.timezone }}</dd></div>
+              </dl>
+            </OverviewSection>
+          </div>
         </div>
-      </div>
-    </template>
-    <div v-else-if="loading" class="panel empty">正在加载概览…</div>
+      </template>
+      <div v-else-if="loading" class="overview-loading" role="status">正在加载概览…</div>
+    </div>
     <AuditDetail v-model="detailOpen" :id="detailID" />
   </AppLayout>
 </template>
+
+<style scoped>
+.console-overview { display: grid; gap: 20px; }
+.overview-topline { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.overview-system-name { min-width: 0; max-width: 100%; overflow-wrap: anywhere; font-size: 18px; font-weight: 600; color: var(--text-primary); }
+.overview-update { display: flex; align-items: center; gap: 12px; margin-left: auto; }
+.update-time { color: var(--text-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.overview-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.overview-content-grid { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(290px, 1fr); align-items: start; gap: 20px; }
+.overview-supporting { display: grid; gap: 20px; min-width: 0; }
+.overview-text-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.overview-text-link:hover { color: var(--text-primary); text-decoration: underline; }
+.overview-text-link .ui-icon { width: 16px; height: 16px; }
+.overview-event-list { list-style: none; padding: 0; margin: 0; }
+.overview-event-list li + li { border-top: 1px solid var(--border); }
+.overview-event { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto 16px; align-items: center; gap: 12px; width: 100%; padding: 18px 20px; border: 0; background: transparent; text-align: left; color: var(--text-secondary); cursor: pointer; }
+.overview-event:hover, .overview-action:hover { background: var(--surface-subtle); }
+.overview-event-icon, .overview-action-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; background: var(--surface-subtle); color: var(--text-secondary); }
+.overview-event-copy { display: grid; gap: 4px; min-width: 0; }
+.overview-event-copy strong { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.overview-event-copy > span { font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
+.overview-event time { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+.overview-event-arrow { width: 16px; height: 16px; color: var(--text-muted); }
+.overview-action-list { display: grid; padding: 4px 0; }
+.overview-action { display: grid; grid-template-columns: 34px minmax(0, 1fr) 16px; align-items: center; gap: 12px; padding: 14px 20px; }
+.overview-action > span:nth-child(2) { display: grid; gap: 3px; min-width: 0; }
+.overview-action strong { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.overview-action small { font-size: 13px; color: var(--text-muted); overflow-wrap: anywhere; }
+.overview-action > .ui-icon { width: 16px; height: 16px; color: var(--text-muted); }
+.overview-policy-list { margin: 0; padding: 4px 20px; }
+.overview-policy-list > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; }
+.overview-policy-list > div + div { border-top: 1px solid var(--border); }
+.overview-policy-list dt { font-size: 13px; color: var(--text-muted); }
+.overview-policy-list dd { margin: 0; font-size: 14px; text-align: right; overflow-wrap: anywhere; color: var(--text-primary); }
+.policy-state { display: inline-flex; align-items: center; gap: 6px; }
+.policy-state::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+.policy-state.open::before { background: var(--success); }
+.overview-empty, .overview-loading { display: grid; place-items: center; align-content: center; gap: 12px; padding: 48px 20px; color: var(--text-muted); text-align: center; }
+.overview-empty { min-height: 320px; }
+.overview-empty > .ui-icon { width: 30px; height: 30px; }
+.overview-empty strong { font-size: 15px; font-weight: 500; color: var(--text-secondary); }
+.overview-empty p { margin: 0; font-size: 13px; }
+@media (max-width: 1200px) {
+  .overview-event { grid-template-columns: 34px minmax(0, 1fr) 16px; }
+  .overview-event-icon { grid-row: 1 / 3; }
+  .overview-event time { grid-column: 2; }
+  .overview-event-arrow { grid-column: 3; grid-row: 1 / 3; }
+}
+@media (max-width: 1050px) {
+  .overview-content-grid { grid-template-columns: minmax(0, 1fr); }
+  .overview-supporting { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .overview-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 600px) {
+  .console-overview { gap: 16px; }
+  .overview-metric-grid { gap: 12px; }
+  .overview-supporting { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .overview-topline { align-items: flex-start; }
+  .overview-update { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  .overview-event { padding: 16px; gap: 8px 10px; }
+  .overview-action { padding: 14px 16px; }
+  .overview-policy-list { padding: 4px 16px; }
+  .overview-empty { min-height: 220px; }
+}
+</style>

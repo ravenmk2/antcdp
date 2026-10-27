@@ -71,7 +71,6 @@ async function userCommand(command: string | number | object) {
     >
       <div class="sidebar-heading">
         <BrandLogo />
-        <div class="brand-sub">AI NATIVE COLLABORATION</div>
       </div>
       <nav
         class="sidebar-main"
@@ -264,14 +263,8 @@ async function userCommand(command: string | number | object) {
           </ElDropdown>
         </div>
       </header>
-      <main class="content">
+      <main class="content" :aria-label="String(route.meta.title || '首页')">
         <slot />
-        <footer class="page-footer">
-          <span>© 2026 AntCDP · AI 原生团队协作开发平台</span
-          ><span class="flex"
-            ><UiIcon name="shield" />让协作有序，让开发专注</span
-          >
-        </footer>
       </main>
     </div>
   </div>

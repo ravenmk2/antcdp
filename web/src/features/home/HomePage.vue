@@ -6,12 +6,6 @@ const identity = useIdentity();
 </script>
 <template>
   <AppLayout>
-    <div class="page-heading">
-      <div>
-        <h1>首页</h1>
-        <p>{{ identity.user?.display_name }}，欢迎回来。</p>
-      </div>
-    </div>
     <section class="panel workspace-welcome">
       <div class="workspace-welcome-copy">
         <span class="eyebrow">YOUR WORKSPACE</span>

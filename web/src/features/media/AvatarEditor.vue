@@ -8,7 +8,6 @@ import "./avatar.css";
 const props = defineProps<{
   avatar?: { id: string; url: string } | null;
   disabled?: boolean;
-  founder?: boolean;
   label?: string;
 }>();
 const value = defineModel<string | null>();
@@ -288,7 +287,7 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <div class="avatar-editor">
-    <span class="avatar large" :class="{ founder }"
+    <span class="avatar large" :class="{ 'has-image': !!preview }"
       ><img v-if="preview" :src="preview" alt="头像预览" /><UiIcon
         v-else
         name="user"

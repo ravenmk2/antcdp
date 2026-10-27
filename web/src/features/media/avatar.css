@@ -180,8 +180,7 @@
   width: 64px;
   height: 64px;
   border-radius: 17px;
-  background: var(--surface-subtle);
-  box-shadow: 0 0 0 1px var(--shadow-strong);
+  background: transparent;
 }
 .crop-preview-item.compact canvas {
   width: 36px;

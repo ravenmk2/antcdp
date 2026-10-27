@@ -63,9 +63,6 @@ onUnmounted(() => {
       <div class="auth-message">
         <div class="eyebrow">YOUR NEXT CHAPTER STARTS HERE</div>
         <h1>让每一次协作，<br />都向前一步。</h1>
-        <p>
-          连接人与工具，让开发更有序。<br />你的开发协作空间，从 AntCDP 开始。
-        </p>
       </div>
       <div class="auth-visual-footer">
         <span class="tiny-line" />AI NATIVE. HUMAN CONNECTED.
@@ -166,20 +163,13 @@ onUnmounted(() => {
               >{{ registering ? "创建账号" : "登录" }}<UiIcon name="arrow"
             /></ElButton>
           </ElForm>
-          <div class="auth-bottom">
+          <div v-if="registering || identity.settings.registration_enabled" class="auth-bottom">
             {{ registering ? "已有账号？" : "还没有账号？"
             }}<RouterLink :to="registering ? '/login' : '/register'">{{
-              registering
-                ? "返回登录"
-                : identity.settings.registration_enabled
-                  ? "创建账号"
-                  : "注册暂未开放"
+              registering ? "返回登录" : "创建账号"
             }}</RouterLink>
           </div>
         </template>
-        <div class="auth-legal">
-          AI Native Team Collaboration &amp; Development Platform
-        </div>
       </div>
     </main>
   </div>

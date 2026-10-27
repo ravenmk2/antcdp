@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref } from "vue";
+import { nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import {
   ElButton,
   ElDialog,
@@ -14,7 +14,7 @@ import {
 } from "element-plus";
 import AppLayout from "../../app/AppLayout.vue";
 import UiIcon from "../../shared/UiIcon.vue";
-import { api, request } from "../../shared/api";
+import { api, ApiError, request } from "../../shared/api";
 import {
   useIdentity,
   identityLabel,
@@ -23,6 +23,8 @@ import {
   type User,
 } from "../identity/store";
 import { useRoute } from "vue-router";
+import PageSizeSelect from "../../shared/PageSizeSelect.vue";
+import { usePageSize } from "../../shared/pageSize";
 import UserAvatar from "../../shared/UserAvatar.vue";
 import AvatarEditor from "../media/AvatarEditor.vue";
 const route = useRoute();
@@ -42,6 +44,37 @@ const loading = ref(false);
 const busy = ref(false);
 const error = ref("");
 const dialogError = ref("");
+const managedForm = ref<InstanceType<typeof ElForm>>();
+const fieldErrors = reactive({ username: "", display_name: "", password: "", confirm: "", role: "" });
+function clearErrors() {
+  dialogError.value = "";
+  Object.keys(fieldErrors).forEach(key => fieldErrors[key as keyof typeof fieldErrors] = "");
+}
+async function focusError() {
+  await nextTick();
+  const input = managedForm.value?.$el.querySelector(".is-error input") as HTMLInputElement | null;
+  input?.focus({ preventScroll: true });
+  input?.scrollIntoView({ block: "center", behavior: "instant" });
+}
+function showSaveError(err: unknown) {
+  if (err instanceof ApiError && err.code === "USERNAME_TAKEN") {
+    fieldErrors.username = errorMessage(err);
+  } else if (err instanceof ApiError && err.code === "VALIDATION_FAILED") {
+    const supported = new Set(["too_short", "too_many_bytes", "invalid_length", "invalid_format", "invalid_value", "null_not_allowed"]);
+    let unmatched = err.details.length === 0;
+    for (const detail of err.details) {
+      const field = detail.field === "new_password" ? "password" : detail.field;
+      if (field && Object.hasOwn(fieldErrors, field) && supported.has(detail.code)) {
+        const key = field as keyof typeof fieldErrors;
+        const message = errorMessage(new ApiError(err.code, err.message, [detail], err.requestId));
+        fieldErrors[key] = [fieldErrors[key], message].filter(Boolean).join("；");
+      } else unmatched = true;
+    }
+    if (unmatched) dialogError.value = errorMessage(err);
+  } else dialogError.value = errorMessage(err);
+  void focusError();
+}
+const pageSize = usePageSize("users");
 const filters = reactive({
   q: "",
   status: String(route.query.status ?? ""),
@@ -49,7 +82,11 @@ const filters = reactive({
     ? String(route.query.identity)
     : "",
   page: 1,
-  page_size: 20,
+  page_size: pageSize.value,
+});
+watch(pageSize, value => {
+  filters.page_size = value;
+  search();
 });
 const dialog = ref(false);
 const mode = ref<"create" | "edit" | "password">("create");
@@ -113,7 +150,7 @@ function createUser() {
     password: "",
     confirm: "",
   });
-  dialogError.value = "";
+  clearErrors();
   dialog.value = true;
 }
 async function edit(user: User, password = false) {
@@ -131,7 +168,7 @@ async function edit(user: User, password = false) {
       password: "",
       confirm: "",
     });
-    dialogError.value = "";
+    clearErrors();
     dialog.value = true;
   } catch (err) {
     ElMessage.error(errorMessage(err));
@@ -139,12 +176,15 @@ async function edit(user: User, password = false) {
 }
 async function save() {
   if (busy.value || avatarProcessing.value) return;
-  dialogError.value = "";
+  clearErrors();
   if (mode.value !== "edit") {
-    dialogError.value = validatePassword(form.password);
-    if (!dialogError.value && form.password !== form.confirm)
-      dialogError.value = "两次输入的密码不一致。";
-    if (dialogError.value) return;
+    fieldErrors.password = validatePassword(form.password);
+    if (form.password !== form.confirm)
+      fieldErrors.confirm = "两次输入的密码不一致。";
+    if (fieldErrors.password || fieldErrors.confirm) {
+      void focusError();
+      return;
+    }
   }
   busy.value = true;
   try {
@@ -190,7 +230,7 @@ async function save() {
     await identity.refresh();
     await load();
   } catch (err) {
-    dialogError.value = errorMessage(err);
+    showSaveError(err);
   } finally {
     busy.value = false;
   }
@@ -259,16 +299,6 @@ onUnmounted(clearPassword);
 </script>
 <template>
   <AppLayout>
-    <div class="page-heading">
-      <div>
-        <h1>用户管理</h1>
-      </div>
-      <div class="actions">
-        <ElButton type="primary" @click="createUser"
-          ><UiIcon name="plus" />添加用户</ElButton
-        >
-      </div>
-    </div>
     <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
     <section class="panel" aria-label="用户列表" :aria-busy="loading">
       <div class="tabs">
@@ -294,7 +324,7 @@ onUnmounted(clearPassword);
           }}<span class="tab-count">{{ status.count ?? "…" }}</span>
         </button>
       </div>
-      <div class="table-toolbar">
+      <div class="table-toolbar users-toolbar">
         <label class="search-box"
           ><UiIcon name="search" /><input
             v-model="filters.q"
@@ -313,8 +343,8 @@ onUnmounted(clearPassword);
           <option value="founder">创始人</option>
           <option value="admin">管理员</option>
           <option value="user">普通用户</option></select
-        ><ElButton :loading="loading" @click="search">查询</ElButton
-        >
+        ><ElButton :loading="loading" @click="search">查询</ElButton>
+        <ElButton class="users-create" type="primary" @click="createUser"><UiIcon name="plus" />添加用户</ElButton>
       </div>
       <div v-if="users.length" class="table-scroll">
         <table>
@@ -410,7 +440,10 @@ onUnmounted(clearPassword);
         <p v-if="!loading">试试其他关键词，或清除当前筛选条件。</p>
       </div>
       <div class="table-footer">
-        <span>共 {{ total }} 位用户 · 每页 {{ filters.page_size }} 位</span>
+        <div class="list-page-summary">
+          <span>共 {{ total }} 位用户</span>
+          <PageSizeSelect v-model="pageSize" :disabled="loading" />
+        </div>
         <div class="pagination">
           <button
             class="page-button"
@@ -441,7 +474,7 @@ onUnmounted(clearPassword);
     </section>
     <ElDialog
       v-model="dialog"
-      class="app-dialog"
+      class="app-dialog user-dialog"
       align-center
       :title="
         mode === 'create'
@@ -450,7 +483,7 @@ onUnmounted(clearPassword);
             ? '重置密码'
             : '编辑用户'
       "
-      width="560px"
+      width="640px"
       :close-on-click-modal="!busy && !avatarProcessing"
       :close-on-press-escape="!busy && !avatarProcessing"
       :show-close="!busy && !avatarProcessing"
@@ -463,38 +496,41 @@ onUnmounted(clearPassword);
       <div v-if="dialogError" class="error-banner" role="alert">
         {{ dialogError }}
       </div>
-      <ElForm label-position="top" :disabled="busy" @submit.prevent="save">
+      <ElForm ref="managedForm" id="managed-user-form" label-position="top" :disabled="busy" @submit.prevent="save">
         <template v-if="mode !== 'password'">
           <AvatarEditor
             ref="avatarEditor"
             v-model="avatarChange"
             :avatar="target?.avatar"
-            :founder="target?.is_founder"
             :disabled="busy"
             @processing="avatarProcessing = $event"
           />
           <div class="form-row spaced">
-            <ElFormItem label="显示名称" required
+            <ElFormItem label="显示名称" :error="fieldErrors.display_name" required
               ><ElInput
                 v-model="form.display_name"
+                @input="fieldErrors.display_name = ''"
                 name="managed-display-name"
                 autocomplete="off"
                 maxlength="30"
                 placeholder="姓名或常用称呼" /></ElFormItem
-            ><ElFormItem label="用户名" required
+            ><ElFormItem label="用户名" :error="fieldErrors.username" required
               ><ElInput
                 v-model="form.username"
+                @input="fieldErrors.username = ''"
                 name="managed-username"
                 autocomplete="off"
                 autocapitalize="none"
                 :spellcheck="false"
                 placeholder="设置用于登录的用户名"
-            /></ElFormItem>
+                aria-describedby="managed-username-help"
+            />
+              <p id="managed-username-help" class="managed-field-help">
+                使用 3–30 位小写字母、数字、下划线或短横线，以字母或数字开头。
+              </p>
+            </ElFormItem>
           </div>
-          <p class="field-help">
-            用户名使用 3–30 位小写字母、数字、下划线或短横线，以字母或数字开头。
-          </p>
-          <ElFormItem v-if="mode === 'create'" label="系统身份" required
+          <ElFormItem v-if="mode === 'create'" label="系统身份" :error="fieldErrors.role" required
             ><div class="role-choices">
               <label class="role-choice"
                 ><input
@@ -520,40 +556,107 @@ onUnmounted(clearPassword);
             </div></ElFormItem
           >
         </template>
-        <template v-if="mode !== 'edit'"
-          ><ElFormItem label="密码" required
-            ><ElInput
-              v-model="form.password"
-              name="managed-new-password"
-              type="password"
-              show-password
-              autocomplete="new-password"
-          /></ElFormItem>
-          <p class="field-help">至少 8 个字符，最多 72 个 UTF-8 字节。</p>
-          <ElFormItem label="确认密码" required
-            ><ElInput
-              v-model="form.confirm"
-              name="managed-confirm-password"
-              type="password"
-              show-password
-              autocomplete="new-password"
-          /></ElFormItem>
+        <template v-if="mode !== 'edit'">
+          <div class="form-row spaced">
+            <ElFormItem label="密码" :error="fieldErrors.password" required
+              ><ElInput
+                v-model="form.password"
+                @input="fieldErrors.password = ''"
+                name="managed-new-password"
+                aria-describedby="managed-password-help"
+                type="password"
+                show-password
+                autocomplete="new-password"
+            />
+              <p id="managed-password-help" class="managed-field-help">至少 8 个字符，最多 72 个 UTF-8 字节。</p>
+            </ElFormItem>
+            <ElFormItem label="确认密码" :error="fieldErrors.confirm" required
+              ><ElInput
+                v-model="form.confirm"
+                @input="fieldErrors.confirm = ''"
+                name="managed-confirm-password"
+                type="password"
+                show-password
+                autocomplete="new-password"
+            /></ElFormItem>
+          </div>
           <div class="info-note">
             用户下次登录必须修改密码。请通过合适的方式告知用户初始密码。
           </div></template
         >
-        <footer class="form-footer">
+      </ElForm>
+      <template #footer>
+        <div class="user-dialog-actions">
           <ElButton :disabled="busy || avatarProcessing" @click="dialog = false"
             >取消</ElButton
           ><ElButton
             type="primary"
             native-type="submit"
+            form="managed-user-form"
             :loading="busy"
             :disabled="busy || avatarProcessing"
             >{{ mode === "create" ? "创建用户" : "保存" }}</ElButton
           >
-        </footer>
-      </ElForm>
+        </div>
+      </template>
     </ElDialog>
   </AppLayout>
 </template>
+
+<style>
+.user-dialog .el-form-item__error {
+  position: static;
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.6;
+  padding-top: 6px;
+}
+.user-dialog .managed-field-help {
+  width: 100%;
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.user-dialog .el-dialog__header,
+.user-dialog .el-dialog__footer {
+  flex-shrink: 0;
+}
+.user-dialog .el-dialog__body {
+  min-height: 0;
+  padding: 20px 24px;
+}
+.user-dialog .el-dialog__footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-subtle);
+}
+.user-dialog .user-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.user-dialog .user-dialog-actions .el-button + .el-button {
+  margin-left: 0;
+}
+.user-dialog .avatar-editor {
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+}
+.user-dialog .form-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.user-dialog .role-choices {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 600px) {
+  .user-dialog .form-row,
+  .user-dialog .role-choices {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>

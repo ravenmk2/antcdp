@@ -115,12 +115,6 @@ onUnmounted(() => {
 </script>
 <template>
   <AppLayout>
-    <div class="page-heading">
-      <div>
-        <h1>个人设置</h1>
-        <p>管理你的个人资料与账号安全。</p>
-      </div>
-    </div>
     <div v-if="identity.user" class="profile-layout">
       <aside class="panel profile-summary">
         <UserAvatar :user="identity.user" large />
@@ -170,7 +164,6 @@ onUnmounted(() => {
               ref="avatarEditor"
               v-model="avatarChange"
               :avatar="identity.user.avatar"
-              :founder="identity.user.is_founder"
               :disabled="busy"
               label="个人头像"
               @processing="avatarProcessing = $event"
@@ -257,11 +250,6 @@ onUnmounted(() => {
           </div>
         </div>
       </section>
-    </div>
-    <div v-if="identity.user?.is_founder" class="info-note">
-      <UiIcon name="shield" /><span
-        >创始人身份始终保留。你的账号无法被删除、禁用或降级，资料与密码仅允许你本人修改。</span
-      >
     </div>
     <ElDialog
       v-model="passwordDialog"

@@ -269,11 +269,7 @@ small {
   font-weight: 650;
   font-size: 13px;
   color: var(--accent);
-  background: var(--accent-soft);
-}
-.avatar.founder {
-  color: var(--on-accent);
-  background: var(--accent);
+  background: var(--surface-subtle);
 }
 .avatar.green {
   color: var(--success);
@@ -2117,6 +2113,11 @@ textarea::placeholder {
 }
 .avatar {
   overflow: hidden;
+  border: 0;
+  box-shadow: none;
+}
+.avatar.has-image {
+  background: transparent;
 }
 .avatar img {
   width: 100%;
@@ -4380,4 +4381,33 @@ textarea::placeholder {
   .app-dialog {
     max-height: calc(100dvh - 26px);
   }
+}
+
+/* Pages use the existing navigation title and a compact action row. */
+.page-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+.page-actions .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.page-actions .el-button + .el-button {
+  margin-left: 0;
+}
+
+.list-page-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.table-footer { flex-wrap: wrap; }
+.users-toolbar .users-create { margin-left: auto; }
+@media (max-width: 600px) {
+  .list-page-summary { justify-content: space-between; width: 100%; }
+  .table-footer .pagination { margin-left: auto; }
+  .users-toolbar .users-create { margin-left: 0; }
 }

@@ -115,17 +115,6 @@ onMounted(load);
 </script>
 <template>
   <AppLayout>
-    <div class="page-heading">
-      <div>
-        <h1>系统设置</h1>
-        <p>配置本系统的基本信息、注册策略与登录会话。</p>
-      </div>
-      <div class="actions">
-        <ElButton :loading="loading" :disabled="busy" @click="load"
-          ><UiIcon name="refresh" />重新加载</ElButton
-        >
-      </div>
-    </div>
     <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
     <div class="settings-layout">
       <nav class="settings-nav" aria-label="系统设置分类">
