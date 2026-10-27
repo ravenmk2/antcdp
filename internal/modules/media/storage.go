@@ -27,8 +27,8 @@ import (
 const MaxInput = 2 << 20
 const MaxOutput = 512 << 10
 
-var keyPattern = regexp.MustCompile(`^avatars/[0-9a-f]{2}/[0-9a-f]{32}\.png$`)
-var temporaryPattern = regexp.MustCompile(`^avatars/[0-9a-f]{2}/\.tmp-[0-9a-f]{32}$`)
+var keyPattern = regexp.MustCompile(`^(avatars|icons)/[0-9a-f]{2}/[0-9a-f]{32}\.png$`)
+var temporaryPattern = regexp.MustCompile(`^(avatars|icons)/[0-9a-f]{2}/\.tmp-[0-9a-f]{32}$`)
 
 type File struct {
 	Key  string
@@ -47,14 +47,17 @@ type Store interface {
 }
 type Storage struct {
 	dir    string
+	prefix string
 	slots  chan struct{}
 	mu     sync.Mutex
 	active map[string]bool
 }
 
 func New(dataDir string) *Storage {
-	return &Storage{dir: filepath.Join(dataDir, "media"), slots: make(chan struct{}, 2), active: map[string]bool{}}
+	return &Storage{dir: filepath.Join(dataDir, "media"), prefix: "avatars", slots: make(chan struct{}, 2), active: map[string]bool{}}
 }
+func NewIcons(dataDir string) *Storage  { s := New(dataDir); s.prefix = "icons"; return s }
+func (s *Storage) owns(key string) bool { return strings.HasPrefix(key, s.prefix+"/") }
 func Normalize(input []byte) ([]byte, error) {
 	if len(input) > MaxInput {
 		return nil, httpx.E(413, "PAYLOAD_TOO_LARGE", "头像图片不能超过 2 MB")
@@ -118,7 +121,7 @@ func (s *Storage) Write(ctx context.Context, input []byte) (File, error) {
 	}
 	defer func() { _ = root.Close() }()
 	token := cryptox.ID()
-	key := "avatars/" + token[:2] + "/" + token + ".png"
+	key := s.prefix + "/" + token[:2] + "/" + token + ".png"
 	s.mu.Lock()
 	s.active[key] = true
 	s.mu.Unlock()
@@ -150,7 +153,7 @@ func (s *Storage) Write(ctx context.Context, input []byte) (File, error) {
 		return File{}, err
 	}
 	// Persist the directory entry as well as the image bytes on Unix.
-	for _, dir := range []string{filepath.Dir(s.dir), s.dir, filepath.Join(s.dir, "avatars"), filepath.Join(s.dir, filepath.Dir(key))} {
+	for _, dir := range []string{filepath.Dir(s.dir), s.dir, filepath.Join(s.dir, s.prefix), filepath.Join(s.dir, filepath.Dir(key))} {
 		if err = filestore.SyncDir(dir); err != nil {
 			return File{}, err
 		}
@@ -160,7 +163,7 @@ func (s *Storage) Write(ctx context.Context, input []byte) (File, error) {
 	return File{key, digest[:], len(data)}, nil
 }
 func (s *Storage) Read(key string) ([]byte, error) {
-	if !keyPattern.MatchString(key) {
+	if !s.owns(key) || !keyPattern.MatchString(key) {
 		return nil, os.ErrNotExist
 	}
 	root, err := os.OpenRoot(s.dir)
@@ -193,7 +196,7 @@ func (s *Storage) Remove(key string) error {
 	if s.active[leaseKey] {
 		return errors.New("media upload is still in progress")
 	}
-	if !keyPattern.MatchString(key) && !temporaryPattern.MatchString(key) {
+	if !s.owns(key) || (!keyPattern.MatchString(key) && !temporaryPattern.MatchString(key)) {
 		return errors.New("invalid media key")
 	}
 	root, err := os.OpenRoot(s.dir)
@@ -244,7 +247,7 @@ func (s *Storage) Candidates(ctx context.Context, before time.Time) ([]string, e
 			return e
 		}
 		key := filepath.ToSlash(rel)
-		if !keyPattern.MatchString(key) && !temporaryPattern.MatchString(key) {
+		if !s.owns(key) || (!keyPattern.MatchString(key) && !temporaryPattern.MatchString(key)) {
 			return nil
 		}
 		s.mu.Lock()
@@ -274,4 +277,9 @@ func (s *Storage) Candidates(ctx context.Context, before time.Time) ([]string, e
 	}
 	return candidates, err
 }
-func ValidKey(key string) bool { return keyPattern.MatchString(key) && !strings.Contains(key, "..") }
+func ValidKey(key string) bool {
+	return keyPattern.MatchString(key) && strings.HasPrefix(key, "avatars/")
+}
+func ValidIconKey(key string) bool {
+	return keyPattern.MatchString(key) && strings.HasPrefix(key, "icons/")
+}

@@ -14,6 +14,23 @@ export interface AuditEvent {
   detail: Record<string, unknown>;
 }
 export const actionLabels: Record<string, string> = {
+  "project.created": "创建项目",
+  "project.updated": "更新项目资料",
+  "project.archived": "归档项目",
+  "project.restored": "恢复项目",
+  "team.created": "创建团队",
+  "team.updated": "更新团队资料",
+  "team.dissolved": "解散团队",
+  "project.member_added": "添加项目成员",
+  "project.member_removed": "移除项目成员",
+  "project.member_role_changed": "调整项目成员角色",
+  "project.member_left": "退出项目",
+  "team.member_added": "添加团队成员",
+  "team.member_removed": "移除团队成员",
+  "team.member_role_changed": "调整团队成员角色",
+  "team.member_left": "退出团队",
+  "project.team_added": "添加项目团队",
+  "project.team_removed": "移除项目团队",
   "installation.completed": "完成系统安装",
   "auth.login_succeeded": "登录系统",
   "auth.logged_out": "退出登录",

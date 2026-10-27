@@ -1,6 +1,16 @@
 # 项目与团队详细设计
 
-更新日期：2026-10-27。状态：详细设计，正在分批实现；第 2 版迁移与侧栏读写后端已通过 MySQL 8.0 验证，完整项目/团队功能尚未交付，实际进展见 [开发说明](development.md)。需求来源见 [项目与团队设计](projects-and-teams.md)。SQL 阅读副本见 [项目与团队 DDL](projects-and-teams-schema.sql)，不作为运行迁移执行。
+更新日期：2026-10-27。状态：基础业务、正式页面、图标与快捷方式已落地并进行隔离验证；尚未完成全部验收矩阵，实际进展见 [开发说明](development.md)。需求来源见 [项目与团队设计](projects-and-teams.md)。SQL 阅读副本见 [项目与团队 DDL](projects-and-teams-schema.sql)，不作为运行迁移执行。
+
+### 当前实现与目标契约
+
+以下章节保留完整目标设计；当前运行接口以本段差异说明和代码为准，避免把规划能力当成已交付能力。
+
+- 项目和团队使用共享的 `collaboration` 业务模块与仓储端口，保留独立数据库实体；身份校验与事务仍由 identity 统一执行。
+- 资源 DTO 采用扁平字段 `icon_key`、`icon_file_id`、`direct_role`、`is_member`、`can_manage`、`etag`、`membership_etag`；列表为 `data:{items,total,page,page_size}`。成员读取同样分页并提供 `membership_etag`，有效成员包含 `direct_role`、`effective_role`、`sources`。关系命令和生命周期命令返回 204，界面随后重新读取资源和关系。
+- 图标上传路径为 `POST /icon-uploads`，删除草稿为 `DELETE /icon-uploads/{id}`，预览与已绑定文件通过 `GET /icons/{id}`。读文件始终验证当前绑定对象的访问权；项目参与者可读取该项目授权团队的图标，不能借此访问团队成员详情。写入形式为 `icon:{type:"default"}`、`{type:"builtin",key}` 或 `{type:"upload",file_id}`。内置目录 `GET /icon-catalog` 返回稳定 key 列表。
+- 成员/团队选择器支持 q 搜索，当前最多返回 50 个正常候选，并排除已有直接成员或团队授权；尚未实现选择器分页和目录图标预览。初始管理员选择器是 `GET /admin/collaboration/user-options`，团队选项只返回 ID、编码、名称和摘要。
+- 快捷方式通过上下按钮排序；跨设备冲突不自动覆盖。Markdown 禁止原始 HTML 和图片嵌入。成员分页目前在应用层合并有效来源之后执行；大规模查询优化、账号删除的逐对象成员审计及完整业务并发压力验收仍需后续完成。
 
 ## 1. 边界与设计取值
 

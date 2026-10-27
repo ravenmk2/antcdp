@@ -5,12 +5,13 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/modules/collaboration"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/install"
 	"github.com/ravenmk2/antcdp/internal/modules/media"
 )
 
-func maintainAvatars(ctx context.Context, installer *install.Service, accounts *identity.Service, files media.Store, logger *slog.Logger) {
+func maintainAvatars(ctx context.Context, installer *install.Service, accounts *identity.Service, files, icons media.Store, logger *slog.Logger) {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for {
@@ -21,6 +22,11 @@ func maintainAvatars(ctx context.Context, installer *install.Service, accounts *
 		if installer.Status(work).State == install.Ready {
 			if err := cleanAvatars(work, accounts, files, time.Now()); err != nil && ctx.Err() == nil {
 				logger.Error("avatar cleanup failed", "error", err)
+			}
+			if store, ok := installer.Backend().(identity.Store); ok {
+				if err := collaboration.CleanIcons(work, store, icons, time.Now()); err != nil && ctx.Err() == nil {
+					logger.Error("icon cleanup failed", "error", err)
+				}
 			}
 		}
 		cancel()

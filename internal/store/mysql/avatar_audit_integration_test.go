@@ -38,6 +38,9 @@ func avatarPNG(t *testing.T) []byte {
 	return b.Bytes()
 }
 func upload(t *testing.T, c *apiClient, data []byte, expected int) map[string]any {
+	return uploadAt(t, c, "/avatar-uploads", data, expected)
+}
+func uploadAt(t *testing.T, c *apiClient, path string, data []byte, expected int) map[string]any {
 	t.Helper()
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
@@ -51,7 +54,7 @@ func upload(t *testing.T, c *apiClient, data []byte, expected int) map[string]an
 	if err = w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	response := c.sendBytes(t, "POST", "/avatar-uploads", body.Bytes(), w.FormDataContentType(), nil)
+	response := c.sendBytes(t, "POST", path, body.Bytes(), w.FormDataContentType(), nil)
 	if response.Code != expected {
 		t.Fatalf("upload: expected %d, got %d: %s", expected, response.Code, response.Body.String())
 	}

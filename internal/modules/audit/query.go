@@ -30,6 +30,11 @@ var targetPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
 
 // Labels are search aliases for the same stable action codes used by clients.
 var labels = map[string]string{
+	"project.created": "创建项目", "project.updated": "更新项目资料", "project.archived": "归档项目", "project.restored": "恢复项目",
+	"team.created": "创建团队", "team.updated": "更新团队资料", "team.dissolved": "解散团队",
+	"project.member_added": "添加项目成员", "project.member_removed": "移除项目成员", "project.member_role_changed": "调整项目成员角色", "project.member_left": "退出项目",
+	"team.member_added": "添加团队成员", "team.member_removed": "移除团队成员", "team.member_role_changed": "调整团队成员角色", "team.member_left": "退出团队",
+	"project.team_added": "添加项目团队", "project.team_removed": "移除项目团队",
 	"installation.completed": "完成系统安装", "auth.login_succeeded": "登录系统", "auth.logged_out": "退出登录",
 	"user.created": "创建用户", "user.registered": "自主注册", "user.profile_updated": "更新用户资料",
 	"user.avatar_changed": "更新用户头像", "user.password_changed": "修改密码", "user.password_reset": "重置密码",
@@ -110,6 +115,20 @@ func PublicDetail(action string, raw json.RawMessage) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	result := map[string]any{}
+	if strings.HasPrefix(action, "project.") || strings.HasPrefix(action, "team.") {
+		for _, key := range []string{"code", "user_id", "team_id", "before", "after"} {
+			var value string
+			if json.Unmarshal(src[key], &value) == nil && utf8.RuneCountInString(value) <= 100 {
+				result[key] = value
+			}
+		}
+		for _, key := range []string{"description_changed", "icon_changed"} {
+			var value bool
+			if json.Unmarshal(src[key], &value) == nil {
+				result[key] = value
+			}
+		}
+	}
 	switch action {
 	case "installation.completed":
 		var value bool

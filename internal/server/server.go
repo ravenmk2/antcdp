@@ -28,11 +28,15 @@ type Options struct {
 	Static    fs.FS
 	Version   string
 	Media     media.Store
+	Icons     media.Store
 	Identity  *identity.Service
 }
 type requestIDKey struct{}
 
 func New(o Options) http.Handler {
+	if o.Icons == nil {
+		o.Icons = media.NewIcons(o.Runtime.DataDir)
+	}
 	if o.Media == nil {
 		o.Media = media.New(o.Runtime.DataDir)
 	}

@@ -233,6 +233,9 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	if testData(member.call(t, "GET", "/auth/session", nil, 200, nil))["session_ttl_days"] != float64(30) {
 		t.Fatal("settings retroactively changed an existing session window")
 	}
+	t.Run("Collaboration", func(t *testing.T) {
+		verifyCollaborationHTTP(t, backend, dataDir, founder, member, visitor, founderID, userID)
+	})
 	_, tag = founder.user(t, userID)
 	founder.call(t, "DELETE", "/admin/users/"+userID, nil, 204, map[string]string{"If-Match": tag, "X-Confirm-Username": "member"})
 	var remainingPreference int

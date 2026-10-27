@@ -17,6 +17,8 @@ const OverviewPage = () => import("./features/admin/OverviewPage.vue");
 const UsersPage = () => import("./features/admin/UsersPage.vue");
 const AuditPage = () => import("./features/admin/AuditPage.vue");
 const SettingsPage = () => import("./features/admin/SettingsPage.vue");
+const CollaborationPage = () =>
+  import("./features/collaboration/CollaborationPage.vue");
 import { useIdentity } from "./features/identity/store";
 import { onAuthFailure } from "./shared/api";
 
@@ -26,6 +28,21 @@ const router = createRouter({
   history: createWebHistory(),
   scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0 },
   routes: [
+    ...(["projects", "teams"] as const).flatMap((kind) => [
+      {
+        path: `/${kind}/:id?`,
+        component: CollaborationPage,
+        meta: { title: kind === "projects" ? "项目" : "团队" },
+      },
+      {
+        path: `/admin/${kind}/:id?`,
+        component: CollaborationPage,
+        meta: {
+          title: kind === "projects" ? "项目管理" : "团队管理",
+          admin: true,
+        },
+      },
+    ]),
     { path: "/", redirect: "/home" },
     {
       path: "/home",

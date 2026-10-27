@@ -11,10 +11,9 @@ import UiIcon from "../shared/UiIcon.vue";
 import BrandLogo from "../shared/BrandLogo.vue";
 import UserAvatar from "../shared/UserAvatar.vue";
 import AppearanceMenuItems from "../shared/AppearanceMenuItems.vue";
+import SidebarShortcuts from "../features/collaboration/SidebarShortcuts.vue";
 import { useAppearance } from "../shared/appearance";
-import {
-  useIdentity,
-} from "../features/identity/store";
+import { useIdentity } from "../features/identity/store";
 import { useLogout } from "../features/identity/logout";
 const identity = useIdentity();
 const { logout, loggingOut } = useLogout();
@@ -49,7 +48,10 @@ watch(mobileOpen, async (open) => {
     scrollLocked = true;
     document.body.style.overflow = "hidden";
     await nextTick();
-    if (mobileOpen.value) sidebar.value?.querySelector<HTMLButtonElement>(".mobile-nav-close")?.focus();
+    if (mobileOpen.value)
+      sidebar.value
+        ?.querySelector<HTMLButtonElement>(".mobile-nav-close")
+        ?.focus();
   } else {
     unlockScroll();
     await nextTick();
@@ -66,14 +68,35 @@ function navigationKeydown(event: KeyboardEvent) {
     event.preventDefault();
     mobileOpen.value = false;
   } else if (event.key === "Tab") {
-    const controls = [...(sidebar.value?.querySelectorAll<HTMLElement>("a[href], button:not(:disabled), [tabindex='0']") ?? [])]
-      .filter(element => element.getClientRects().length && getComputedStyle(element).visibility !== "hidden");
-    const first = controls[0], last = controls[controls.length - 1];
-    if (!first) { event.preventDefault(); return; }
-    if (event.shiftKey && (document.activeElement === first || !sidebar.value?.contains(document.activeElement))) {
-      event.preventDefault(); last?.focus();
-    } else if (!event.shiftKey && (document.activeElement === last || !sidebar.value?.contains(document.activeElement))) {
-      event.preventDefault(); first.focus();
+    const controls = [
+      ...(sidebar.value?.querySelectorAll<HTMLElement>(
+        "a[href], button:not(:disabled), [tabindex='0']",
+      ) ?? []),
+    ].filter(
+      (element) =>
+        element.getClientRects().length &&
+        getComputedStyle(element).visibility !== "hidden",
+    );
+    const first = controls[0],
+      last = controls[controls.length - 1];
+    if (!first) {
+      event.preventDefault();
+      return;
+    }
+    if (
+      event.shiftKey &&
+      (document.activeElement === first ||
+        !sidebar.value?.contains(document.activeElement))
+    ) {
+      event.preventDefault();
+      last?.focus();
+    } else if (
+      !event.shiftKey &&
+      (document.activeElement === last ||
+        !sidebar.value?.contains(document.activeElement))
+    ) {
+      event.preventDefault();
+      first.focus();
     }
   }
 }
@@ -130,7 +153,14 @@ async function userCommand(command: string | number | object) {
     >
       <div class="sidebar-heading">
         <BrandLogo />
-        <button v-if="isMobile" class="icon-btn mobile-nav-close" aria-label="关闭导航" @click="mobileOpen = false"><UiIcon name="close" /></button>
+        <button
+          v-if="isMobile"
+          class="icon-btn mobile-nav-close"
+          aria-label="关闭导航"
+          @click="mobileOpen = false"
+        >
+          <UiIcon name="close" />
+        </button>
       </div>
       <nav
         class="sidebar-main"
@@ -138,6 +168,26 @@ async function userCommand(command: string | number | object) {
       >
         <template v-if="consoleMode">
           <div class="nav-label">控制台</div>
+          <RouterLink
+            class="nav-item"
+            title="项目管理"
+            aria-label="项目管理"
+            to="/admin/projects"
+            :class="{ active: route.path.startsWith('/admin/projects') }"
+            ><UiIcon name="database" /><span class="nav-text"
+              >项目管理</span
+            ></RouterLink
+          >
+          <RouterLink
+            class="nav-item"
+            title="团队管理"
+            aria-label="团队管理"
+            to="/admin/teams"
+            :class="{ active: route.path.startsWith('/admin/teams') }"
+            ><UiIcon name="users" /><span class="nav-text"
+              >团队管理</span
+            ></RouterLink
+          >
           <RouterLink
             class="nav-item"
             title="概览"
@@ -200,6 +250,7 @@ async function userCommand(command: string | number | object) {
               >个人设置</span
             ></RouterLink
           >
+          <SidebarShortcuts v-if="!identity.session?.require_password_change" />
         </template>
       </nav>
       <div v-if="identity.user" class="sidebar-bottom">
@@ -245,6 +296,16 @@ async function userCommand(command: string | number | object) {
                 ><UiIcon name="shield" />控制台</ElDropdownItem
               >
               <AppearanceMenuItems @select="userCommand" />
+              <ElDropdownItem
+                v-if="!identity.session?.require_password_change"
+                command="/projects"
+                ><UiIcon name="database" />我的项目</ElDropdownItem
+              >
+              <ElDropdownItem
+                v-if="!identity.session?.require_password_change"
+                command="/teams"
+                ><UiIcon name="users" />我的团队</ElDropdownItem
+              >
               <ElDropdownItem command="logout" divided :disabled="loggingOut"
                 ><UiIcon name="logout" />退出登录</ElDropdownItem
               >
@@ -317,6 +378,16 @@ async function userCommand(command: string | number | object) {
                   <UiIcon name="shield" />控制台
                 </ElDropdownItem>
                 <AppearanceMenuItems @select="userCommand" />
+                <ElDropdownItem
+                  v-if="!identity.session?.require_password_change"
+                  command="/projects"
+                  ><UiIcon name="database" />我的项目</ElDropdownItem
+                >
+                <ElDropdownItem
+                  v-if="!identity.session?.require_password_change"
+                  command="/teams"
+                  ><UiIcon name="users" />我的团队</ElDropdownItem
+                >
                 <ElDropdownItem command="logout" divided :disabled="loggingOut">
                   <UiIcon name="logout" />退出登录
                 </ElDropdownItem>
@@ -334,7 +405,16 @@ async function userCommand(command: string | number | object) {
 
 <style scoped>
 @media (max-width: 850px) {
-  .sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .mobile-nav-close, .mobile-menu { min-width: 44px; min-height: 44px; }
+  .sidebar-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .mobile-nav-close,
+  .mobile-menu {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 </style>

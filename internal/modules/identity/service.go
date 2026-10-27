@@ -279,6 +279,16 @@ type policy struct{ admin, allowChange, renew bool }
 
 // Authentication, authorization, mutation and sliding renewal share a transaction.
 func (s *Service) execute(ctx context.Context, raw string, p policy, targetID uint64, fn func(Tx, *Auth, *User) error) (*Auth, error) {
+	return s.executeWithUsers(ctx, raw, p, targetID, nil, fn)
+}
+
+// BusinessAccess keeps module authorization/mutation inside the authenticated
+// transaction. prepare discovers additional user locks before session locking.
+func (s *Service) BusinessAccess(ctx context.Context, raw string, prepare func(Tx) ([]uint64, error), fn func(Tx, *Auth) error) (*Auth, error) {
+	return s.executeWithUsers(ctx, raw, policy{renew: true}, 0, prepare, func(tx Tx, a *Auth, _ *User) error { return fn(tx, a) })
+}
+
+func (s *Service) executeWithUsers(ctx context.Context, raw string, p policy, targetID uint64, prepare func(Tx) ([]uint64, error), fn func(Tx, *Auth, *User) error) (*Auth, error) {
 	if len(raw) != 43 {
 		return nil, unauthorized()
 	}
@@ -295,7 +305,15 @@ func (s *Service) execute(ctx context.Context, raw string, p policy, targetID ui
 		if ss == nil {
 			return unauthorized()
 		}
-		users, e := tx.LockUsers([]uint64{ss.UserID, targetID})
+		ids := []uint64{ss.UserID, targetID}
+		if prepare != nil {
+			extra, prepareErr := prepare(tx)
+			if prepareErr != nil {
+				return prepareErr
+			}
+			ids = append(ids, extra...)
+		}
+		users, e := tx.LockUsers(ids)
 		if e != nil {
 			return e
 		}

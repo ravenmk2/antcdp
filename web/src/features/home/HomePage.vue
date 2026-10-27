@@ -10,7 +10,7 @@ const identity = useIdentity();
       <div class="workspace-welcome-copy">
         <span class="eyebrow">YOUR WORKSPACE</span>
         <h2>从这里开始，专注每一次协作。</h2>
-        <p>管理个人资料和账号安全，让协作从一个完整的账号开始。</p>
+        <p>进入参与的项目与团队，从侧栏快捷方式继续协作。</p>
         <span class="workspace-site"
           ><UiIcon name="globe" />{{ identity.settings.site_name
           }}<span class="status active">账号正常</span></span
@@ -23,9 +23,7 @@ const identity = useIdentity();
     <div class="workspace-links">
       <RouterLink class="overview-shortcut" to="/account"
         ><span class="shortcut-icon"><UiIcon name="user" /></span
-        ><span
-          ><strong>个人资料</strong
-          ><small>更新头像和显示名称</small></span
+        ><span><strong>个人资料</strong><small>更新头像和显示名称</small></span
         ><UiIcon name="chevron"
       /></RouterLink>
       <RouterLink class="overview-shortcut" to="/account/security"

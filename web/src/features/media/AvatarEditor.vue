@@ -9,8 +9,10 @@ const props = defineProps<{
   avatar?: { id: string; url: string } | null;
   disabled?: boolean;
   label?: string;
+  uploadPath?: string;
 }>();
 const value = defineModel<string | null>();
+const mediaLabel = computed(() => (props.uploadPath ? "图标" : "头像"));
 const emit = defineEmits<{ processing: [value: boolean] }>();
 interface Draft {
   id: string;
@@ -54,7 +56,9 @@ function notifyProcessing() {
 async function discard(draft?: Draft) {
   if (draft)
     try {
-      await request(`/avatar-uploads/${draft.id}`, { method: "DELETE" });
+      await request(`${props.uploadPath || "/avatar-uploads"}/${draft.id}`, {
+        method: "DELETE",
+      });
     } catch {
       /* Expired or bound drafts are never removed by this endpoint. */
     }
@@ -99,7 +103,7 @@ async function choose(event: Event) {
     return;
   }
   if (file.size > 2 * 1024 * 1024) {
-    ElMessage.error("头像图片不能超过 2 MB。");
+    ElMessage.error(`${mediaLabel.value}图片不能超过 2 MB。`);
     return;
   }
   const token = ++generation;
@@ -250,10 +254,13 @@ async function apply() {
     );
     const body = new FormData();
     body.append("file", blob, "avatar.png");
-    const response = await request<Draft>("/avatar-uploads", {
-      method: "POST",
-      body,
-    });
+    const response = await request<Draft>(
+      props.uploadPath || "/avatar-uploads",
+      {
+        method: "POST",
+        body,
+      },
+    );
     if (disposed) {
       void discard(response.data);
       return;
@@ -288,7 +295,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="avatar-editor">
     <span class="avatar large" :class="{ 'has-image': !!preview }"
-      ><img v-if="preview" :src="preview" alt="头像预览" /><UiIcon
+      ><img v-if="preview" :src="preview" :alt="`${mediaLabel}预览`" /><UiIcon
         v-else
         name="user"
     /></span>
@@ -299,7 +306,7 @@ onBeforeUnmount(() => {
           :disabled="disabled || pending"
           :loading="reading"
           @click="select"
-          ><UiIcon name="plus" />上传头像</ElButton
+          ><UiIcon name="plus" />上传{{ mediaLabel }}</ElButton
         ><button
           class="btn link"
           type="button"
@@ -312,7 +319,7 @@ onBeforeUnmount(() => {
       <p class="field-hint" aria-live="polite">
         {{
           value !== undefined
-            ? "头像变更将在保存资料后生效。"
+            ? `${mediaLabel}变更将在保存资料后生效。`
             : "支持 JPG、PNG、WebP，最大 2 MB，可手动裁剪。"
         }}
       </p>
@@ -321,7 +328,7 @@ onBeforeUnmount(() => {
       ref="input"
       type="file"
       accept="image/jpeg,image/png,image/webp"
-      :aria-label="label === '个人头像' ? '上传个人头像' : '上传用户头像'"
+      :aria-label="`上传${label || mediaLabel}`"
       hidden
       @change="choose"
     />
@@ -329,7 +336,7 @@ onBeforeUnmount(() => {
   <ElDialog
     v-model="dialog"
     class="app-dialog avatar-crop-dialog"
-    title="裁剪头像"
+    :title="`裁剪${mediaLabel}`"
     width="650px"
     align-center
     append-to-body
@@ -347,7 +354,7 @@ onBeforeUnmount(() => {
     "
   >
     <template #header="{ titleId }"
-      ><h2 :id="titleId">裁剪头像</h2>
+      ><h2 :id="titleId">裁剪{{ mediaLabel }}</h2>
       <p class="crop-subtitle">
         拖动图片调整位置，选择你想展示的部分。
       </p></template
@@ -359,7 +366,7 @@ onBeforeUnmount(() => {
           class="crop-stage"
           :class="{ dragging }"
           tabindex="0"
-          aria-label="头像裁剪区域，可拖动图片或使用方向键微调"
+          :aria-label="`${mediaLabel}裁剪区域，可拖动图片或使用方向键微调`"
           @pointerdown="pointerDown"
           @pointermove="pointerMove"
           @pointerup="pointerEnd"
@@ -389,7 +396,7 @@ onBeforeUnmount(() => {
           <button
             type="button"
             class="icon-btn"
-            aria-label="缩小头像"
+            :aria-label="`缩小${mediaLabel}`"
             :disabled="uploading"
             @click="setZoom(zoom - 0.1)"
           >
@@ -400,13 +407,13 @@ onBeforeUnmount(() => {
             min="1"
             max="4"
             step="0.01"
-            aria-label="头像缩放"
+            :aria-label="`${mediaLabel}缩放`"
             :disabled="uploading"
             @input="setZoom(Number(($event.target as HTMLInputElement).value))"
           /><button
             type="button"
             class="icon-btn"
-            aria-label="放大头像"
+            :aria-label="`放大${mediaLabel}`"
             :disabled="uploading"
             @click="setZoom(zoom + 0.1)"
           >
@@ -455,7 +462,7 @@ onBeforeUnmount(() => {
           :loading="uploading"
           :disabled="uploading"
           @click="apply"
-          ><UiIcon name="check" />使用此头像</ElButton
+          ><UiIcon name="check" />使用此{{ mediaLabel }}</ElButton
         >
       </div></template
     >

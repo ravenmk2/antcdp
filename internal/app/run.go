@@ -88,13 +88,14 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 	}
 	gin.SetMode(gin.ReleaseMode)
 	files := media.New(r.DataDir)
+	icons := media.NewIcons(r.DataDir)
 	accounts := identity.New(func() (identity.Store, error) {
 		if store, ok := installer.Backend().(identity.Store); ok {
 			return store, nil
 		}
 		return nil, httpx.E(503, "INSTANCE_NOT_READY", "系统尚未就绪")
 	})
-	handler := server.New(server.Options{Runtime: r, Installer: installer, Static: web.DistFS(), Version: version, Identity: accounts, Media: files})
+	handler := server.New(server.Options{Runtime: r, Installer: installer, Static: web.DistFS(), Version: version, Identity: accounts, Media: files, Icons: icons})
 	listener, err := net.Listen("tcp", r.Server.Listen)
 	if err != nil {
 		return err
@@ -106,7 +107,7 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 	maintenanceDone := make(chan struct{})
 	go func() {
 		defer close(maintenanceDone)
-		maintainAvatars(maintenanceCtx, installer, accounts, files, logger)
+		maintainAvatars(maintenanceCtx, installer, accounts, files, icons, logger)
 	}()
 	defer func() { stopMaintenance(); <-maintenanceDone }()
 	stopped := make(chan struct{})

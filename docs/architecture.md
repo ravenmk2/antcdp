@@ -1,6 +1,6 @@
 # 架构与技术选型
 
-下一阶段 project/team 模块及关系存储的草案见 [项目与团队设计](projects-and-teams.md)；尚未实现，不改变下文一期模块清单。
+项目与团队实现见 [详细设计](projects-and-teams-detail.md) 与 [开发说明](development.md)。新增共享 `collaboration` 模块处理资料、成员、授权、图标和生命周期，数据库仍使用独立 project/team 实体；通过 identity 的 `BusinessAccess` 在同一事务中完成账号/会话校验，MySQL 事务适配器实现协作仓储端口。媒体处理复用规范化函数，头像和图标各自限制目录及清理范围。下文一期模块清单保留为原有模块的说明。
 
 模块接口、跨模块锁顺序及实施步骤见 [详细设计](projects-and-teams-detail.md)。新增 icon_file 只管理业务图标，保留 avatar_file；账号级快捷方式和分组版本使用三张独立表持久化，不进入系统设置 KV。
 
