@@ -5,6 +5,7 @@ import { useRoute } from "vue-router";
 import { api } from "../../shared/api";
 import { errorMessage } from "../identity/store";
 import ResourceIcon from "./ResourceIcon.vue";
+import UiIcon from "../../shared/UiIcon.vue";
 import { useShortcuts } from "./sidebar";
 import type { Kind, Page, Resource } from "./model";
 const store = useShortcuts(),
@@ -101,9 +102,10 @@ async function save() {
         class="icon-btn shortcut-add"
         :disabled="busy"
         :aria-label="`管理${group === 'projects' ? '项目' : '团队'}快捷方式`"
+        :title="`管理${group === 'projects' ? '项目' : '团队'}快捷方式`"
         @click="edit(group)"
       >
-        +
+        <UiIcon name="plus" />
       </button>
     </div>
     <RouterLink
@@ -122,7 +124,7 @@ async function save() {
       ></RouterLink
     >
     <p v-if="!store.groups[group].items.length" class="nav-text shortcut-empty">
-      暂无固定{{ group === "projects" ? "项目" : "团队" }}
+      尚未固定
     </p>
   </section>
   <button v-if="error && !open" class="nav-item" @click="refresh">
@@ -198,19 +200,45 @@ async function save() {
 </template>
 <style scoped>
 .shortcut-group {
-  margin-top: 22px;
+  margin-top: 20px;
 }
 .shortcut-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 10px 0 15px;
   color: var(--text-muted);
-  min-height: 36px;
+  min-height: 30px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 500;
 }
 .shortcut-add {
   opacity: 0;
-  font-size: 24px;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+}
+.shortcut-add :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+.shortcut-group > .nav-item {
+  min-height: 46px;
+  margin-bottom: 2px;
+}
+.shortcut-group > .nav-item > .resource-icon {
+  width: 19px;
+  height: 19px;
+  color: var(--text-muted);
+}
+.shortcut-group > .nav-item:hover > .resource-icon,
+.shortcut-group > .nav-item.active > .resource-icon {
+  color: var(--brand);
+}
+.shortcut-group > .nav-item > small {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 .shortcut-group:hover .shortcut-add,
 .shortcut-group:focus-within .shortcut-add {
@@ -223,7 +251,8 @@ async function save() {
   flex: 1;
 }
 .shortcut-empty {
-  padding: 0 12px;
+  margin: 0;
+  padding: 8px 15px 8px 46px;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -250,6 +279,8 @@ async function save() {
 }
 @media (hover: none) {
   .shortcut-add {
+    width: 44px;
+    height: 44px;
     opacity: 1;
   }
 }

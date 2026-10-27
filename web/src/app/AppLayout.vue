@@ -240,16 +240,6 @@ async function userCommand(command: string | number | object) {
               >首页</span
             ></RouterLink
           >
-          <RouterLink
-            class="nav-item"
-            title="个人设置"
-            aria-label="个人设置"
-            to="/account"
-            :class="{ active: route.path.startsWith('/account') }"
-            ><UiIcon name="user" /><span class="nav-text"
-              >个人设置</span
-            ></RouterLink
-          >
           <SidebarShortcuts v-if="!identity.session?.require_password_change" />
         </template>
       </nav>
@@ -295,9 +285,7 @@ async function userCommand(command: string | number | object) {
                 command="/teams"
                 ><UiIcon name="users" />我的团队</ElDropdownItem
               >
-              <ElDropdownItem
-                command="/account"
-                :divided="!identity.session?.require_password_change"
+              <ElDropdownItem command="/account"
                 ><UiIcon name="user" />个人设置</ElDropdownItem
               >
               <ElDropdownItem
@@ -308,7 +296,7 @@ async function userCommand(command: string | number | object) {
                 ><UiIcon name="shield" />控制台</ElDropdownItem
               >
               <AppearanceMenuItems @select="userCommand" />
-              <ElDropdownItem command="logout" divided :disabled="loggingOut"
+              <ElDropdownItem command="logout" :disabled="loggingOut"
                 ><UiIcon name="logout" />退出登录</ElDropdownItem
               >
             </ElDropdownMenu></template
@@ -377,10 +365,7 @@ async function userCommand(command: string | number | object) {
                   command="/teams"
                   ><UiIcon name="users" />我的团队</ElDropdownItem
                 >
-                <ElDropdownItem
-                  command="/account"
-                  :divided="!identity.session?.require_password_change"
-                >
+                <ElDropdownItem command="/account">
                   <UiIcon name="user" />个人设置
                 </ElDropdownItem>
                 <ElDropdownItem
@@ -393,7 +378,7 @@ async function userCommand(command: string | number | object) {
                   <UiIcon name="shield" />控制台
                 </ElDropdownItem>
                 <AppearanceMenuItems @select="userCommand" />
-                <ElDropdownItem command="logout" divided :disabled="loggingOut">
+                <ElDropdownItem command="logout" :disabled="loggingOut">
                   <UiIcon name="logout" />退出登录
                 </ElDropdownItem>
               </ElDropdownMenu>
