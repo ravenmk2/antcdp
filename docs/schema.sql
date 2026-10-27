@@ -1,5 +1,5 @@
 -- AntCDP complete target schema: 16 business tables, MySQL 8.0.16+ / InnoDB.
--- Phase A: 7 existing tables. Collaboration/sidebar: 9 designed, not implemented.
+-- Phase A: 7 existing tables. Collaboration/sidebar: 9 migrated; feature implementation in progress.
 -- This file is a review snapshot, NOT an upgrade migration or proof of deployment.
 -- Review reference only. Runtime migrations live in internal/store/migrations/mysql/.
 -- Designed for an empty schema; do not import into an existing installation.
@@ -148,7 +148,7 @@ CREATE TABLE `audit_event` (
     CONSTRAINT ck_audit_event_detail CHECK (detail IS NULL OR JSON_TYPE(detail) = 'OBJECT')
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Next-stage design: project/team/icon/sidebar tables (not yet migrated).
+-- Collaboration schema: implemented by goose migration 00002_collaboration.sql.
 CREATE TABLE `icon_file` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     storage_key VARCHAR(120) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,

@@ -89,6 +89,8 @@ jobs:
     env:
       ANTCDP_TEST_MYSQL_DSN: antcdp_test:integration-test-only@tcp(127.0.0.1:3306)/antcdp_test
       ANTCDP_TEST_HTTP_MYSQL_DSN: antcdp_test:integration-test-only@tcp(127.0.0.1:3306)/antcdp_test_http
+
+      ANTCDP_TEST_UPGRADE_MYSQL_DSN: antcdp_test:integration-test-only@tcp(127.0.0.1:3306)/antcdp_test_upgrade
     steps:
       - uses: actions/checkout@v7
 
@@ -110,7 +112,9 @@ jobs:
         run: >-
           docker exec -e MYSQL_PWD=integration-root-only ${{ job.services.mysql.id }}
           mysql --user=root -e "CREATE DATABASE antcdp_test_http CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-          GRANT ALL PRIVILEGES ON antcdp_test_http.* TO 'antcdp_test'@'%';"
+          GRANT ALL PRIVILEGES ON antcdp_test_http.* TO 'antcdp_test'@'%';
+          CREATE DATABASE antcdp_test_upgrade CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+          GRANT ALL PRIVILEGES ON antcdp_test_upgrade.* TO 'antcdp_test'@'%';"
 
       - name: Test MySQL installation, authentication and management
         run: go test -race -count=1 -v ./internal/store/mysql

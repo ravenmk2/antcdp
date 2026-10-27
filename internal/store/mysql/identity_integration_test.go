@@ -158,6 +158,7 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 		t.Fatal("incorrect founder session")
 	}
 	founder.call(t, "GET", "/admin/overview", nil, 200, nil)
+	verifySidebarHTTP(t, installer.Backend().(*Store), founder, founderID)
 	founder.call(t, "POST", "/setup/install", map[string]any{}, 409, nil)
 	lock, err := os.ReadFile(filepath.Join(dataDir, "install.lock"))
 	if err != nil || strings.TrimSpace(string(lock)) != installed["installation_id"] {
@@ -234,6 +235,10 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	}
 	_, tag = founder.user(t, userID)
 	founder.call(t, "DELETE", "/admin/users/"+userID, nil, 204, map[string]string{"If-Match": tag, "X-Confirm-Username": "member"})
+	var remainingPreference int
+	if err = backend.db.GetContext(context.Background(), &remainingPreference, "SELECT COUNT(*) FROM user_sidebar_preference WHERE user_id=?", userID); err != nil || remainingPreference != 0 {
+		t.Fatal("deleted account retained sidebar preferences", err)
+	}
 	expectCode(t, member.call(t, "GET", "/auth/session", nil, 401, nil), "UNAUTHENTICATED")
 	expectCode(t, visitor.call(t, "POST", "/auth/register", map[string]any{"username": "member", "display_name": "被占用用户名", "password": "visitor-password"}, 409, nil), "USERNAME_TAKEN")
 	expiredHash := cryptox.Digest(visitor.cookies["antcdp_session"].Value)

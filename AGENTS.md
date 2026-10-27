@@ -30,8 +30,8 @@ antcdp/
 - [docs/database.md](docs/database.md)：MySQL 表关系、字段职责、索引、事务与生命周期。
 - [docs/projects-and-teams.md](docs/projects-and-teams.md)：下一阶段项目与团队的已确认规则、编码、成员授权、图标及数据库设计草案与待确认项，尚未实现。
 - [docs/projects-and-teams-detail.md](docs/projects-and-teams-detail.md)：项目与团队的权限矩阵、API/DTO、选择器、图标、并发事务、工作区快捷入口与控制台交互、实施及验收详细设计，尚未实现。
-- [docs/projects-and-teams-schema.sql](docs/projects-and-teams-schema.sql)：九张项目、团队、图标及侧栏偏好表的 DDL 阅读副本，非运行迁移，尚未实库验证。
-- [docs/schema.sql](docs/schema.sql)：完整 16 张目标业务表的 DDL 阅读副本（一期 7 张已实现，下一阶段 9 张未实现）；实际执行使用嵌入式 goose 迁移。
+- [docs/projects-and-teams-schema.sql](docs/projects-and-teams-schema.sql)：九张项目、团队、图标及侧栏偏好表的 DDL 阅读副本，非运行迁移，迁移已通过 MySQL 8.0 验证。
+- [docs/schema.sql](docs/schema.sql)：完整 16 张目标业务表的 DDL 阅读副本（一期 7 张与协作迁移 9 张，业务开发中）；实际执行使用嵌入式 goose 迁移。
 - [docs/deployment.md](docs/deployment.md)：容器目录、配置、主密钥、持久化安装锁、安装恢复、备份与升级设计。
 
 交互原型仅供本地参考，不纳入 Git；正式前端开发以 `docs/ui-design.md` 和相关需求文档为基线。

@@ -104,6 +104,7 @@ func registerIdentity(api *gin.RouterGroup, o Options) {
 		c.Next()
 	})
 	registerAvatarAudit(business, o)
+	registerSidebar(business, o)
 	business.GET("/public/settings", func(c *gin.Context) {
 		value, err := service.PublicSettings(c.Request.Context())
 		if err != nil {

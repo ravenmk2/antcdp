@@ -1,8 +1,8 @@
 # 数据库设计
 
-下一阶段新增项目、团队及图标表的设计草案见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 已汇总完整目标结构（一期 7 张 + 下一阶段 9 张，共 16 张）。新增结构尚未生成或执行迁移。
+下一阶段新增项目、团队及图标表的设计草案见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 已汇总完整目标结构（一期 7 张 + 下一阶段 9 张，共 16 张）。新增结构已进入第 2 版运行迁移并通过 MySQL 8.0 升级和安装验证；业务实现仍在进行。
 
-字段约束、关系查询、事务和版本详见 [详细设计](projects-and-teams-detail.md)，九张新增表有独立 [DDL 阅读副本](projects-and-teams-schema.sql)。该副本依赖一期 user 表，不能作为生产迁移直接导入；尚未进行实库验证。
+字段约束、关系查询、事务和版本详见 [详细设计](projects-and-teams-detail.md)，九张新增表有独立 [DDL 阅读副本](projects-and-teams-schema.sql)。该副本依赖一期 user 表，不能作为生产迁移直接导入；MySQL 8.0 验证范围见开发说明，8.4 仍待验证。
 
 本稿面向 MySQL 8+，当前 DDL 的技术最低版本为 8.0.16，兼容目标覆盖 8.0、8.4；更高系列需经过同一迁移及仓储集成检查后声明支持，不把主版本号较大视为自动兼容。产品规则见 [设计入口](README.md)，结构阅读副本见 [schema.sql](schema.sql)。实际初始迁移已放入 `internal/store/migrations/mysql/00001_phase_a.sql` 并随二进制嵌入，由安装服务执行。MySQL 8.0 的真实初始迁移、种子事务、JSON/Unicode 回读及重复初始化保护已通过，8.4 尚待验证；不要手动导入阅读副本。
 

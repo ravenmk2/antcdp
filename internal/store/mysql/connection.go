@@ -178,14 +178,14 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if v != 1 {
+	if v != 2 {
 		return errors.New("database migration version does not match this executable")
 	}
 	var tables int
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event')"); err != nil {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event','icon_file','project','team','project_member','team_member','project_team','user_sidebar_preference','user_project_shortcut','user_team_shortcut')"); err != nil {
 		return err
 	}
-	if tables != 7 {
+	if tables != 16 {
 		return install.ErrIncompleteSchema
 	}
 	instance, err := s.Instance(ctx)
@@ -245,6 +245,9 @@ func (s *Store) Seed(ctx context.Context, seed install.Seed) error {
 	}
 	id, err := r.LastInsertId()
 	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, "INSERT INTO user_sidebar_preference (user_id,updated_at) VALUES (?,?)", id, seed.Now); err != nil {
 		return err
 	}
 	if _, err = tx.ExecContext(ctx, "INSERT INTO user_password (user_id,password_hash,require_password_change,password_changed_at) VALUES (?,?,FALSE,?)", id, seed.PasswordHash, seed.Now); err != nil {

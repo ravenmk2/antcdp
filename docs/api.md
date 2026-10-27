@@ -2,7 +2,7 @@
 
 项目与团队的需求见 [项目与团队设计](projects-and-teams.md)，具体 HTTP 路径、DTO、选择器、图标及错误契约见 [详细设计第 4–5 节](projects-and-teams-detail.md#4-http-契约)。这些接口尚未实现；下文继续描述一期接口。
 
-账号侧栏快捷方式使用 `GET /me/sidebar-shortcuts` 和两个分组的 PUT 整组替换接口，分别校验 If-Match，保存固定与排序；此前本地 resolve 方案已撤回。详见 [详细设计 4.5 节](projects-and-teams-detail.md#45-侧栏快捷方式-api)。
+账号侧栏快捷方式已实现 `GET /me/sidebar-shortcuts` 和两个分组的 PUT 整组替换接口，分别校验 If-Match，保存固定与排序；已通过 MySQL 8.0 HTTP 验证，正式前端待接入。此前本地 resolve 方案已撤回。详见 [详细设计 4.5 节](projects-and-teams-detail.md#45-侧栏快捷方式-api)。
 
 一期 REST API 草案，基础路径 `/api/v1`。下方路径均相对此前缀，健康检查除外。规则的确认状态见 [设计入口](README.md)；本文没有邮箱字段、邮箱登录、邮件找回、项目或团队接口。
 

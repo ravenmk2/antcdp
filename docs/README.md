@@ -21,8 +21,8 @@
 | [数据库设计](database.md) | 表关系、字段职责、索引、事务与生命周期 |
 | [项目与团队设计](projects-and-teams.md) | 下一阶段编码、资料、图标、成员授权、生命周期、数据库草案与待确认项 |
 | [项目与团队详细设计](projects-and-teams-detail.md) | 权限矩阵、API/DTO、事务版本、页面与悬停快捷入口、实施验收；未实现 |
-| [项目与团队 DDL](projects-and-teams-schema.sql) | 九张新增表的独立阅读副本；非运行迁移，未实库验证 |
-| [MySQL DDL 阅读副本](schema.sql) | 完整 16 张目标业务表（已实现 7 张 + 新设计 9 张）；运行时仍使用版本化迁移 |
+| [项目与团队 DDL](projects-and-teams-schema.sql) | 九张新增表的独立阅读副本；阅读副本；运行迁移 2 已通过 MySQL 8.0 验证 |
+| [MySQL DDL 阅读副本](schema.sql) | 完整 16 张目标业务表（一期 7 张 + 协作迁移 9 张）；运行时仍使用版本化迁移 |
 | [安装与容器部署](deployment.md) | `/app/`、`<cwd>/data/`、配置、主密钥、安装恢复与升级 |
 
 ## 已确认的产品规则

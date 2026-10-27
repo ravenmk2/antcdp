@@ -139,9 +139,18 @@ func (t *identityTx) InsertUser(u *identity.User) error {
 	u.AuthVersion = 1
 	u.Version = 1
 	u.Status = "active"
+	if err != nil {
+		return err
+	}
+	_, err = t.tx.ExecContext(t.ctx, "INSERT INTO user_sidebar_preference (user_id,updated_at) VALUES (?,?)", u.ID, u.CreatedAt)
 	return err
 }
 func (t *identityTx) SaveUser(u *identity.User) error {
+	if u.DeletedAt != nil {
+		if err := t.removeCollaborationUser(u.ID, u.UpdatedAt); err != nil {
+			return err
+		}
+	}
 	_, err := t.tx.ExecContext(t.ctx, "UPDATE `user` SET username=?,display_name=?,role=?,status=?,avatar_file_id=?,auth_version=?,row_version=?,updated_at=?,deleted_at=? WHERE id=?", u.Username, u.DisplayName, u.Role, u.Status, u.AvatarID, u.AuthVersion, u.Version, u.UpdatedAt, u.DeletedAt, u.ID)
 	return err
 }
