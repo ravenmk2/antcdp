@@ -50,7 +50,7 @@
   --canvas: #151515;
   --surface: #1a1a19;
   --surface-input: #20201e;
-  --surface-overlay: #222220;
+  --surface-overlay: #2c2c2a;
   --surface-subtle: #20201e;
   --surface-hover: rgb(255 255 255 / 5%);
   --surface-disabled: #1a1a19;
@@ -59,12 +59,12 @@
   --text-secondary: #a3a3a3;
   --text-muted: #8a8a8a;
   --text-disabled: #666666;
-  --border: rgb(255 255 255 / 9%);
-  --border-control: rgb(255 255 255 / 18%);
+  --border: #3d3d3a;
+  --border-control: #73726c;
   --accent: #faf9f5;
   --accent-hover: #e8e6dc;
   --accent-soft: #20201e;
-  --accent-border: rgb(255 255 255 / 18%);
+  --accent-border: #73726c;
   --on-accent: #141413;
   --brand: #d97757;
   --success: #9bc5a5;
@@ -147,6 +147,7 @@
   --el-text-color-placeholder: var(--text-muted);
   --el-text-color-disabled: var(--text-disabled);
   --el-border-color: var(--border-control);
+  --el-border-color-hover: var(--text-secondary);
   --el-border-color-light: var(--border);
   --el-border-color-lighter: var(--border);
   --el-border-color-extra-light: var(--border);

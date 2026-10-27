@@ -340,6 +340,41 @@ select:focus-visible {
   background: var(--surface-overlay);
   border-color: var(--border);
 }
+/* Controls keep a distinct boundary and a shared keyboard focus treatment. */
+.search-box:hover,
+.input:hover:not(:disabled):not([readonly]),
+.role-choice:hover {
+  border-color: var(--text-secondary);
+}
+.role-choice {
+  border-color: var(--border-control);
+}
+.search-box:focus-within,
+.input:focus:not(:disabled),
+.role-choice:focus-within {
+  border-color: var(--focus);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+.el-input,
+.el-textarea {
+  --el-input-focus-border-color: var(--focus);
+}
+.el-select {
+  --el-select-input-focus-border-color: var(--focus);
+}
+:root.dark .app-dialog,
+:root.dark .el-message-box {
+  border: 1px solid var(--border-control);
+}
+:root.dark .el-popper.is-light {
+  border-color: var(--border-control);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 45%);
+}
+:root.dark .el-popper.is-light > .el-popper__arrow::before {
+  border-color: var(--border-control);
+}
 @media (max-width: 850px) {
   .auth-visual {
     border-right: 0;

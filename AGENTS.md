@@ -21,7 +21,7 @@ antcdp/
 - [docs/README.md](docs/README.md)：一期范围、已确认规则、工程实施约定及默认原型和设计文档入口。
 - [docs/development.md](docs/development.md)：开发进度、安装至控制台闭环、头像与审计实现、本地启动及验证边界。
 - [docs/initial-delivery.md](docs/initial-delivery.md)：首次迁移范围、全新安装、单个初始提交、工程改名与双主题验收。
-- [docs/ui-design.md](docs/ui-design.md)：暖色中性双主题视觉基线、蚂蚁头 LOGO 与主题反色、用户菜单外观选择、中文排版、组件、导航、响应式、系统用词与交互规范。
+- [docs/ui-design.md](docs/ui-design.md)：暖色中性双主题视觉基线、蚂蚁头 LOGO 与主题反色、用户菜单外观选择、深色边框与焦点层次、中文排版、组件、导航、响应式、系统用词与交互规范。
 - [docs/architecture.md](docs/architecture.md)：技术选型、模块边界、前后端结构与视觉基线、实施顺序。
 - [docs/technology-decisions.md](docs/technology-decisions.md)：sqlx/sqlc、bcrypt/HMAC 与 MySQL 版本及命名的比较和建议。
 - [docs/extensibility.md](docs/extensibility.md)：受控设置 KV、独立凭据表、仓储/事务接口和未来模块的扩展边界。
