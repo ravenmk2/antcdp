@@ -170,6 +170,16 @@ async function userCommand(command: string | number | object) {
           <div class="nav-label">控制台</div>
           <RouterLink
             class="nav-item"
+            title="系统概览"
+            aria-label="系统概览"
+            to="/admin"
+            :class="{ active: route.path === '/admin' }"
+            ><UiIcon name="dashboard" /><span class="nav-text"
+              >系统概览</span
+            ></RouterLink
+          >
+          <RouterLink
+            class="nav-item"
             title="项目管理"
             aria-label="项目管理"
             to="/admin/projects"
@@ -186,16 +196,6 @@ async function userCommand(command: string | number | object) {
             :class="{ active: route.path.startsWith('/admin/teams') }"
             ><UiIcon name="users" /><span class="nav-text"
               >团队管理</span
-            ></RouterLink
-          >
-          <RouterLink
-            class="nav-item"
-            title="概览"
-            aria-label="概览"
-            to="/admin"
-            :class="{ active: route.path === '/admin' }"
-            ><UiIcon name="dashboard" /><span class="nav-text"
-              >概览</span
             ></RouterLink
           >
           <RouterLink
@@ -285,17 +285,6 @@ async function userCommand(command: string | number | object) {
                   ><span>@{{ identity.user.username }}</span>
                 </div>
               </div>
-              <ElDropdownItem command="/account"
-                ><UiIcon name="user" />个人设置</ElDropdownItem
-              >
-              <ElDropdownItem
-                v-if="
-                  identity.isAdmin && !identity.session?.require_password_change
-                "
-                command="/admin"
-                ><UiIcon name="shield" />控制台</ElDropdownItem
-              >
-              <AppearanceMenuItems @select="userCommand" />
               <ElDropdownItem
                 v-if="!identity.session?.require_password_change"
                 command="/projects"
@@ -306,6 +295,19 @@ async function userCommand(command: string | number | object) {
                 command="/teams"
                 ><UiIcon name="users" />我的团队</ElDropdownItem
               >
+              <ElDropdownItem
+                command="/account"
+                :divided="!identity.session?.require_password_change"
+                ><UiIcon name="user" />个人设置</ElDropdownItem
+              >
+              <ElDropdownItem
+                v-if="
+                  identity.isAdmin && !identity.session?.require_password_change
+                "
+                command="/admin"
+                ><UiIcon name="shield" />控制台</ElDropdownItem
+              >
+              <AppearanceMenuItems @select="userCommand" />
               <ElDropdownItem command="logout" divided :disabled="loggingOut"
                 ><UiIcon name="logout" />退出登录</ElDropdownItem
               >
@@ -365,7 +367,20 @@ async function userCommand(command: string | number | object) {
             </button>
             <template #dropdown>
               <ElDropdownMenu>
-                <ElDropdownItem command="/account">
+                <ElDropdownItem
+                  v-if="!identity.session?.require_password_change"
+                  command="/projects"
+                  ><UiIcon name="database" />我的项目</ElDropdownItem
+                >
+                <ElDropdownItem
+                  v-if="!identity.session?.require_password_change"
+                  command="/teams"
+                  ><UiIcon name="users" />我的团队</ElDropdownItem
+                >
+                <ElDropdownItem
+                  command="/account"
+                  :divided="!identity.session?.require_password_change"
+                >
                   <UiIcon name="user" />个人设置
                 </ElDropdownItem>
                 <ElDropdownItem
@@ -378,16 +393,6 @@ async function userCommand(command: string | number | object) {
                   <UiIcon name="shield" />控制台
                 </ElDropdownItem>
                 <AppearanceMenuItems @select="userCommand" />
-                <ElDropdownItem
-                  v-if="!identity.session?.require_password_change"
-                  command="/projects"
-                  ><UiIcon name="database" />我的项目</ElDropdownItem
-                >
-                <ElDropdownItem
-                  v-if="!identity.session?.require_password_change"
-                  command="/teams"
-                  ><UiIcon name="users" />我的团队</ElDropdownItem
-                >
                 <ElDropdownItem command="logout" divided :disabled="loggingOut">
                   <UiIcon name="logout" />退出登录
                 </ElDropdownItem>

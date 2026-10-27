@@ -74,7 +74,7 @@ const router = createRouter({
     {
       path: "/admin",
       component: OverviewPage,
-      meta: { title: "概览", admin: true },
+      meta: { title: "系统概览", admin: true },
     },
     {
       path: "/admin/users",
