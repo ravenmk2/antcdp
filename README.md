@@ -4,7 +4,7 @@
 
 AI Native Team Collaboration & Development Platform
 
-AI 原生团队协作开发平台。当前提供安装、账号与权限、用户管理、系统设置、头像和审计等基础能力，支持浅色、深色及跟随系统的暖色界面。项目、工作流和 AI 执行等业务能力仍在后续规划中。迁移与首次交付范围见 [首次交付说明](docs/initial-delivery.md)，开发与验证状态见 [开发说明](docs/development.md)。
+[开发文档](docs/README.md)
 
 ## Quick Start
 

@@ -2,6 +2,8 @@
 
 更新日期：2026-10-23。
 
+本文仅记录首次迁移时的范围与验收，不约束后续功能和 UI 设计。当前实现见 [开发说明](development.md)，现行设计见 [UI 规范](ui-design.md)；下文的占位 LOGO 和功能规划属于当时状态。
+
 AntCDP = AI Native Team Collaboration & Development Platform，中文为 AI 原生团队协作开发平台。
 
 ## 迁移与交付边界
