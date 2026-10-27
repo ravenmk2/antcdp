@@ -1,5 +1,14 @@
 <script setup lang="ts">
-defineProps<{ iconKey?: string | null; fileId?: string | null }>();
+withDefaults(
+  defineProps<{
+    iconKey?: string | null;
+    fileId?: string | null;
+    imageUrl?: string | null;
+    fallback?: string;
+    tile?: boolean;
+  }>(),
+  { fallback: "folder" },
+);
 const paths: Record<string, string> = {
   folder: "M3 6h6l2 2h10v12H3V6Z",
   code: "m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18",
@@ -12,8 +21,13 @@ const paths: Record<string, string> = {
 };
 </script>
 <template>
-  <span class="resource-icon"
-    ><img v-if="fileId" :src="`/api/v1/icons/${fileId}`" alt="" /><svg
+  <span
+    class="resource-icon"
+    :class="{ 'resource-icon-tile': tile, 'has-image': !!fileId || !!imageUrl }"
+    ><img
+      v-if="fileId || imageUrl"
+      :src="imageUrl || `/api/v1/icons/${fileId}`"
+      alt="" /><svg
       v-else
       viewBox="0 0 24 24"
       fill="none"
@@ -23,7 +37,7 @@ const paths: Record<string, string> = {
       stroke-linejoin="round"
       aria-hidden="true"
     >
-      <path :d="paths[iconKey || 'folder'] || paths.folder" /></svg
+      <path :d="paths[iconKey || fallback] || paths.folder" /></svg
   ></span>
 </template>
 <style scoped>
@@ -32,7 +46,25 @@ const paths: Record<string, string> = {
   width: 24px;
   height: 24px;
   flex-shrink: 0;
-  color: var(--brand);
+  color: var(--text-secondary);
+}
+.resource-icon-tile {
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-subtle);
+  border-radius: 10px;
+}
+.resource-icon-tile svg {
+  width: 23px;
+  height: 23px;
+}
+.resource-icon-tile img {
+  border-radius: inherit;
+}
+.resource-icon-tile.has-image {
+  background: transparent;
 }
 svg,
 img {

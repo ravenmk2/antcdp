@@ -78,7 +78,7 @@ func (t *identityTx) Resources(k c.Kind, uid uint64, f c.Query) (c.Page, error) 
 		where += " AND NOT EXISTS (SELECT 1 FROM " + table + "_member m JOIN `user` u ON u.id=m.user_id WHERE m." + table + "_id=o.id AND m.role='admin' AND u.status='active' AND u.deleted_at IS NULL)"
 	}
 	if f.Search != "" {
-		where += " AND (o.code LIKE ? ESCAPE '!' OR o.name LIKE ? ESCAPE '!' OR o.summary LIKE ? ESCAPE '!')"
+		where += " AND (CONVERT(o.code USING utf8mb4) LIKE ? ESCAPE '!' OR o.name LIKE ? ESCAPE '!' OR o.summary LIKE ? ESCAPE '!')"
 		q := collabSearch(f.Search)
 		args = append(args, q, q, q)
 	}
@@ -363,7 +363,7 @@ func (t *identityTx) CleanupShortcuts(users []uint64, now time.Time) error {
 func (t *identityTx) UserOptions(q string) ([]c.UserOption, error) {
 	out := []c.UserOption{}
 	search := collabSearch(q)
-	err := t.tx.SelectContext(t.ctx, &out, "SELECT id,username,display_name FROM `user` WHERE status='active' AND deleted_at IS NULL AND (username LIKE ? ESCAPE '!' OR display_name LIKE ? ESCAPE '!') ORDER BY username LIMIT 50", search, search)
+	err := t.tx.SelectContext(t.ctx, &out, "SELECT id,username,display_name FROM `user` WHERE status='active' AND deleted_at IS NULL AND (CONVERT(username USING utf8mb4) LIKE ? ESCAPE '!' OR display_name LIKE ? ESCAPE '!') ORDER BY username LIMIT 50", search, search)
 	return out, err
 }
 

@@ -19,5 +19,5 @@ export function useListSearch(search: () => void, invalidate: () => void) {
     run();
   }
   onBeforeUnmount(cancel);
-  return { run, input, enter, compositionStart, compositionEnd };
+  return { run, cancel, input, enter, compositionStart, compositionEnd };
 }

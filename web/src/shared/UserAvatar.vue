@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import UiIcon from "./UiIcon.vue";
 import type { User } from "../features/identity/store";
-defineProps<{ user: User; large?: boolean }>();
+defineProps<{ user: Pick<User, "avatar">; large?: boolean }>();
 </script>
 <template>
   <span class="avatar" :class="{ 'has-image': !!user.avatar, large }"

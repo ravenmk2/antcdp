@@ -118,6 +118,7 @@ async function save() {
       ><ResourceIcon
         :icon-key="item.icon_key"
         :file-id="item.icon_file_id"
+        :fallback="group === 'teams' ? 'team' : 'folder'"
       /><span class="nav-text shortcut-name">{{ item.name }}</span
       ><small v-if="item.status === 'archived'" class="nav-text"
         >归档</small
@@ -149,6 +150,7 @@ async function save() {
       <ResourceIcon
         :icon-key="item.icon_key"
         :file-id="item.icon_file_id"
+        :fallback="kind === 'teams' ? 'team' : 'folder'"
       /><span>{{ item.name }}</span
       ><ElButton
         :disabled="busy || index === 0"
@@ -181,6 +183,7 @@ async function save() {
         <ResourceIcon
           :icon-key="item.icon_key"
           :file-id="item.icon_file_id"
+          :fallback="kind === 'teams' ? 'team' : 'folder'"
         /><span
           >{{ item.name }} <small>{{ item.code }}</small></span
         ><ElButton

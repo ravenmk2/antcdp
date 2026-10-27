@@ -1,6 +1,9 @@
 <script setup lang="ts">
 defineProps<{
   name:
+    | "archive"
+    | "pin"
+    | "edit"
     | "sun"
     | "moon"
     | "arrow"
@@ -35,6 +38,9 @@ defineProps<{
     | "close";
 }>();
 const paths = {
+  archive: "M3 3h18v5H3V3Zm2 5v13h14V8m-10 4h6",
+  pin: "m16 3 5 5-4 1-4 4-1 5-3-3-6 6m6-6-3-3 5-1 4-4 1-4Z",
+  edit: "m16 3 5 5-12 12-6 1 1-6L16 3Zm-2 2 5 5",
   sun: "M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8ZM12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5",
   moon: "M20.5 13a8.5 8.5 0 0 1-9.5-9.5A8.5 8.5 0 1 0 20.5 13Z",
   minus: "M5 12h14",

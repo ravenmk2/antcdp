@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -20,6 +21,35 @@ func verifyCollaborationHTTP(t *testing.T, backend *Store, dataDir string, admin
 	head := func(path, field string) map[string]string {
 		return map[string]string{"If-Match": get(path)[field].(string)}
 	}
+	t.Run("UnicodeSearch", func(t *testing.T) {
+		for _, tc := range []struct {
+			kind, query string
+			want        float64
+		}{
+			{"projects", "协作测试项目", 1},
+			{"teams", "协作测试团队", 1},
+			{"projects", "qa_project", 1},
+			{"teams", "不存在的团队🧪", 0},
+			{"projects", "%", 0},
+			{"teams", "!", 0},
+		} {
+			result := testData(admin.call(t, "GET", "/"+tc.kind+"?scope=all&status=all&page_size=1&q="+url.QueryEscape(tc.query), nil, 200, nil))
+			if result["total"] != tc.want || len(result["items"].([]any)) != int(tc.want) {
+				t.Fatalf("%s search %q: unexpected count or items", tc.kind, tc.query)
+			}
+		}
+		for _, path := range []string{"/admin/collaboration/user-options", p + "/member-options"} {
+			result := admin.call(t, "GET", path+"?q="+url.QueryEscape("中文用户"), nil, 200, nil)
+			items := result["data"].([]any)
+			if len(items) != 1 || items[0].(map[string]any)["id"] != memberID {
+				t.Fatal("Chinese display-name search did not return the member")
+			}
+		}
+		items := admin.call(t, "GET", p+"/team-options?q="+url.QueryEscape("协作测试团队"), nil, 200, nil)["data"].([]any)
+		if len(items) != 1 || items[0].(map[string]any)["id"] != team["id"] {
+			t.Fatal("Chinese team-option search did not return the team")
+		}
+	})
 	icon := testData(uploadAt(t, admin, "/icon-uploads", avatarPNG(t), 201))
 	iconID := icon["id"].(string)
 	outsider.call(t, "GET", "/icons/"+iconID, nil, 404, nil)

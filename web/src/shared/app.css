@@ -3221,6 +3221,13 @@ small {
 .account-dropdown {
   width: 242px;
   min-width: 224px;
+}
+.collab-detail-dropdown {
+  width: max-content;
+  min-width: 0;
+}
+.account-dropdown,
+.collab-detail-dropdown {
   max-width: calc(100vw - 16px);
   max-height: calc(100dvh - 16px);
   overflow-y: auto;
@@ -4079,17 +4086,20 @@ textarea::placeholder {
 .mobile-scrim.show {
   border: 0;
 }
-.account-dropdown.el-popper {
+.account-dropdown.el-popper,
+.collab-detail-dropdown.el-popper {
   padding: 7px;
   border: 1px solid var(--line);
   border-radius: 11px;
   box-shadow: 0 12px 42px var(--shadow-color);
 }
 .account-dropdown .el-dropdown-menu,
+.collab-detail-dropdown .el-dropdown-menu,
 .action-dropdown .el-dropdown-menu {
   padding: 0;
 }
-.account-dropdown .el-dropdown-menu__item {
+.account-dropdown .el-dropdown-menu__item,
+.collab-detail-dropdown .el-dropdown-menu__item {
   min-height: 42px;
   padding: 10px 12px;
   font-size: 14px;
@@ -4098,10 +4108,12 @@ textarea::placeholder {
   border-radius: 6px;
   color: var(--text-secondary);
 }
-.account-dropdown .el-popper__arrow {
+.account-dropdown .el-popper__arrow,
+.collab-detail-dropdown .el-popper__arrow {
   display: none;
 }
-.account-dropdown .el-dropdown-menu__item .ui-icon {
+.account-dropdown .el-dropdown-menu__item .ui-icon,
+.collab-detail-dropdown .el-dropdown-menu__item .ui-icon {
   width: 17px;
   height: 17px;
 }

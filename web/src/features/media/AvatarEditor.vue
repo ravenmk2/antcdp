@@ -73,7 +73,7 @@ function reset() {
   value.value = undefined;
   void discard(old);
 }
-defineExpose({ saved, reset });
+defineExpose({ saved, reset, preview });
 function select() {
   if (props.disabled || reading.value || uploading.value || closing.value)
     return;
