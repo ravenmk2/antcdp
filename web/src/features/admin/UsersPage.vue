@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import {
   ElButton,
   ElDialog,
@@ -12,9 +12,12 @@ import {
   ElMessage,
   ElMessageBox,
 } from "element-plus";
+import { useFormErrors, validateDisplayName, validateUsername, usernameHelp, passwordHelp } from "../../shared/formErrors";
+import { useListSearch } from "../../shared/listSearch";
+import RefreshButton from "../../shared/RefreshButton.vue";
 import AppLayout from "../../app/AppLayout.vue";
 import UiIcon from "../../shared/UiIcon.vue";
-import { api, ApiError, request } from "../../shared/api";
+import { api, request } from "../../shared/api";
 import {
   useIdentity,
   identityLabel,
@@ -43,37 +46,9 @@ const total = ref(0);
 const loading = ref(false);
 const busy = ref(false);
 const error = ref("");
-const dialogError = ref("");
-const managedForm = ref<InstanceType<typeof ElForm>>();
-const fieldErrors = reactive({ username: "", display_name: "", password: "", confirm: "", role: "" });
-function clearErrors() {
-  dialogError.value = "";
-  Object.keys(fieldErrors).forEach(key => fieldErrors[key as keyof typeof fieldErrors] = "");
-}
-async function focusError() {
-  await nextTick();
-  const input = managedForm.value?.$el.querySelector(".is-error input") as HTMLInputElement | null;
-  input?.focus({ preventScroll: true });
-  input?.scrollIntoView({ block: "center", behavior: "instant" });
-}
-function showSaveError(err: unknown) {
-  if (err instanceof ApiError && err.code === "USERNAME_TAKEN") {
-    fieldErrors.username = errorMessage(err);
-  } else if (err instanceof ApiError && err.code === "VALIDATION_FAILED") {
-    const supported = new Set(["too_short", "too_many_bytes", "invalid_length", "invalid_format", "invalid_value", "null_not_allowed"]);
-    let unmatched = err.details.length === 0;
-    for (const detail of err.details) {
-      const field = detail.field === "new_password" ? "password" : detail.field;
-      if (field && Object.hasOwn(fieldErrors, field) && supported.has(detail.code)) {
-        const key = field as keyof typeof fieldErrors;
-        const message = errorMessage(new ApiError(err.code, err.message, [detail], err.requestId));
-        fieldErrors[key] = [fieldErrors[key], message].filter(Boolean).join("；");
-      } else unmatched = true;
-    }
-    if (unmatched) dialogError.value = errorMessage(err);
-  } else dialogError.value = errorMessage(err);
-  void focusError();
-}
+const { formRef: managedForm, error: dialogError, fieldErrors, clearErrors, showError: showSaveError, hasErrors } = useFormErrors(
+  ["username", "display_name", "password", "confirm", "role"] as const, { new_password: "password" },
+);
 const pageSize = usePageSize("users");
 const filters = reactive({
   q: "",
@@ -86,7 +61,7 @@ const filters = reactive({
 });
 watch(pageSize, value => {
   filters.page_size = value;
-  search();
+  listSearch.run();
 });
 const dialog = ref(false);
 const mode = ref<"create" | "edit" | "password">("create");
@@ -105,12 +80,14 @@ function canManage(user: User) {
 function canEdit(user: User) {
   return !user.is_founder || user.id === identity.user?.id;
 }
+let sequence = 0;
 async function load() {
+  const current = ++sequence;
   loading.value = true;
   error.value = "";
   try {
     const query = new URLSearchParams(
-      Object.entries(filters).map(([key, value]) => [key, String(value)]),
+      Object.entries(filters).map(([key, value]) => [key, key === "q" ? String(value).trim() : String(value)]),
     );
     const [r, overview] = await Promise.all([
       request<User[]>(`/admin/users?${query}`),
@@ -121,19 +98,29 @@ async function load() {
         users_disabled: number;
       }>("/admin/overview"),
     ]);
+    if (current !== sequence) return;
     counts.value = overview;
     users.value = r.data;
     total.value = r.pagination?.total ?? 0;
   } catch (err) {
+    if (current !== sequence) return;
+    users.value = [];
     error.value = errorMessage(err);
   } finally {
-    loading.value = false;
+    if (current === sequence) loading.value = false;
   }
 }
 function search() {
   filters.page = 1;
   void load();
 }
+const listSearch = useListSearch(search, () => { sequence++; loading.value = true; });
+const hasFilters = computed(() => Boolean(filters.q || filters.status || filters.identity));
+function clearFilters() {
+  Object.assign(filters, { q: "", status: "", identity: "" });
+  listSearch.run();
+}
+onUnmounted(() => { sequence++; });
 function clearPassword() {
   form.password = "";
   form.confirm = "";
@@ -177,15 +164,16 @@ async function edit(user: User, password = false) {
 async function save() {
   if (busy.value || avatarProcessing.value) return;
   clearErrors();
+  if (mode.value !== "password") {
+    fieldErrors.username = validateUsername(form.username);
+    fieldErrors.display_name = validateDisplayName(form.display_name);
+  }
   if (mode.value !== "edit") {
     fieldErrors.password = validatePassword(form.password);
     if (form.password !== form.confirm)
       fieldErrors.confirm = "两次输入的密码不一致。";
-    if (fieldErrors.password || fieldErrors.confirm) {
-      void focusError();
-      return;
-    }
   }
+  if (hasErrors()) return;
   busy.value = true;
   try {
     if (mode.value === "create")
@@ -317,7 +305,7 @@ onUnmounted(clearPassword);
           :class="{ active: filters.status === status.value }"
           @click="
             filters.status = status.value;
-            search();
+            listSearch.run();
           "
         >
           {{ status.label
@@ -332,18 +320,22 @@ onUnmounted(clearPassword);
             autocomplete="off"
             aria-label="搜索用户名或显示名称"
             placeholder="搜索用户名或显示名称…"
-            @keyup.enter="search" /></label
+            @input="listSearch.input"
+            @compositionstart="listSearch.compositionStart"
+            @compositionend="listSearch.compositionEnd"
+            @keydown.enter="listSearch.enter" /></label
         ><select
           v-model="filters.identity"
           class="select-filter"
           aria-label="筛选用户身份"
-          @change="search"
+          @change="listSearch.run"
         >
           <option value="">全部身份</option>
           <option value="founder">创始人</option>
           <option value="admin">管理员</option>
           <option value="user">普通用户</option></select
-        ><ElButton :loading="loading" @click="search">查询</ElButton>
+        ><RefreshButton :loading="loading" @click="listSearch.run">刷新</RefreshButton>
+        <ElButton :disabled="!hasFilters" @click="clearFilters">清除筛选</ElButton>
         <ElButton class="users-create" type="primary" @click="createUser"><UiIcon name="plus" />添加用户</ElButton>
       </div>
       <div v-if="users.length" class="table-scroll">
@@ -434,12 +426,17 @@ onUnmounted(clearPassword);
           </tbody>
         </table>
       </div>
+      <div v-else-if="error && !loading" class="empty" role="status">
+        <h3>用户列表加载失败</h3>
+        <p>未能获取数据，请重试。</p>
+        <button class="btn" @click="load">重试</button>
+      </div>
       <div v-else class="empty">
         <UiIcon name="search" />
         <h3>{{ loading ? "正在加载用户" : "没有找到匹配的用户" }}</h3>
         <p v-if="!loading">试试其他关键词，或清除当前筛选条件。</p>
       </div>
-      <div class="table-footer">
+      <div v-if="!error" class="table-footer">
         <div class="list-page-summary">
           <span>共 {{ total }} 位用户</span>
           <PageSizeSelect v-model="pageSize" :disabled="loading" />
@@ -496,7 +493,7 @@ onUnmounted(clearPassword);
       <div v-if="dialogError" class="error-banner" role="alert">
         {{ dialogError }}
       </div>
-      <ElForm ref="managedForm" id="managed-user-form" label-position="top" :disabled="busy" @submit.prevent="save">
+      <ElForm ref="managedForm" id="managed-user-form" class="field-errors-form" label-position="top" :disabled="busy" @submit.prevent="save">
         <template v-if="mode !== 'password'">
           <AvatarEditor
             ref="avatarEditor"
@@ -525,8 +522,8 @@ onUnmounted(clearPassword);
                 placeholder="设置用于登录的用户名"
                 aria-describedby="managed-username-help"
             />
-              <p id="managed-username-help" class="managed-field-help">
-                使用 3–30 位小写字母、数字、下划线或短横线，以字母或数字开头。
+              <p id="managed-username-help" class="form-field-help">
+                {{ usernameHelp }}
               </p>
             </ElFormItem>
           </div>
@@ -568,7 +565,7 @@ onUnmounted(clearPassword);
                 show-password
                 autocomplete="new-password"
             />
-              <p id="managed-password-help" class="managed-field-help">至少 8 个字符，最多 72 个 UTF-8 字节。</p>
+              <p id="managed-password-help" class="form-field-help">{{ passwordHelp }}</p>
             </ElFormItem>
             <ElFormItem label="确认密码" :error="fieldErrors.confirm" required
               ><ElInput
@@ -604,21 +601,6 @@ onUnmounted(clearPassword);
 </template>
 
 <style>
-.user-dialog .el-form-item__error {
-  position: static;
-  width: 100%;
-  font-size: 13px;
-  line-height: 1.6;
-  padding-top: 6px;
-}
-.user-dialog .managed-field-help {
-  width: 100%;
-  margin: 6px 0 0;
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text-muted);
-}
-
 .user-dialog .el-dialog__header,
 .user-dialog .el-dialog__footer {
   flex-shrink: 0;

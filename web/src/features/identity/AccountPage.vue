@@ -9,11 +9,12 @@ import {
   ElInput,
   ElMessage,
 } from "element-plus";
+import { useFormErrors, validateDisplayName, passwordHelp } from "../../shared/formErrors";
+import RequiredPasswordPage from "./RequiredPasswordPage.vue";
 import AppLayout from "../../app/AppLayout.vue";
 import { request, resetCSRF } from "../../shared/api";
 import {
   useIdentity,
-  errorMessage,
   identityLabel,
   validatePassword,
   type User,
@@ -34,7 +35,7 @@ const passwordDialog = ref(
   Boolean(identity.session?.require_password_change && security.value),
 );
 const busy = ref(false);
-const error = ref("");
+const { formRef, error, fieldErrors, clearErrors, showError, hasErrors } = useFormErrors(["display_name", "current", "next", "confirm"] as const, { current_password: "current", new_password: "next" });
 const form = reactive({
   display_name: identity.user?.display_name ?? "",
   current: "",
@@ -50,7 +51,7 @@ watch(
     avatarEditor.value?.reset();
     avatarChange.value = undefined;
     avatarProcessing.value = false;
-    error.value = "";
+    clearErrors();
     form.current = "";
     form.next = "";
     form.confirm = "";
@@ -58,13 +59,13 @@ watch(
 );
 async function save() {
   if (busy.value || avatarProcessing.value || !identity.user) return;
-  error.value = "";
+  clearErrors();
   if (security.value) {
-    error.value = validatePassword(form.next);
-    if (!error.value && form.next !== form.confirm)
-      error.value = "两次输入的密码不一致。";
-    if (error.value) return;
-  }
+    if (!form.current) fieldErrors.current = "请输入当前密码。";
+    fieldErrors.next = validatePassword(form.next);
+    if (form.next !== form.confirm) fieldErrors.confirm = "两次输入的密码不一致。";
+  } else fieldErrors.display_name = validateDisplayName(form.display_name);
+  if (hasErrors()) return;
   busy.value = true;
   try {
     if (security.value) {
@@ -96,7 +97,7 @@ async function save() {
       ElMessage.success("个人资料已保存。");
     }
   } catch (err) {
-    error.value = errorMessage(err);
+    showError(err);
   } finally {
     busy.value = false;
   }
@@ -105,7 +106,7 @@ function clearPassword() {
   form.current = "";
   form.next = "";
   form.confirm = "";
-  error.value = "";
+  clearErrors();
 }
 onUnmounted(() => {
   form.current = "";
@@ -114,7 +115,8 @@ onUnmounted(() => {
 });
 </script>
 <template>
-  <AppLayout>
+  <RequiredPasswordPage v-if="identity.session?.require_password_change" />
+  <AppLayout v-else>
     <div v-if="identity.user" class="profile-layout">
       <aside class="panel profile-summary">
         <UserAvatar :user="identity.user" large />
@@ -152,6 +154,8 @@ onUnmounted(() => {
         </nav>
         <ElForm
           v-if="!security"
+          ref="formRef"
+          class="field-errors-form"
           label-position="top"
           :disabled="busy"
           @submit.prevent="save"
@@ -168,9 +172,10 @@ onUnmounted(() => {
               label="个人头像"
               @processing="avatarProcessing = $event"
             />
-            <ElFormItem label="显示名称" required
+            <ElFormItem label="显示名称" :error="fieldErrors.display_name" required
               ><ElInput
                 v-model="form.display_name"
+            @input="fieldErrors.display_name = ''"
                 name="display-name"
                 autocomplete="nickname"
                 maxlength="30" /></ElFormItem
@@ -253,6 +258,7 @@ onUnmounted(() => {
     </div>
     <ElDialog
       v-model="passwordDialog"
+      destroy-on-close
       class="app-dialog"
       align-center
       title="修改密码"
@@ -275,26 +281,29 @@ onUnmounted(() => {
         >
       </div>
       <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
-      <ElForm label-position="top" :disabled="busy" @submit.prevent="save"
-        ><ElFormItem label="当前密码" required
+      <ElForm ref="formRef" class="field-errors-form" label-position="top" :disabled="busy" @submit.prevent="save"
+        ><ElFormItem label="当前密码" :error="fieldErrors.current" required
           ><ElInput
             v-model="form.current"
+            @input="fieldErrors.current = ''"
             name="current-password"
             type="password"
             show-password
             autocomplete="current-password" /></ElFormItem
-        ><ElFormItem label="新密码" required
+        ><ElFormItem label="新密码" :error="fieldErrors.next" required
           ><ElInput
             v-model="form.next"
+            @input="fieldErrors.next = ''"
             name="new-password"
+            aria-describedby="account-password-help"
             type="password"
             show-password
             autocomplete="new-password"
-        /></ElFormItem>
-        <p class="field-help">至少 8 个字符，最多 72 个 UTF-8 字节。</p>
-        <ElFormItem label="确认新密码" required
+        /><p id="account-password-help" class="form-field-help">{{ passwordHelp }}</p></ElFormItem>
+        <ElFormItem label="确认新密码" :error="fieldErrors.confirm" required
           ><ElInput
             v-model="form.confirm"
+            @input="fieldErrors.confirm = ''"
             name="confirm-password"
             type="password"
             show-password

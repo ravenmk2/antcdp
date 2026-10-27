@@ -464,3 +464,18 @@ select:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+.field-errors-form .el-form-item__error {
+  position: static;
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.6;
+  padding-top: 6px;
+}
+.field-errors-form .form-field-help {
+  width: 100%;
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}

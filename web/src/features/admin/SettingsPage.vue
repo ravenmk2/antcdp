@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, computed } from "vue";
+import { onMounted, onUnmounted, reactive, ref, computed } from "vue";
 import {
   ElButton,
   ElForm,
   ElFormItem,
   ElInput,
   ElMessage,
+  ElMessageBox,
   ElOption,
   ElSelect,
   ElSwitch,
@@ -27,7 +28,7 @@ interface SystemInfo {
   database_type: string;
   master_key_initialized: boolean;
 }
-import { useRoute } from "vue-router";
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from "vue-router";
 import UiIcon from "../../shared/UiIcon.vue";
 const route = useRoute();
 const tab = computed(() =>
@@ -42,6 +43,36 @@ const form = reactive({
   registration_enabled: false,
   session_ttl_days: 30,
 });
+const saved = ref({ ...form });
+const dirty = computed(() => JSON.stringify(form) !== JSON.stringify(saved.value));
+function discard() {
+  Object.assign(form, saved.value);
+  error.value = "";
+}
+async function confirmLeave() {
+  if (busy.value) return false;
+  if (!dirty.value) return true;
+  try {
+    await ElMessageBox.confirm("当前分类有未保存的修改，离开后将丢弃这些修改。", "放弃未保存的修改？", {
+      confirmButtonText: "放弃修改", cancelButtonText: "继续编辑", closeOnClickModal: false,
+    });
+    discard();
+    return true;
+  } catch { return false; }
+}
+onBeforeRouteLeave((to) => {
+  if (to.path === "/login" && !identity.session) return true;
+  return confirmLeave();
+});
+onBeforeRouteUpdate((to, from) => to.query.tab === from.query.tab ? true : confirmLeave());
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (dirty.value || busy.value) { event.preventDefault(); event.returnValue = ""; }
+}
+onMounted(() => window.addEventListener("beforeunload", beforeUnload));
+onUnmounted(() => window.removeEventListener("beforeunload", beforeUnload));
+async function reload() {
+  if (await confirmLeave()) await load();
+}
 const publicURL = ref("");
 const etag = ref("");
 const info = ref<SystemInfo>();
@@ -66,6 +97,7 @@ async function load() {
       registration_enabled: settings.data.registration_enabled,
       session_ttl_days: settings.data.session_ttl_days,
     });
+    saved.value = { ...form };
     publicURL.value = settings.data.deployment.public_url;
     etag.value = settings.etag;
     info.value = system;
@@ -76,14 +108,16 @@ async function load() {
   }
 }
 async function save() {
-  if (busy.value) return;
+  if (busy.value || loading.value || !dirty.value) return;
   busy.value = true;
   error.value = "";
   try {
     const r = await request<Settings>("/admin/settings", {
       method: "PATCH",
       etag: etag.value,
-      body: { ...form },
+      body: tab.value === "general"
+        ? { site_name: form.site_name, timezone: form.timezone }
+        : { registration_enabled: form.registration_enabled, session_ttl_days: form.session_ttl_days },
     });
     Object.assign(form, {
       site_name: r.data.site_name,
@@ -91,6 +125,7 @@ async function save() {
       registration_enabled: r.data.registration_enabled,
       session_ttl_days: r.data.session_ttl_days,
     });
+    saved.value = { ...form };
     etag.value = r.etag;
     await identity.refresh();
     ElMessage.success("系统设置已保存。");
@@ -115,7 +150,9 @@ onMounted(load);
 </script>
 <template>
   <AppLayout>
-    <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
+    <div v-if="error" class="error-banner" role="alert">
+      {{ error }} <ElButton :disabled="busy || loading" @click="reload">{{ etag ? "重新加载" : "重试" }}</ElButton>
+    </div>
     <div class="settings-layout">
       <nav class="settings-nav" aria-label="系统设置分类">
         <RouterLink to="/admin/settings" :class="{ active: tab === 'general' }"
@@ -152,7 +189,7 @@ onMounted(load);
         <ElForm
           v-if="tab !== 'system'"
           label-position="top"
-          :disabled="busy"
+          :disabled="busy || loading"
           @submit.prevent="save"
         >
           <div class="settings-body">
@@ -231,13 +268,14 @@ onMounted(load);
             </template>
           </div>
           <div class="settings-save">
-            <span>配置变更后对整个系统生效</span
+            <span role="status">{{ dirty ? "当前分类有未保存的修改" : "当前分类已保存" }}</span
+            ><ElButton :disabled="busy || loading || !dirty" @click="discard">撤销修改</ElButton
             ><ElButton
               type="primary"
               native-type="submit"
               :loading="busy"
-              :disabled="busy"
-              >保存更改</ElButton
+              :disabled="busy || loading || !dirty"
+              >保存当前分类</ElButton
             >
           </div>
         </ElForm>
@@ -277,3 +315,14 @@ onMounted(load);
     </div>
   </AppLayout>
 </template>
+
+<style scoped>
+.settings-save { flex-wrap: wrap; }
+.settings-save > span { flex: 1 1 180px; }
+.settings-save .el-button + .el-button { margin-left: 0; }
+@media (max-width: 600px) {
+  .settings-layout { grid-template-columns: minmax(0, 1fr); }
+  .settings-save { justify-content: flex-end; gap: 10px; }
+  .settings-save > span { flex-basis: 100%; }
+}
+</style>

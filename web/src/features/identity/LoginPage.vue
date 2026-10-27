@@ -2,7 +2,8 @@
 import { computed, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElButton, ElForm, ElFormItem, ElInput, ElMessage } from "element-plus";
-import { useIdentity, errorMessage, validatePassword } from "./store";
+import { useIdentity, validatePassword } from "./store";
+import { useFormErrors, validateDisplayName, validateUsername, usernameHelp, passwordHelp } from "../../shared/formErrors";
 import UiIcon from "../../shared/UiIcon.vue";
 import BrandLogo from "../../shared/BrandLogo.vue";
 const identity = useIdentity();
@@ -16,16 +17,20 @@ const form = reactive({
   confirm: "",
 });
 const busy = ref(false);
-const error = ref("");
+const { formRef, error, fieldErrors, clearErrors, showError, hasErrors } = useFormErrors(["username", "display_name", "password", "confirm"] as const);
 async function submit() {
   if (busy.value) return;
-  error.value = "";
+  clearErrors();
   if (registering.value) {
-    error.value = validatePassword(form.password);
-    if (!error.value && form.password !== form.confirm)
-      error.value = "两次输入的密码不一致。";
-    if (error.value) return;
+    fieldErrors.display_name = validateDisplayName(form.display_name);
+    fieldErrors.username = validateUsername(form.username);
+    fieldErrors.password = validatePassword(form.password);
+    if (form.password !== form.confirm) fieldErrors.confirm = "两次输入的密码不一致。";
+  } else {
+    if (!form.username) fieldErrors.username = "请输入用户名。";
+    if (!form.password) fieldErrors.password = "请输入密码。";
   }
+  if (hasErrors()) return;
   busy.value = true;
   try {
     if (registering.value)
@@ -37,7 +42,7 @@ async function submit() {
       identity.session?.require_password_change ? "/account/security" : "/home",
     );
   } catch (err) {
-    error.value = errorMessage(err);
+    showError(err);
   } finally {
     busy.value = false;
   }
@@ -45,7 +50,7 @@ async function submit() {
 watch(
   () => route.path,
   () => {
-    error.value = "";
+    clearErrors();
     form.password = "";
     form.confirm = "";
   },
@@ -93,42 +98,54 @@ onUnmounted(() => {
         >
         <template v-else>
           <ElForm
+            ref="formRef"
+            class="field-errors-form"
             label-position="top"
             :disabled="busy"
             @submit.prevent="submit"
           >
-            <ElFormItem v-if="registering" label="显示名称" required
+            <ElFormItem v-if="registering" label="显示名称" :error="fieldErrors.display_name" required
               ><ElInput
                 v-model="form.display_name"
+                @input="fieldErrors.display_name = ''"
                 name="display-name"
                 autocomplete="nickname"
                 placeholder="你的姓名或常用称呼"
             /></ElFormItem>
-            <ElFormItem label="用户名" required
+            <ElFormItem label="用户名" :error="fieldErrors.username" required
               ><ElInput
                 v-model="form.username"
+                @input="fieldErrors.username = ''"
                 name="username"
+                :aria-describedby="registering ? 'register-username-help' : undefined"
                 autocomplete="username"
                 autocapitalize="none"
                 :spellcheck="false"
                 :placeholder="
                   registering ? '设置用于登录的用户名' : '请输入用户名'
                 "
-            /></ElFormItem>
-            <ElFormItem label="密码" required
+            />
+              <p v-if="registering" id="register-username-help" class="form-field-help">{{ usernameHelp }}</p>
+            </ElFormItem>
+            <ElFormItem label="密码" :error="fieldErrors.password" required
               ><ElInput
                 v-model="form.password"
+                @input="fieldErrors.password = ''"
                 name="password"
+                :aria-describedby="registering ? 'register-password-help' : undefined"
                 type="password"
                 show-password
                 :autocomplete="
                   registering ? 'new-password' : 'current-password'
                 "
                 :placeholder="registering ? '至少 8 个字符' : '请输入密码'"
-            /></ElFormItem>
-            <ElFormItem v-if="registering" label="确认密码" required
+            />
+              <p v-if="registering" id="register-password-help" class="form-field-help">{{ passwordHelp }}</p>
+            </ElFormItem>
+            <ElFormItem v-if="registering" label="确认密码" :error="fieldErrors.confirm" required
               ><ElInput
                 v-model="form.confirm"
+                @input="fieldErrors.confirm = ''"
                 name="confirm-password"
                 type="password"
                 show-password

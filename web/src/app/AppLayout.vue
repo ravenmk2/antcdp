@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   ElDropdown,
@@ -33,6 +33,59 @@ function storedCollapsed() {
 }
 const collapsed = ref(storedCollapsed());
 const mobileOpen = ref(false);
+const mobileQuery = window.matchMedia("(max-width: 850px)");
+const isMobile = ref(mobileQuery.matches);
+const sidebar = ref<HTMLElement>();
+const mobileTrigger = ref<HTMLButtonElement>();
+let previousOverflow = "";
+let scrollLocked = false;
+function unlockScroll() {
+  if (scrollLocked) document.body.style.overflow = previousOverflow;
+  scrollLocked = false;
+}
+watch(mobileOpen, async (open) => {
+  if (open) {
+    previousOverflow = document.body.style.overflow;
+    scrollLocked = true;
+    document.body.style.overflow = "hidden";
+    await nextTick();
+    if (mobileOpen.value) sidebar.value?.querySelector<HTMLButtonElement>(".mobile-nav-close")?.focus();
+  } else {
+    unlockScroll();
+    await nextTick();
+    if (isMobile.value) mobileTrigger.value?.focus();
+  }
+});
+function resizeNavigation() {
+  isMobile.value = mobileQuery.matches;
+  if (!isMobile.value) mobileOpen.value = false;
+}
+function navigationKeydown(event: KeyboardEvent) {
+  if (!mobileOpen.value || !isMobile.value) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    mobileOpen.value = false;
+  } else if (event.key === "Tab") {
+    const controls = [...(sidebar.value?.querySelectorAll<HTMLElement>("a[href], button:not(:disabled), [tabindex='0']") ?? [])]
+      .filter(element => element.getClientRects().length && getComputedStyle(element).visibility !== "hidden");
+    const first = controls[0], last = controls[controls.length - 1];
+    if (!first) { event.preventDefault(); return; }
+    if (event.shiftKey && (document.activeElement === first || !sidebar.value?.contains(document.activeElement))) {
+      event.preventDefault(); last?.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !sidebar.value?.contains(document.activeElement))) {
+      event.preventDefault(); first.focus();
+    }
+  }
+}
+onMounted(() => {
+  mobileQuery.addEventListener("change", resizeNavigation);
+  document.addEventListener("keydown", navigationKeydown);
+});
+onUnmounted(() => {
+  mobileQuery.removeEventListener("change", resizeNavigation);
+  document.removeEventListener("keydown", navigationKeydown);
+  unlockScroll();
+});
 watch(collapsed, (value) => {
   try {
     localStorage.setItem("antcdp.sidebar-collapsed", String(value));
@@ -62,15 +115,22 @@ async function userCommand(command: string | number | object) {
       v-if="mobileOpen"
       class="mobile-scrim show"
       aria-label="关闭导航"
+      tabindex="-1"
       @click="mobileOpen = false"
     />
     <aside
+      ref="sidebar"
+      id="main-navigation"
+      :role="isMobile ? 'dialog' : undefined"
+      :aria-modal="isMobile && mobileOpen ? true : undefined"
+      :inert="isMobile && !mobileOpen"
       class="sidebar"
       :class="{ 'mobile-open': mobileOpen }"
       aria-label="侧边栏"
     >
       <div class="sidebar-heading">
         <BrandLogo />
+        <button v-if="isMobile" class="icon-btn mobile-nav-close" aria-label="关闭导航" @click="mobileOpen = false"><UiIcon name="close" /></button>
       </div>
       <nav
         class="sidebar-main"
@@ -193,7 +253,7 @@ async function userCommand(command: string | number | object) {
         </ElDropdown>
       </div>
     </aside>
-    <div class="main-shell">
+    <div class="main-shell" :inert="isMobile && mobileOpen">
       <header class="topbar">
         <div class="topbar-leading">
           <button
@@ -204,7 +264,9 @@ async function userCommand(command: string | number | object) {
             <UiIcon :name="collapsed ? 'expand' : 'panel'" />
           </button>
           <button
+            ref="mobileTrigger"
             class="icon-btn mobile-menu"
+            aria-controls="main-navigation"
             aria-label="展开导航"
             :aria-expanded="mobileOpen"
             @click="mobileOpen = !mobileOpen"
@@ -269,3 +331,10 @@ async function userCommand(command: string | number | object) {
     </div>
   </div>
 </template>
+
+<style scoped>
+@media (max-width: 850px) {
+  .sidebar-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .mobile-nav-close, .mobile-menu { min-width: 44px; min-height: 44px; }
+}
+</style>

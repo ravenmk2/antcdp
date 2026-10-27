@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount, reactive, ref, watch } from "vue";
-import { ElDatePicker } from "element-plus";
+import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from "vue";
+import { ElButton, ElDatePicker } from "element-plus";
+import { useListSearch } from "../../shared/listSearch";
 import AppLayout from "../../app/AppLayout.vue";
 import UiIcon from "../../shared/UiIcon.vue";
 import PageSizeSelect from "../../shared/PageSizeSelect.vue";
@@ -13,7 +14,7 @@ import { actionLabels, actionIcon, type AuditEvent } from "./audit";
 import "./audit.css";
 const identity = useIdentity();
 const pageSize = usePageSize("audit");
-watch(pageSize, search);
+watch(pageSize, () => listSearch.run());
 const filters = reactive({ q: "", action: "" });
 const dates = ref<[Date, Date] | null>(null);
 const events = ref<AuditEvent[]>([]),
@@ -24,8 +25,7 @@ const page = ref(0),
   next = ref<string | null>(null);
 const detailOpen = ref(false),
   selected = ref<string>();
-let sequence = 0,
-  timer: ReturnType<typeof setTimeout> | undefined;
+let sequence = 0;
 async function load() {
   const current = ++sequence;
   loading.value = true;
@@ -64,7 +64,6 @@ async function load() {
   }
 }
 function search() {
-  clearTimeout(timer);
   page.value = 0;
   cursors.value = [undefined];
   void load();
@@ -82,16 +81,16 @@ function showDetail(id: string) {
   selected.value = id;
   detailOpen.value = true;
 }
-watch(
-  () => filters.q,
-  () => {
-    clearTimeout(timer);
-    timer = setTimeout(search, 350);
-  },
-);
+const listSearch = useListSearch(search, () => { sequence++; loading.value = true; });
+const hasFilters = computed(() => Boolean(filters.q || filters.action || dates.value));
+function clearFilters() {
+  filters.q = "";
+  filters.action = "";
+  dates.value = null;
+  listSearch.run();
+}
 onMounted(load);
 onBeforeUnmount(() => {
-  clearTimeout(timer);
   sequence++;
 });
 </script>
@@ -108,12 +107,15 @@ onBeforeUnmount(() => {
             aria-label="搜索审计记录"
             placeholder="搜索操作者、操作对象或事件…"
             maxlength="64"
-            @keydown.enter="search" /></label
+            @input="listSearch.input"
+            @compositionstart="listSearch.compositionStart"
+            @compositionend="listSearch.compositionEnd"
+            @keydown.enter="listSearch.enter" /></label
         ><select
           v-model="filters.action"
           class="select-filter"
           aria-label="筛选事件类型"
-          @change="search"
+          @change="listSearch.run"
         >
           <option value="">全部事件</option>
           <option value="user.">用户操作（含注册）</option>
@@ -131,10 +133,11 @@ onBeforeUnmount(() => {
             range-separator="至"
             :editable="false"
             :clearable="true"
-            @change="search"
+            @change="listSearch.run"
           />
         </div>
-        <RefreshButton :loading="loading" @click="search">刷新</RefreshButton>
+        <ElButton :disabled="!hasFilters" @click="clearFilters">清除筛选</ElButton>
+        <RefreshButton :loading="loading" @click="listSearch.run">刷新</RefreshButton>
       </div>
       <div v-if="events.length" class="table-scroll">
         <table>
@@ -145,7 +148,7 @@ onBeforeUnmount(() => {
               <th>操作对象</th>
               <th>时间</th>
               <th>结果</th>
-              <th><span class="sr-only">详情</span></th>
+              <th class="audit-detail-column"><span class="sr-only">详情</span></th>
             </tr>
           </thead>
           <tbody>
@@ -177,12 +180,17 @@ onBeforeUnmount(() => {
           </tbody>
         </table>
       </div>
+      <div v-else-if="error && !loading" class="empty" role="status">
+        <h3>审计记录加载失败</h3>
+        <p>未能获取数据，请重试。</p>
+        <button class="btn" @click="load">重试</button>
+      </div>
       <div v-else class="empty" role="status">
         <UiIcon name="log" />
         <h3>{{ loading ? "正在加载审计记录" : "暂无匹配的审计记录" }}</h3>
         <p v-if="!loading">试试其他事件类型、时间范围或关键词。</p>
       </div>
-      <div class="table-footer">
+      <div v-if="!error" class="table-footer">
         <div class="list-page-summary">
           <span>本页 {{ events.length }} 条记录</span>
           <PageSizeSelect v-model="pageSize" :disabled="loading" />

@@ -103,6 +103,7 @@ const fieldLabels: Record<string, string> = {
   display_name: "显示名称",
   password: "密码",
   new_password: "新密码",
+  current_password: "当前密码",
   site_name: "系统名称",
   timezone: "系统时区",
   session_ttl_days: "会话有效期",

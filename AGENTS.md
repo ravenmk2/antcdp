@@ -19,9 +19,9 @@ antcdp/
 
 - [README.md](README.md)：项目简介与 Docker 快速开始。
 - [docs/README.md](docs/README.md)：一期范围、已确认规则、工程实施约定及默认原型和设计文档入口。
-- [docs/development.md](docs/development.md)：开发进度、安装至控制台闭环、头像与审计实现、UI 精简、弹窗修复与页面层级、本地启动及验证边界。
+- [docs/development.md](docs/development.md)：开发进度、安装至控制台闭环、头像与审计实现、UI 精简、弹窗修复与页面层级、强制改密与设置保存保护、失败重试与移动导航焦点、表单字段错误与 600ms 搜索、本地启动及验证边界。
 - [docs/initial-delivery.md](docs/initial-delivery.md)：首次迁移范围、全新安装、单个初始提交、工程改名与双主题验收。
-- [docs/ui-design.md](docs/ui-design.md)：暖色中性双主题视觉基线、蚂蚁头 LOGO 与主题反色、用户菜单外观选择、深色边框与焦点层次、中文排版、组件、导航、响应式、系统用词与交互规范、统一头像、固定操作区用户弹窗与审计工具栏、字段就近提示、客户端分页偏好、模块化概览、页面标题精简与刷新动效。
+- [docs/ui-design.md](docs/ui-design.md)：暖色中性双主题视觉基线、蚂蚁头 LOGO 与主题反色、用户菜单外观选择、深色边框与焦点层次、中文排版、组件、导航、响应式、系统用词与交互规范、统一头像、固定操作区用户弹窗与审计工具栏、统一字段错误与搜索交互（600ms）、客户端分页偏好、模块化概览、页面标题精简与刷新动效、受限改密、分类保存、失败重试与移动抽屉交互。
 - [docs/architecture.md](docs/architecture.md)：技术选型、模块边界、前后端结构与视觉基线、实施顺序。
 - [docs/technology-decisions.md](docs/technology-decisions.md)：sqlx/sqlc、bcrypt/HMAC 与 MySQL 版本及命名的比较和建议。
 - [docs/extensibility.md](docs/extensibility.md)：受控设置 KV、独立凭据表、仓储/事务接口和未来模块的扩展边界。

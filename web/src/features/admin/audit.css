@@ -155,3 +155,11 @@
     min-width: 150px;
   }
 }
+
+.audit-detail-column { position: relative; }
+@media (max-width: 600px) {
+  .audit-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; }
+  .audit-toolbar .search-box, .audit-toolbar .audit-time-filter { grid-column: 1 / -1; }
+  .audit-toolbar .select-filter { min-width: 0; width: 100%; }
+  .audit-toolbar > .el-button { margin-left: 0; }
+}
