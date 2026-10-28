@@ -333,18 +333,18 @@ button:focus-visible,
 a:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 .el-popper.is-light,
 .el-popper.is-light > .el-popper__arrow::before {
   background: var(--surface-overlay);
   border-color: var(--border);
 }
-/* Controls keep a distinct boundary and a shared keyboard focus treatment. */
+/* Editable controls use one focus boundary; buttons retain a keyboard outline. */
 .search-box:hover,
 .input:hover:not(:disabled):not([readonly]),
 .role-choice:hover {
-  border-color: var(--text-secondary);
+  border-color: var(--border-control-hover);
 }
 .role-choice {
   border-color: var(--border-control);
@@ -353,9 +353,20 @@ select:focus-visible {
 .input:focus:not(:disabled),
 .role-choice:focus-within {
   border-color: var(--focus);
+  outline: none;
+  box-shadow: none;
+}
+.role-choice:has(:focus-visible) {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  box-shadow: none;
+}
+@media (forced-colors: active) {
+  .search-box:focus-within,
+  .input:focus:not(:disabled),
+  .collab-search:focus-within {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 .el-input,
 .el-textarea {
@@ -479,3 +490,9 @@ select:focus-visible {
   line-height: 1.6;
   color: var(--text-muted);
 }
+
+/* Keep the resource hierarchy available on narrow screens as well. */
+.topbar .breadcrumb.resource-breadcrumb { display: flex; flex-wrap: wrap; min-width: 0; gap: 6px; }
+.topbar .breadcrumb.resource-breadcrumb > a { display: inline; white-space: nowrap; }
+.topbar .breadcrumb.resource-breadcrumb > svg { display: inline-block; flex-shrink: 0; }
+.topbar .breadcrumb.resource-breadcrumb > .current { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

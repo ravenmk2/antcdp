@@ -18,6 +18,7 @@ defineProps<{
     | "users"
     | "settings"
     | "chevron"
+    | "chevron-left"
     | "key"
     | "globe"
     | "more"
@@ -68,6 +69,7 @@ const paths = {
   settings:
     "M9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1 1-3Zm7 9a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z",
   chevron: "m9 6 6 6-6 6",
+  "chevron-left": "m15 6-6 6 6 6",
   home: "m3 10 9-7 9 7v10H3V10Zm6 10v-7h6v7",
   arrow: "M5 12h14m-6-6 6 6-6 6",
   back: "M19 12H5m6-6-6 6 6 6",

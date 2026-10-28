@@ -1,6 +1,10 @@
 /* AntCDP appearance tokens. Product surfaces and controls share this palette. */
 :root {
   color-scheme: light;
+  --auth-canvas: #f3f2ed;
+  --auth-surface: #fffefa;
+  --auth-art: #eae8df;
+  --auth-tile: #f6f5ee;
   --canvas: #faf9f5;
   --surface: #ffffff;
   --surface-input: var(--surface);
@@ -46,6 +50,10 @@
 
 :root.dark {
   color-scheme: dark;
+  --auth-canvas: #121310;
+  --auth-surface: #1d1f1a;
+  --auth-art: #25281f;
+  --auth-tile: #30342a;
   /* Dark surface ladder: shell 0, canvas 1, cards 2, controls 3. */
   --canvas: #151515;
   --surface: #1a1a19;
@@ -147,7 +155,8 @@
   --el-text-color-placeholder: var(--text-muted);
   --el-text-color-disabled: var(--text-disabled);
   --el-border-color: var(--border-control);
-  --el-border-color-hover: var(--text-secondary);
+  --border-control-hover: color-mix(in srgb, var(--border-control) 65%, var(--text-secondary));
+  --el-border-color-hover: var(--border-control-hover);
   --el-border-color-light: var(--border);
   --el-border-color-lighter: var(--border);
   --el-border-color-extra-light: var(--border);

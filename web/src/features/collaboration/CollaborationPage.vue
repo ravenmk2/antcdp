@@ -17,7 +17,6 @@ import {
   ElMessage,
   ElMessageBox,
   ElPagination,
-  ElCheckbox,
   ElDropdown,
   ElDropdownMenu,
   ElDropdownItem,
@@ -62,8 +61,7 @@ const rows = ref<Resource[]>([]),
   total = ref(0),
   page = ref(1),
   query = ref(""),
-  status = ref("active"),
-  unmanaged = ref(false);
+  status = ref("active");
 const detail = ref<Resource>(),
   members = ref<Member[]>([]),
   teams = ref<Resource[]>([]);
@@ -272,7 +270,7 @@ async function load() {
       detail.value.membership_etag = results[0].membership_etag;
       teams.value = results[1];
     } else {
-      const common = `scope=${consoleMode.value ? "all" : "mine"}&q=${encodeURIComponent(query.value)}&unmanaged=${unmanaged.value}`;
+      const common = `scope=${consoleMode.value ? "all" : "mine"}&q=${encodeURIComponent(query.value)}`;
       const [result, active, ended] = await Promise.all([
         api<Page>(
           `${endpoint}?${common}&status=${status.value}&page=${page.value}&page_size=20`,
@@ -313,12 +311,11 @@ watch(
     counts.value = {};
     query.value = "";
     status.value = "active";
-    unmanaged.value = false;
     void load();
   },
   { immediate: true },
 );
-watch([status, unmanaged], () => {
+watch(status, () => {
   listSearch.cancel();
   if (page.value !== 1) page.value = 1;
   else void load();
@@ -576,7 +573,11 @@ async function removeTeam(t: Resource) {
 }
 </script>
 <template>
-  <AppLayout>
+  <AppLayout :breadcrumbs="id ? [
+    { label: consoleMode ? '控制台' : '首页', to: consoleMode ? '/admin' : '/home' },
+    { label: consoleMode ? `${label}管理` : `我的${label}`, to: base },
+    { label: detail?.id === id ? detail.name : `${label}详情` },
+  ] : undefined">
     <div class="collaboration-page" :aria-busy="loading">
       <div v-if="error" class="collab-error" role="alert">
         <span>{{ error }}</span
@@ -618,19 +619,13 @@ async function removeTeam(t: Resource) {
               :disabled="busy"
               aria-label="刷新"
               @click="listSearch.run"
-              ><span class="collab-sr-only">刷新</span></RefreshButton
+              ></RefreshButton
             >
             <ElButton v-if="consoleMode" type="primary" @click="edit(true)"
               ><UiIcon name="plus" />创建{{ label }}</ElButton
             >
           </div>
         </div>
-        <ElCheckbox
-          v-if="consoleMode"
-          v-model="unmanaged"
-          class="collab-unmanaged"
-          >仅显示无有效管理员</ElCheckbox
-        >
         <div v-if="loading && !rows.length" class="collab-empty" role="status">
           正在加载{{ label }}…
         </div>
@@ -638,20 +633,22 @@ async function removeTeam(t: Resource) {
           <ResourceIcon :fallback="fallbackIcon" tile />
           <h2>
             {{
-              query || unmanaged
+              query
                 ? "没有匹配结果"
                 : `暂无${status === "active" ? "" : status === "all" ? "" : statusLabel(status)}${label}`
             }}
           </h2>
           <p>
             {{
-              query || unmanaged
+              query
                 ? "尝试其他关键词或调整筛选条件。"
                 : consoleMode
                   ? `创建${label}后，即可添加成员开始协作。`
-                  : `你参与的${label}会显示在这里。`
+                  : `你参与的${label}会显示在这里。需要加入时，请联系${label}或系统管理员。`
             }}
           </p>
+          <ElButton v-if="query || status !== 'active'" @click="query = ''; status = 'active'; listSearch.run()">清除筛选</ElButton>
+          <ElButton v-else-if="consoleMode" type="primary" @click="edit(true)">创建{{ label }}</ElButton>
         </div>
         <template v-else-if="rows.length">
           <div v-if="consoleMode" class="collab-table-panel">
@@ -742,10 +739,10 @@ async function removeTeam(t: Resource) {
               <footer>
                 <span class="collab-member-count"
                   ><UiIcon name="users" />{{ item.member_count }} 位成员</span
-                ><span v-if="item.status === 'active'" class="collab-role">{{
+                ><span class="collab-role">{{
                   roleLabel(item)
                 }}</span
-                ><span v-else class="collab-status ended">{{
+                ><span class="collab-status" :class="{ ended: item.status !== 'active' }">{{
                   statusLabel(item.status)
                 }}</span>
               </footer>
@@ -790,9 +787,7 @@ async function removeTeam(t: Resource) {
           <footer v-if="!error" class="collab-list-footer">
             <span
               >共 {{ total }} 个{{ label
-              }}<template v-if="!consoleMode">
-                · 仅显示我参与的{{ label }}</template
-              ></span
+              }}</span
             ><ElPagination
               v-if="total > 20"
               v-model:current-page="page"
@@ -804,10 +799,6 @@ async function removeTeam(t: Resource) {
         </template>
       </template>
       <template v-else-if="detail">
-        <RouterLink :to="base" class="collab-back"
-          ><UiIcon name="back" />{{ consoleMode ? "全部" : "我的"
-          }}{{ label }}</RouterLink
-        >
         <section class="collab-detail-heading">
           <ResourceIcon
             :icon-key="detail.icon_key"
@@ -816,27 +807,28 @@ async function removeTeam(t: Resource) {
             tile
           />
           <div class="collab-identity">
-            <h1>{{ detail.name }}</h1>
-            <div class="collab-identity-line">
-              <code>{{ detail.code }}</code
-              ><span
+            <div class="collab-title-line">
+              <h1>{{ detail.name }}</h1>
+              <span
                 class="collab-status"
                 :class="{ ended: detail.status !== 'active' }"
                 >{{ statusLabel(detail.status) }}</span
               >
             </div>
+            <div class="collab-identity-line"><code>{{ detail.code }}</code></div>
             <p v-if="detail.summary">{{ detail.summary }}</p>
           </div>
           <div class="collab-detail-actions">
-            <ElButton
+            <button
               v-if="detail.is_member"
-              text
+              class="icon-btn"
               :disabled="pinBusy"
               :aria-pressed="isPinned(detail)"
+              :aria-label="isPinned(detail) ? '取消固定' : '固定到侧栏'"
+              :title="isPinned(detail) ? '取消固定' : '固定到侧栏'"
+              :class="{ pinned: isPinned(detail) }"
               @click="togglePin(detail)"
-              ><UiIcon name="pin" />{{
-                isPinned(detail) ? "已固定" : "固定"
-              }}</ElButton
+              ><UiIcon name="pin" /></button
             >
             <ElDropdown
               trigger="click"
@@ -1116,7 +1108,7 @@ async function removeTeam(t: Resource) {
                 :total="memberTotal"
                 :page-size="20"
                 layout="prev, pager, next"
-              /><span v-else>每位成员仅显示一次</span>
+              />
             </footer>
           </div>
           <p v-if="kind === 'projects'" class="collab-help">
@@ -1228,7 +1220,6 @@ async function removeTeam(t: Resource) {
                   @click="iconPicker = !iconPicker"
                   >更换图标</ElButton
                 >
-                <p>选择一个容易辨认的图标</p>
               </div>
             </div>
             <div v-show="iconPicker" class="collab-icon-options">

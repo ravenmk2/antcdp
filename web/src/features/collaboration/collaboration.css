@@ -65,10 +65,11 @@
 .collab-search input::placeholder {
   color: var(--text-muted);
 }
+.collab-search:hover {
+  border-color: var(--border-control-hover);
+}
 .collab-search:focus-within {
   border-color: var(--focus);
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
 }
 .collab-status-tabs {
   display: flex;
@@ -113,9 +114,6 @@
   font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
-.collab-unmanaged {
-  margin: -8px 0 18px;
-}
 .collab-muted {
   color: var(--text-muted);
 }
@@ -156,6 +154,8 @@
   gap: 18px;
 }
 .resource-card {
+  display: flex;
+  flex-direction: column;
   position: relative;
   min-width: 0;
   background: var(--surface);
@@ -168,7 +168,6 @@
 }
 .resource-card:hover {
   border-color: var(--border-control);
-  box-shadow: 0 4px 16px var(--shadow-color);
 }
 .resource-card-heading {
   display: flex;
@@ -183,9 +182,8 @@
   display: block;
   font-size: 16px;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 .resource-card-title a::after {
   content: "";
@@ -234,6 +232,8 @@
   overflow-wrap: anywhere;
 }
 .resource-card footer {
+  margin-top: auto;
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -349,6 +349,7 @@
   font-size: 14px;
 }
 .collab-table th {
+  border-bottom: 1px solid var(--border);
   font-size: 13px;
   font-weight: 400;
   padding: 12px 20px;
@@ -421,27 +422,15 @@
   padding: 16px 20px;
   border-top: 1px solid var(--border);
 }
-.collab-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13px;
-  color: var(--text-muted);
-  margin-bottom: 22px;
-}
-.collab-back .ui-icon {
-  width: 16px;
-  height: 16px;
-}
 .collab-detail-heading {
   display: flex;
   align-items: flex-start;
-  gap: 18px;
-  padding: 0 0 24px;
+  gap: 15px;
+  padding: 0 0 18px;
 }
 .collab-detail-heading > .resource-icon {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   border-radius: 12px;
   background: var(--surface);
 }
@@ -449,15 +438,17 @@
   border: 1px solid var(--border);
 }
 .collab-detail-heading > .resource-icon svg {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
 }
 .collab-identity {
   flex: 1;
   min-width: 0;
 }
+.collab-title-line { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .collab-identity h1 {
-  font-size: 26px;
+  margin: 0;
+  font-size: 24px;
   line-height: 1.4;
   font-weight: 600;
   letter-spacing: normal;
@@ -473,8 +464,8 @@
 .collab-identity p {
   font-size: 14px;
   color: var(--text-muted);
-  margin-top: 14px;
-  max-width: 720px;
+  margin-top: 9px;
+  max-width: 900px;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
@@ -485,15 +476,15 @@
 }
 .collab-tabs {
   display: flex;
-  gap: 30px;
+  gap: 26px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 28px;
+  margin-bottom: 22px;
 }
 .collab-tabs button {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 13px 0;
+  padding: 11px 0;
 }
 .collab-tabs button.active::after {
   bottom: -1px;
@@ -516,12 +507,13 @@
 .collab-overview-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
-  gap: 28px;
+  gap: 24px;
+  align-items: start;
 }
 .collab-document {
   min-width: 0;
-  min-height: 360px;
-  padding: 28px 32px;
+  padding: 0;
+  overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -532,8 +524,10 @@
   gap: 7px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-muted);
-  margin-bottom: 25px;
+  color: var(--text-primary);
+  margin: 0;
+  padding: 15px 24px;
+  border-bottom: 1px solid var(--border);
 }
 .collab-info {
   padding: 5px 0;
@@ -950,4 +944,13 @@
   .collab-editor-dialog :is(input, textarea) {
     font-size: 16px;
   }
+}
+
+.collab-document > .markdown-content { padding: 22px 24px; }
+.collab-document > .collab-empty { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 24px; text-align: left; }
+.collab-document > .collab-empty p { margin: 0; }
+@media (max-width: 600px) {
+  .collab-document { padding: 0; }
+  .collab-document > .markdown-content, .collab-document > .collab-empty { padding: 18px; }
+  .collab-document .collab-section-label { padding: 14px 18px; }
 }

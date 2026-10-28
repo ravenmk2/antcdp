@@ -176,15 +176,6 @@ onMounted(load);
               ]
             }}
           </h2>
-          <p class="section-description">
-            {{
-              {
-                general: "为你的开发协作系统设置名称与访问地址。",
-                access: "控制账号如何加入系统，以及登录会话的有效时间。",
-                system: "查看应用安装状态与运行配置。",
-              }[tab]
-            }}
-          </p>
         </div>
         <ElForm
           v-if="tab !== 'system'"

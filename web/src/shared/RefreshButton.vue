@@ -42,16 +42,21 @@ onBeforeUnmount(() => clearTimeout(timer));
 <template>
   <ElButton
     class="refresh-button"
+    aria-label="刷新"
+    title="刷新"
     :disabled="disabled || loading"
     :aria-busy="loading"
     @click="refresh"
   >
     <UiIcon name="refresh" :class="{ 'refresh-spinning': spinning }" />
-    <slot>刷新</slot>
   </ElButton>
 </template>
 
 <style scoped>
+.refresh-button {
+  width: 40px;
+  padding: 8px;
+}
 .refresh-button .ui-icon {
   flex-shrink: 0;
   transform-origin: center;

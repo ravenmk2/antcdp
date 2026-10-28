@@ -4,7 +4,7 @@ import UiIcon from "../../shared/UiIcon.vue";
 defineProps<{
   label: string;
   value: number;
-  hint: string;
+  hint?: string;
   icon: "users" | "user" | "block" | "shield";
   to?: string;
 }>();
@@ -13,7 +13,7 @@ defineProps<{
   <component :is="to ? RouterLink : 'div'" :to="to" class="overview-metric" :class="{ linked: to }">
     <div class="metric-label"><span>{{ label }}</span><UiIcon :name="icon" /></div>
     <strong class="metric-value">{{ value.toLocaleString('zh-CN') }}</strong>
-    <div class="metric-hint"><span>{{ hint }}</span><UiIcon v-if="to" name="arrow" /></div>
+    <div v-if="hint" class="metric-hint">{{ hint }}</div>
   </component>
 </template>
 <style scoped>

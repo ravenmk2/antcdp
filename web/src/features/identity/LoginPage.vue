@@ -3,7 +3,7 @@ import { computed, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElButton, ElForm, ElFormItem, ElInput, ElMessage } from "element-plus";
 import { useIdentity, validatePassword } from "./store";
-import { useFormErrors, validateDisplayName, validateUsername, usernameHelp, passwordHelp } from "../../shared/formErrors";
+import { useFormErrors, validateDisplayName, validateUsername, usernameHelp } from "../../shared/formErrors";
 import UiIcon from "../../shared/UiIcon.vue";
 import BrandLogo from "../../shared/BrandLogo.vue";
 const identity = useIdentity();
@@ -62,30 +62,15 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="auth-page">
-    <aside class="auth-visual">
+  <div class="signin-page">
+    <div class="signin-window" :class="{ registering }">
+    <aside class="signin-brand-panel">
       <BrandLogo />
-      <div class="auth-message">
-        <div class="eyebrow">YOUR NEXT CHAPTER STARTS HERE</div>
-        <h1>让每一次协作，<br />都向前一步。</h1>
-      </div>
-      <div class="auth-visual-footer">
-        <span class="tiny-line" />AI NATIVE. HUMAN CONNECTED.
-      </div>
+      <div class="signin-scene" aria-hidden="true"><svg viewBox="0 0 440 440" fill="none"><circle cx="220" cy="220" r="150" stroke="currentColor" opacity=".35"/><circle cx="220" cy="220" r="100" stroke="currentColor" opacity=".25"/><path d="M135 123C215 123 328 180 328 220S260 330 170 330" stroke="currentColor" stroke-dasharray="4 7" opacity=".65"/></svg><span class="node a"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M3 6h6l2 2h10v12H3Z"/></svg></span><span class="node b"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18"/></svg></span><span class="node c"><svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M24 11V6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/><circle cx="24" cy="5" r="2.5" fill="var(--brand)"/><rect x="9" y="12" width="30" height="26" rx="9" stroke="currentColor" stroke-width="2.5"/><path d="M5 22v7m38-7v7" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><rect x="16" y="21" width="4" height="6" rx="2" fill="currentColor"/><rect x="28" y="21" width="4" height="6" rx="2" fill="currentColor"/></svg></span></div>
     </aside>
-    <main class="auth-main">
-      <div class="auth-form">
-        <div class="eyebrow">
-          WELCOME TO {{ identity.settings.site_name.toUpperCase() }}
-        </div>
-        <h1>{{ registering ? "创建你的账号" : "欢迎回来" }}</h1>
-        <p class="subtitle">
-          {{
-            registering
-              ? "无需审批，创建成功后自动登录并进入首页。"
-              : "登录账号，继续你的开发协作之旅。"
-          }}
-        </p>
+    <main class="signin-main">
+      <div class="signin-form">
+        <h1>{{ registering ? "创建账号" : "欢迎回来" }}</h1>
         <template v-if="registering && !identity.settings.registration_enabled"
           ><div class="register-closed">
             <div class="confirm-icon"><UiIcon name="lock" /></div>
@@ -125,7 +110,7 @@ onUnmounted(() => {
                   registering ? '设置用于登录的用户名' : '请输入用户名'
                 "
             />
-              <p v-if="registering" id="register-username-help" class="form-field-help">{{ usernameHelp }}</p>
+              <p v-if="registering" id="register-username-help" class="form-field-help signin-username-help" :title="usernameHelp">3–30 位小写字母、数字、_ 或 -</p>
             </ElFormItem>
             <ElFormItem label="密码" :error="fieldErrors.password" required
               ><ElInput
@@ -140,7 +125,7 @@ onUnmounted(() => {
                 "
                 :placeholder="registering ? '至少 8 个字符' : '请输入密码'"
             />
-              <p v-if="registering" id="register-password-help" class="form-field-help">{{ passwordHelp }}</p>
+              <p v-if="registering" id="register-password-help" class="form-field-help">至少 8 个字符。</p>
             </ElFormItem>
             <ElFormItem v-if="registering" label="确认密码" :error="fieldErrors.confirm" required
               ><ElInput
@@ -152,13 +137,8 @@ onUnmounted(() => {
                 autocomplete="new-password"
                 placeholder="再次输入密码"
             /></ElFormItem>
-            <div v-if="!registering" class="between auth-session-hint">
-              <span class="muted"
-                >{{
-                  identity.settings.session_ttl_days
-                }}
-                天内有效，使用时自动续期</span
-              ><button
+            <div v-if="!registering" class="signin-forgot">
+              <button
                 class="btn link"
                 type="button"
                 @click="
@@ -172,7 +152,7 @@ onUnmounted(() => {
             </div>
             <div v-if="error" class="error-text" role="alert">{{ error }}</div>
             <ElButton
-              class="auth-submit"
+              class="signin-submit"
               type="primary"
               native-type="submit"
               :loading="busy"
@@ -180,7 +160,7 @@ onUnmounted(() => {
               >{{ registering ? "创建账号" : "登录" }}<UiIcon name="arrow"
             /></ElButton>
           </ElForm>
-          <div v-if="registering || identity.settings.registration_enabled" class="auth-bottom">
+          <div v-if="registering || identity.settings.registration_enabled" class="signin-bottom">
             {{ registering ? "已有账号？" : "还没有账号？"
             }}<RouterLink :to="registering ? '/login' : '/register'">{{
               registering ? "返回登录" : "创建账号"
@@ -189,5 +169,68 @@ onUnmounted(() => {
         </template>
       </div>
     </main>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.signin-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 80px 24px 48px;
+  background: var(--auth-canvas);
+}
+.signin-window {
+  display: grid;
+  grid-template-columns: 42% 58%;
+  width: 100%;
+  max-width: 1000px;
+  min-height: 640px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--auth-surface);
+  box-shadow: 0 24px 80px var(--shadow-color);
+}
+.signin-window.registering { min-height: 690px; }
+.signin-brand-panel { position: relative; overflow: hidden; background: var(--auth-art); padding: 38px; }
+.signin-brand-panel :deep(.brand) { position: relative; z-index: 1; gap: 10px; width: fit-content; }
+.signin-brand-panel :deep(.brand-mark) { width: 34px; height: 34px; }
+.signin-brand-panel :deep(.brand-wordmark) { font-size: 20px; font-weight: 600; letter-spacing: -.6px; }
+.signin-scene { position: absolute; inset: 110px -20px 48px; display: grid; place-items: center; }
+.signin-scene > svg { width: 100%; height: auto; color: var(--border-control); }
+.node { position: absolute; display: grid; place-items: center; width: 72px; height: 72px; border: 1px solid var(--border); border-radius: 18px; background: var(--auth-tile); box-shadow: 0 10px 30px var(--shadow-color); transform: rotate(-7deg); }
+.node svg { width: 29px; height: 29px; color: var(--text-muted); }
+.node.a { left: 22%; top: 22%; }
+.node.b { right: 17%; top: 38%; transform: rotate(8deg); }
+.node.c { left: 30%; bottom: 18%; transform: rotate(-3deg); }
+.node.c svg { width: 44px; height: 44px; }
+.signin-main { display: flex; align-items: center; justify-content: center; min-width: 0; padding: 46px 56px; }
+.signin-form { width: 100%; max-width: 352px; }
+.signin-form h1 { margin: 0 0 30px; font-size: 28px; line-height: 1.4; font-weight: 600; letter-spacing: -.4px; }
+.signin-form :deep(.el-form-item) { margin-bottom: 20px; }
+.signin-form :deep(.el-input__wrapper) { background: var(--auth-surface); }
+.signin-form :deep(.el-input__inner) { --autofill-surface: var(--auth-surface); }
+.signin-form :deep(.el-form-item__label) { font-weight: 500; }
+.signin-form .form-field-help { margin: 7px 0 0; font-size: 12px; line-height: 1.65; color: var(--text-muted); }
+.signin-form .signin-username-help { white-space: nowrap; }
+.signin-forgot { display: flex; justify-content: flex-end; margin: -5px 0 22px; }
+.signin-forgot .btn { padding: 0; min-height: auto; font-size: 13px; }
+.signin-submit { width: 100%; min-height: 44px; border-radius: 7px; }
+.signin-bottom { margin-top: 24px; text-align: center; font-size: 13px; color: var(--text-muted); }
+.signin-bottom a { margin-left: 8px; color: var(--text-primary); font-weight: 500; }
+.signin-bottom a:hover, .signin-forgot .btn:hover { text-decoration: underline; }
+.registering .signin-form h1 { margin-bottom: 24px; }
+.registering :deep(.el-form-item) { margin-bottom: 15px; }
+@media (max-width: 650px) {
+  .signin-page { padding: 72px 16px 32px; align-items: start; }
+  .signin-window, .signin-window.registering { grid-template-columns: 1fr; min-height: 0; max-width: 430px; }
+  .signin-brand-panel { padding: 24px 28px; background: var(--auth-surface); }
+  .signin-scene { display: none; }
+  .signin-main { padding: 12px 28px 38px; }
+  .signin-form { max-width: none; }
+  .signin-form h1 { font-size: 25px; }
+}
+@media (max-width: 380px) { .signin-main { padding-inline: 18px; } }
+</style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { onMounted, ref } from "vue";
 import AppLayout from "../../app/AppLayout.vue";
 import { api } from "../../shared/api";
 import { useIdentity, errorMessage } from "../identity/store";
@@ -24,23 +24,18 @@ interface Overview {
   recent_events: Event[];
 }
 import UiIcon from "../../shared/UiIcon.vue";
-import RefreshButton from "../../shared/RefreshButton.vue";
 const identity = useIdentity();
 const data = ref<Overview>();
-const updatedAt = ref<Date>();
-const updateLabel = computed(() => updatedAt.value
-  ? new Intl.DateTimeFormat("zh-CN", { timeZone: identity.settings.timezone, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(updatedAt.value)
-  : "");
 const metrics = [
-  { key: "users_total", label: "全部用户", hint: "查看用户列表", icon: "users", to: "/admin/users" },
-  { key: "users_active", label: "正常账号", hint: "查看正常账号", icon: "user", to: "/admin/users?status=active" },
-  { key: "users_disabled", label: "已禁用", hint: "查看禁用账号", icon: "block", to: "/admin/users?status=disabled" },
-  { key: "admins_total", label: "管理员", hint: "包含创始人", icon: "shield" },
+  { key: "users_total", label: "全部用户", icon: "users", to: "/admin/users" },
+  { key: "users_active", label: "正常账号", icon: "user", to: "/admin/users?status=active" },
+  { key: "users_disabled", label: "已禁用", icon: "block", to: "/admin/users?status=disabled" },
+  { key: "admins_total", label: "管理员", icon: "shield" },
 ] as const;
 const shortcuts = [
-  { label: "添加用户", description: "创建账号并设置身份", icon: "plus", to: "/admin/users?create=1" },
-  { label: "注册与会话", description: "调整加入方式与会话时长", icon: "key", to: "/admin/settings?tab=access" },
-  { label: "系统信息", description: "查看版本与运行配置", icon: "device", to: "/admin/settings?tab=system" },
+  { label: "添加用户", icon: "plus", to: "/admin/users?create=1" },
+  { label: "注册与会话", icon: "key", to: "/admin/settings?tab=access" },
+  { label: "系统信息", icon: "device", to: "/admin/settings?tab=system" },
 ] as const;
 const error = ref("");
 const loading = ref(true);
@@ -56,7 +51,6 @@ async function load() {
   error.value = "";
   try {
     data.value = await api<Overview>("/admin/overview");
-    updatedAt.value = new Date();
   } catch (err) {
     error.value = errorMessage(err);
   } finally {
@@ -68,18 +62,11 @@ onMounted(load);
 <template>
   <AppLayout>
     <div class="console-overview" :aria-busy="loading">
-      <div class="overview-topline">
-        <strong class="overview-system-name">{{ identity.settings.site_name }}</strong>
-        <div class="overview-update">
-          <span v-if="updatedAt" class="update-time">{{ error ? '上次成功更新' : '更新于' }} {{ updateLabel }}</span>
-          <RefreshButton :loading="loading" @click="load" />
-        </div>
-      </div>
-      <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
+      <div v-if="error" class="error-banner" role="alert">{{ error }} <button class="btn" :disabled="loading" @click="load">重试</button></div>
       <template v-if="data">
         <section class="overview-metric-grid" aria-label="账号概况">
           <OverviewMetric v-for="metric in metrics" :key="metric.key"
-            :label="metric.label" :value="data[metric.key]" :hint="metric.hint" :icon="metric.icon"
+            :label="metric.label" :value="data[metric.key]" :icon="metric.icon"
             :to="'to' in metric ? metric.to : undefined" />
         </section>
         <div class="overview-content-grid">
@@ -88,7 +75,6 @@ onMounted(load);
             <div v-if="!data.recent_events.length" class="overview-empty" role="status">
               <UiIcon name="log" />
               <strong>暂无操作记录</strong>
-              <p>用户、设置等关键操作将在这里显示。</p>
             </div>
             <ul v-else class="overview-event-list">
               <li v-for="event in data.recent_events" :key="event.id">
@@ -109,7 +95,7 @@ onMounted(load);
               <nav class="overview-action-list" aria-label="常用操作">
                 <RouterLink v-for="shortcut in shortcuts" :key="shortcut.to" :to="shortcut.to" class="overview-action">
                   <span class="overview-action-icon"><UiIcon :name="shortcut.icon" /></span>
-                  <span><strong>{{ shortcut.label }}</strong><small>{{ shortcut.description }}</small></span>
+                  <span><strong>{{ shortcut.label }}</strong></span>
                   <UiIcon name="chevron" />
                 </RouterLink>
               </nav>
@@ -133,15 +119,11 @@ onMounted(load);
 
 <style scoped>
 .console-overview { display: grid; gap: 20px; }
-.overview-topline { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-.overview-system-name { min-width: 0; max-width: 100%; overflow-wrap: anywhere; font-size: 18px; font-weight: 600; color: var(--text-primary); }
-.overview-update { display: flex; align-items: center; gap: 12px; margin-left: auto; }
-.update-time { color: var(--text-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
 .overview-metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
 .overview-content-grid { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(290px, 1fr); align-items: start; gap: 20px; }
 .overview-supporting { display: grid; gap: 20px; min-width: 0; }
-.overview-text-link { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
-.overview-text-link:hover { color: var(--text-primary); text-decoration: underline; }
+.overview-text-link { display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px; border-radius: 7px; font-size: 14px; color: var(--text-muted); white-space: nowrap; }
+.overview-text-link:hover { background: var(--accent-soft); color: var(--text-secondary); }
 .overview-text-link .ui-icon { width: 16px; height: 16px; }
 .overview-event-list { list-style: none; padding: 0; margin: 0; }
 .overview-event-list li + li { border-top: 1px solid var(--border); }
@@ -187,8 +169,6 @@ onMounted(load);
   .console-overview { gap: 16px; }
   .overview-metric-grid { gap: 12px; }
   .overview-supporting { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .overview-topline { align-items: flex-start; }
-  .overview-update { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
   .overview-event { padding: 16px; gap: 8px 10px; }
   .overview-action { padding: 14px 16px; }
   .overview-policy-list { padding: 4px 16px; }

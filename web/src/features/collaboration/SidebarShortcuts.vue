@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, onUnmounted } from "vue";
+import { computed, ref, onMounted, watch, onUnmounted } from "vue";
 import { ElButton, ElDialog, ElInput, ElMessage } from "element-plus";
 import { useRoute } from "vue-router";
 import { api } from "../../shared/api";
@@ -18,6 +18,8 @@ const kind = ref<Kind>("projects"),
 const selected = ref<Resource[]>([]),
   candidates = ref<Resource[]>([]),
   tag = ref("");
+const searching = ref(false);
+const available = computed(() => candidates.value.filter(item => !selected.value.some(v => v.id === item.id)));
 let timer: ReturnType<typeof setTimeout> | undefined,
   sequence = 0;
 async function refresh() {
@@ -33,6 +35,8 @@ watch(() => route.path, refresh);
 async function search() {
   const seq = ++sequence,
     group = kind.value;
+  searching.value = true;
+  error.value = "";
   try {
     const page = await api<Page>(
       `/${group}?scope=mine&status=all&page_size=100&q=${encodeURIComponent(query.value)}`,
@@ -40,10 +44,14 @@ async function search() {
     if (seq === sequence) candidates.value = page.items;
   } catch (e) {
     if (seq === sequence) error.value = errorMessage(e);
+  } finally {
+    if (seq === sequence) searching.value = false;
   }
 }
 watch(query, () => {
   clearTimeout(timer);
+  sequence++;
+  searching.value = true;
   timer = setTimeout(search, 600);
 });
 onUnmounted(() => {
@@ -140,12 +148,10 @@ async function save() {
     :show-close="!busy"
     append-to-body
   >
-    <p>
-      固定你参与的{{
-        kind === "projects" ? "项目" : "团队"
-      }}，使用上下按钮调整顺序。
-    </p>
     <p v-if="error" role="alert" class="shortcut-error">{{ error }}</p>
+    <h3 class="shortcut-section-title">已选快捷方式 <span>{{ selected.length }} / 200</span></h3>
+    <p v-if="!selected.length" class="shortcut-hint">尚未选择</p>
+    <div class="shortcut-selected">
     <div v-for="(item, index) in selected" :key="item.id" class="shortcut-row">
       <ResourceIcon
         :icon-key="item.icon_key"
@@ -166,17 +172,20 @@ async function save() {
         >取消固定</ElButton
       >
     </div>
+    </div>
+    <h3 class="shortcut-section-title">添加快捷方式</h3>
     <ElInput
       v-model="query"
-      placeholder="搜索我的项目或团队"
+      :placeholder="`搜索我参与的${kind === 'projects' ? '项目' : '团队'}`"
+      :aria-label="`搜索我参与的${kind === 'projects' ? '项目' : '团队'}`"
       clearable
       :disabled="busy"
     />
     <div class="shortcut-candidates">
+      <p v-if="searching" class="shortcut-hint" role="status">正在查找…</p>
+      <p v-else-if="!error && !available.length" class="shortcut-hint">{{ query ? '没有可添加的匹配项，试试其他关键词。' : '当前结果中没有可添加的项目或团队，可搜索更多内容。' }}</p>
       <div
-        v-for="item in candidates.filter(
-          (item) => !selected.some((v) => v.id === item.id),
-        )"
+        v-for="item in searching ? [] : available"
         :key="item.id"
         class="shortcut-row"
       >
@@ -189,14 +198,14 @@ async function save() {
         ><ElButton
           :disabled="busy || selected.length >= 200"
           @click="selected.push(item)"
-          >固定</ElButton
+          >添加</ElButton
         >
       </div>
     </div>
     <template #footer
       ><ElButton :disabled="busy" @click="open = false">取消</ElButton
       ><ElButton type="primary" :loading="busy" @click="save"
-        >保存</ElButton
+        >保存快捷方式</ElButton
       ></template
     >
   </ElDialog>
@@ -274,6 +283,13 @@ async function save() {
   max-height: 260px;
   overflow: auto;
 }
+.shortcut-selected { max-height: 220px; overflow: auto; }
+.shortcut-section-title { display: flex; justify-content: space-between; gap: 12px; margin: 22px 0 12px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.shortcut-section-title span, .shortcut-hint { color: var(--text-muted); font-size: 13px; font-weight: 400; }
+.shortcut-hint { padding: 12px 0; }
+.shortcut-row { padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.shortcut-row small { display: block; color: var(--text-muted); }
+@media (max-width: 600px) { .shortcut-row { flex-wrap: wrap; } .shortcut-row > span:nth-child(2) { flex-basis: calc(100% - 50px); } }
 .shortcut-error {
   color: var(--danger);
 }

@@ -137,7 +137,7 @@ onBeforeUnmount(() => {
           />
         </div>
         <ElButton :disabled="!hasFilters" @click="clearFilters">清除筛选</ElButton>
-        <RefreshButton :loading="loading" @click="listSearch.run">刷新</RefreshButton>
+        <RefreshButton :loading="loading" @click="listSearch.run" />
       </div>
       <div v-if="events.length" class="table-scroll">
         <table>
@@ -203,7 +203,7 @@ onBeforeUnmount(() => {
             aria-label="上一页"
             @click="changePage(-1)"
           >
-            <UiIcon name="back" /></button
+            <UiIcon name="chevron-left" /></button
           ><span>第 {{ page + 1 }} 页</span
           ><button
             type="button"

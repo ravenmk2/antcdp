@@ -218,7 +218,6 @@ onUnmounted(() => {
           <div class="security-row">
             <div>
               <h3>登录密码</h3>
-              <p>定期更新密码，保护你的账号。</p>
             </div>
             <ElButton @click="passwordDialog = true"
               ><UiIcon name="key" />修改密码</ElButton
@@ -247,7 +246,6 @@ onUnmounted(() => {
           <div class="security-row">
             <div>
               <h3>退出账号</h3>
-              <p>结束当前浏览器中的登录会话。</p>
             </div>
             <ElButton :disabled="loggingOut" @click="logout"
               ><UiIcon name="logout" />退出登录</ElButton

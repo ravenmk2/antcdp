@@ -28,8 +28,8 @@ a {
 }
 button:focus-visible,
 a:focus-visible {
-  outline: 3px solid var(--accent-border);
-  outline-offset: 3px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 .ui-icon {
   width: 19px;
@@ -136,7 +136,7 @@ a:focus-visible {
   gap: 10px;
 }
 .el-button--primary {
-  box-shadow: 0 3px 5px var(--shadow-color);
+  box-shadow: none;
 }
 .form-grid {
   display: grid;

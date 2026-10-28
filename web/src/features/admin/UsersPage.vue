@@ -334,7 +334,7 @@ onUnmounted(clearPassword);
           <option value="founder">创始人</option>
           <option value="admin">管理员</option>
           <option value="user">普通用户</option></select
-        ><RefreshButton :loading="loading" @click="listSearch.run">刷新</RefreshButton>
+        ><RefreshButton :loading="loading" @click="listSearch.run" />
         <ElButton :disabled="!hasFilters" @click="clearFilters">清除筛选</ElButton>
         <ElButton class="users-create" type="primary" @click="createUser"><UiIcon name="plus" />添加用户</ElButton>
       </div>
@@ -451,7 +451,7 @@ onUnmounted(clearPassword);
               load();
             "
           >
-            <UiIcon name="back" /></button
+            <UiIcon name="chevron-left" /></button
           ><span
             >{{ filters.page }} /
             {{ Math.max(1, Math.ceil(total / filters.page_size)) }}</span

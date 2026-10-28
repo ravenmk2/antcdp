@@ -15,6 +15,7 @@ import SidebarShortcuts from "../features/collaboration/SidebarShortcuts.vue";
 import { useAppearance } from "../shared/appearance";
 import { useIdentity } from "../features/identity/store";
 import { useLogout } from "../features/identity/logout";
+defineProps<{ breadcrumbs?: { label: string; to?: string }[] }>();
 const identity = useIdentity();
 const { logout, loggingOut } = useLogout();
 const { setAppearance } = useAppearance();
@@ -324,7 +325,14 @@ async function userCommand(command: string | number | object) {
           >
             <UiIcon name="menu" />
           </button>
-          <nav class="breadcrumb" aria-label="当前位置">
+          <nav v-if="breadcrumbs" class="breadcrumb resource-breadcrumb" aria-label="当前位置">
+            <template v-for="(crumb, index) in breadcrumbs" :key="index">
+              <UiIcon v-if="index" name="chevron" />
+              <RouterLink v-if="crumb.to" :to="crumb.to">{{ crumb.label }}</RouterLink>
+              <span v-else class="current" aria-current="page" :title="crumb.label">{{ crumb.label }}</span>
+            </template>
+          </nav>
+          <nav v-else class="breadcrumb" aria-label="当前位置">
             <RouterLink :to="consoleMode ? '/admin' : '/home'">{{
               consoleMode ? "控制台" : "首页"
             }}</RouterLink

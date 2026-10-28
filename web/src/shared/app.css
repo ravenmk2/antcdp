@@ -32,8 +32,8 @@ button:disabled {
 }
 button:focus-visible,
 a:focus-visible {
-  outline: 3px solid var(--accent-border);
-  outline-offset: 3px;
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 a {
   color: var(--blue);
@@ -346,7 +346,7 @@ small {
   background: var(--blue);
   border-color: var(--blue);
   color: var(--on-accent);
-  box-shadow: 0 3px 5px var(--shadow-color);
+  box-shadow: none;
 }
 .btn.primary:hover {
   background: var(--blue-dark);
@@ -530,8 +530,8 @@ small {
   min-width: 0;
 }
 .search-box:focus-within {
-  border-color: var(--accent-border);
-  box-shadow: 0 0 0 3px var(--shadow-color);
+  border-color: var(--focus);
+  box-shadow: none;
 }
 input::placeholder,
 textarea::placeholder {
@@ -838,8 +838,8 @@ textarea::placeholder {
     box-shadow 0.16s;
 }
 .input:focus {
-  border-color: var(--accent-border);
-  box-shadow: 0 0 0 3px var(--shadow-color);
+  border-color: var(--focus);
+  box-shadow: none;
 }
 .input:disabled,
 .input[readonly] {
@@ -2305,7 +2305,7 @@ small {
   height: 18px;
 }
 .icon-btn:focus-visible {
-  outline: 3px solid var(--accent-border);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 .avatar {
