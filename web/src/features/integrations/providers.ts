@@ -41,18 +41,7 @@ export const serviceUI: Record<string, ServiceUI> = {
         limit: 32768,
       },
     ],
-    identityFields: [
-      {
-        key: "token_type",
-        label: "令牌类别（说明用途）",
-        options: [
-          { value: "", label: "未指定" },
-          { value: "personal", label: "个人访问令牌" },
-          { value: "project", label: "项目访问令牌" },
-          { value: "group", label: "群组访问令牌" },
-        ],
-      },
-    ],
+    identityFields: [],
     secretFields: [
       {
         key: "token",
@@ -66,7 +55,7 @@ export const serviceUI: Record<string, ServiceUI> = {
       base_url: v.base_url ?? "",
       custom_ca_pem: v.custom_ca_pem ?? "",
     }),
-    identityBody: (v) => ({ token_type: v.token_type ?? "" }),
+    identityBody: () => ({}),
     secretBody: (v) => ({ token: v.token ?? "" }),
     validateSecret: (v) => (v.token ? "" : "请输入 API Token"),
   },

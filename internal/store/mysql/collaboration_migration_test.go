@@ -14,7 +14,7 @@ import (
 )
 
 // Uses a distinct empty schema and preserves it for inspection. In particular,
-// this tests the real goose 1 -> 2 -> 3 upgrade, not importing the reference DDL.
+// this tests the real goose 1 -> 2 -> 3 -> 4 upgrade, not importing the reference DDL.
 func TestCollaborationMigrationUpgrade(t *testing.T) {
 	dsn := os.Getenv("ANTCDP_TEST_UPGRADE_MYSQL_DSN")
 	if dsn == "" {
@@ -60,11 +60,42 @@ func TestCollaborationMigrationUpgrade(t *testing.T) {
 	if err = s.SchemaReady(ctx); err == nil {
 		t.Fatal("old schema must not pass current executable readiness")
 	}
+	if _, err = p.UpTo(ctx, 3); err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		"INSERT INTO integration(id,service_type,name,created_by_user_id,created_at,updated_at) VALUES(1,'gitlab','legacy',41,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3)),(2,'redis','future',41,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))",
+		`INSERT INTO integration_credential(id,integration_id,scope_type,name,auth_method,identity_config,secret_ciphertext,created_by_user_id,created_at,updated_at) VALUES(1,1,'system','legacy','gitlab_access_token','{"token_type":"personal"}','preserved-ciphertext',41,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`,
+	} {
+		if _, err = s.db.ExecContext(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err = s.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.SchemaReady(ctx); err != nil {
 		t.Fatal(err)
+	}
+	var legacy struct {
+		Code        string
+		ServiceType string `db:"service_type"`
+		Identity    string `db:"identity_config"`
+		Secret      string `db:"secret_ciphertext"`
+		Version     int    `db:"row_version"`
+	}
+	if err = s.db.GetContext(ctx, &legacy, "SELECT code,service_type,identity_config,secret_ciphertext,row_version FROM integration_credential WHERE id=1"); err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Code != "credential_1" || legacy.ServiceType != "gitlab" || legacy.Identity != "{}" || legacy.Secret != "preserved-ciphertext" || legacy.Version != 2 {
+		t.Fatalf("bad backfill: %+v", legacy)
+	}
+	insertCredential := `INSERT INTO integration_credential(integration_id,service_type,code,scope_type,name,auth_method,identity_config,created_by_user_id,created_at,updated_at) VALUES(?,?,'credential_1','system','unique test','test','{}',41,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`
+	if _, err = s.db.ExecContext(ctx, insertCredential, 1, "gitlab"); err == nil {
+		t.Fatal("duplicate code accepted")
+	}
+	if _, err = s.db.ExecContext(ctx, insertCredential, 2, "redis"); err != nil {
+		t.Fatal("different service cannot reuse code", err)
 	}
 	var ids []uint64
 	if err = s.db.SelectContext(ctx, &ids, "SELECT user_id FROM user_sidebar_preference ORDER BY user_id"); err != nil {

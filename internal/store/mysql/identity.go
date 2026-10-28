@@ -38,6 +38,9 @@ func (s *Store) Transact(ctx context.Context, fn func(identity.Tx) error) error 
 		}
 		var dbErr *driver.MySQLError
 		if errors.As(err, &dbErr) && dbErr.Number == 1062 {
+			if strings.Contains(dbErr.Message, "uq_integration_credential_code") {
+				return httpx.E(409, "CREDENTIAL_CODE_CONFLICT", "同服务类型下的凭证 code 已存在")
+			}
 			if strings.Contains(dbErr.Message, "uq_integration") {
 				return httpx.E(409, "INTEGRATION_CONFLICT", "名称或首选设置发生冲突")
 			}

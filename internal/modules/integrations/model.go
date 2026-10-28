@@ -34,6 +34,8 @@ type GitLab struct {
 	WebhookVersion    uint64  `db:"webhook_version" json:"-"`
 }
 type Credential struct {
+	Code            string          `db:"code" json:"code"`
+	Type            string          `db:"service_type" json:"service_type"`
 	ID              uint64          `db:"id" json:"id,string"`
 	IntegrationID   uint64          `db:"integration_id" json:"integration_id,string"`
 	Scope           string          `db:"scope_type" json:"scope_type"`

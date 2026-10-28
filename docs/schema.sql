@@ -1,6 +1,6 @@
 -- AntCDP complete target schema: 19 business tables, MySQL 8.0.16+ / InnoDB.
 -- Phase A: 7 existing tables. Collaboration/sidebar: 9 migrated; feature implementation in progress.
--- Integrations: 3 tables in runtime migration 00003; validated on MySQL.
+-- Integrations: 3 tables in runtime migrations 00003 and 00004; validated on MySQL.
 -- This file is a review snapshot, NOT an upgrade migration or proof of deployment.
 -- Review reference only. Runtime migrations live in internal/store/migrations/mysql/.
 -- Designed for an empty schema; do not import into an existing installation.
@@ -326,7 +326,7 @@ CREATE TABLE `user_team_shortcut` (
 -- Backfill preference rows for non-deleted users in the future upgrade migration;
 -- create a row in each new-account transaction. No data seeds in this reference.
 
--- External integrations: migration 00003 reference, see docs/service-integrations.md.
+-- External integrations: migrations 00003/00004 reference, see docs/service-integrations.md.
 -- No credential-set or separate secret table. Encrypted envelopes belong to
 -- their service extension (inbound verification) or credential (outbound identity).
 CREATE TABLE `integration` (
@@ -371,6 +371,8 @@ CREATE TABLE `integration_gitlab` (
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `integration_credential` (
+    service_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     integration_id BIGINT UNSIGNED NOT NULL,
     scope_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -398,6 +400,7 @@ CREATE TABLE `integration_credential` (
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
+    UNIQUE KEY uq_integration_credential_code (service_type, code),
     UNIQUE KEY uq_integration_credential_name (integration_id, scope_type, owner_key, name),
     UNIQUE KEY uq_integration_credential_preferred (integration_id, scope_type, owner_key, preferred_slot),
     KEY idx_integration_credential_scope (integration_id, scope_type, owner_key, enabled, id),

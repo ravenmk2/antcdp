@@ -2,16 +2,21 @@ package integrations
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	c "github.com/ravenmk2/antcdp/internal/modules/collaboration"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 )
+
+var credentialCodePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 
 type Service struct {
 	Identity *identity.Service
@@ -39,13 +44,12 @@ type SecretWrite struct {
 	Method string `json:"verification_method"`
 }
 type CredentialCreate struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	AuthMethod  string `json:"auth_method"`
-	Identity    struct {
-		TokenType string `json:"token_type,omitempty"`
-	} `json:"identity_config"`
-	Secret struct {
+	Code        string   `json:"code"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	AuthMethod  string   `json:"auth_method"`
+	Identity    struct{} `json:"identity_config"`
+	Secret      struct {
 		Token string `json:"token"`
 	} `json:"secret"`
 	ExpiresAt *time.Time `json:"expires_at"`
@@ -494,14 +498,22 @@ func (s *Service) Credentials(ctx context.Context, raw string, id, cid uint64, s
 			if w.AuthMethod != "gitlab_access_token" {
 				return httpx.Invalid("auth_method", "unsupported")
 			}
-			if w.Identity.TokenType != "" && w.Identity.TokenType != "personal" && w.Identity.TokenType != "project" && w.Identity.TokenType != "group" {
-				return httpx.Invalid("identity_config.token_type", "invalid_value")
+			w.Code = strings.TrimSpace(w.Code)
+			if w.Code == "" {
+				var err error
+				w.Code, err = newCredentialCode()
+				if err != nil {
+					return err
+				}
+			}
+			if !credentialCodePattern.MatchString(w.Code) {
+				return httpx.Invalid("code", "invalid_format")
 			}
 			if e := validateToken(w.Secret.Token); e != nil {
 				return e
 			}
 			identityJSON, _ := json.Marshal(w.Identity)
-			cr = &Credential{IntegrationID: id, Scope: scope.Type, Name: w.Name, Description: w.Description, AuthMethod: w.AuthMethod, Identity: identityJSON, Enabled: true, HasSecret: true, ExpiresAt: w.ExpiresAt, Version: 1, MaterialVersion: 1, Creator: a.User.ID}
+			cr = &Credential{Code: w.Code, Type: v.Type, IntegrationID: id, Scope: scope.Type, Name: w.Name, Description: w.Description, AuthMethod: w.AuthMethod, Identity: identityJSON, Enabled: true, HasSecret: true, ExpiresAt: w.ExpiresAt, Version: 1, MaterialVersion: 1, Creator: a.User.ID}
 			if scope.Type == "project" {
 				cr.ProjectID = &scope.Owner
 			}
@@ -663,4 +675,15 @@ func diagnosticView(raw json.RawMessage, connection, material, webhook uint64) *
 	}
 	d.Outdated = connection != 0 && d.ConnectionVersion != connection || material != 0 && d.MaterialVersion != material || webhook != 0 && d.WebhookVersion != webhook
 	return &d
+}
+
+// newCredentialCode returns a UUID v4 without separators.
+func newCredentialCode() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return hex.EncodeToString(b[:]), nil
 }

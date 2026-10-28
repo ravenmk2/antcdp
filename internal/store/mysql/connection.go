@@ -178,7 +178,7 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if v != 3 {
+	if v != 4 {
 		return errors.New("database migration version does not match this executable")
 	}
 	var tables int

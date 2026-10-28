@@ -16,6 +16,8 @@ export interface Capability {
   auth_methods: string[];
 }
 export interface Credential {
+  code: string;
+  service_type: string;
   id: string;
   name: string;
   description: string;
@@ -57,6 +59,7 @@ export function message(e: unknown) {
                   custom_ca_pem: "CA 证书格式不正确",
                   token: "令牌格式不正确",
                   name: "请检查名称",
+ code: "code 须以小写字母或数字开头，仅含小写字母、数字、下划线或短横线，最长 64 位",
                   webhook_enabled: "启用前请先保存验证秘密",
                   credential_id: "凭证不可用",
                   auth_method: "不支持此认证方式",

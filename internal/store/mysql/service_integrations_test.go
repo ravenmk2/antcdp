@@ -53,8 +53,10 @@ func verifyServiceIntegrations(t *testing.T, db *Store, admin, member, other *ap
 	if e := db.db.GetContext(context.Background(), &encrypted, "SELECT webhook_secret_ciphertext FROM integration_gitlab WHERE integration_id=?", id); e != nil || !strings.HasPrefix(encrypted, "enc:v1:") || strings.Contains(encrypted, hook) {
 		t.Fatal("webhook encryption", e)
 	}
+	counter := 0
 	create := func(client *apiClient, p, name string) string {
-		data := testData(client.call(t, "POST", p, map[string]any{"name": name, "auth_method": "gitlab_access_token", "identity_config": map[string]string{}, "secret": map[string]string{"token": "glpat-private-test-token"}}, 201, tag(client, p)))
+		counter++
+		data := testData(client.call(t, "POST", p, map[string]any{"code": fmt.Sprintf("test_credential_%d", counter), "name": name, "auth_method": "gitlab_access_token", "identity_config": map[string]string{}, "secret": map[string]string{"token": "glpat-private-test-token"}}, 201, tag(client, p)))
 		if strings.Contains(fmt.Sprint(data), "glpat-") || strings.Contains(fmt.Sprint(data), "ciphertext") {
 			t.Fatal("secret leaked")
 		}
@@ -69,6 +71,28 @@ func verifyServiceIntegrations(t *testing.T, db *Store, admin, member, other *ap
 	if fmt.Sprint(beforeCommon) != fmt.Sprint(afterCommon) || admin.last.Header().Get("ETag") != commonTag {
 		t.Fatal("credential writes altered common representation")
 	}
+	payload := map[string]any{"name": "code test", "auth_method": "gitlab_access_token", "secret": map[string]string{"token": "glpat-code-test"}}
+	for _, code := range []string{"UPPER", "bad space", "-prefix", strings.Repeat("a", 65)} {
+		payload["code"] = code
+		admin.call(t, "POST", sys, payload, 422, tag(admin, sys))
+	}
+	payload["code"] = ""
+	generated := testData(admin.call(t, "POST", sys, payload, 201, tag(admin, sys)))["code"].(string)
+	if len(generated) != 32 || generated[12] != '4' {
+		t.Fatal("invalid generated UUID", generated)
+	}
+	payload["code"] = generated
+	payload["name"] = "duplicate code"
+	member.call(t, "POST", "/me/integrations/gitlab/"+id+"/credentials", payload, 409, tag(member, "/me/integrations/gitlab/"+id+"/credentials"))
+	secondIntegration := testData(admin.call(t, "POST", base, map[string]any{"name": "Other code integration", "base_url": "https://other.example.com"}, 201, nil))["id"].(string)
+	secondPath := base + "/" + secondIntegration + "/credentials"
+	admin.call(t, "POST", secondPath, payload, 409, tag(admin, secondPath))
+	admin.call(t, "PATCH", sys+"/"+one, map[string]string{"code": "renamed"}, 422, tag(admin, sys+"/"+one))
+	delete(payload, "code")
+	payload["name"] = "omitted code"
+	admin.call(t, "POST", secondPath, payload, 201, tag(admin, secondPath))
+	payload["identity_config"] = map[string]string{"token_type": "personal"}
+	admin.call(t, "POST", secondPath, payload, 422, tag(admin, secondPath))
 	oldCollection := tag(admin, sys)
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": one}, 200, oldCollection)
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": two}, 412, oldCollection)

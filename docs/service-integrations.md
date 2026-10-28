@@ -1,6 +1,6 @@
 # 外部服务集成设计
 
-更新日期：2026-10-28。状态：首期已实现并部署，验证范围见开发说明。采用 `integration`、`integration_gitlab`、`integration_credential` 三张表，取代此前四表草案及专属配置放入公共主表的两表方案。DDL 阅读副本见 [schema.sql](schema.sql)；运行迁移为 `00003_integrations.sql`，通过真实 MySQL 新装及版本 2 → 3 升级验证。
+更新日期：2026-10-28。状态：首期已实现并部署，验证范围见开发说明。采用 `integration`、`integration_gitlab`、`integration_credential` 三张表，取代此前四表草案及专属配置放入公共主表的两表方案。DDL 阅读副本见 [schema.sql](schema.sql)；运行迁移为 `00003_integrations.sql` 和 `00004_credential_codes.sql`。
 
 ## 1. 目标、术语与范围
 
@@ -109,6 +109,7 @@ default_credential_id 是逻辑引用，不设物理外键；代码在事务内�
 | 字段 | 职责 |
 | --- | --- |
 | id、integration_id | 稳定凭证 ID 和所属集成，创建后不迁移 |
+| service_type、code | 服务类型由所属集成派生；code 为稳定程序标识，创建后不可修改 |
 | scope_type、project_id、user_id | system / project / personal 及归属主体的逻辑引用 |
 | owner_key | 生成列：系统为 0，否则对应项目或用户 ID，仅用于唯一约束 |
 | name、description | 具名认证身份 |
@@ -125,6 +126,7 @@ default_credential_id 是逻辑引用，不设物理外键；代码在事务内�
 
 唯一约束：
 
+- (service_type, code)：同服务类型内唯一，跨连接和所有归属；不同服务类型可复用。code 只用于定位，不授予使用权限。
 - (integration_id, scope_type, owner_key, name)：同一归属内名称唯一。
 - (integration_id, scope_type, owner_key, preferred_slot)：同一归属最多一份首选；MySQL 允许多行 NULL，故非首选可有多份。
 
@@ -309,7 +311,7 @@ GET 不返回密文、私钥、Token 片段或内部 key_version，只返回 has
 - HTTPS 必需，禁止回环、未指定、链路本地、云元数据及特殊地址；允许正常私有业务网络，支持自定义 CA。DNS 解析后校验全部地址并按已校验 IP 拨号，不使用系统代理，不跟随重定向。暂不提供 HTTP 或回环放行配置。
 - API 使用 `/api/v1`；仅注册 `gitlab`。前端服务注册表定义连接字段、身份字段、秘密字段、认证方式和专属详情组件，能力目录只发布已实现的类型。
 - 新建集成请求为 `{name, description, base_url, custom_ca_pem}`；公共 PATCH 仅接受 name/description/enabled；配置 PATCH 接受 base_url/custom_ca_pem/webhook_enabled，清空 CA 使用空字符串。TLS 始终验证，不接受 verify=false。
-- 凭证认证方式为 gitlab_access_token；identity_config 是 `{token_type?: "personal" | "project" | "group"}`，仅为令牌类别说明。创建时提供，普通编辑限名称、说明、启停、到期时间；替换秘密独立提交。expires_at 使用 RFC3339 或 null。
+- 凭证认证方式为 gitlab_access_token；identity_config 为 `{}`，不再维护 token_type，令牌用途可写入说明。普通编辑限名称、说明、启停、到期时间；替换秘密独立提交。expires_at 使用 RFC3339 或 null。
 - 集成目录和凭证集合首版返回完整列表，由前端搜索；尚无服务端分页和查询过滤。凭证集合返回 `{items, mutation_version}`，此版本绑定未筛选归属集合，不公开全局计数器。
 - 公共资料、专属配置、凭证详情、默认资源通过响应 ETag 返回版本；PATCH/PUT/DELETE 使用 If-Match。公共 updated_at 只随公共版本变化，凭证或默认更新不会偷偷改变公共表示。诊断资源 no-store，历史配置对应的结果标记 outdated。
 - Webhook 支持 Push Hook、Tag Push Hook、Merge Request Hook；请求体上限 1 MiB。传统秘密与 HMAC 签名显式二选一，签名时间窗 ±5 分钟，不降级。生成传统 Token 返回一次性 token，不隐式启用。签名 Token 从支持该功能的 GitLab 导入。
@@ -320,3 +322,9 @@ GET 不返回密文、私钥、Token 片段或内部 key_version，只返回 has
 
 沿用[领域权限](domain-model.md)、[项目规则](projects-and-teams.md)、[API 基线](api.md)、[数据库基线](database.md)、[密钥与部署](deployment.md)及[UI 规范](ui-design.md)。扩展边界见[扩展性设计](extensibility.md)，完整目标表结构见[schema.sql](schema.sql)。实际交付状态继续以 development.md 为准。
 
+
+### 凭证 code
+
+创建 API 接受可选字符串 `code`，去除首尾空白后若为空，服务端生成 UUID v4 并去掉短横线（32 位小写十六进制）。手动值匹配 `[a-z0-9][a-z0-9_-]{0,63}`。响应返回最终 code 和 service_type；PATCH 不接受 code 或 service_type。服务类型由服务器从所属集成派生，数据库以 `(service_type, code)` 唯一键兜底并发冲突。重复返回 409 `CREDENTIAL_CODE_CONFLICT`，不透露冲突凭证的归属。
+
+升级为已有凭证赋予 `credential_<ID>`，移除 GitLab identity_config.token_type；不改变秘密、材料版本、首选或默认设置。更新凭证及列表版本，旧客户端快照需重新加载。本期仅维护标识，不新增通过 code 使用秘密的接口。

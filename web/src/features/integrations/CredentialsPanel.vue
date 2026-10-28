@@ -48,6 +48,7 @@ const dialog = ref(false),
   editTag = ref(""),
   formError = ref("");
 const form = reactive({
+  code: "",
   name: "",
   description: "",
 
@@ -106,6 +107,7 @@ async function open(modeValue: "create" | "edit" | "secret", row?: Credential) {
   providerValues.value = { ...row?.identity_config };
   clearSecret();
   Object.assign(form, {
+    code: row?.code ?? "",
     name: row?.name ?? "",
     description: row?.description ?? "",
 
@@ -125,6 +127,7 @@ async function open(modeValue: "create" | "edit" | "secret", row?: Credential) {
       selected.value = r.data;
       editTag.value = r.etag;
       Object.assign(form, {
+        code: r.data.code,
         name: r.data.name,
         description: r.data.description,
         enabled: r.data.enabled,
@@ -158,6 +161,14 @@ async function save() {
     formError.value = adapter.value.validateSecret(providerValues.value);
     return;
   }
+  if (
+    mode.value === "create" &&
+    form.code.trim() &&
+    !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(form.code.trim())
+  ) {
+    formError.value = "code 须以小写字母或数字开头，仅含小写字母、数字、下划线或短横线，最长 64 位";
+    return;
+  }
   busy.value = true;
   try {
     const expires = form.expires_at
@@ -168,6 +179,7 @@ async function save() {
         method: "POST",
         etag: collection.value,
         body: {
+          code: form.code,
           name: form.name,
           description: form.description,
           auth_method: adapter.value.authMethod,
@@ -305,6 +317,7 @@ useUnsaved(
               >默认 · 缺失时回退</span
             >
           </h3>
+          <p><code>{{ row.code }}</code></p>
           <p>{{ row.description || "未填写说明" }}</p>
           <small
             >{{
@@ -400,6 +413,14 @@ useUnsaved(
           {{ formError }}
         </div>
         <template v-if="mode !== 'secret'"
+          ><label
+            >凭证 code{{ mode === 'create' ? '（可选）' : '' }}<ElInput
+              v-model="form.code"
+              maxlength="64"
+              :readonly="mode === 'edit'"
+              :disabled="busy"
+              autocomplete="off" />
+            <small>同服务类型全局唯一，创建后不可修改。<template v-if="mode === 'create'">留空自动生成无短横线的 UUID；手动填写允许小写字母、数字、下划线和短横线。</template></small></label
           ><label
             >名称<ElInput
               v-model="form.name"

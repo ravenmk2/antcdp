@@ -10,7 +10,7 @@ import (
 
 const integrationColumns = "id,service_type,name,description,enabled,default_credential_id,row_version,credentials_version,default_version,created_by_user_id,created_at,updated_at"
 const gitlabColumns = "integration_id,base_url,custom_ca_pem,webhook_enabled,webhook_verification_method,webhook_secret_ciphertext IS NOT NULL AS has_secret,row_version,connection_version,webhook_version"
-const credentialColumns = "id,integration_id,scope_type,project_id,user_id,name,description,auth_method,identity_config,enabled,is_preferred,secret_ciphertext IS NOT NULL AS has_secret,expires_at,row_version,material_version,created_by_user_id"
+const credentialColumns = "id,integration_id,service_type,code,scope_type,project_id,user_id,name,description,auth_method,identity_config,enabled,is_preferred,secret_ciphertext IS NOT NULL AS has_secret,expires_at,row_version,material_version,created_by_user_id"
 
 func (t *identityTx) Integrations() ([]i.Integration, error) {
 	out := []i.Integration{}
@@ -76,7 +76,7 @@ func (t *identityTx) Credential(id uint64) (*i.Credential, error) {
 	return o, e
 }
 func (t *identityTx) InsertCredential(c *i.Credential) error {
-	r, e := t.tx.NamedExecContext(t.ctx, "INSERT INTO integration_credential(integration_id,scope_type,project_id,user_id,name,description,auth_method,identity_config,expires_at,created_by_user_id,created_at,updated_at) VALUES(:integration_id,:scope_type,:project_id,:user_id,:name,:description,:auth_method,:identity_config,:expires_at,:created_by_user_id,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", c)
+	r, e := t.tx.NamedExecContext(t.ctx, "INSERT INTO integration_credential(integration_id,service_type,code,scope_type,project_id,user_id,name,description,auth_method,identity_config,expires_at,created_by_user_id,created_at,updated_at) VALUES(:integration_id,:service_type,:code,:scope_type,:project_id,:user_id,:name,:description,:auth_method,:identity_config,:expires_at,:created_by_user_id,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", c)
 	if e != nil {
 		return e
 	}
