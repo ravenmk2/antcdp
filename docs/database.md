@@ -1,6 +1,6 @@
 # 数据库设计
 
-下一阶段新增项目、团队及图标表的设计草案见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 已汇总完整目标结构（一期 7 张 + 下一阶段 9 张，共 16 张）。新增结构已进入第 2 版运行迁移并通过 MySQL 8.0 升级和安装验证；基础业务已接入；当前验证范围与剩余验收见开发说明。
+项目、团队及图标表设计见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 已汇总 19 张目标业务表（一期 7 张 + 协作 9 张 + 集成 3 张）。协作九表已进入第 2 版运行迁移并通过 MySQL 8.0 升级和安装验证；集成三表仅为待审查 DDL，未进入迁移、未实库验证。实际交付边界见开发说明。
 
 字段约束、关系查询、事务和版本详见 [详细设计](projects-and-teams-detail.md)，九张新增表有独立 [DDL 阅读副本](projects-and-teams-schema.sql)。该副本依赖一期 user 表，不能作为生产迁移直接导入；MySQL 8.0 验证范围见开发说明，8.4 仍待验证。
 
@@ -41,7 +41,13 @@ erDiagram
 
 ### 下一阶段新增结构
 
-完整 [schema.sql](schema.sql) 包含原有 7 张表及新增 9 张表：project、team、project_member、team_member、project_team、icon_file、user_sidebar_preference、user_project_shortcut、user_team_shortcut。现有运行迁移仍只代表已交付的一期结构，不可用目标阅读副本覆盖运行库。
+完整 [schema.sql](schema.sql) 包含一期 7 张、协作 9 张（project、team、project_member、team_member、project_team、icon_file、user_sidebar_preference、user_project_shortcut、user_team_shortcut），以及待开发集成 3 张（integration、integration_gitlab、integration_credential）。运行迁移已覆盖一期与协作结构，尚未包含集成，不可用目标阅读副本覆盖运行库。
+
+### 外部集成目标结构（待审查）
+
+详见[外部服务集成设计](service-integrations.md)。integration 保存公共资料、启停、默认凭证和公共并发版本；integration_gitlab 一对一保存 GitLab 地址、CA、Webhook 配置、加密验证秘密和诊断摘要；integration_credential 保存归属、身份、加密认证材料及首选标记。不设凭证集合表或一对一秘密表。
+
+集成三表不设置物理外键或 CHECK，保留主键、唯一键、查询索引及基础字段定义。生成列与唯一索引约束同一集成、同一归属最多一份首选；目标存在、默认凭证属于同一集成且为系统级、归属组合、可用状态、秘密完整性及 JSON 结构由代码与事务校验。凭证维护锁定集成行并验证版本，关联删除与并发新增遵循相同锁协议。GitLab Webhook 仅维护验证配置及最近接收摘要，不是工作流事件收件箱。DDL 和索引仍需真实 MySQL 验证；本次不变更既有业务表的外键与 CHECK。
 
 侧栏关系通过 preference.user_id 间接外键关联 user；两个分组分别维护版本。固定及排序按账号保存、跨设备共享；目标和顺序分别有索引，sort_order 不设唯一。新账号创建同步初始化 preference，升级迁移为未删除账号补行；删除账号明确删除快捷及偏好行。权限失去后的自动清理与授权变更同事务，保留其他成员来源及暂时禁用账号的偏好。详见 [详细设计 2.3 和 4.5 节](projects-and-teams-detail.md#23-侧栏持久化模型)。
 
@@ -53,7 +59,7 @@ erDiagram
 - 业务实体 ID 使用 `BIGINT UNSIGNED`；设置以 name 为主键，安装记录使用单例小整数。API 中 ID 与用户版本使用十进制字符串，避免 JavaScript 数字精度丢失；设置聚合版本为不透明摘要，客户端不解析版本。
 - 时间存为 UTC `DATETIME(3)`；应用写入毫秒精度 UTC，连接设置 `time_zone='+00:00'`、`parseTime=true`、`loc=UTC`。界面按系统设置时区展示，修改时区不改历史数据。
 - 不使用自动 `ON UPDATE` 时间列；业务服务明确更新 `updated_at`、版本和审计。最近登录时间只更新 `last_login_at`。
-- 不用数据库 `ENUM`，使用短字符串与命名 `CHECK`；新状态通过迁移明确扩展。CHECK 只保护行内规则，跨表与权限规则由服务事务执行。
+- 不用数据库 `ENUM`。既有业务表使用短字符串与命名 `CHECK`，新状态通过迁移明确扩展；CHECK 只保护行内规则，跨表与权限规则由服务事务执行。新增集成三表按本模块约定仅保留唯一键和索引，状态等业务校验在代码中执行，不新增 CHECK。
 - 所有查询参数绑定，不拼接用户输入；排序字段使用服务端白名单。运行连接保持 `multiStatements=false`；goose 使用独立迁移连接，按工具要求开启 `multiStatements=true`，不可复用成请求连接。
 - 结构草案不包含 `CREATE DATABASE`、初始用户数据或默认口令。部署者先提供专用空数据库与账号，安装服务创建业务种子。
 
