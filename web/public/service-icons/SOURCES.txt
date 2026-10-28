@@ -1,0 +1,4 @@
+GitLab, Jenkins, MySQL, PostgreSQL, Redis, RabbitMQ, MongoDB, Elasticsearch: https://github.com/simple-icons/simple-icons (CC0 collection; brand marks remain their owners).
+OpenObserve: https://openobserve.ai/favicon.svg
+Nacos: https://nacos.io/favicon.ico
+Icons identify external services. Service availability is determined by the capability registry.

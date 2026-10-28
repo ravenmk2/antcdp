@@ -16,6 +16,7 @@ import {
   ElDropdownItem,
 } from "element-plus";
 import AppLayout from "../../app/AppLayout.vue";
+import ServiceIcon from "./ServiceIcon.vue";
 import CredentialsPanel from "./CredentialsPanel.vue";
 import { serviceUI } from "./providers";
 import ProviderFields from "./ProviderFields.vue";
@@ -345,17 +346,17 @@ useUnsaved(
               <ElButton v-if="items.length" @click="resetFilters">清除筛选</ElButton>
               <ElButton v-else-if="admin" :disabled="!types.length" @click="openCreate">添加集成</ElButton>
             </div>
-            <div class="integration-grid">
-              <button v-for="item in visible" :key="item.id" class="integration-tile" @click="choose(item)">
-                <span class="service-symbol" aria-hidden="true">{{ item.service_type.slice(0, 2).toUpperCase() }}</span>
-                <span class="integration-tile-content">
-                  <span class="integration-tile-title">{{ item.name }}</span>
-                  <span class="integration-tile-description">{{ item.description || '未填写说明' }}</span>
-                  <span class="integration-provider">{{ filterTypes.find((t) => t.service_type === item.service_type)?.name ?? item.service_type }}</span>
-                </span>
-                <span class="integration-status" :class="{ enabled: item.enabled }">{{ item.enabled ? '已启用' : '已停用' }}</span>
-                <span class="integration-tile-link">{{ admin ? '管理集成' : '管理凭证' }} <span aria-hidden="true">→</span></span>
-              </button>
+            <div v-if="visible.length" class="integration-table-wrap">
+              <table class="integration-table instances-table">
+                <thead><tr><th>集成名称</th><th>服务类型</th><th>说明</th><th>状态</th><th class="actions-column">操作</th></tr></thead>
+                <tbody><tr v-for="item in visible" :key="item.id">
+                  <td><div class="instance-identity"><ServiceIcon :type="item.service_type" /><button class="instance-name" @click="choose(item)">{{ item.name }}</button></div></td>
+                  <td data-label="服务类型">{{ filterTypes.find(t => t.service_type === item.service_type)?.name ?? item.service_type }}</td>
+                  <td data-label="说明"><span class="instance-description" :title="item.description">{{ item.description || '未填写说明' }}</span></td>
+                  <td data-label="状态"><span class="integration-status" :class="{ enabled: item.enabled }">{{ item.enabled ? '已启用' : '已停用' }}</span></td>
+                  <td class="actions-column"><ElButton link @click="choose(item)">{{ admin ? '管理集成' : '管理凭证' }} →</ElButton></td>
+                </tr></tbody>
+              </table>
             </div>
           </section>
         </div>
@@ -363,7 +364,7 @@ useUnsaved(
       <template v-else-if="selected && !loading">
         <RouterLink class="integration-back" :to="{ path: listPath, query: { type: typeFilter || undefined } }">← 返回集成列表</RouterLink>
         <div class="integration-toolbar integration-detail-header">
-          <div>
+          <div class="integration-detail-identity"><ServiceIcon :type="selected.service_type" /><div>
             <span class="integration-provider">{{
               capability?.name ?? selected.service_type
             }}</span>
@@ -374,7 +375,7 @@ useUnsaved(
               }}</span>
             </h1>
             <p>{{ selected.description }}</p>
-          </div>
+          </div></div>
           <div v-if="admin" class="integration-actions">
             <ElButton :disabled="busy" @click="openEdit">编辑资料</ElButton
             ><ElDropdown trigger="click" @command="remove">
@@ -407,7 +408,7 @@ useUnsaved(
           </button>
         </nav>
         <p v-if="!selected.enabled" class="integration-note">此集成已停用。可以继续维护配置与凭证，外部验证和事件接收暂不可用。</p>
-        <div class="integration-detail-body">
+        <div class="integration-detail-body" :class="{ 'credentials-body': tab === 'credentials' }">
         <CredentialsPanel
           v-if="capability?.credentials"
           v-show="tab === 'credentials'"

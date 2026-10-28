@@ -2,11 +2,13 @@
 import { serviceUI } from "./providers";
 import ProviderFields from "./ProviderFields.vue";
 import { useUnsaved } from "./unsaved";
-import { computed, reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch, onMounted, onUnmounted } from "vue";
 import {
   ElButton,
   ElDialog,
   ElInput,
+  ElSelect,
+  ElOption,
   ElSwitch,
   ElMessage,
   ElMessageBox,
@@ -56,10 +58,47 @@ const form = reactive({
   expires_at: "",
 });
 const search = ref("");
-const visibleRows = computed(() => rows.value.filter((row) =>
+const stateFilter = ref("");
+const clock = ref(Date.now());
+let clockTimer: ReturnType<typeof setInterval>;
+onMounted(() => { clockTimer = setInterval(() => { clock.value = Date.now(); }, 60000); });
+onUnmounted(() => clearInterval(clockTimer));
+const stateLabels: Record<string, string> = { available: "可用", expiring: "即将到期", expired: "已过期", disabled: "已停用", missing: "未配置秘密" };
+function stateOf(row: Credential) {
+  if (!row.enabled) return "disabled";
+  if (!row.has_secret) return "missing";
+  const expires = row.expires_at ? Date.parse(row.expires_at) : Infinity;
+  if (expires <= clock.value) return "expired";
+  return expires - clock.value <= 7 * 86400000 ? "expiring" : "available";
+}
+function expiryHint(row: Credential) {
+  if (!row.expires_at) return "";
+  const remaining = Date.parse(row.expires_at) - clock.value;
+  return remaining <= 0 ? "已过期" : remaining < 86400000 ? "不足 1 天到期" : `${Math.ceil(remaining / 86400000)} 天后到期`;
+}
+const visibleRows = computed(() => rows.value.filter(row =>
+  (!stateFilter.value || stateOf(row) === stateFilter.value) &&
   `${row.name} ${row.code} ${row.description}`.toLowerCase().includes(search.value.trim().toLowerCase()),
 ));
-const diagnostics = ref<Record<string, Diagnostic>>({});
+const diagnostics = ref<Record<string, Diagnostic | null>>({});
+async function copyCode(code: string) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(code);
+    else {
+      const input = document.createElement("textarea");
+      input.value = code; input.style.position = "fixed"; input.style.opacity = "0";
+      document.body.appendChild(input);
+      try { input.select(); if (!document.execCommand("copy")) throw new Error("复制失败"); }
+      finally { input.remove(); }
+    }
+    ElMessage.success("code 已复制");
+  } catch { ElMessage.error("无法复制，请选中 code 手动复制"); }
+}
+function menuAction(command: string, row: Credential) {
+  if (command === "secret") void open("secret", row);
+  else if (command === "diagnostics") void last(row);
+  else void action(command, row);
+}
 const integrationBase = computed(() =>
   props.base.replace(/\/credentials$/, ""),
 );
@@ -209,6 +248,7 @@ async function save() {
           expires_at: expires,
         },
       });
+    if (selected.value) delete diagnostics.value[selected.value.id];
     dialog.value = false;
     clearSecret();
     await load();
@@ -273,8 +313,7 @@ async function last(row: Credential) {
     const r = await request<Diagnostic | null>(
       props.base + "/" + row.id + "/diagnostics",
     );
-    if (r.data) diagnostics.value[row.id] = r.data;
-    else ElMessage.info("尚无验证记录");
+    diagnostics.value[row.id] = r.data;
   } catch (e) {
     error.value = message(e);
   }
@@ -313,95 +352,31 @@ useUnsaved(
     </div>
     <div v-if="rows.length" class="credential-filters">
       <ElInput v-model="search" clearable placeholder="搜索名称、code 或说明" aria-label="搜索凭证" />
+      <ElSelect v-model="stateFilter" placeholder="全部状态" aria-label="凭证状态筛选"><ElOption label="全部状态" value="" /><ElOption v-for="(label, value) in stateLabels" :key="value" :label="label" :value="value" /></ElSelect>
       <span aria-live="polite">{{ visibleRows.length }} 份凭证</span>
     </div>
-    <p v-if="rows.length && !visibleRows.length" class="integration-empty">没有匹配的凭证。<ElButton link @click="search = ''">清除搜索</ElButton></p>
-    <article v-for="row in visibleRows" :key="row.id" class="credential-row">
-      <div class="integration-toolbar">
-        <div>
-          <h3>
-            {{ row.name }}
-            <span v-if="row.is_preferred" class="integration-badge">首选</span>
-            <span v-if="defaultID === row.id" class="integration-badge"
-              >默认 · 缺失时回退</span
-            >
-          </h3>
-          <p class="credential-code"><span>code</span> <code>{{ row.code }}</code></p>
-          <p>{{ row.description || "未填写说明" }}</p>
-          <small
-            >{{
-              !row.enabled
-                ? "已停用"
-                : !available(row)
-                  ? "已过期或不可用"
-                  : "已启用"
-            }}
-            · {{ adapter.authLabel }} · 秘密{{
-              row.has_secret ? "已配置" : "未配置"
-            }}
-            <template v-if="row.expires_at">
-              · 到期 {{ new Date(row.expires_at).toLocaleString() }}</template
-            ></small
-          >
-        </div>
-      </div>
-      <div class="integration-actions">
-        <template v-if="!readonly">
-          <ElButton link :disabled="busy" @click="open('edit', row)"
-            >编辑</ElButton
-          >
-          <ElButton link :disabled="busy" @click="open('secret', row)"
-            >替换秘密</ElButton
-          >
-          <ElButton
-            link
-            :disabled="busy || !available(row) || !integrationEnabled"
-            @click="action('verify', row)"
-            >验证凭证</ElButton
-          >
-          <ElDropdown
-            trigger="click"
-            @command="(command: string) => action(command, row)"
-          >
-            <ElButton link :disabled="busy">更多操作</ElButton>
-            <template #dropdown
-              ><ElDropdownMenu>
-                <ElDropdownItem
-                  command="preferred"
-                  :disabled="!row.is_preferred && !available(row)"
-                  >{{
-                    row.is_preferred ? "取消首选" : "设为首选"
-                  }}</ElDropdownItem
-                >
-                <ElDropdownItem
-                  v-if="system"
-                  command="default"
-                  :disabled="defaultID !== row.id && !available(row)"
-                  >{{
-                    defaultID === row.id ? "清除默认" : "设为默认"
-                  }}</ElDropdownItem
-                >
-                <ElDropdownItem command="delete" divided
-                  >删除凭证</ElDropdownItem
-                >
-              </ElDropdownMenu></template
-            >
-          </ElDropdown>
-        </template>
-        <ElButton link @click="last(row)">最近验证</ElButton>
-      </div>
-      <p v-if="diagnostics[row.id]" class="integration-note">
-        {{
-          diagnostics[row.id]!.outdated
-            ? "历史结果（配置或材料已变化） · "
-            : ""
-        }}{{ diagnosticLabels[diagnostics[row.id]!.status] }}
-        <template v-if="diagnostics[row.id]!.username">
-          · {{ diagnostics[row.id]!.username }}</template
-        >
-        · {{ new Date(diagnostics[row.id]!.started_at).toLocaleString() }}
-      </p>
-    </article>
+    <p v-if="rows.length && !visibleRows.length" class="integration-empty">没有匹配的凭证。<ElButton link @click="search = ''; stateFilter = ''">清除筛选</ElButton></p>
+    <div v-if="visibleRows.length" class="integration-table-wrap">
+      <table class="integration-table credentials-table">
+        <thead><tr><th>凭证 / code</th><th>状态</th><th>使用设置</th><th>有效期</th><th>最近验证</th><th class="actions-column">操作</th></tr></thead>
+        <tbody><tr v-for="row in visibleRows" :key="row.id">
+          <td><strong class="credential-name" :title="row.description">{{ row.name }}</strong><div class="credential-code"><code :title="row.code">{{ row.code }}</code><button class="copy-code" :aria-label="`复制 ${row.code}`" @click="copyCode(row.code)">⧉</button></div><span v-if="row.description" class="credential-description" :title="row.description">{{ row.description }}</span></td>
+          <td data-label="状态"><span class="credential-status" :class="stateOf(row)">{{ stateLabels[stateOf(row)] }}</span></td>
+          <td data-label="使用设置"><div><span v-if="row.is_preferred" class="integration-badge">首选</span><span v-if="defaultID === row.id" class="integration-badge fallback">默认回退</span><span v-if="!row.is_preferred && defaultID !== row.id" class="muted">—</span></div></td>
+          <td data-label="有效期"><div><span :title="row.expires_at ? new Date(row.expires_at).toLocaleString() : ''">{{ row.expires_at ? new Date(row.expires_at).toLocaleDateString() : '未设置' }}</span><small v-if="row.expires_at" class="cell-subtext">{{ expiryHint(row) }}</small></div></td>
+          <td data-label="最近验证"><div v-if="diagnostics[row.id]"><span class="diagnostic-status">{{ diagnostics[row.id]!.outdated ? '历史结果 · ' : '' }}{{ diagnosticLabels[diagnostics[row.id]!.status] }}</span><small v-if="diagnostics[row.id]!.username" class="cell-subtext">{{ diagnostics[row.id]!.username }}</small><small class="cell-subtext">{{ new Date(diagnostics[row.id]!.started_at).toLocaleString() }}</small></div><ElButton v-else-if="diagnostics[row.id] === undefined" link @click="last(row)">查看记录</ElButton><span v-else class="muted">尚无记录</span></td>
+          <td class="actions-column"><div v-if="!readonly" class="credential-row-actions"><ElButton link :disabled="busy" @click="open('edit', row)">编辑</ElButton><ElDropdown trigger="click" @command="(command: string) => menuAction(command, row)"><ElButton link :disabled="busy" :aria-label="`${row.name}更多操作`">···</ElButton><template #dropdown><ElDropdownMenu>
+            <ElDropdownItem command="secret">替换秘密</ElDropdownItem>
+            <ElDropdownItem command="verify" :disabled="!available(row) || !integrationEnabled">验证凭证</ElDropdownItem>
+            <ElDropdownItem command="diagnostics">最近验证</ElDropdownItem>
+            <ElDropdownItem command="preferred" divided :disabled="!row.is_preferred && !available(row)">{{ row.is_preferred ? '取消首选' : '设为首选' }}</ElDropdownItem>
+            <ElDropdownItem v-if="system" command="default" :disabled="defaultID !== row.id && !available(row)">{{ defaultID === row.id ? '清除默认回退' : '设为默认回退' }}</ElDropdownItem>
+            <ElDropdownItem command="delete" divided>删除凭证</ElDropdownItem>
+          </ElDropdownMenu></template></ElDropdown></div><span v-else class="muted">只读</span></td>
+        </tr></tbody>
+      </table>
+    </div>
+    <div v-if="rows.length" class="credential-legend"><span>首选 · 当前归属内优先使用</span><span v-if="system">默认回退 · 其它凭证缺失时使用</span><span>秘密保存后不可读取</span></div>
     <ElDialog
       v-model="dialog"
       :title="
@@ -422,7 +397,7 @@ useUnsaved(
           {{ formError }}
         </div>
         <template v-if="mode !== 'secret'"
-          ><label
+          ><h3 class="credential-form-heading">基本资料</h3><label
             >凭证 code{{ mode === 'create' ? '（可选）' : '' }}<ElInput
               v-model="form.code"
               maxlength="64"
@@ -446,20 +421,20 @@ useUnsaved(
             v-if="mode === 'create'"
             v-model="providerValues"
             :fields="adapter.identityFields"
-            :disabled="busy" /><label
-            >到期时间（本地时间，可选）<input
-              v-model="form.expires_at"
-              type="datetime-local"
-              :disabled="busy" /></label
-          ><label v-if="mode === 'edit'"
-            >启用<ElSwitch v-model="form.enabled" :disabled="busy" /></label
-        ></template>
+            :disabled="busy" />
+        </template>
+        <h3 v-if="mode !== 'edit'" class="credential-form-heading">认证材料 · {{ adapter.authLabel }}</h3>
         <ProviderFields
           v-if="mode !== 'edit'"
           v-model="providerValues"
           :fields="adapter.secretFields"
           :disabled="busy"
         />
+        <template v-if="mode !== 'secret'">
+          <h3 class="credential-form-heading">有效期与状态</h3>
+          <label>到期时间（本地时间，可选）<input v-model="form.expires_at" type="datetime-local" :disabled="busy" /></label>
+          <label v-if="mode === 'edit'">启用<ElSwitch v-model="form.enabled" :disabled="busy" /></label>
+        </template>
         <div class="integration-actions">
           <ElButton :disabled="busy" @click="dialog = false">取消</ElButton
           ><ElButton type="primary" native-type="submit" :loading="busy"
