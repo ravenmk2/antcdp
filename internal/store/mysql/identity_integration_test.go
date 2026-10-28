@@ -236,8 +236,13 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	t.Run("Collaboration", func(t *testing.T) {
 		verifyCollaborationHTTP(t, backend, dataDir, founder, member, visitor, founderID, userID)
 	})
+	t.Run("ServiceIntegrations", func(t *testing.T) { verifyServiceIntegrations(t, backend, founder, member, visitor, founderID, userID) })
 	_, tag = founder.user(t, userID)
 	founder.call(t, "DELETE", "/admin/users/"+userID, nil, 204, map[string]string{"If-Match": tag, "X-Confirm-Username": "member"})
+	var personalCount int
+	if err = backend.db.GetContext(context.Background(), &personalCount, "SELECT COUNT(*) FROM integration_credential WHERE user_id=?", userID); err != nil || personalCount != 0 {
+		t.Fatal("personal credentials survived account deletion", err)
+	}
 	var remainingPreference int
 	if err = backend.db.GetContext(context.Background(), &remainingPreference, "SELECT COUNT(*) FROM user_sidebar_preference WHERE user_id=?", userID); err != nil || remainingPreference != 0 {
 		t.Fatal("deleted account retained sidebar preferences", err)

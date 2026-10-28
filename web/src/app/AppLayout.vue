@@ -209,6 +209,7 @@ async function userCommand(command: string | number | object) {
               >用户管理</span
             ></RouterLink
           >
+          <RouterLink class="nav-item" title="服务集成" aria-label="服务集成" to="/admin/integrations" :class="{active:route.path.startsWith('/admin/integrations')}"><UiIcon name="globe"/><span class="nav-text">服务集成</span></RouterLink>
           <RouterLink
             class="nav-item"
             title="系统设置"

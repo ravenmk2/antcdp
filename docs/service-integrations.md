@@ -1,6 +1,6 @@
 # 外部服务集成设计
 
-更新日期：2026-10-28。状态：待审查、未开发。采用 `integration`、`integration_gitlab`、`integration_credential` 三张表，取代此前四表草案及专属配置放入公共主表的两表方案。目标 DDL 已纳入 [schema.sql](schema.sql)，仅供审查，不是运行迁移，也未代表实库验收。
+更新日期：2026-10-28。状态：已实现，进入验收与部署。采用 `integration`、`integration_gitlab`、`integration_credential` 三张表，取代此前四表草案及专属配置放入公共主表的两表方案。DDL 阅读副本见 [schema.sql](schema.sql)；运行迁移为 `00003_integrations.sql`，通过真实 MySQL 新装及版本 2 → 3 升级验证。
 
 ## 1. 目标、术语与范围
 
@@ -31,7 +31,7 @@ AntCDP 接入外部服务，供后续 AI Agent 工具和工作流使用。本期
 10. 集成三表不设置物理外键和 CHECK，保留主键、唯一键、查询索引及基础字段类型、可空性与默认值。关联完整性与业务规则由代码和事务保证；既有业务表不在本次调整范围。
 11. 公共主表只保存公共管理字段；服务专属配置进入一对一扩展表，本期仅建立 integration_gitlab。凭证保持通用表，后续服务接入时再增加相应扩展表。
 
-其余字段限制、生命周期、网络策略及接口细节是本稿提出的实施方案；第 12 节列出需审查事项，不能将它们描述为已经逐项确认。
+实施采用下述边界；第 12 节记录本期实现选择与尚未覆盖的外部联调范围。
 
 ## 3. 参考项目与取舍依据
 
@@ -43,7 +43,7 @@ AntCDP 接入外部服务，供后续 AI Agent 工具和工作流使用。本期
 | Argo Events | 同一 GitLab 事件源含 accessToken 与 secretToken，二者用途独立 | Kubernetes Secret 与控制器生命周期不是本项目存储模型 |
 | n8n 凭证实体 | 凭证实体内保存认证数据，入库前加密 | 不复制其共享、动态解析及权限模型 |
 
-官方资料：[GitLab 开发指南](https://docs.gitlab.com/development/integrations/)、[GitLab 集成 API](https://docs.gitlab.com/api/project_integrations/)、[Backstage GitLab](https://backstage.io/docs/integrations/gitlab/locations/)、[Jenkins GitLab Plugin](https://github.com/jenkinsci/gitlab-plugin)、[Argo GitLab 示例](https://github.com/argoproj/argo-events/blob/master/examples/event-sources/gitlab.yaml)、[n8n 凭证实体](https://github.com/n8n-io/n8n/blob/master/packages/@n8n/db/src/entities/credentials-entity.ts)、[n8n 加密说明](https://github.com/n8n-io/n8n-docs/blob/main/docs/deploy/host-n8n/configure-n8n/basic-configuration/configuration-examples/set-a-custom-encryption-key.md)。
+官方资料：[GitLab 开发指南](https://docs.gitlab.com/development/integrations/)、[GitLab 集成 API](https://docs.gitlab.com/api/v1/project_integrations/)、[Backstage GitLab](https://backstage.io/docs/integrations/gitlab/locations/)、[Jenkins GitLab Plugin](https://github.com/jenkinsci/gitlab-plugin)、[Argo GitLab 示例](https://github.com/argoproj/argo-events/blob/master/examples/event-sources/gitlab.yaml)、[n8n 凭证实体](https://github.com/n8n-io/n8n/blob/master/packages/@n8n/db/src/entities/credentials-entity.ts)、[n8n 加密说明](https://github.com/n8n-io/n8n-docs/blob/main/docs/deploy/host-n8n/configure-n8n/basic-configuration/configuration-examples/set-a-custom-encryption-key.md)。
 
 这些参考证明方案可行，不构成三表模型或首选策略的行业统一标准。
 
@@ -69,7 +69,7 @@ AntCDP 接入外部服务，供后续 AI Agent 工具和工作流使用。本期
 
 ## 5. 三表模型与 DDL 对照
 
-表名采用单数，ID 为 BIGINT UNSIGNED，时间为 UTC DATETIME(3)，API ID/版本均为十进制字符串。schema.sql 包含一期 7 张、协作 9 张、本文待开发 3 张，共 19 张目标业务表。
+表名采用单数，ID 为 BIGINT UNSIGNED，时间为 UTC DATETIME(3)，API ID/版本均为十进制字符串。schema.sql 包含一期 7 张、协作 9 张、集成迁移 3 张，共 19 张目标业务表。
 
 ### 5.1 integration
 
@@ -170,21 +170,23 @@ credentials_version 在新增、删除、首选、资料、启停、秘密状态
 
 ## 7. GitLab 首期配置及 API 验证
 
-服务类型 gitlab，首期认证方式 gitlab_access_token，支持手动输入访问令牌；不根据 Token 前缀猜测账号、类型或权限。个人/项目/群组令牌类型与 AntCDP 凭证归属无一一对应关系，参考[GitLab REST 认证](https://docs.gitlab.com/api/rest/authentication/)。
+服务类型 gitlab，首期认证方式 gitlab_access_token，支持手动输入访问令牌；不根据 Token 前缀猜测账号、类型或权限。个人/项目/群组令牌类型与 AntCDP 凭证归属无一一对应关系，参考[GitLab REST 认证](https://docs.gitlab.com/api/v1/rest/authentication/)。
 
 GitLab 专属接口的非秘密配置 DTO 示例（字段映射到 integration_gitlab 列，不作为整体 JSON 入库）：
 
 ```json
 {
   "base_url": "https://gitlab.example.com",
-  "tls": { "verify": true, "custom_ca_pem": null },
-  "webhook": { "enabled": false, "verification_method": "secret_token" }
+  "custom_ca_pem": null,
+  "webhook_enabled": false,
+  "webhook_verification_method": "secret_token",
+  "has_secret": false
 }
 ```
 
-集成 secret 明文结构由 GitLab 适配器定义为 webhook_verification_secret，整体加密后保存到 integration_gitlab.webhook_secret_ciphertext；凭证 secret 明文结构为 token，保存在凭证表，二者用途不同。TLS verify=true 是接口固定要求，不设可关闭的数据库列。验证方式变更必须与秘密替换在同一命令完成，不把旧字节重新解释为新方式。
+Webhook 替换请求为 `{verification_method, token}`，凭证创建的 secret 为 `{token}`，凭证替换请求为 `{token}`。本期封装版本 1 加密保存单个 Token 字符串，分别存于扩展表与凭证表，二者用途不同。TLS verify=true 是接口固定要求，不设可关闭的数据库列。验证方式变更必须与秘密替换在同一命令完成，不把旧字节重新解释为新方式。
 
-基础 URL 允许合法子路径，禁止 userinfo、query、fragment；API 路径由服务端构造。默认 HTTPS、校验主机名，支持公共自定义 CA，不接收 CA 私钥，不提供跳过 TLS 验证开关。内网 HTTP、回环访问见审查项。
+基础 URL 允许合法子路径，禁止 userinfo、query、fragment；API 路径由服务端构造。默认 HTTPS、校验主机名，支持公共自定义 CA，不接收 CA 私钥，不提供跳过 TLS 验证开关。本期不开放 HTTP 和回环白名单；支持符合地址策略的内网 HTTPS。
 
 测试集成只做连接探测，不暗用默认凭证；凭证验证使用已保存的对应 Token 和只读受控 API。网络/TLS 可达、认证有效、是否有特定业务权限必须分开表达。允许未验证或验证失败的配置保存；Token 权限和有效期无法获取时明确未知。
 
@@ -209,7 +211,7 @@ GitLab 文档记录 Signing Token 在 19.0 引入、19.1 正式可用；推荐�
 
 ### 8.2 配置交互与轮换
 
-系统管理员在 GitLab 集成详情查看接收地址、验证方式、配置状态及最近接收结果。建议地址 /api/webhooks/gitlab/{integration_id}，ID 用于路由而非认证，不能只靠难猜 URL 保护。地址由已配置的 AntCDP 对外访问地址生成，不取任意 Host 头。
+系统管理员在 GitLab 集成详情查看接收地址、验证方式、配置状态及最近接收结果。建议地址 /api/v1/webhooks/gitlab/{integration_id}，ID 用于路由而非认证，不能只靠难猜 URL 保护。地址由已配置的 AntCDP 对外访问地址生成，不取任意 Host 头。
 
 新生成的传统 Token 允许在创建结果中一次性展示并复制，用于粘贴到 GitLab；失败重试不能恢复明文，用户需重新生成或输入。已有秘密保存后不再读取。Signing Token 由 GitLab 生成后复制导入 AntCDP。输入值不存浏览器持久化存储，不写日志或审计。
 
@@ -238,20 +240,20 @@ Token 证明发送方持有秘密，不证明 payload 中的项目归属。不�
 
 | 路由 | 用途 |
 | --- | --- |
-| GET /api/integrations/types | 仅已实现的服务及认证/入站能力 |
-| GET /api/integrations | 有限目录投影 |
-| /api/admin/integrations/gitlab | GET 列表、POST 创建 |
-| /api/admin/integrations/gitlab/{id} | GET 公共资料、PATCH 名称/说明/整项启停、DELETE；使用主表 ETag |
-| /api/admin/integrations/gitlab/{id}/config | GET/PATCH GitLab 专属非秘密配置；使用扩展表 ETag |
+| GET /api/v1/integrations/types | 仅已实现的服务及认证/入站能力 |
+| GET /api/v1/integrations | 有限目录投影 |
+| /api/v1/admin/integrations/gitlab | GET 列表、POST 创建 |
+| /api/v1/admin/integrations/gitlab/{id} | GET 公共资料、PATCH 名称/说明/整项启停、DELETE；使用主表 ETag |
+| /api/v1/admin/integrations/gitlab/{id}/config | GET/PATCH GitLab 专属非秘密配置；使用扩展表 ETag |
 | POST .../{id}/test | 测试已保存连接 |
 | GET/PUT/DELETE .../{id}/default-credential | 读取/设置/清除默认，独立 ETag |
 | GET .../{id}/diagnostics | 连接测试及最近 Webhook 诊断，no-store |
 | PUT .../{id}/webhook-secret | 原子提交验证方式与匹配的新秘密；使用扩展表 ETag |
 | POST .../{id}/webhook-secret/generate | 原子切换至传统 Token 并生成秘密，响应一次性明文；使用扩展表 ETag |
-| /api/admin/integrations/gitlab/{id}/credentials | 系统凭证集合 |
-| /api/projects/{project_id}/integrations/gitlab/{id}/credentials | 项目凭证集合 |
-| /api/me/integrations/gitlab/{id}/credentials | 本人凭证集合 |
-| POST /api/webhooks/gitlab/{id} | 无会话的入站验证端点 |
+| /api/v1/admin/integrations/gitlab/{id}/credentials | 系统凭证集合 |
+| /api/v1/projects/{project_id}/integrations/gitlab/{id}/credentials | 项目凭证集合 |
+| /api/v1/me/integrations/gitlab/{id}/credentials | 本人凭证集合 |
+| POST /api/v1/webhooks/gitlab/{id} | 无会话的入站验证端点 |
 
 credentials 集合支持 GET/POST；/preferred 支持 PUT/DELETE；/{credential_id} 支持 GET/PATCH/DELETE；/{credential_id}/secret 支持 PUT 整体替换；/{credential_id}/verify 支持 POST。静态路由优先或 ID 路由限定数字，避免 preferred 歧义。启停通过对应 PATCH 明确字段，不允许批量覆盖归属。
 
@@ -259,7 +261,7 @@ credentials 集合支持 GET/POST；/preferred 支持 PUT/DELETE；/{credential_
 
 GitLab 集成创建一次提交公共资料与 GitLab 配置，主表/扩展原子落库。公共 GET/PATCH 不读写扩展配置，配置 GET/PATCH 不覆盖公共资料；PATCH /config 不允许单独改变验证方式，须用秘密替换命令。界面分别保存公共资料和服务配置，避免两个独立保存请求被误认为一个原子操作。删除使用主表 If-Match 及 expected_config_version（扩展 ETag），在锁内检查两者并原子删除两条记录。
 
-GitLab 创建凭证 DTO 含 name、description、auth_method、identity_config、secret、expires_at；归属由路径确定，拒绝 client 提交 integration_id 覆盖、密文、生成列和他人归属。未来每种服务有自己的配置 DTO、校验和表单，不复制权限实现。GET /api/integrations 和 /types 是跨类型目录/能力查询，允许不带类型路径；维护和入站路径必须明确类型。
+GitLab 创建凭证 DTO 含 name、description、auth_method、identity_config、secret、expires_at；归属由路径确定，拒绝 client 提交 integration_id 覆盖、密文、生成列和他人归属。未来每种服务有自己的配置 DTO、校验和表单，不复制权限实现。GET /api/v1/integrations 和 /types 是跨类型目录/能力查询，允许不带类型路径；维护和入站路径必须明确类型。
 
 沿用 Cookie/CSRF、字段 details、If-Match/412 和冲突/409。新建集成无需已有 ETag；凭证集合 GET 在空集合时仍给出 ETag，新增与首选命令要求它。普通凭证编辑和替换用凭证 ETag；删除用凭证 If-Match 加 expected_collection_version 不透明值。默认接口用独立默认 ETag；GitLab 配置和 Webhook 秘密使用扩展表 row_version 对应的 ETag，与主表编辑版本明确区分。
 
@@ -283,7 +285,7 @@ GET 不返回密文、私钥、Token 片段或内部 key_version，只返回 has
 
 ## 11. 实施与验收
 
-实施顺序：审查本文及 DDL → 确定 GitLab 版本和接收边界 → 新增 goose 迁移与仓储端口 → 通用权限/加密/凭证 → GitLab 连接及 Webhook → 前端 → 实库和浏览器验收。当前不修改已发布迁移，不启动业务开发。
+实施顺序：审查本文及 DDL → 确定 GitLab 版本和接收边界 → 新增 goose 迁移与仓储端口 → 通用权限/加密/凭证 → GitLab 连接及 Webhook → 前端 → 实库和浏览器验收。不修改既有已发布迁移；本期新增第 3 版迁移。
 
 重点验收：
 
@@ -300,24 +302,19 @@ GET 不返回密文、私钥、Token 片段或内部 key_version，只返回 has
 - 支持事件和不支持事件响应、未认证请求不污染摘要；响应和页面明确未分发工作流。
 - 深浅主题、键盘可用性、保存失败可修正、首选与默认语义清楚。
 
-验证状态：仅设计及 DDL 阅读副本；静态检查或解析通过不等于真实 MySQL DDL、约束、迁移和运行验证。
+验证状态：Go 单元测试、真实 MySQL 新装/升级及 HTTP 集成测试通过。新增验收覆盖权限隔离、首选冲突、默认停用清除、密文落库、账号清理和 Token Webhook；签名、原始请求体、时间窗、禁止降级及网络地址策略有单元测试。用户实际 GitLab 实例与访问令牌尚未提供，不将模拟入站请求等同于外部 GitLab 端到端联调。
 
-## 12. 待审查项
+## 12. 本期实施边界与 API 补充
 
-| 问题 | 本稿建议 |
-| --- | --- |
-| 首选与默认是否必填 | 均可空；系统首选与默认可不同，不自动选第一条 |
-| 停用/到期 | 停用清除引用；自然到期保留设置但标记不可用，禁止新设 |
-| 归档项目秘密删除 | 先恢复再维护；暂不提供特殊紧急删除入口 |
-| HTTP、回环访问 | HTTPS 默认；内网 HTTP 和回环是否通过部署白名单开放需确定 |
-| GitLab 兼容范围 | API 最低版本待部署环境确认；签名模式要求支持的版本 |
-| Webhook 范围 | 本期接收验证和最近结果，不持久保存完整事件、不执行工作流 |
-| 验证方式 | 建议兼容传统 Token 和 Signing Token；用户显式选择 |
-| 首期事件 | Push、Tag Push、Merge Request；其他返回不支持 |
-| 共享秘密轮换 | 一项集成一份，无双密钥过渡；生成值一次性展示 |
-| 字段限制 | 名称 1–100 码点、说明 1000；配置/秘密明文各 32 KiB；API Token 8 KiB；CA 计入配置上限 |
-| 诊断限制 | 请求/响应上限建议 1 MiB、外部超时 10 秒、签名容差 ±5 分钟 |
-| 可见性与保存 | 全体正常用户可见有限目录；失败验证允许保存；最近结果仅维护者可见 |
+- HTTPS 必需，禁止回环、未指定、链路本地、云元数据及特殊地址；允许正常私有业务网络，支持自定义 CA。DNS 解析后校验全部地址并按已校验 IP 拨号，不使用系统代理，不跟随重定向。暂不提供 HTTP 或回环放行配置。
+- API 使用 `/api/v1`；仅注册 `gitlab`。前端服务注册表定义连接字段、身份字段、秘密字段、认证方式和专属详情组件，能力目录只发布已实现的类型。
+- 新建集成请求为 `{name, description, base_url, custom_ca_pem}`；公共 PATCH 仅接受 name/description/enabled；配置 PATCH 接受 base_url/custom_ca_pem/webhook_enabled，清空 CA 使用空字符串。TLS 始终验证，不接受 verify=false。
+- 凭证认证方式为 gitlab_access_token；identity_config 是 `{token_type?: "personal" | "project" | "group"}`，仅为令牌类别说明。创建时提供，普通编辑限名称、说明、启停、到期时间；替换秘密独立提交。expires_at 使用 RFC3339 或 null。
+- 集成目录和凭证集合首版返回完整列表，由前端搜索；尚无服务端分页和查询过滤。凭证集合返回 `{items, mutation_version}`，此版本绑定未筛选归属集合，不公开全局计数器。
+- 公共资料、专属配置、凭证详情、默认资源通过响应 ETag 返回版本；PATCH/PUT/DELETE 使用 If-Match。公共 updated_at 只随公共版本变化，凭证或默认更新不会偷偷改变公共表示。诊断资源 no-store，历史配置对应的结果标记 outdated。
+- Webhook 支持 Push Hook、Tag Push Hook、Merge Request Hook；请求体上限 1 MiB。传统秘密与 HMAC 签名显式二选一，签名时间窗 ±5 分钟，不降级。生成传统 Token 返回一次性 token，不隐式启用。签名 Token 从支持该功能的 GitLab 导入。
+- 连接测试使用 `/-/health`，只判断 HTTP 可达；身份验证使用只读 `/api/v4/user`，仅确认身份，不保证具体业务权限，也不推断远端令牌有效期。网络超时 10 秒、响应上限 1 MiB、全局同时验证上限 8，并有入口限流。
+- 本期尚无运行时凭证选择、fallback 执行、Agent 工具、工作流事件队列或分发；不承诺事件幂等执行、可靠重放或在线密钥轮换。
 
 ## 13. 关联文档
 

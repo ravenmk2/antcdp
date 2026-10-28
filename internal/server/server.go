@@ -123,6 +123,7 @@ func New(o Options) http.Handler {
 		httpx.Data(c, 201, gin.H{"installation_id": id, "state": "ready", "authenticated": authenticated})
 	})
 	registerIdentity(api, o)
+	registerIntegrations(api, o)
 	r.NoRoute(func(c *gin.Context) {
 		if c.Request.URL.Path == "/api" || strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			httpx.Write(c, httpx.E(404, "NOT_FOUND", "接口不存在"))
@@ -136,6 +137,10 @@ func New(o Options) http.Handler {
 		w.Header().Set("X-Request-ID", id)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		req = req.WithContext(context.WithValue(req.Context(), requestIDKey{}, id))
+		if webhookRequest(req) {
+			r.ServeHTTP(w, req)
+			return
+		}
 		if strings.HasPrefix(req.URL.Path, "/api/") {
 			w.Header().Set("Cache-Control", "no-store")
 			if unsafeMethod(req.Method) && !sameOrigin(req, o.Runtime.Origin()) {

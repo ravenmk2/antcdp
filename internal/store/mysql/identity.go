@@ -13,6 +13,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/settings"
+	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
 func (s *Store) Credential(ctx context.Context, username string) (*identity.Credential, error) {
@@ -37,6 +38,9 @@ func (s *Store) Transact(ctx context.Context, fn func(identity.Tx) error) error 
 		}
 		var dbErr *driver.MySQLError
 		if errors.As(err, &dbErr) && dbErr.Number == 1062 {
+			if strings.Contains(dbErr.Message, "uq_integration") {
+				return httpx.E(409, "INTEGRATION_CONFLICT", "名称或首选设置发生冲突")
+			}
 			return collaborationDuplicate(dbErr.Message)
 		}
 		if !errors.As(err, &dbErr) || (dbErr.Number != 1213 && dbErr.Number != 1205) || attempt >= 2 {

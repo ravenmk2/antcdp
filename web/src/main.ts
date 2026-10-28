@@ -22,12 +22,29 @@ const CollaborationPage = () =>
 import { useIdentity } from "./features/identity/store";
 import { onAuthFailure } from "./shared/api";
 
+const IntegrationsPage = () =>
+  import("./features/integrations/IntegrationsPage.vue");
 const pinia = createPinia();
 
 const router = createRouter({
   history: createWebHistory(),
   scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0 },
   routes: [
+    {
+      path: "/admin/integrations/:integrationID?",
+      component: IntegrationsPage,
+      meta: { title: "服务集成", admin: true },
+    },
+    {
+      path: "/account/integrations/:integrationID?",
+      component: IntegrationsPage,
+      meta: { title: "个人集成凭证" },
+    },
+    {
+      path: "/projects/:projectID/integrations/:integrationID?",
+      component: IntegrationsPage,
+      meta: { title: "项目集成凭证" },
+    },
     ...(["projects", "teams"] as const).flatMap((kind) => [
       {
         path: `/${kind}/:id?`,

@@ -589,3 +589,21 @@ func (s *Service) Migrate(ctx context.Context, username, secret string) error {
 	}
 	return b.SchemaReady(ctx)
 }
+
+// IntegrationSecret keeps the installation key inside the installation service.
+func (s *Service) IntegrationSecret(purpose, value string, seal bool) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.state != Ready || len(s.key) != 32 {
+		return "", errors.New("installation is not ready")
+	}
+	f, err := config.Read(s.path("config.yaml"))
+	if err != nil {
+		return "", err
+	}
+	key := cryptox.Derive(s.key, "integrations")
+	if seal {
+		return cryptox.Encrypt(key, f.InstallationID, purpose, value)
+	}
+	return cryptox.Decrypt(key, f.InstallationID, purpose, value)
+}

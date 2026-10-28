@@ -1,6 +1,6 @@
 # API 设计
 
-外部服务集成的服务专属维护接口、三类凭证、首选/默认及 GitLab Webhook 接收契约见[外部服务集成设计](service-integrations.md)。该模块仍为待审查设计，尚未实现；Webhook 不承诺工作流入队或执行。
+外部服务集成的服务专属维护接口、三类凭证、首选/默认及 GitLab Webhook 接收契约见[外部服务集成设计](service-integrations.md)。本期已实现 GitLab 维护与验证接口，统一使用 `/api/v1` 前缀；Webhook 不承诺工作流入队或执行。
 
 维护路由明确包含服务类型，例如 `/api/admin/integrations/gitlab/{id}`、`/api/projects/{project_id}/integrations/gitlab/{id}/credentials` 和 `/api/me/integrations/gitlab/{id}/credentials`。公共资料与 GitLab 专属配置分别通过主资源及其 `/config` 子资源维护，使用独立 ETag；请求类型必须与记录匹配。service_type 由创建路由决定，创建后不可修改，不提供类型转换 API。跨服务目录 `/api/integrations` 与能力目录 `/api/integrations/types` 保持通用。
 

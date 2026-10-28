@@ -1,6 +1,6 @@
 # 数据库设计
 
-项目、团队及图标表设计见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 已汇总 19 张目标业务表（一期 7 张 + 协作 9 张 + 集成 3 张）。协作九表已进入第 2 版运行迁移并通过 MySQL 8.0 升级和安装验证；集成三表仅为待审查 DDL，未进入迁移、未实库验证。实际交付边界见开发说明。
+项目、团队及图标表设计见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 已汇总 19 张目标业务表（一期 7 张 + 协作 9 张 + 集成 3 张）。协作九表已进入第 2 版运行迁移并通过 MySQL 8.0 升级和安装验证；集成三表已进入第 3 版迁移，通过真实 MySQL 新装与版本 2 → 3 升级验证。实际交付边界见开发说明。
 
 字段约束、关系查询、事务和版本详见 [详细设计](projects-and-teams-detail.md)，九张新增表有独立 [DDL 阅读副本](projects-and-teams-schema.sql)。该副本依赖一期 user 表，不能作为生产迁移直接导入；MySQL 8.0 验证范围见开发说明，8.4 仍待验证。
 
@@ -43,7 +43,7 @@ erDiagram
 
 完整 [schema.sql](schema.sql) 包含一期 7 张、协作 9 张（project、team、project_member、team_member、project_team、icon_file、user_sidebar_preference、user_project_shortcut、user_team_shortcut），以及待开发集成 3 张（integration、integration_gitlab、integration_credential）。运行迁移已覆盖一期与协作结构，尚未包含集成，不可用目标阅读副本覆盖运行库。
 
-### 外部集成目标结构（待审查）
+### 外部集成结构
 
 详见[外部服务集成设计](service-integrations.md)。integration 保存公共资料、启停、默认凭证和公共并发版本；integration_gitlab 一对一保存 GitLab 地址、CA、Webhook 配置、加密验证秘密和诊断摘要；integration_credential 保存归属、身份、加密认证材料及首选标记。不设凭证集合表或一对一秘密表。
 

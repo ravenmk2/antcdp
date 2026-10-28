@@ -30,6 +30,21 @@ var targetPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
 
 // Labels are search aliases for the same stable action codes used by clients.
 var labels = map[string]string{
+	"integration.created":                    "创建服务集成",
+	"integration.update":                     "更新服务集成",
+	"integration.deleted":                    "删除服务集成",
+	"integration.set_default":                "设置默认凭证",
+	"integration.clear_default":              "清除默认凭证",
+	"integration.update_config":              "更新服务配置",
+	"integration.webhook_secret":             "替换 Webhook 秘密",
+	"integration.generate_webhook":           "生成 Webhook 秘密",
+	"integration.credential.create":          "创建集成凭证",
+	"integration.credential.update":          "更新集成凭证",
+	"integration.credential.secret":          "替换集成凭证秘密",
+	"integration.credential.delete":          "删除集成凭证",
+	"integration.credential.preferred":       "设置首选凭证",
+	"integration.credential.clear_preferred": "取消首选凭证",
+
 	"project.created": "创建项目", "project.updated": "更新项目资料", "project.archived": "归档项目", "project.restored": "恢复项目",
 	"team.created": "创建团队", "team.updated": "更新团队资料", "team.dissolved": "解散团队",
 	"project.member_added": "添加项目成员", "project.member_removed": "移除项目成员", "project.member_role_changed": "调整项目成员角色", "project.member_left": "退出项目",

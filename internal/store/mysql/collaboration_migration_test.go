@@ -14,7 +14,7 @@ import (
 )
 
 // Uses a distinct empty schema and preserves it for inspection. In particular,
-// this tests the real goose 1 -> 2 upgrade, not importing the reference DDL.
+// this tests the real goose 1 -> 2 -> 3 upgrade, not importing the reference DDL.
 func TestCollaborationMigrationUpgrade(t *testing.T) {
 	dsn := os.Getenv("ANTCDP_TEST_UPGRADE_MYSQL_DSN")
 	if dsn == "" {
@@ -53,6 +53,9 @@ func TestCollaborationMigrationUpgrade(t *testing.T) {
 		if _, err = s.db.ExecContext(ctx, q); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if _, err = p.UpTo(ctx, 2); err != nil {
+		t.Fatal(err)
 	}
 	if err = s.SchemaReady(ctx); err == nil {
 		t.Fatal("old schema must not pass current executable readiness")

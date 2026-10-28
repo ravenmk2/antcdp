@@ -1,6 +1,6 @@
 -- AntCDP complete target schema: 19 business tables, MySQL 8.0.16+ / InnoDB.
 -- Phase A: 7 existing tables. Collaboration/sidebar: 9 migrated; feature implementation in progress.
--- Integrations: 3 proposed tables, NOT migrated or runtime-validated.
+-- Integrations: 3 tables in runtime migration 00003; validated on MySQL.
 -- This file is a review snapshot, NOT an upgrade migration or proof of deployment.
 -- Review reference only. Runtime migrations live in internal/store/migrations/mysql/.
 -- Designed for an empty schema; do not import into an existing installation.
@@ -326,7 +326,7 @@ CREATE TABLE `user_team_shortcut` (
 -- Backfill preference rows for non-deleted users in the future upgrade migration;
 -- create a row in each new-account transaction. No data seeds in this reference.
 
--- External integrations: review-only target, see docs/service-integrations.md.
+-- External integrations: migration 00003 reference, see docs/service-integrations.md.
 -- No credential-set or separate secret table. Encrypted envelopes belong to
 -- their service extension (inbound verification) or credential (outbound identity).
 CREATE TABLE `integration` (

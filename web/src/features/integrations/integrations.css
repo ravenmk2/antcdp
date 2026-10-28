@@ -1,0 +1,212 @@
+.integrations-page {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 28px 32px 64px;
+  color: var(--text-primary);
+}
+.integrations-page h1 {
+  font-size: 24px;
+  margin: 10px 0;
+}
+.integrations-page h2 {
+  font-size: 18px;
+  margin: 0 0 10px;
+}
+.integrations-page h3 {
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+.integrations-page p {
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin: 6px 0 16px;
+  overflow-wrap: anywhere;
+}
+.integrations-page small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.integration-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.integration-toolbar > div:first-child {
+  min-width: 0;
+}
+.integration-toolbar h1,
+.integration-toolbar h3 {
+  overflow-wrap: anywhere;
+}
+.integration-filters {
+  display: flex;
+  gap: 12px;
+  margin: 26px 0;
+  max-width: 540px;
+}
+.integration-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 18px;
+}
+.integration-tile {
+  font: inherit;
+  text-align: left;
+  color: var(--text-primary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  cursor: pointer;
+  min-width: 0;
+}
+.integration-tile:hover {
+  border-color: var(--border-control);
+  background: var(--surface-subtle);
+}
+.integration-tile h2 {
+  margin: 24px 0 8px;
+  overflow-wrap: anywhere;
+}
+.integration-tile p {
+  min-height: 48px;
+}
+.integration-tile-link {
+  font-size: 13px;
+}
+.integration-provider {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+.integration-badge {
+  display: inline-block;
+  font-weight: 400;
+  font-size: 11px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 7px;
+  vertical-align: middle;
+  color: var(--text-secondary);
+}
+.integration-tabs {
+  display: flex;
+  gap: 24px;
+  border-bottom: 1px solid var(--border);
+  margin: 20px 0 28px;
+  overflow-x: auto;
+}
+.integration-tabs a,
+.integration-tabs button {
+  font: inherit;
+  font-size: 14px;
+  white-space: nowrap;
+  color: var(--text-muted);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 12px 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+.integration-tabs .active {
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
+}
+.integration-section {
+  padding: 4px 0;
+}
+.integration-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 660px;
+}
+.integration-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.integration-form input[type="datetime-local"] {
+  background: var(--surface-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-control);
+  padding: 8px;
+  border-radius: 4px;
+  font: inherit;
+}
+.integration-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.integration-actions .el-button + .el-button {
+  margin-left: 0;
+}
+.integration-card {
+  padding: 22px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 10px;
+  margin: 22px 0;
+  max-width: 760px;
+}
+.credential-row {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--border);
+}
+.credential-row .integration-actions {
+  margin-top: 16px;
+}
+.integration-empty {
+  padding: 64px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  margin-top: 20px;
+}
+.integration-note {
+  padding: 12px 16px;
+  background: var(--surface-subtle);
+  border-radius: 6px;
+  font-size: 13px;
+}
+.integration-steps {
+  padding-left: 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 2;
+  margin: 24px 0;
+}
+@media (max-width: 650px) {
+  .integrations-page {
+    padding: 20px 16px 40px;
+  }
+  .integration-grid {
+    grid-template-columns: 1fr;
+  }
+  .integration-filters {
+    flex-wrap: wrap;
+  }
+  .integration-tabs {
+    gap: 20px;
+  }
+  .integration-toolbar {
+    align-items: flex-start;
+  }
+  .integration-toolbar h1 {
+    font-size: 21px;
+  }
+  .integration-tile {
+    padding: 20px;
+  }
+}
