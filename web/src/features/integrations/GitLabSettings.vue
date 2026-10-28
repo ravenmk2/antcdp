@@ -229,7 +229,7 @@ useUnsaved(
     <div v-if="!loading && config">
       <form
         v-if="tab === 'connection'"
-        class="integration-form"
+        class="integration-form connection-form"
         @submit.prevent="save"
       >
         <h2>GitLab 连接配置</h2>
@@ -279,7 +279,7 @@ useUnsaved(
           {{ new Date(diagnostic.connection.started_at).toLocaleString() }}
         </p>
       </form>
-      <div v-if="tab === 'webhook'">
+      <div v-if="tab === 'webhook'" class="webhook-settings">
         <h2>GitLab Webhook</h2>
         <p>
           接收并验证 Push、Tag Push 和 Merge Request 事件。本期不触发工作流。

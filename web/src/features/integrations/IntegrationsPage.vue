@@ -11,6 +11,9 @@ import {
   ElOption,
   ElMessageBox,
   ElMessage,
+  ElDropdown,
+  ElDropdownMenu,
+  ElDropdownItem,
 } from "element-plus";
 import AppLayout from "../../app/AppLayout.vue";
 import CredentialsPanel from "./CredentialsPanel.vue";
@@ -33,7 +36,8 @@ const items = ref<Integration[]>([]),
   busy = ref(false),
   error = ref(""),
   query = ref(""),
-  typeFilter = ref(""),
+  typeFilter = ref(String(route.query.type ?? "")),
+  statusFilter = ref(""),
   tab = ref("connection"),
   tag = ref(""),
   readonly = ref(false),
@@ -68,13 +72,25 @@ const credentialsPath = computed(() =>
     ? `${admin.value ? "/admin" : projectID.value ? "/projects/" + projectID.value : "/me"}/integrations/${selected.value.service_type}/${selected.value.id}/credentials`
     : "",
 );
+const filterTypes = computed(() => {
+  const names = new Map(types.value.map((t) => [t.service_type, t.name]));
+  for (const item of items.value) if (!names.has(item.service_type)) names.set(item.service_type, item.service_type);
+  return Array.from(names, ([service_type, name]) => ({
+    service_type, name, count: items.value.filter((i) => i.service_type === service_type).length,
+  }));
+});
+const selectedTypeName = computed(() => filterTypes.value.find((t) => t.service_type === typeFilter.value)?.name ?? (typeFilter.value || "全部服务"));
+watch(typeFilter, (value) => { void router.replace({ query: { ...route.query, type: value || undefined } }); });
+watch(() => route.query.type, (value) => { typeFilter.value = typeof value === "string" ? value : ""; });
+function resetFilters() { query.value = ""; statusFilter.value = ""; typeFilter.value = ""; }
 const visible = computed(() =>
   items.value.filter(
     (i) =>
       (!typeFilter.value || i.service_type === typeFilter.value) &&
+      (!statusFilter.value || i.enabled === (statusFilter.value === "enabled")) &&
       `${i.name} ${i.description}`
         .toLowerCase()
-        .includes(query.value.toLowerCase()),
+        .includes(query.value.trim().toLowerCase()),
   ),
 );
 let generation = 0;
@@ -134,20 +150,21 @@ watch(
   { immediate: true },
 );
 function choose(item: Integration) {
-  void router.push(
-    admin.value
+  void router.push({
+    path: admin.value
       ? `/admin/integrations/${item.id}`
       : projectID.value
         ? `/projects/${projectID.value}/integrations/${item.id}`
         : `/account/integrations/${item.id}`,
-  );
+    query: { type: typeFilter.value || undefined },
+  });
 }
 function openCreate() {
   editing.value = false;
   providerValues.value = {};
   formError.value = "";
   Object.assign(form, {
-    service_type: types.value[0]?.service_type ?? "",
+    service_type: types.value.find((t) => t.service_type === typeFilter.value)?.service_type ?? types.value[0]?.service_type ?? "",
     name: "",
     description: "",
     enabled: true,
@@ -249,7 +266,7 @@ const breadcrumbs = computed(() => [
         },
       ]
     : []),
-  { label: scopeLabel.value, to: selected.value ? listPath.value : undefined },
+  { label: scopeLabel.value, to: selected.value ? listPath.value + (typeFilter.value ? `?type=${encodeURIComponent(typeFilter.value)}` : "") : undefined },
   ...(selected.value ? [{ label: selected.value.name }] : []),
 ]);
 useUnsaved(
@@ -296,61 +313,56 @@ useUnsaved(
             >添加集成</ElButton
           >
         </div>
-        <div class="integration-filters">
-          <ElInput
-            v-model="query"
-            clearable
-            placeholder="搜索名称或说明"
-            aria-label="搜索集成"
-          /><ElSelect
-            v-if="types.length > 1"
-            v-model="typeFilter"
-            clearable
-            placeholder="全部服务类型"
-            aria-label="服务类型"
-            ><ElOption
-              v-for="type in types"
-              :key="type.service_type"
-              :label="type.name"
-              :value="type.service_type"
-          /></ElSelect>
-        </div>
-        <div v-if="!visible.length" class="integration-empty">
-          {{
-            items.length
-              ? "没有符合条件的集成"
-              : "尚无服务集成。" +
-                (admin
-                  ? "添加服务后即可维护凭证和接入配置。"
-                  : "请联系系统管理员添加。")
-          }}
-        </div>
-        <div class="integration-grid">
-          <button
-            v-for="item in visible"
-            :key="item.id"
-            class="integration-tile"
-            @click="choose(item)"
-          >
-            <div class="integration-toolbar">
-              <span class="integration-provider">{{
-                types.find((t) => t.service_type === item.service_type)?.name ??
-                item.service_type
-              }}</span
-              ><span class="integration-badge">{{
-                item.enabled ? "已启用" : "已停用"
-              }}</span>
+        <div class="integration-browser">
+          <nav class="service-menu" aria-label="按服务类型筛选">
+            <span class="service-menu-title">服务类型</span>
+            <button :class="{ active: !typeFilter }" :aria-pressed="!typeFilter" @click="typeFilter = ''">
+              <span>全部服务</span><span class="service-count">{{ items.length }}</span>
+            </button>
+            <button v-for="type in filterTypes" :key="type.service_type"
+              :class="{ active: typeFilter === type.service_type }"
+              :aria-pressed="typeFilter === type.service_type" @click="typeFilter = type.service_type">
+              <span>{{ type.name }}</span><span class="service-count">{{ type.count }}</span>
+            </button>
+          </nav>
+          <section class="integration-results" aria-label="集成列表">
+            <div class="service-mobile-filter">
+              <label>服务类型<ElSelect v-model="typeFilter" placeholder="全部服务" aria-label="服务类型筛选">
+                <ElOption label="全部服务" value="" />
+                <ElOption v-for="type in filterTypes" :key="type.service_type" :label="`${type.name}（${type.count}）`" :value="type.service_type" />
+              </ElSelect></label>
             </div>
-            <h2>{{ item.name }}</h2>
-            <p>{{ item.description || "未填写说明" }}</p>
-            <span class="integration-tile-link"
-              >{{ admin ? "管理集成" : "管理凭证" }} →</span
-            >
-          </button>
+            <div class="integration-result-heading"><h2>{{ selectedTypeName }}</h2><span aria-live="polite">{{ visible.length }} 个集成</span></div>
+            <div class="integration-filters">
+              <ElInput v-model="query" clearable placeholder="搜索集成名称或说明" aria-label="搜索集成" />
+              <ElSelect v-model="statusFilter" placeholder="全部状态" aria-label="集成状态筛选">
+                <ElOption label="全部状态" value="" /><ElOption label="已启用" value="enabled" /><ElOption label="已停用" value="disabled" />
+              </ElSelect>
+            </div>
+            <div v-if="!visible.length" class="integration-empty">
+              <h3>{{ items.length ? '没有匹配的集成' : '连接你的第一个服务' }}</h3>
+              <p>{{ items.length ? '尝试更换服务类型、状态或搜索关键词。' : admin ? '添加服务连接后，即可配置凭证和事件接收。' : '请联系系统管理员添加服务连接。' }}</p>
+              <ElButton v-if="items.length" @click="resetFilters">清除筛选</ElButton>
+              <ElButton v-else-if="admin" :disabled="!types.length" @click="openCreate">添加集成</ElButton>
+            </div>
+            <div class="integration-grid">
+              <button v-for="item in visible" :key="item.id" class="integration-tile" @click="choose(item)">
+                <span class="service-symbol" aria-hidden="true">{{ item.service_type.slice(0, 2).toUpperCase() }}</span>
+                <span class="integration-tile-content">
+                  <span class="integration-tile-title">{{ item.name }}</span>
+                  <span class="integration-tile-description">{{ item.description || '未填写说明' }}</span>
+                  <span class="integration-provider">{{ filterTypes.find((t) => t.service_type === item.service_type)?.name ?? item.service_type }}</span>
+                </span>
+                <span class="integration-status" :class="{ enabled: item.enabled }">{{ item.enabled ? '已启用' : '已停用' }}</span>
+                <span class="integration-tile-link">{{ admin ? '管理集成' : '管理凭证' }} <span aria-hidden="true">→</span></span>
+              </button>
+            </div>
+          </section>
         </div>
       </template>
       <template v-else-if="selected && !loading">
-        <div class="integration-toolbar">
+        <RouterLink class="integration-back" :to="{ path: listPath, query: { type: typeFilter || undefined } }">← 返回集成列表</RouterLink>
+        <div class="integration-toolbar integration-detail-header">
           <div>
             <span class="integration-provider">{{
               capability?.name ?? selected.service_type
@@ -365,29 +377,37 @@ useUnsaved(
           </div>
           <div v-if="admin" class="integration-actions">
             <ElButton :disabled="busy" @click="openEdit">编辑资料</ElButton
-            ><ElButton :disabled="busy" @click="remove">删除集成</ElButton>
+            ><ElDropdown trigger="click" @command="remove">
+              <ElButton :disabled="busy" aria-label="集成更多操作">更多操作</ElButton>
+              <template #dropdown><ElDropdownMenu><ElDropdownItem command="delete">删除集成</ElDropdownItem></ElDropdownMenu></template>
+            </ElDropdown>
           </div>
         </div>
         <nav v-if="admin" class="integration-tabs" aria-label="集成配置">
           <button
+            :aria-pressed="tab === 'connection'"
             :class="{ active: tab === 'connection' }"
             @click="tab = 'connection'"
           >
             连接配置</button
           ><button
             v-if="capability?.credentials"
+            :aria-pressed="tab === 'credentials'"
             :class="{ active: tab === 'credentials' }"
             @click="tab = 'credentials'"
           >
             系统凭证</button
           ><button
             v-if="capability?.webhook"
+            :aria-pressed="tab === 'webhook'"
             :class="{ active: tab === 'webhook' }"
             @click="tab = 'webhook'"
           >
             Webhook
           </button>
         </nav>
+        <p v-if="!selected.enabled" class="integration-note">此集成已停用。可以继续维护配置与凭证，外部验证和事件接收暂不可用。</p>
+        <div class="integration-detail-body">
         <CredentialsPanel
           v-if="capability?.credentials"
           v-show="tab === 'credentials'"
@@ -408,6 +428,7 @@ useUnsaved(
           :enabled="selected.enabled"
           :integration-i-d="selected.id"
         />
+        </div>
       </template>
       <ElDialog
         v-model="dialog"

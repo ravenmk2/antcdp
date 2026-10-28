@@ -55,6 +55,10 @@ const form = reactive({
   enabled: true,
   expires_at: "",
 });
+const search = ref("");
+const visibleRows = computed(() => rows.value.filter((row) =>
+  `${row.name} ${row.code} ${row.description}`.toLowerCase().includes(search.value.trim().toLowerCase()),
+));
 const diagnostics = ref<Record<string, Diagnostic>>({});
 const integrationBase = computed(() =>
   props.base.replace(/\/credentials$/, ""),
@@ -307,7 +311,12 @@ useUnsaved(
     <div v-else-if="!rows.length && !error" class="integration-empty">
       尚未添加凭证。每个归属可维护多份独立身份。
     </div>
-    <article v-for="row in rows" :key="row.id" class="credential-row">
+    <div v-if="rows.length" class="credential-filters">
+      <ElInput v-model="search" clearable placeholder="搜索名称、code 或说明" aria-label="搜索凭证" />
+      <span aria-live="polite">{{ visibleRows.length }} 份凭证</span>
+    </div>
+    <p v-if="rows.length && !visibleRows.length" class="integration-empty">没有匹配的凭证。<ElButton link @click="search = ''">清除搜索</ElButton></p>
+    <article v-for="row in visibleRows" :key="row.id" class="credential-row">
       <div class="integration-toolbar">
         <div>
           <h3>
@@ -317,7 +326,7 @@ useUnsaved(
               >默认 · 缺失时回退</span
             >
           </h3>
-          <p><code>{{ row.code }}</code></p>
+          <p class="credential-code"><span>code</span> <code>{{ row.code }}</code></p>
           <p>{{ row.description || "未填写说明" }}</p>
           <small
             >{{
