@@ -30,20 +30,35 @@ var targetPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
 
 // Labels are search aliases for the same stable action codes used by clients.
 var labels = map[string]string{
-	"integration.created":                    "创建服务集成",
-	"integration.update":                     "更新服务集成",
-	"integration.deleted":                    "删除服务集成",
-	"integration.set_default":                "设置默认凭证",
-	"integration.clear_default":              "清除默认凭证",
-	"integration.update_config":              "更新服务配置",
-	"integration.webhook_secret":             "替换 Webhook 秘密",
-	"integration.generate_webhook":           "生成 Webhook 秘密",
-	"integration.credential.create":          "创建集成凭证",
-	"integration.credential.update":          "更新集成凭证",
-	"integration.credential.secret":          "替换集成凭证秘密",
-	"integration.credential.delete":          "删除集成凭证",
-	"integration.credential.preferred":       "设置首选凭证",
-	"integration.credential.clear_preferred": "取消首选凭证",
+	"service_connection.created":                       "创建服务连接",
+	"service_connection.updated":                       "更新服务连接",
+	"service_connection.deleted":                       "删除服务连接",
+	"service_connection.fallback_changed":              "修改兜底凭证",
+	"service_credential.created":                       "创建访问凭证",
+	"service_credential.updated":                       "更新访问凭证",
+	"service_credential.deleted":                       "删除访问凭证",
+	"service_credential.authentication_replaced":       "替换认证信息",
+	"service_credential.preferred_changed":             "修改首选凭证",
+	"service_connection.webhook_updated":               "更新 Webhook 接收设置",
+	"service_connection.webhook_verification_replaced": "替换 Webhook 验证秘密",
+	"webhook_endpoint.created":                         "创建 Webhook 接入点",
+	"webhook_endpoint.updated":                         "更新 Webhook 接入点",
+	"webhook_endpoint.deleted":                         "删除 Webhook 接入点",
+	"webhook_endpoint.verification_replaced":           "替换接入点验证秘密",
+	"integration.created":                              "创建服务集成",
+	"integration.update":                               "更新服务集成",
+	"integration.deleted":                              "删除服务集成",
+	"integration.set_default":                          "设置默认凭证",
+	"integration.clear_default":                        "清除默认凭证",
+	"integration.update_config":                        "更新服务配置",
+	"integration.webhook_secret":                       "替换 Webhook 秘密",
+	"integration.generate_webhook":                     "生成 Webhook 秘密",
+	"integration.credential.create":                    "创建集成凭证",
+	"integration.credential.update":                    "更新集成凭证",
+	"integration.credential.secret":                    "替换集成凭证秘密",
+	"integration.credential.delete":                    "删除集成凭证",
+	"integration.credential.preferred":                 "设置首选凭证",
+	"integration.credential.clear_preferred":           "取消首选凭证",
 
 	"project.created": "创建项目", "project.updated": "更新项目资料", "project.archived": "归档项目", "project.restored": "恢复项目",
 	"team.created": "创建团队", "team.updated": "更新团队资料", "team.dissolved": "解散团队",
@@ -142,6 +157,18 @@ func PublicDetail(action string, raw json.RawMessage) json.RawMessage {
 			if json.Unmarshal(src[key], &value) == nil {
 				result[key] = value
 			}
+		}
+	}
+	if strings.HasPrefix(action, "service_connection.") || strings.HasPrefix(action, "service_credential.") || strings.HasPrefix(action, "webhook_endpoint.") {
+		for _, key := range []string{"enabled", "enabled_before", "enabled_after", "config_changed"} {
+			var value bool
+			if json.Unmarshal(src[key], &value) == nil {
+				result[key] = value
+			}
+		}
+		var owner string
+		if json.Unmarshal(src["ownership_type"], &owner) == nil && (owner == "system" || owner == "project" || owner == "personal") {
+			result["ownership_type"] = owner
 		}
 	}
 	switch action {

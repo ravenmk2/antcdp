@@ -2,7 +2,10 @@ package install
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io/fs"
@@ -606,4 +609,13 @@ func (s *Service) IntegrationSecret(purpose, value string, seal bool) (string, e
 		return cryptox.Encrypt(key, f.InstallationID, purpose, value)
 	}
 	return cryptox.Decrypt(key, f.InstallationID, purpose, value)
+}
+
+// IntegrationETag derives opaque scoped versions without exposing cross-owner counters.
+func (s *Service) IntegrationETag(value string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	mac := hmac.New(sha256.New, cryptox.Derive(s.key, "service-integrations-etags"))
+	mac.Write([]byte(value))
+	return hex.EncodeToString(mac.Sum(nil))
 }

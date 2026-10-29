@@ -5,161 +5,215 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	i "github.com/ravenmk2/antcdp/internal/modules/integrations"
+	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-const integrationColumns = "id,service_type,name,description,enabled,default_credential_id,row_version,credentials_version,default_version,created_by_user_id,created_at,updated_at"
-const gitlabColumns = "integration_id,base_url,custom_ca_pem,webhook_enabled,webhook_verification_method,webhook_secret_ciphertext IS NOT NULL AS has_secret,row_version,connection_version,webhook_version"
-const credentialColumns = "id,integration_id,service_type,code,scope_type,project_id,user_id,name,description,auth_method,identity_config,enabled,is_preferred,secret_ciphertext IS NOT NULL AS has_secret,expires_at,row_version,material_version,created_by_user_id"
+const connectionColumns = "id,service_type,code,name,description,enabled,fallback_credential_id,row_version,config_version,credentials_version,fallback_version,created_by_user_id,created_at,updated_at"
+const secretProjection = "secret_ciphertext IS NOT NULL AS has_secret,COALESCE(((secret_ciphertext IS NULL AND secret_format_version IS NULL AND secret_key_version IS NULL) OR (secret_ciphertext IS NOT NULL AND secret_format_version=1 AND secret_key_version='v1')),FALSE) AS secret_valid"
+const credentialColumns = "id,connection_id,service_type,code,ownership_type,project_id,user_id,name,description,auth_method,auth_schema_version,identity_config,enabled,is_preferred," + secretProjection + ",expires_at,row_version,material_version,created_by_user_id,created_at,updated_at"
 
-func (t *identityTx) Integrations() ([]i.Integration, error) {
-	out := []i.Integration{}
-	e := t.tx.SelectContext(t.ctx, &out, "SELECT "+integrationColumns+" FROM integration ORDER BY name,id")
-	return out, e
+func integrationIntegrity() error {
+	return httpx.E(500, "DATA_INTEGRITY_ERROR", "服务配置完整性异常")
 }
-func (t *identityTx) Integration(id uint64) (*i.Integration, error) {
-	o := &i.Integration{}
-	e := t.tx.GetContext(t.ctx, o, "SELECT "+integrationColumns+" FROM integration WHERE id=? FOR UPDATE", id)
-	if errors.Is(e, sql.ErrNoRows) {
+func (t *identityTx) Connections() ([]i.ServiceConnection, error) {
+	out := []i.ServiceConnection{}
+	err := t.tx.SelectContext(t.ctx, &out, "SELECT "+connectionColumns+" FROM service_connection ORDER BY name,id")
+	return out, err
+}
+func (t *identityTx) Connection(id uint64) (*i.ServiceConnection, error) {
+	v := &i.ServiceConnection{}
+	err := t.tx.GetContext(t.ctx, v, "SELECT "+connectionColumns+" FROM service_connection WHERE id=? FOR UPDATE", id)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	return o, e
+	return v, err
 }
-func (t *identityTx) GitLab(id uint64) (*i.GitLab, error) {
-	o := &i.GitLab{}
-	e := t.tx.GetContext(t.ctx, o, "SELECT "+gitlabColumns+" FROM integration_gitlab WHERE integration_id=?", id)
-	if errors.Is(e, sql.ErrNoRows) {
+func (t *identityTx) GitLabConfig(id uint64) (*i.GitLabConfig, error) {
+	v := &i.GitLabConfig{}
+	err := t.tx.GetContext(t.ctx, v, "SELECT connection_id,base_url,custom_ca_pem FROM service_connection_gitlab WHERE connection_id=?", id)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	return o, e
+	return v, err
 }
-func (t *identityTx) InsertIntegration(o *i.Integration, g *i.GitLab) error {
-	r, e := t.tx.ExecContext(t.ctx, "INSERT INTO integration(service_type,name,description,enabled,created_by_user_id,created_at,updated_at) VALUES(?,?,?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", o.Type, o.Name, o.Description, o.Enabled, o.Creator)
-	if e != nil {
-		return e
+func (t *identityTx) InsertConnection(v *i.ServiceConnection) error {
+	v.CreatedAt = time.Now().UTC().Truncate(time.Millisecond)
+	v.UpdatedAt = v.CreatedAt
+	result, err := t.tx.NamedExecContext(t.ctx, "INSERT INTO service_connection(service_type,code,name,description,enabled,created_by_user_id,created_at,updated_at) VALUES(:service_type,:code,:name,:description,:enabled,:created_by_user_id,:created_at,:updated_at)", v)
+	if err != nil {
+		return err
 	}
-	id, e := r.LastInsertId()
-	if e != nil {
-		return e
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
 	}
-	o.ID = uint64(id)
-	g.ID = o.ID
-	_, e = t.tx.ExecContext(t.ctx, "INSERT INTO integration_gitlab(integration_id,base_url,custom_ca_pem,created_at,updated_at) VALUES(?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", o.ID, g.BaseURL, g.CA)
-	return e
+	v.ID = uint64(id)
+	v.Config.ID = v.ID
+	_, err = t.tx.ExecContext(t.ctx, "INSERT INTO service_connection_gitlab(connection_id,base_url,custom_ca_pem) VALUES(?,?,?)", v.ID, v.Config.BaseURL, v.Config.CA)
+	return err
 }
-func (t *identityTx) SaveIntegration(o *i.Integration) error {
-	_, e := t.tx.NamedExecContext(t.ctx, "UPDATE integration SET updated_at=IF(row_version<>:row_version,UTC_TIMESTAMP(3),updated_at),name=:name,description=:description,enabled=:enabled,default_credential_id=:default_credential_id,row_version=:row_version,credentials_version=:credentials_version,default_version=:default_version WHERE id=:id", o)
-	return e
-}
-func (t *identityTx) SaveGitLab(g *i.GitLab) error {
-	_, e := t.tx.NamedExecContext(t.ctx, "UPDATE integration_gitlab SET base_url=:base_url,custom_ca_pem=:custom_ca_pem,webhook_enabled=:webhook_enabled,webhook_verification_method=:webhook_verification_method,row_version=:row_version,connection_version=:connection_version,webhook_version=:webhook_version,updated_at=UTC_TIMESTAMP(3) WHERE integration_id=:integration_id", g)
-	return e
-}
-func (t *identityTx) DeleteIntegration(id uint64) error {
-	if _, e := t.tx.ExecContext(t.ctx, "DELETE FROM integration_gitlab WHERE integration_id=?", id); e != nil {
-		return e
+func (t *identityTx) SaveConnection(v *i.ServiceConnection) error {
+	_, err := t.tx.NamedExecContext(t.ctx, "UPDATE service_connection SET updated_at=IF(row_version<>:row_version,UTC_TIMESTAMP(3),updated_at),name=:name,description=:description,enabled=:enabled,fallback_credential_id=:fallback_credential_id,row_version=:row_version,config_version=:config_version,credentials_version=:credentials_version,fallback_version=:fallback_version WHERE id=:id", v)
+	if err != nil {
+		return err
 	}
-	_, e := t.tx.ExecContext(t.ctx, "DELETE FROM integration WHERE id=?", id)
-	return e
+	return t.tx.GetContext(t.ctx, &v.UpdatedAt, "SELECT updated_at FROM service_connection WHERE id=?", v.ID)
 }
-func (t *identityTx) Credentials(id uint64, s i.Scope) ([]i.Credential, error) {
-	out := []i.Credential{}
-	e := t.tx.SelectContext(t.ctx, &out, "SELECT "+credentialColumns+" FROM integration_credential WHERE integration_id=? AND scope_type=? AND owner_key=? ORDER BY name,id", id, s.Type, s.Owner)
-	return out, e
+func (t *identityTx) SaveGitLabConfig(v *i.GitLabConfig) error {
+	_, err := t.tx.NamedExecContext(t.ctx, "UPDATE service_connection_gitlab SET base_url=:base_url,custom_ca_pem=:custom_ca_pem WHERE connection_id=:connection_id", v)
+	return err
 }
-func (t *identityTx) Credential(id uint64) (*i.Credential, error) {
-	o := &i.Credential{}
-	e := t.tx.GetContext(t.ctx, o, "SELECT "+credentialColumns+" FROM integration_credential WHERE id=?", id)
-	if errors.Is(e, sql.ErrNoRows) {
+func (t *identityTx) DeleteConnection(id uint64) error {
+	if _, err := t.tx.ExecContext(t.ctx, "DELETE FROM service_connection_gitlab WHERE connection_id=?", id); err != nil {
+		return err
+	}
+	_, err := t.tx.ExecContext(t.ctx, "DELETE FROM service_connection WHERE id=?", id)
+	return err
+}
+func (t *identityTx) Credentials(id uint64, owner i.CredentialOwnership) ([]i.ServiceCredential, error) {
+	rows := []i.ServiceCredential{}
+	err := t.tx.SelectContext(t.ctx, &rows, "SELECT "+credentialColumns+" FROM service_credential WHERE connection_id=? AND ownership_type=? AND owner_key=? ORDER BY name,id", id, owner.Type, owner.Owner)
+	if err != nil {
+		return nil, err
+	}
+	for j := range rows {
+		if !rows[j].ValidRecord() {
+			return nil, integrationIntegrity()
+		}
+	}
+	return rows, nil
+}
+func (t *identityTx) Credential(id uint64) (*i.ServiceCredential, error) {
+	v := &i.ServiceCredential{}
+	err := t.tx.GetContext(t.ctx, v, "SELECT "+credentialColumns+" FROM service_credential WHERE id=?", id)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
-	return o, e
-}
-func (t *identityTx) InsertCredential(c *i.Credential) error {
-	r, e := t.tx.NamedExecContext(t.ctx, "INSERT INTO integration_credential(integration_id,service_type,code,scope_type,project_id,user_id,name,description,auth_method,identity_config,expires_at,created_by_user_id,created_at,updated_at) VALUES(:integration_id,:service_type,:code,:scope_type,:project_id,:user_id,:name,:description,:auth_method,:identity_config,:expires_at,:created_by_user_id,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", c)
-	if e != nil {
-		return e
+	if err != nil {
+		return nil, err
 	}
-	id, e := r.LastInsertId()
-	c.ID = uint64(id)
-	return e
+	if !v.ValidRecord() {
+		return nil, integrationIntegrity()
+	}
+	return v, nil
 }
-func (t *identityTx) SaveCredential(c *i.Credential) error {
-	_, e := t.tx.NamedExecContext(t.ctx, "UPDATE integration_credential SET name=:name,description=:description,enabled=:enabled,is_preferred=:is_preferred,expires_at=:expires_at,row_version=:row_version,material_version=:material_version,updated_at=UTC_TIMESTAMP(3) WHERE id=:id", c)
-	return e
+func (t *identityTx) InsertCredential(v *i.ServiceCredential) error {
+	v.CreatedAt = time.Now().UTC().Truncate(time.Millisecond)
+	v.UpdatedAt = v.CreatedAt
+	result, err := t.tx.NamedExecContext(t.ctx, "INSERT INTO service_credential(connection_id,service_type,code,ownership_type,project_id,user_id,name,description,auth_method,auth_schema_version,identity_config,expires_at,created_by_user_id,created_at,updated_at) VALUES(:connection_id,:service_type,:code,:ownership_type,:project_id,:user_id,:name,:description,:auth_method,:auth_schema_version,:identity_config,:expires_at,:created_by_user_id,:created_at,:updated_at)", v)
+	if err != nil {
+		return err
+	}
+	id, err := result.LastInsertId()
+	v.ID = uint64(id)
+	return err
+}
+func (t *identityTx) SaveCredential(v *i.ServiceCredential) error {
+	v.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
+	_, err := t.tx.NamedExecContext(t.ctx, "UPDATE service_credential SET name=:name,description=:description,auth_method=:auth_method,auth_schema_version=:auth_schema_version,identity_config=:identity_config,enabled=:enabled,is_preferred=:is_preferred,expires_at=:expires_at,row_version=:row_version,material_version=:material_version,updated_at=:updated_at WHERE id=:id", v)
+	return err
 }
 func (t *identityTx) DeleteCredential(id uint64) error {
-	_, e := t.tx.ExecContext(t.ctx, "DELETE FROM integration_credential WHERE id=?", id)
-	return e
+	_, err := t.tx.ExecContext(t.ctx, "DELETE FROM service_credential WHERE id=?", id)
+	return err
 }
 func (t *identityTx) CredentialCount(id uint64) (int, error) {
 	var n int
-	e := t.tx.GetContext(t.ctx, &n, "SELECT COUNT(*) FROM integration_credential WHERE integration_id=?", id)
-	return n, e
+	err := t.tx.GetContext(t.ctx, &n, "SELECT COUNT(*) FROM service_credential WHERE connection_id=?", id)
+	return n, err
 }
-func secretColumns(kind string) (table, id, col string) {
-	if kind == "webhook" {
-		return "integration_gitlab", "integration_id", "webhook_secret_ciphertext"
+func (t *identityTx) WebhookSettings(id uint64) (*i.WebhookSettings, error) {
+	v := &i.WebhookSettings{}
+	projection := strings.ReplaceAll(secretProjection, "secret_", "webhook_secret_")
+	projection = strings.ReplaceAll(projection, "AS webhook_secret_valid", "AS secret_valid")
+	err := t.tx.GetContext(t.ctx, v, "SELECT connection_id,webhook_enabled,webhook_verification_method,"+projection+",webhook_version,webhook_updated_at FROM service_connection_gitlab WHERE connection_id=?", id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, integrationIntegrity()
 	}
-	if kind == "credential" {
-		return "integration_credential", "id", "secret_ciphertext"
+	if err != nil {
+		return nil, err
+	}
+	if !v.ValidRecord() {
+		return nil, integrationIntegrity()
+	}
+	return v, nil
+}
+func (t *identityTx) SaveWebhookSettings(v *i.WebhookSettings) error {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	v.UpdatedAt = &now
+	_, err := t.tx.NamedExecContext(t.ctx, "UPDATE service_connection_gitlab SET webhook_enabled=:webhook_enabled,webhook_verification_method=:webhook_verification_method,webhook_version=:webhook_version,webhook_updated_at=:webhook_updated_at WHERE connection_id=:connection_id", v)
+	return err
+}
+func secretColumns(kind string) (table, prefix, key string) {
+	switch kind {
+	case "credential":
+		return "service_credential", "", "id"
+	case "webhook":
+		return "service_connection_gitlab", "webhook_", "connection_id"
 	}
 	panic("invalid secret kind")
 }
 func (t *identityTx) SetSecret(kind string, id uint64, value string) error {
-	table, key, col := secretColumns(kind)
-	_, e := t.tx.ExecContext(t.ctx, fmt.Sprintf("UPDATE %s SET %s=?,secret_format_version=1,secret_key_version='v1' WHERE %s=?", table, col, key), value, id)
-	return e
+	table, prefix, key := secretColumns(kind)
+	_, err := t.tx.ExecContext(t.ctx, fmt.Sprintf("UPDATE %s SET %ssecret_ciphertext=?,%ssecret_format_version=1,%ssecret_key_version='v1' WHERE %s=?", table, prefix, prefix, prefix, key), value, id)
+	return err
 }
 func (t *identityTx) Secret(kind string, id uint64) (string, error) {
-	table, key, col := secretColumns(kind)
+	table, prefix, key := secretColumns(kind)
 	var value string
-	e := t.tx.GetContext(t.ctx, &value, fmt.Sprintf("SELECT %s FROM %s WHERE %s=? AND secret_format_version=1 AND secret_key_version='v1'", col, table, key), id)
-	return value, e
+	err := t.tx.GetContext(t.ctx, &value, fmt.Sprintf("SELECT %ssecret_ciphertext FROM %s WHERE %s=? AND %ssecret_format_version=1 AND %ssecret_key_version='v1' AND %ssecret_ciphertext IS NOT NULL", prefix, table, key, prefix, prefix, prefix), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", integrationIntegrity()
+	}
+	return value, err
 }
-func diagnosticColumns(kind string) (table, key, col string) {
+func diagnosticColumns(kind string) (table, col, key string) {
 	switch kind {
 	case "connection":
-		return "integration_gitlab", "integration_id", "last_connection_check"
-	case "webhook":
-		return "integration_gitlab", "integration_id", "last_webhook_receipt"
+		return "service_connection", "last_connection_check", "id"
 	case "credential":
-		return "integration_credential", "id", "last_verification"
+		return "service_credential", "last_verification", "id"
+	case "webhook":
+		return "service_connection_gitlab", "webhook_last_receipt", "connection_id"
 	}
 	panic("invalid diagnostic kind")
 }
 func (t *identityTx) Diagnostics(kind string, id uint64) (json.RawMessage, error) {
-	table, key, col := diagnosticColumns(kind)
-	var v []byte
-	e := t.tx.GetContext(t.ctx, &v, fmt.Sprintf("SELECT %s FROM %s WHERE %s=?", col, table, key), id)
-	return json.RawMessage(v), e
+	table, col, key := diagnosticColumns(kind)
+	var b []byte
+	err := t.tx.GetContext(t.ctx, &b, fmt.Sprintf("SELECT %s FROM %s WHERE %s=?", col, table, key), id)
+	return json.RawMessage(b), err
 }
 func (t *identityTx) SaveDiagnostics(kind string, id uint64, v json.RawMessage) error {
-	table, key, col := diagnosticColumns(kind)
-	_, e := t.tx.ExecContext(t.ctx, fmt.Sprintf("UPDATE %s SET %s=? WHERE %s=?", table, col, key), []byte(v), id)
-	return e
+	table, col, key := diagnosticColumns(kind)
+	_, err := t.tx.ExecContext(t.ctx, fmt.Sprintf("UPDATE %s SET %s=? WHERE %s=?", table, col, key), []byte(v), id)
+	return err
 }
 
-// The account row is already locked; creators of personal credentials take the same lock.
-func (t *identityTx) DeletePersonalIntegrationCredentials(uid uint64) error {
-	var ids []uint64
-	if e := t.tx.SelectContext(t.ctx, &ids, "SELECT DISTINCT integration_id FROM integration_credential WHERE user_id=? ORDER BY integration_id", uid); e != nil {
-		return e
+// Account deletion already holds the user row; creation takes the same lock.
+func (t *identityTx) DeletePersonalServiceCredentials(uid uint64) error {
+	ids := []uint64{}
+	if err := t.tx.SelectContext(t.ctx, &ids, "SELECT DISTINCT connection_id FROM service_credential WHERE user_id=? ORDER BY connection_id", uid); err != nil {
+		return err
 	}
 	for _, id := range ids {
-		v, e := t.Integration(id)
-		if e != nil {
-			return e
+		v, err := t.Connection(id)
+		if err != nil {
+			return err
 		}
 		if v == nil {
-			return errors.New("orphaned integration credential")
+			return integrationIntegrity()
 		}
-		if _, e = t.tx.ExecContext(t.ctx, "DELETE FROM integration_credential WHERE integration_id=? AND scope_type='personal' AND user_id=?", id, uid); e != nil {
-			return e
+		if _, err = t.tx.ExecContext(t.ctx, "DELETE FROM service_credential WHERE connection_id=? AND ownership_type='personal' AND user_id=?", id, uid); err != nil {
+			return err
 		}
 		v.CredentialsVersion++
-		if e = t.SaveIntegration(v); e != nil {
-			return e
+		if err = t.SaveConnection(v); err != nil {
+			return err
 		}
 	}
 	return nil

@@ -178,14 +178,26 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if v != 4 {
+	if v != 5 {
 		return errors.New("database migration version does not match this executable")
 	}
 	var tables int
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event','icon_file','project','team','project_member','team_member','project_team','user_sidebar_preference','user_project_shortcut','user_team_shortcut','integration','integration_gitlab','integration_credential')"); err != nil {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event','icon_file','project','team','project_member','team_member','project_team','user_sidebar_preference','user_project_shortcut','user_team_shortcut','service_connection','service_connection_gitlab','service_credential')"); err != nil {
 		return err
 	}
 	if tables != 19 {
+		return install.ErrIncompleteSchema
+	}
+	// The task's intermediate version 5 used endpoint tables. A version number
+	// alone must not accept that schema after consolidating the migration.
+	var webhookColumns, obsolete int
+	if err = s.db.GetContext(ctx, &webhookColumns, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='service_connection_gitlab' AND COLUMN_NAME IN ('webhook_enabled','webhook_verification_method','webhook_secret_ciphertext','webhook_secret_format_version','webhook_secret_key_version','webhook_version','webhook_last_receipt','webhook_updated_at')"); err != nil {
+		return err
+	}
+	if err = s.db.GetContext(ctx, &obsolete, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('webhook_endpoint','webhook_endpoint_gitlab')"); err != nil {
+		return err
+	}
+	if webhookColumns != 8 || obsolete != 0 {
 		return install.ErrIncompleteSchema
 	}
 	instance, err := s.Instance(ctx)

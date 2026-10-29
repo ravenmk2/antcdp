@@ -25,7 +25,7 @@
 - 使用 Context 方法与超时；查询结果有分页或上限，不让 `SelectContext` 无界加载全表。
 - 所有值参数绑定，动态条件、表名与排序只来自服务端定义。没有自动 CRUD、自动迁移或通用数据库权限框架。
 - 账号、凭据、会话与审计共享同一事务；服务通过仓储/UnitOfWork 接口协作，sqlx 句柄只留在 MySQL 适配器。关键验证包括创始人保护、管理员并发互管、版本冲突及软删除筛选。
-- MySQL 集成检查至少覆盖 8.0 与 8.4 系列，验证 SQL、字段映射、外键/CHECK、事务与迁移；纯 mock 无法证明跨版本兼容。
+- MySQL 集成检查至少覆盖 8.0 与 8.4 系列，验证 SQL、字段映射、应用完整性校验、事务与迁移，并确认最终结构无外键/CHECK；纯 mock 无法证明跨版本兼容。
 
 依据：[sqlx 官方指南](https://jmoiron.github.io/sqlx/) 与 [sqlc MySQL 教程](https://docs.sqlc.dev/en/latest/tutorials/getting-started-mysql.html)。上述项目建议是基于这些能力作出的判断，并非工具官方对本项目的推荐。
 
@@ -55,4 +55,4 @@
 
 业务表名统一为单数 snake_case，DDL 用反引号引用表名；表名不决定 HTTP 集合资源的命名。`goose_db_version` 属于迁移工具维护对象，不由应用自行重命名。
 
-当前最低版本建议明确为 **8.0.16**：更早的 MySQL 8.0 对 CHECK 的支持不足，不能宣称它们会执行本稿的约束。8.0 和 8.4 使用同一套迁移及查询，8.4 镜像只作容器示例；更高主版本通过兼容验证后加入支持范围。依据：[MySQL CHECK 约束版本说明](https://dev.mysql.com/doc/refman/8.0/en/create-table-check-constraints.html)。
+当前最低版本仍为 **8.0.16**，用于继续执行包含 CHECK 的历史迁移 1/2；最终 DDL 与迁移 5 已移除物理外键/CHECK，完整性规则由程序事务实现。8.0 和 8.4 使用同一套迁移及查询，8.4 镜像只作容器示例；更高主版本通过兼容验证后加入支持范围。依据：[MySQL CHECK 约束版本说明](https://dev.mysql.com/doc/refman/8.0/en/create-table-check-constraints.html)。

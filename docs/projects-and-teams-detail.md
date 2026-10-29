@@ -23,7 +23,7 @@
 
 | 项目 | 本稿默认值 | 调整影响 |
 | --- | --- | --- |
-| 编码 | 创建后不可改，2–64 位，首尾字母或数字；不复用 | 字段校验、PATCH 契约；不影响 ID 外键 |
+| 编码 | 创建后不可改，2–64 位，首尾字母或数字；不复用 | 字段校验、PATCH 契约；不影响 ID 关联 |
 | 名称 | trim 首尾空白，1–100 码点，忽略大小写但区分重音；结束后仍占用 | 校验与唯一索引排序规则 |
 | 摘要/简介 | 选填，300 码点 / 100 KiB UTF-8，空字符串 | 请求限制与字段校验 |
 | 归档退出 | 本人可退出，管理性成员变更需恢复项目 | 生命周期权限 |
@@ -36,7 +36,7 @@
 
 新增 project/team 领域模块，media 增加独立 IconFile 用例；identity 删除账号事务接入小范围成员清理端口。复用现有 UnitOfWork、sqlx 适配器、审计追加器，不让模块服务相互调用并开启独立事务。
 
-九张表职责维持需求稿的划分，其中三张负责账号级侧栏偏好。所有表为 InnoDB；ID、版本以 BIGINT UNSIGNED 存储，API 为字符串；时间 UTC DATETIME(3)。ID 是稳定身份，code 供展示和查询，不使用名称或编码做外键。
+九张表职责维持需求稿的划分，其中三张负责账号级侧栏偏好。所有表为 InnoDB；ID、版本以 BIGINT UNSIGNED 存储，API 为字符串；时间 UTC DATETIME(3)。ID 是稳定身份，code 供展示和查询，不使用名称或编码做关联键。
 
 ### 2.1 主表和文件
 
@@ -49,7 +49,7 @@ project/team 共同字段：id、code、name、summary、description、icon_key�
 - 一个文件只能被一个项目或团队绑定。两张主表各自 UNIQUE(icon_file_id) 只保证表内唯一，跨表互斥必须锁定文件并验证 staged 状态。
 - archived_at/dissolved_at 索引支持状态列表；名称/编码唯一索引也用于精确匹配。列表统一 created_at DESC, id DESC。搜索名称、编码、摘要使用转义后的参数化 LIKE，`%`、`_` 作为普通输入，不把编码中的下划线当通配符。ASCII 编码列及用户选择器的用户名列先转换为 utf8mb4 再比较，支持中文及 emoji 关键词，编码匹配仍不区分大小写。
 - 无成员数、有效权限或管理员数缓存列。初期查询计算，后续有测量证据再优化。
-- 创建者和文件上传者关联用户墓碑；所有新表外键使用 RESTRICT，不使用业务对象级联硬删除。
+- 创建者和文件上传者关联用户墓碑；不设置物理外键，由应用事务校验引用，不使用业务对象级联硬删除。
 
 icon_file 继续只处理图标：256×256 PNG，保留上传者、随机 storage_key、尺寸、字节数、sha256、staged/attached/orphaned 状态及对应时间。不扩展为内容图片或缩略图模型；avatar_file 不迁移不改名，两个用例可共用图像处理函数和存储接口。
 
@@ -73,11 +73,11 @@ icon_file 继续只处理图标：256×256 PNG，保留上传者、随机 storag
 
 | 表 | 字段 | 约束与索引 |
 | --- | --- | --- |
-| user_sidebar_preference | user_id、project_version、team_version、updated_at | user_id 主键及 user 外键，两个版本初始 1 |
+| user_sidebar_preference | user_id、project_version、team_version、updated_at | user_id 主键及 user 逻辑引用，两个版本初始 1 |
 | user_project_shortcut | user_id、project_id、sort_order、created_at | 联合主键；(user_id, sort_order, project_id) 排序索引；(project_id, user_id) 清理索引 |
 | user_team_shortcut | user_id、team_id、sort_order、created_at | 联合主键；(user_id, sort_order, team_id) 排序索引；(team_id, user_id) 清理索引 |
 
-快捷表 user_id 引用 user_sidebar_preference.user_id，再通过该表关联 user，保证每个快捷关系都有版本行；目标 ID 分别关联 project/team，不使用无外键的多态 target_id。删除使用 RESTRICT，由应用事务明确清理。
+快捷表 user_id 引用 user_sidebar_preference.user_id，再通过该表关联 user，保证每个快捷关系都有版本行；目标 ID 分别关联 project/team，不使用多态 target_id。应用事务校验版本行和目标存在，删除时明确清理引用。
 
 sort_order 使用 INT UNSIGNED，从 1 开始；同组排序值不设置唯一约束，避免交换顺序时的中间冲突。查询按 sort_order ASC、目标 ID ASC；增删或排序后在同一事务内重新编号为 1..N，保留已有记录的 created_at。默认空分组，不自动固定。
 
@@ -269,7 +269,7 @@ JSON 默认 64 KiB 不能容纳 100 KiB 简介及转义开销，项目/团队创
 | 本人退出 | 锁本人和对象；删除直接关系、递增成员版本、审计；允许最后管理员退出 |
 | 解散团队 | 锁操作者、团队；重新读取关联项目并依次锁定；验证组合令牌；清空关系，更新团队及受影响项目成员版本；审计 |
 | 删除账号 | 沿用账号墓碑事务，扩展锁其相关团队和直接项目；删除两类直接成员关系、递增对应集合版本；不删除 project_team |
-| 图标清理 | 只锁文件元数据，再用普通读确认两张主表均无引用；状态和外键共同保护；不反向锁业务对象 |
+| 图标清理 | 只锁文件元数据，再用普通读确认两张主表均无引用；状态、文件行锁和引用复查共同保护；不反向锁业务对象 |
 
 直接角色变更与资料编辑以同一对象行锁串行；团队授权写入需先锁团队，解散持有团队锁后关联集合稳定。账号加入任何对象前必须锁目标用户，因此删除用户持有该用户锁后其成员集合不会新增。文件绑定只能从 staged 转 attached，清理不能仅依据事务外扫描结果删除。
 

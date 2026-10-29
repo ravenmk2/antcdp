@@ -1,6 +1,8 @@
 import { ApiError } from "../../shared/api";
-export interface Integration {
+export interface ServiceConnection {
   id: string;
+  code: string;
+  config?: { base_url: string; custom_ca_pem: string | null };
   service_type: string;
   name: string;
   description: string;
@@ -11,11 +13,11 @@ export interface Capability {
   service_type: string;
   name: string;
   credentials: boolean;
-  webhook: boolean;
+  webhook: { supported: boolean; verification_methods: string[] };
   connection_test: boolean;
   auth_methods: string[];
 }
-export interface Credential {
+export interface ServiceCredential {
   code: string;
   service_type: string;
   id: string;
@@ -28,22 +30,20 @@ export interface Credential {
   version: string;
   identity_config: Record<string, string>;
 }
+export interface WebhookSettings {
+  connection_id: string; updated_at: string | null;
+  enabled: boolean; has_secret: boolean; verification_method: string; version: string;
+}
 export interface Diagnostic {
-  outdated?: boolean;
-  status: string;
-  started_at: string;
-  http_status?: number;
-  username?: string;
-  event?: string;
-  external_project_id?: string;
+  id: string; kind: string; outdated: boolean; status: string; started_at: string; finished_at: string;
+  summary: { reachability?: string; authentication?: string; permissions?: string; reason?: string;
+    external_identity?: { id: string; username: string }; event_type?: string; source_project_id?: string; delivery_id?: string };
 }
 export const diagnosticLabels: Record<string, string> = {
-  connection_failed: "连接失败，请检查地址、网络和证书",
-  http_reachable: "HTTP 服务可达（未验证身份与业务权限）",
-  authenticated: "身份验证通过（业务权限尚未验证）",
-  authentication_failed: "认证未通过，请检查令牌和访问权限",
-  invalid_response: "外部服务响应不符合预期",
-  received_not_dispatched: "已验证接收，未触发工作流",
+  succeeded: "验证通过（不代表已获得具体业务权限）",
+  failed: "验证未通过，请检查配置、网络和认证材料",
+  unsupported: "此项验证暂不支持",
+  received_not_dispatched: "已验证接收，未分发工作流",
 };
 export function message(e: unknown) {
   if (e instanceof ApiError)
@@ -60,7 +60,6 @@ export function message(e: unknown) {
                   token: "令牌格式不正确",
                   name: "请检查名称",
  code: "code 须以小写字母或数字开头，仅含小写字母、数字、下划线或短横线，最长 64 位",
-                  webhook_enabled: "启用前请先保存验证秘密",
                   credential_id: "凭证不可用",
                   auth_method: "不支持此认证方式",
                   expires_at: "有效期格式不正确",
@@ -73,7 +72,7 @@ export function message(e: unknown) {
     );
   return e instanceof Error ? e.message : "操作失败，请重试";
 }
-export function available(c: Credential) {
+export function available(c: ServiceCredential) {
   return (
     c.enabled &&
     c.has_secret &&

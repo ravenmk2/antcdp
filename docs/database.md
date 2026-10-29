@@ -1,6 +1,6 @@
 # 数据库设计
 
-项目、团队及图标表设计见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 已汇总 19 张目标业务表（一期 7 张 + 协作 9 张 + 集成 3 张）。协作九表已进入第 2 版运行迁移并通过 MySQL 8.0 升级和安装验证；集成三表已进入第 3 版迁移，通过真实 MySQL 新装与版本 2 → 3 升级验证。实际交付边界见开发说明。
+项目、团队及图标表设计见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 现汇总 19 张目标业务表（一期 7 张 + 协作 9 张 + 服务集成新设计 3 张）。合并后的迁移 5 重建旧集成模块，最终共 19 张业务表。实际交付边界见[开发说明](development.md)。
 
 字段约束、关系查询、事务和版本详见 [详细设计](projects-and-teams-detail.md)，九张新增表有独立 [DDL 阅读副本](projects-and-teams-schema.sql)。该副本依赖一期 user 表，不能作为生产迁移直接导入；MySQL 8.0 验证范围见开发说明，8.4 仍待验证。
 
@@ -41,31 +41,31 @@ erDiagram
 
 ### 下一阶段新增结构
 
-完整 [schema.sql](schema.sql) 包含一期 7 张、协作 9 张（project、team、project_member、team_member、project_team、icon_file、user_sidebar_preference、user_project_shortcut、user_team_shortcut），以及待开发集成 3 张（integration、integration_gitlab、integration_credential）。运行迁移已覆盖一期与协作结构，尚未包含集成，不可用目标阅读副本覆盖运行库。
+完整 [schema.sql](schema.sql) 包含一期 7 张、协作 9 张（project、team、project_member、team_member、project_team、icon_file、user_sidebar_preference、user_project_shortcut、user_team_shortcut），以及目标服务集成 3 张。新集成设计不要求旧模块兼容；迁移 5 删除旧模块配置和凭证，需要重新配置，不可将阅读副本直接导入运行库。
 
 ### 外部集成结构
 
-详见[外部服务集成设计](service-integrations.md)。integration 保存公共资料、启停、默认凭证和公共并发版本；integration_gitlab 一对一保存 GitLab 地址、CA、Webhook 配置、加密验证秘密和诊断摘要；integration_credential 保存归属、身份、加密认证材料及首选标记。不设凭证集合表或一对一秘密表。
+详见[外部服务集成设计](service-integrations.md#4-数据库结构)。service_connection 保存公共资料、兜底引用、聚合/集合版本及出站诊断；service_connection_gitlab 保存 GitLab 地址和 CA（使用父连接编辑版本），以及此连接的 Webhook 设置、加密秘密、独立 webhook_version 和最近接收诊断；service_credential 保存凭证归属、认证材料和首选。不设接入点表；事件筛选和项目绑定属于消费方。服务类型/适配器为代码注册，不建表。
 
-集成三表不设置物理外键或 CHECK，保留主键、唯一键、查询索引及基础字段定义。生成列与唯一索引约束同一集成、同一归属最多一份首选；目标存在、默认凭证属于同一集成且为系统级、归属组合、可用状态、秘密完整性及 JSON 结构由代码与事务校验。凭证维护锁定集成行并验证版本，关联删除与并发新增遵循相同锁协议。GitLab Webhook 仅维护验证配置及最近接收摘要，不是工作流事件收件箱。DDL 和索引仍需真实 MySQL 验证；本次不变更既有业务表的外键与 CHECK。
+新三表不设置物理外键或 CHECK。生成列与唯一索引约束同连接同归属最多一份首选；引用存在、类型扩展、系统兜底、归属组合、秘密完整性及 JSON 结构由事务保证。所有子对象写入先锁父连接；删除连接要求凭证为空，Webhook 设置随连接扩展删除。诊断独立于编辑/集合表示，不递增编辑版本或更新时间。Webhook 不承担事件收件箱；通知渠道不使用这三张表预建模型。全部 19 张业务表均不设置物理外键/CHECK；迁移 5 移除既有约束，保留键、索引和字段定义。
 
-侧栏关系通过 preference.user_id 间接外键关联 user；两个分组分别维护版本。固定及排序按账号保存、跨设备共享；目标和顺序分别有索引，sort_order 不设唯一。新账号创建同步初始化 preference，升级迁移为未删除账号补行；删除账号明确删除快捷及偏好行。权限失去后的自动清理与授权变更同事务，保留其他成员来源及暂时禁用账号的偏好。详见 [详细设计 2.3 和 4.5 节](projects-and-teams-detail.md#23-侧栏持久化模型)。
+侧栏关系通过 preference.user_id 间接逻辑关联 user；两个分组分别维护版本。固定及排序按账号保存、跨设备共享；目标和顺序分别有索引，sort_order 不设唯一。新账号创建同步初始化 preference，升级迁移为未删除账号补行；删除账号明确删除快捷及偏好行。权限失去后的自动清理与授权变更同事务，保留其他成员来源及暂时禁用账号的偏好。详见 [详细设计 2.3 和 4.5 节](projects-and-teams-detail.md#23-侧栏持久化模型)。
 
 ### 既有通用约定
 
 - 业务表统一使用单数 snake_case：`user`、`user_password`、`session`、`avatar_file`、`system_setting`、`system_instance`、`audit_event`；SQL 中统一用反引号引用表名。REST 集合路径仍为 `/admin/users` 等复数形式，不随表名变化。
-- MySQL 8.0.16 起才执行 CHECK 约束，因此安装检查拒绝更早的 8.0 版本。DDL 与查询不引入 8.4 独有语法；实施 CI 至少覆盖 8.0 系列可用维护版本和 8.4 系列。8.4 容器标签只是部署示例，不再是唯一支持版本。
+- 历史迁移 1/2 使用 CHECK，保持迁移可执行性的最低版本仍为 MySQL 8.0.16；迁移 5 后最终结构无 CHECK。DDL 与查询不引入 8.4 独有语法；实施 CI 至少覆盖 8.0 系列可用维护版本和 8.4 系列。8.4 容器标签只是部署示例，不再是唯一支持版本。
 - 使用 InnoDB、`utf8mb4_0900_ai_ci`；用户名、枚举、令牌及标识符字段使用 ASCII 二进制比较。用户名只接收规范的小写 ASCII，唯一索引也覆盖已删除账号。
 - 业务实体 ID 使用 `BIGINT UNSIGNED`；设置以 name 为主键，安装记录使用单例小整数。API 中 ID 与用户版本使用十进制字符串，避免 JavaScript 数字精度丢失；设置聚合版本为不透明摘要，客户端不解析版本。
 - 时间存为 UTC `DATETIME(3)`；应用写入毫秒精度 UTC，连接设置 `time_zone='+00:00'`、`parseTime=true`、`loc=UTC`。界面按系统设置时区展示，修改时区不改历史数据。
 - 不使用自动 `ON UPDATE` 时间列；业务服务明确更新 `updated_at`、版本和审计。最近登录时间只更新 `last_login_at`。
-- 不用数据库 `ENUM`。既有业务表使用短字符串与命名 `CHECK`，新状态通过迁移明确扩展；CHECK 只保护行内规则，跨表与权限规则由服务事务执行。新增集成三表按本模块约定仅保留唯一键和索引，状态等业务校验在代码中执行，不新增 CHECK。
+- 不用数据库 `ENUM`。状态使用短字符串；所有业务表仅保留主键、唯一键和索引等结构定义，不设置外键或 CHECK。状态、版本、引用存在、字段组合、跨表与权限规则在服务事务中验证；字段类型、NOT NULL 和默认值保留。
 - 所有查询参数绑定，不拼接用户输入；排序字段使用服务端白名单。运行连接保持 `multiStatements=false`；goose 使用独立迁移连接，按工具要求开启 `multiStatements=true`，不可复用成请求连接。
 - 结构草案不包含 `CREATE DATABASE`、初始用户数据或默认口令。部署者先提供专用空数据库与账号，安装服务创建业务种子。
 
 ## 3. 用户与凭据
 
-`user.role` 只有 `admin`、`user`。`system_instance.founder_user_id` 唯一指定创始人，不新增 `founder` 角色值、不假定其 ID 为 1。外键只能防止硬删除该用户，不能阻止软删除、禁用或降级；这些保护必须由服务层在事务中执行。
+`user.role` 只有 `admin`、`user`。`system_instance.founder_user_id` 唯一指定创始人，不新增 `founder` 角色值、不假定其 ID 为 1。服务层在事务中保护该用户，不允许删除、禁用或降级；不依赖物理外键。
 
 `status` 只有 `active`、`disabled`。`deleted_at IS NOT NULL` 代表墓碑，并要求 `status=disabled`。常规列表、登录与当前账号查询统一排除墓碑；审计关联不依赖账号仍可登录。
 
@@ -75,7 +75,7 @@ erDiagram
 | `display_name` | 1–30 个 Unicode 码点，支持中文、不唯一；存储宽度保留少量余量 |
 | `auth_version` | 初值 1，安全事件递增；会话必须与当前用户版本一致 |
 | `row_version` | 初值 1，资料、头像、角色、状态、密码或删除等实质变更递增，用于 If-Match |
-| `avatar_file_id` | 可空外键；唯一索引允许多个 NULL，但同一非空头像只能绑定一个用户 |
+| `avatar_file_id` | 可空逻辑引用；唯一索引允许多个 NULL，但同一非空头像只能绑定一个用户 |
 | `last_login_at` | 登录成功时更新，不改变编辑版本 |
 
 一期本地登录账号正常或禁用时必须有凭据。逻辑删除时删除 `user_password` 行，保留用户行并撤销全部会话。凭据哈希为库生成的完整 bcrypt 字符串，包含算法标识、cost 和盐；不单列盐、不保存明文或可逆密码。`password_hash VARCHAR(255)` 保留算法迁移余量，不把字段限制为当前哈希长度。保留独立凭据表的评估见 [扩展性设计](extensibility.md)：未来外部身份独立关联，不要求无本地登录方式的用户伪造密码。
@@ -110,7 +110,7 @@ erDiagram
 
 文件先在内存中规范化，再写入数据目录的私有临时文件并原子移动到最终随机路径，最后提交 `avatar_file`。数据库提交失败可能留下没有元数据的磁盘文件，清理器只扫描符合本应用随机路径规则、超过 24 小时且无元数据的文件，包括中断遗留的 `.tmp-<random>`；删除前再次检查元数据并跳过在途上传。不能笼统删除未知目录或刚上传文件。维护循环在 ready 状态启动并每小时执行，元数据每批最多 100 行，磁盘候选每次最多 500 个；回收失败保留重试，访问权限与过期判断不依赖清理准时运行。
 
-垃圾清理锁定文件行并重新确认没有用户引用，先删除数据库元数据再删除文件。文件删除失败记录待重试日志，并由上述无元数据扫描回收。外键防止删掉当前引用；不通过级联删除头像文件。
+垃圾清理锁定文件行并重新确认没有用户引用，先删除数据库元数据再删除文件。文件删除失败记录待重试日志，并由上述无元数据扫描回收。绑定与清理共同锁定文件元数据，清理再次查询用户引用；不通过级联删除头像文件。
 
 ## 6. 受控设置 KV 与安装记录
 
@@ -129,7 +129,7 @@ erDiagram
 
 注册流程只锁定 `auth.registration_enabled` 并重新检查，和设置修改共享这一个原子边界；开放时直接创建 active 普通用户及会话，无需审批，关闭不撤销已创建账号。KV 不保存数据库配置、主密钥、密码、外部系统凭据或工作流/任务实体。API 仍返回四个具体字段，不暴露通用 KV 编辑器。
 
-只有 `system_instance` 保留 `CHECK(id=1)`；“安装后恰好一行”由安装事务及启动校验保证。其创始人引用等身份字段不可通过业务 API 修改，不用它承载设置版本计数。
+`system_instance.id=1` 及“安装后恰好一行”均由安装事务、写入校验及启动检查保证，不设置 CHECK。其创始人引用等身份字段不可通过业务 API 修改，不用它承载设置版本计数。
 
 `installation_id` 是 16 字节随机值的小写 32 位十六进制编码，与本地配置及安装标记一致。`key_fingerprint` 为 32 字节主密钥的 SHA-256，仅用于启动匹配，不代替主密钥，不通过业务 API 返回。主密钥文件与加密数据库口令均不放入业务表。
 
@@ -162,6 +162,6 @@ erDiagram
 
 实现时将结构拆入带版本的 goose 迁移，不直接在运行服务中执行本文件，不用 `IF NOT EXISTS` 掩盖错误结构。迁移账户需要相应 DDL 权限；运行账户只需业务读写权限，允许部署者在安装/迁移后切换为最小权限账号。
 
-MySQL DDL 会隐式提交，不能靠一个事务撤销整次安装。恢复、备份和升级流程见 [部署设计](deployment.md)。实现验收必须在目标 MySQL 上运行全新建库、升级及安装中断场景；本次文档阶段只进行结构与契约一致性检查。
+MySQL DDL 会隐式提交，不能靠一个事务撤销整次安装。恢复、备份和升级流程见 [部署设计](deployment.md)。实现验收必须在目标 MySQL 上运行全新建库、升级及安装中断场景；本次已在隔离 MySQL 8.3.0 验证新装、1→5 升级、重复迁移及 HTTP 生命周期；8.0/8.4 对新迁移的复验仍待完成。
 
 MySQL 语法约束参考：[MySQL 8.0 CHECK 支持起点](https://dev.mysql.com/doc/refman/8.0/en/create-table-check-constraints.html)、[DDL 隐式提交](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html)；迁移连接参数参考 [goose 官方说明](https://github.com/pressly/goose)。

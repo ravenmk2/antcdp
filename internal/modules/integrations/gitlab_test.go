@@ -5,6 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"net/http"
 	"net/netip"
@@ -74,29 +75,34 @@ func TestNetworkValidation(t *testing.T) {
 }
 func TestSecretBindingAndCollectionABA(t *testing.T) {
 	key := cryptox.Random(32)
-	secret, e := cryptox.Encrypt(key, "installation", purpose("credential", 1), "secret-token")
+	secret, e := cryptox.Encrypt(key, "installation", purpose("credential", 10, 1, "gitlab_access_token"), "secret-token")
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, binding := range []string{purpose("credential", 2), purpose("webhook", 1)} {
+	for _, binding := range []string{purpose("credential", 10, 2, "gitlab_access_token"), purpose("credential", 11, 1, "gitlab_access_token"), purpose("webhook", 10, 1, "secret_token")} {
 		if _, e = cryptox.Decrypt(key, "installation", binding, secret); e == nil {
 			t.Fatal("swapped secret decrypted")
 		}
 	}
-	v := Integration{ID: 1, CredentialsVersion: 1}
-	s := Scope{Type: "personal", Owner: 2}
-	old := v.CollectionTag(s)
-	if old == v.CollectionTag(Scope{Type: "personal", Owner: 3}) {
+	v := ServiceConnection{ID: 1, CredentialsVersion: 1}
+	s := CredentialOwnership{Type: "personal", Owner: 2}
+	svc := &Service{ETag: func(v string) string {
+		h := hmac.New(sha256.New, key)
+		h.Write([]byte(v))
+		return fmt.Sprintf("%x", h.Sum(nil))
+	}}
+	old := svc.collectionTag(&v, s)
+	if old == svc.collectionTag(&v, CredentialOwnership{Type: "personal", Owner: 3}) {
 		t.Fatal("scope unbound")
 	}
 	v.CredentialsVersion += 2
-	if old == v.CollectionTag(s) {
+	if old == svc.collectionTag(&v, s) {
 		t.Fatal("ABA accepted")
 	}
 }
 
 func TestDialRejectsActualLocalAddresses(t *testing.T) {
-	tr := transport(&GitLab{})
+	tr := transport(&GitLabConfig{})
 	defer tr.CloseIdleConnections()
 	for _, address := range []string{"127.0.0.1:443", "[::1]:443", "169.254.169.254:80", "100.100.100.200:80"} {
 		conn, err := tr.DialContext(context.Background(), "tcp", address)

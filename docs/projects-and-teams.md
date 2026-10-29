@@ -62,21 +62,21 @@ erDiagram
 
 | 字段 | 建议类型/默认值 | 含义 |
 | --- | --- | --- |
-| `id` | BIGINT UNSIGNED，自增 | 稳定身份，所有业务外键使用 ID |
+| `id` | BIGINT UNSIGNED，自增 | 稳定身份，所有业务关联使用 ID |
 | `code` | VARCHAR(64)，ascii / ascii_general_ci | 保留大小写，大小写不敏感唯一索引 |
 | `name` | VARCHAR(100) | 显示名称，单独唯一索引 |
 | `summary` | VARCHAR(300)，空字符串 | 列表摘要，纯文本 |
 | `description` | MEDIUMTEXT，非 NULL | Markdown 源文，创建时明确写入空字符串或内容 |
 | `icon_key` | VARCHAR(64)，ASCII 二进制比较，可空 | 内置图标稳定 key |
-| `icon_file_id` | BIGINT UNSIGNED，可空 | 外键关联上传图标 |
-| `created_by_user_id` | BIGINT UNSIGNED，非空 | 创建者外键；不作为授权依据 |
+| `icon_file_id` | BIGINT UNSIGNED，可空 | 逻辑关联上传图标 |
+| `created_by_user_id` | BIGINT UNSIGNED，非空 | 创建者引用；不作为授权依据 |
 | `row_version` | BIGINT UNSIGNED，默认 1 | 基础资料及生命周期版本 |
 | `membership_version` | BIGINT UNSIGNED，默认 1 | 直接成员、角色、团队授权的集合版本 |
 | `created_at` / `updated_at` | DATETIME(3) | 应用明确写入，无自动 ON UPDATE |
 
 `project` 另含可空 `archived_at`；`team` 另含可空 `dissolved_at`。空值表示正常，非空表示归档或解散，不再维护重复的 status 字段。恢复项目清空 archived_at，历史由审计保存。
 
-两表对 `icon_file_id` 分别建唯一索引，并建立文件外键；创建者关联 user 墓碑，外键使用 RESTRICT。CHECK 要求两种图标引用不能同时非空，版本至少为 1；没有指定图标时两列均为空，显示默认图标。
+两表对 `icon_file_id` 分别建唯一索引，图标及创建者通过 ID 逻辑关联，创建者保留 user 墓碑。应用事务校验引用存在、两种图标引用不能同时非空、版本至少为 1；没有指定图标时两列均为空，显示默认图标。
 
 编码建议格式为 `^[A-Za-z0-9][A-Za-z0-9_-]{0,62}[A-Za-z0-9]$`。不通过小写转换改变用户输入；应用校验与数据库唯一约束共同工作，重复编码或名称返回 409。
 
@@ -88,9 +88,9 @@ Markdown 只保存源文，不重复存储渲染 HTML；展示时统一安全渲
 
 ## 4. 成员关系与有效权限
 
-`project_member` 和 `team_member` 均包含对象 ID、`user_id`、`role`、`created_at`、`updated_at`；role 使用 ASCII 字符串及 CHECK，仅允许 admin/member，不使用数据库 ENUM。project_team 仅含 project_id、team_id、created_at，不存固定的 member 角色。
+`project_member` 和 `team_member` 均包含对象 ID、`user_id`、`role`、`created_at`、`updated_at`；role 使用 ASCII 字符串，由应用仅允许 admin/member，不使用数据库 ENUM。project_team 仅含 project_id、team_id、created_at，不存固定的 member 角色。
 
-外键关联对应主表及 user，使用 RESTRICT。反向索引分别为 `(user_id, project_id)`、`(user_id, team_id)` 和 `(team_id, project_id)`。添加关系必须检查用户正常且未删除、团队未解散、项目可写；添加既有关系不隐式修改角色。
+通过 ID 逻辑关联对应主表及 user，由应用事务校验引用和清理顺序。反向索引分别为 `(user_id, project_id)`、`(user_id, team_id)` 和 `(team_id, project_id)`。添加关系必须检查用户正常且未删除、团队未解散、项目可写；添加既有关系不隐式修改角色。
 
 有效项目成员来自直接关系与 `project_team → team_member` 的并集，按 user_id 去重；来源分别返回，不把团队成员复制进 project_member。只有直接关系的 admin 可提供业务管理权限。系统管理员使用独立授权分支。
 
@@ -112,14 +112,14 @@ Markdown 只保存源文，不重复存储渲染 HTML；展示时统一安全渲
 | `width` / `height` | SMALLINT UNSIGNED | 统一 256×256 |
 | `size_bytes` | INT UNSIGNED | 输出大小 |
 | `sha256` | BINARY(32) | 完整性与 ETag，不做全局去重 |
-| `uploaded_by_user_id` | BIGINT UNSIGNED | 用户外键，RESTRICT |
+| `uploaded_by_user_id` | BIGINT UNSIGNED | 用户逻辑引用，由程序校验 |
 | `state` | VARCHAR(16)，ASCII 二进制 | staged/attached/orphaned |
 | `expires_at` / `orphaned_at` | DATETIME(3)，可空 | 草稿过期及孤立时间 |
 | `created_at` | DATETIME(3) | 上传时间 |
 
 沿用头像建议限制：输入最大 2 MiB、边长最大 4096、总像素最多 16,777,216；服务端重新解码输出 256×256 PNG，最大 512 KiB。裁剪取消不上传，保存表单时才绑定；取消表单可删除草稿，否则 24 小时后过期。
 
-CHECK 及索引沿用 avatar_file 的状态时间组合、图像规格和到期检索规则。内置 SVG 随应用发布，只有白名单 key 入库，不存任意 SVG、路径或远程 URL。
+应用校验沿用 avatar_file 的状态时间组合和图像规格规则，索引支持到期检索。内置 SVG 随应用发布，只有白名单 key 入库，不存任意 SVG、路径或远程 URL。
 
 绑定事务锁定目标对象和图标文件，检查当前操作者权限、资料版本、草稿上传者和有效期；仅 staged 文件可绑定，原子变为 attached，且确认 project/team 均无现存引用。跨类型同时绑定同一草稿必须由同一文件行锁串行化。替换或移除后旧文件变 orphaned，不允许再次绑定。
 

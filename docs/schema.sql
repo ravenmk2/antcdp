@@ -1,6 +1,6 @@
 -- AntCDP complete target schema: 19 business tables, MySQL 8.0.16+ / InnoDB.
--- Phase A: 7 existing tables. Collaboration/sidebar: 9 migrated; feature implementation in progress.
--- Integrations: 3 tables in runtime migrations 00003 and 00004; validated on MySQL.
+-- Phase A: 7 tables. Collaboration/sidebar: 9 tables. Integrations: 3 tables.
+-- Consolidated migration 5 final schema. No physical FK/CHECK rules.
 -- This file is a review snapshot, NOT an upgrade migration or proof of deployment.
 -- Review reference only. Runtime migrations live in internal/store/migrations/mysql/.
 -- Designed for an empty schema; do not import into an existing installation.
@@ -26,13 +26,7 @@ CREATE TABLE `user` (
     UNIQUE KEY uq_user_avatar_file_id (avatar_file_id),
     KEY idx_user_deleted_created (deleted_at, created_at, id),
     KEY idx_user_deleted_status (deleted_at, status, created_at, id),
-    KEY idx_user_deleted_role (deleted_at, role, created_at, id),
-    CONSTRAINT ck_user_username_length CHECK (CHAR_LENGTH(username) BETWEEN 3 AND 30),
-    CONSTRAINT ck_user_display_name_length CHECK (CHAR_LENGTH(display_name) BETWEEN 1 AND 30),
-    CONSTRAINT ck_user_role CHECK (role IN ('admin', 'user')),
-    CONSTRAINT ck_user_status CHECK (status IN ('active', 'disabled')),
-    CONSTRAINT ck_user_deleted_status CHECK (deleted_at IS NULL OR status = 'disabled'),
-    CONSTRAINT ck_user_versions CHECK (auth_version >= 1 AND row_version >= 1)
+    KEY idx_user_deleted_role (deleted_at, role, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `user_password` (
@@ -40,9 +34,7 @@ CREATE TABLE `user_password` (
     password_hash VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     require_password_change BOOLEAN NOT NULL DEFAULT FALSE,
     password_changed_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (user_id),
-    CONSTRAINT fk_user_password_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE CASCADE,
-    CONSTRAINT ck_user_password_require_change CHECK (require_password_change IN (0, 1))
+    PRIMARY KEY (user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `avatar_file` (
@@ -62,21 +54,8 @@ CREATE TABLE `avatar_file` (
     UNIQUE KEY uq_avatar_file_storage_key (storage_key),
     KEY idx_avatar_file_staged_expiry (state, expires_at, id),
     KEY idx_avatar_file_orphaned_time (state, orphaned_at, id),
-    KEY idx_avatar_file_uploader (uploaded_by_user_id, created_at, id),
-    CONSTRAINT fk_avatar_file_uploader FOREIGN KEY (uploaded_by_user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_avatar_file_type CHECK (content_type = 'image/png'),
-    CONSTRAINT ck_avatar_file_dimensions CHECK (width = 256 AND height = 256),
-    CONSTRAINT ck_avatar_file_size CHECK (size_bytes BETWEEN 1 AND 524288),
-    CONSTRAINT ck_avatar_file_state CHECK (state IN ('staged', 'attached', 'orphaned')),
-    CONSTRAINT ck_avatar_file_lifecycle CHECK (
-        (state = 'staged' AND expires_at IS NOT NULL AND orphaned_at IS NULL)
-        OR (state = 'attached' AND expires_at IS NULL AND orphaned_at IS NULL)
-        OR (state = 'orphaned' AND expires_at IS NULL AND orphaned_at IS NOT NULL)
-    )
+    KEY idx_avatar_file_uploader (uploaded_by_user_id, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-ALTER TABLE `user`
-    ADD CONSTRAINT fk_user_avatar FOREIGN KEY (avatar_file_id) REFERENCES `avatar_file` (id) ON DELETE RESTRICT;
 
 CREATE TABLE `session` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -93,12 +72,7 @@ CREATE TABLE `session` (
     PRIMARY KEY (id),
     UNIQUE KEY uq_session_token_hash (token_hash),
     KEY idx_session_user_validity (user_id, revoked_at, expires_at),
-    KEY idx_session_expiry (expires_at, id),
-    CONSTRAINT fk_session_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE CASCADE,
-    CONSTRAINT ck_session_auth_version CHECK (auth_version >= 1),
-    CONSTRAINT ck_session_ttl_days CHECK (ttl_days BETWEEN 1 AND 30),
-    CONSTRAINT ck_session_seen CHECK (last_seen_at >= created_at),
-    CONSTRAINT ck_session_expiry CHECK (expires_at > last_seen_at)
+    KEY idx_session_expiry (expires_at, id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `system_setting` (
@@ -107,9 +81,7 @@ CREATE TABLE `system_setting` (
     row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (`name`),
-    CONSTRAINT ck_system_setting_name_length CHECK (CHAR_LENGTH(`name`) BETWEEN 3 AND 96),
-    CONSTRAINT ck_system_setting_version CHECK (row_version >= 1)
+    PRIMARY KEY (`name`)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `system_instance` (
@@ -120,9 +92,7 @@ CREATE TABLE `system_instance` (
     installed_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_system_instance_installation (installation_id),
-    KEY idx_system_instance_founder (founder_user_id),
-    CONSTRAINT fk_system_instance_founder FOREIGN KEY (founder_user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_system_instance_singleton CHECK (id = 1)
+    KEY idx_system_instance_founder (founder_user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `audit_event` (
@@ -143,10 +113,7 @@ CREATE TABLE `audit_event` (
     KEY idx_audit_event_time (occurred_at, id),
     KEY idx_audit_event_actor_time (actor_user_id, occurred_at, id),
     KEY idx_audit_event_action_time (action, occurred_at, id),
-    KEY idx_audit_event_target_time (target_type, target_id, occurred_at, id),
-    CONSTRAINT fk_audit_event_actor FOREIGN KEY (actor_user_id) REFERENCES `user` (id) ON DELETE SET NULL,
-    CONSTRAINT ck_audit_event_actor_type CHECK (actor_type IN ('user', 'system')),
-    CONSTRAINT ck_audit_event_detail CHECK (detail IS NULL OR JSON_TYPE(detail) = 'OBJECT')
+    KEY idx_audit_event_target_time (target_type, target_id, occurred_at, id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Collaboration schema: implemented by goose migration 00002_collaboration.sql.
@@ -167,17 +134,7 @@ CREATE TABLE `icon_file` (
     UNIQUE KEY uq_icon_file_storage_key (storage_key),
     KEY idx_icon_file_expiry (state, expires_at, id),
     KEY idx_icon_file_orphaned (state, orphaned_at, id),
-    KEY idx_icon_file_uploader (uploaded_by_user_id, created_at, id),
-    CONSTRAINT fk_icon_file_uploader FOREIGN KEY (uploaded_by_user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_icon_file_type CHECK (content_type = 'image/png'),
-    CONSTRAINT ck_icon_file_dimensions CHECK (width = 256 AND height = 256),
-    CONSTRAINT ck_icon_file_size CHECK (size_bytes BETWEEN 1 AND 524288),
-    CONSTRAINT ck_icon_file_state CHECK (state IN ('staged', 'attached', 'orphaned')),
-    CONSTRAINT ck_icon_file_lifecycle CHECK (
-        (state = 'staged' AND expires_at IS NOT NULL AND orphaned_at IS NULL)
-        OR (state = 'attached' AND expires_at IS NULL AND orphaned_at IS NULL)
-        OR (state = 'orphaned' AND expires_at IS NULL AND orphaned_at IS NOT NULL)
-    )
+    KEY idx_icon_file_uploader (uploaded_by_user_id, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `project` (
@@ -199,15 +156,7 @@ CREATE TABLE `project` (
     UNIQUE KEY uq_project_name (name),
     UNIQUE KEY uq_project_icon (icon_file_id),
     KEY idx_project_status_created (archived_at, created_at, id),
-    KEY idx_project_creator (created_by_user_id),
-    CONSTRAINT fk_project_creator FOREIGN KEY (created_by_user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_project_icon FOREIGN KEY (icon_file_id) REFERENCES icon_file (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_project_code_length CHECK (CHAR_LENGTH(code) BETWEEN 2 AND 64),
-    CONSTRAINT ck_project_name_length CHECK (CHAR_LENGTH(name) BETWEEN 1 AND 100),
-    CONSTRAINT ck_project_description_size CHECK (OCTET_LENGTH(description) <= 102400),
-    CONSTRAINT ck_project_icon_choice CHECK (icon_key IS NULL OR icon_file_id IS NULL),
-    CONSTRAINT ck_project_icon_key CHECK (icon_key IS NULL OR CHAR_LENGTH(icon_key) BETWEEN 1 AND 64),
-    CONSTRAINT ck_project_versions CHECK (row_version >= 1 AND membership_version >= 1)
+    KEY idx_project_creator (created_by_user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `team` (
@@ -229,15 +178,7 @@ CREATE TABLE `team` (
     UNIQUE KEY uq_team_name (name),
     UNIQUE KEY uq_team_icon (icon_file_id),
     KEY idx_team_status_created (dissolved_at, created_at, id),
-    KEY idx_team_creator (created_by_user_id),
-    CONSTRAINT fk_team_creator FOREIGN KEY (created_by_user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_team_icon FOREIGN KEY (icon_file_id) REFERENCES icon_file (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_team_code_length CHECK (CHAR_LENGTH(code) BETWEEN 2 AND 64),
-    CONSTRAINT ck_team_name_length CHECK (CHAR_LENGTH(name) BETWEEN 1 AND 100),
-    CONSTRAINT ck_team_description_size CHECK (OCTET_LENGTH(description) <= 102400),
-    CONSTRAINT ck_team_icon_choice CHECK (icon_key IS NULL OR icon_file_id IS NULL),
-    CONSTRAINT ck_team_icon_key CHECK (icon_key IS NULL OR CHAR_LENGTH(icon_key) BETWEEN 1 AND 64),
-    CONSTRAINT ck_team_versions CHECK (row_version >= 1 AND membership_version >= 1)
+    KEY idx_team_creator (created_by_user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `project_member` (
@@ -247,10 +188,7 @@ CREATE TABLE `project_member` (
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (project_id, user_id),
-    KEY idx_project_member_user (user_id, project_id),
-    CONSTRAINT fk_project_member_object FOREIGN KEY (project_id) REFERENCES `project` (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_project_member_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_project_member_role CHECK (role IN ('admin', 'member'))
+    KEY idx_project_member_user (user_id, project_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `team_member` (
@@ -260,10 +198,7 @@ CREATE TABLE `team_member` (
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (team_id, user_id),
-    KEY idx_team_member_user (user_id, team_id),
-    CONSTRAINT fk_team_member_object FOREIGN KEY (team_id) REFERENCES `team` (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_team_member_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_team_member_role CHECK (role IN ('admin', 'member'))
+    KEY idx_team_member_user (user_id, team_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `project_team` (
@@ -271,9 +206,7 @@ CREATE TABLE `project_team` (
     team_id BIGINT UNSIGNED NOT NULL,
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (project_id, team_id),
-    KEY idx_project_team_team (team_id, project_id),
-    CONSTRAINT fk_project_team_project FOREIGN KEY (project_id) REFERENCES `project` (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_project_team_team FOREIGN KEY (team_id) REFERENCES `team` (id) ON DELETE RESTRICT
+    KEY idx_project_team_team (team_id, project_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Application rules: full code regex, trim/name validation, icon-key allowlist,
@@ -288,9 +221,7 @@ CREATE TABLE `user_sidebar_preference` (
     project_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     team_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     updated_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (user_id),
-    CONSTRAINT fk_user_sidebar_preference_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_user_sidebar_preference_versions CHECK (project_version >= 1 AND team_version >= 1)
+    PRIMARY KEY (user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `user_project_shortcut` (
@@ -300,10 +231,7 @@ CREATE TABLE `user_project_shortcut` (
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (user_id, project_id),
     KEY idx_user_project_shortcut_order (user_id, sort_order, project_id),
-    KEY idx_user_project_shortcut_target (project_id, user_id),
-    CONSTRAINT fk_user_project_shortcut_preference FOREIGN KEY (user_id) REFERENCES user_sidebar_preference (user_id) ON DELETE RESTRICT,
-    CONSTRAINT fk_user_project_shortcut_target FOREIGN KEY (project_id) REFERENCES `project` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_user_project_shortcut_order CHECK (sort_order >= 1)
+    KEY idx_user_project_shortcut_target (project_id, user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `user_team_shortcut` (
@@ -313,10 +241,7 @@ CREATE TABLE `user_team_shortcut` (
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (user_id, team_id),
     KEY idx_user_team_shortcut_order (user_id, sort_order, team_id),
-    KEY idx_user_team_shortcut_target (team_id, user_id),
-    CONSTRAINT fk_user_team_shortcut_preference FOREIGN KEY (user_id) REFERENCES user_sidebar_preference (user_id) ON DELETE RESTRICT,
-    CONSTRAINT fk_user_team_shortcut_target FOREIGN KEY (team_id) REFERENCES `team` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_user_team_shortcut_order CHECK (sort_order >= 1)
+    KEY idx_user_team_shortcut_target (team_id, user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- sort_order is deliberately not UNIQUE: transactionally reorder a group,
@@ -326,60 +251,62 @@ CREATE TABLE `user_team_shortcut` (
 -- Backfill preference rows for non-deleted users in the future upgrade migration;
 -- create a row in each new-account transaction. No data seeds in this reference.
 
--- External integrations: migrations 00003/00004 reference, see docs/service-integrations.md.
--- No credential-set or separate secret table. Encrypted envelopes belong to
--- their service extension (inbound verification) or credential (outbound identity).
-CREATE TABLE `integration` (
+-- Service integrations target design (2026-10-29), see docs/service-integrations.md.
+-- Replaces the old three-table model in the DESIGN ONLY. Runtime migrations
+-- 00003/00004 and deployed data still use the old model; this is not a migration.
+-- ServiceType/ServiceAdapter are code registrations; notification channels,
+-- workflow definitions, execution records and event inboxes are out of scope.
+CREATE TABLE `service_connection` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     service_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     name VARCHAR(100) COLLATE utf8mb4_0900_as_ci NOT NULL,
     description VARCHAR(1000) NOT NULL DEFAULT '',
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    default_credential_id BIGINT UNSIGNED NULL,
+    fallback_credential_id BIGINT UNSIGNED NULL,
     row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    config_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     credentials_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    default_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    fallback_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    last_connection_check JSON NULL,
     created_by_user_id BIGINT UNSIGNED NOT NULL,
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_integration_type_name (service_type, name),
-    KEY idx_integration_type_enabled (service_type, enabled, id),
-    KEY idx_integration_creator (created_by_user_id),
-    KEY idx_integration_default (default_credential_id)
+    UNIQUE KEY uq_service_connection_code (code),
+    UNIQUE KEY uq_service_connection_type_name (service_type, name),
+    KEY idx_service_connection_type_enabled (service_type, enabled, id),
+    KEY idx_service_connection_creator (created_by_user_id),
+    KEY idx_service_connection_fallback (fallback_credential_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- One GitLab extension per gitlab integration. Application validates type and
--- atomically creates/deletes both records; no physical foreign key is added.
-CREATE TABLE `integration_gitlab` (
-    integration_id BIGINT UNSIGNED NOT NULL,
+-- Exactly one extension for a GitLab connection. The parent owns the aggregate
+-- row_version and config_version; both rows are created/updated/deleted atomically.
+CREATE TABLE `service_connection_gitlab` (
+    connection_id BIGINT UNSIGNED NOT NULL,
     base_url VARCHAR(2048) NOT NULL,
     custom_ca_pem TEXT NULL,
     webhook_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     webhook_verification_method VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'secret_token',
     webhook_secret_ciphertext BLOB NULL,
-    secret_format_version INT UNSIGNED NULL,
-    secret_key_version VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
-    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    connection_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    webhook_secret_format_version INT UNSIGNED NULL,
+    webhook_secret_key_version VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
     webhook_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    last_connection_check JSON NULL,
-    last_webhook_receipt JSON NULL,
-    created_at DATETIME(3) NOT NULL,
-    updated_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (integration_id)
+    webhook_last_receipt JSON NULL,
+    webhook_updated_at DATETIME(3) NULL,
+    PRIMARY KEY (connection_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE `integration_credential` (
+CREATE TABLE `service_credential` (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    connection_id BIGINT UNSIGNED NOT NULL,
     service_type VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    integration_id BIGINT UNSIGNED NOT NULL,
-    scope_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    ownership_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     project_id BIGINT UNSIGNED NULL,
     user_id BIGINT UNSIGNED NULL,
     owner_key BIGINT UNSIGNED GENERATED ALWAYS AS (
-        CASE scope_type WHEN 'system' THEN 0 WHEN 'project' THEN project_id WHEN 'personal' THEN user_id ELSE NULL END
+        CASE ownership_type WHEN 'system' THEN 0 WHEN 'project' THEN project_id WHEN 'personal' THEN user_id ELSE NULL END
     ) STORED,
     name VARCHAR(100) COLLATE utf8mb4_0900_as_ci NOT NULL,
     description VARCHAR(1000) NOT NULL DEFAULT '',
@@ -400,23 +327,24 @@ CREATE TABLE `integration_credential` (
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_integration_credential_code (service_type, code),
-    UNIQUE KEY uq_integration_credential_name (integration_id, scope_type, owner_key, name),
-    UNIQUE KEY uq_integration_credential_preferred (integration_id, scope_type, owner_key, preferred_slot),
-    KEY idx_integration_credential_scope (integration_id, scope_type, owner_key, enabled, id),
-    KEY idx_integration_credential_project (project_id, integration_id),
-    KEY idx_integration_credential_user (user_id, integration_id),
-    KEY idx_integration_credential_creator (created_by_user_id)
+    UNIQUE KEY uq_service_credential_code (service_type, code),
+    UNIQUE KEY uq_service_credential_name (connection_id, ownership_type, owner_key, name),
+    UNIQUE KEY uq_service_credential_preferred (connection_id, ownership_type, owner_key, preferred_slot),
+    KEY idx_service_credential_ownership (connection_id, ownership_type, owner_key, enabled, id),
+    KEY idx_service_credential_project (project_id, connection_id),
+    KEY idx_service_credential_user (user_id, connection_id),
+    KEY idx_service_credential_creator (created_by_user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- Logical references only: no physical foreign keys or CHECK constraints.
--- Service transactions validate existence, ownership, flags, versions, JSON
--- shape and secret envelope completeness, and maintain deletion dependencies.
-
--- Application must serialize credential maintenance on the integration row,
--- check scoped collection ETags, and clear references before disabling/deleting.
--- A NULL preferred_slot permits multiple non-preferred credentials; owner_key
--- plus scope_type keeps system/project/personal uniqueness domains separate.
--- Service adapters validate JSON fields, sizes, authentication methods and
--- required secrets. No generated field or ciphertext accepts public API input.
--- Webhook receipts are diagnostic summaries, never a durable event inbox.
+-- The three integration tables have logical references only: no FK or CHECK constraints.
+-- Service transactions validate existence, immutable type/ownership, flags,
+-- positive versions, JSON structure/bounds and complete secret envelopes.
+-- Credentials and webhook settings maintenance serialize on the connection parent row.
+-- A connection can be deleted only after ALL credentials are gone; webhook settings are removed with it.
+-- Disabling/deleting a credential clears preferred and fallback atomically;
+-- changing preferred increments the row_version of every affected credential.
+-- A NULL preferred_slot allows multiple non-preferred credentials per owner.
+-- Diagnostic writes do not change edit versions, collection versions or updated_at.
+-- Outbound credentials and inbound webhook secrets have distinct encryption
+-- purposes and resource-bound AAD. Plaintext never belongs in configuration JSON.
+-- No automatic event dispatch, durable inbox, replay or notification delivery.

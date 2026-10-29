@@ -30,6 +30,7 @@ export interface RequestOptions {
 export interface ApiResponse<T> {
   data: T;
   etag: string;
+  collectionEtag?: string;
   pagination?: {
     page?: number;
     page_size?: number;
@@ -99,12 +100,13 @@ export async function request<T>(
       payload?.request_id,
     );
   }
-  if (response.status === 204) return { data: undefined as T, etag: "" };
+  if (response.status === 204) return { data: undefined as T, etag: response.headers.get("ETag") ?? "", collectionEtag: response.headers.get("X-Collection-ETag") ?? undefined };
   if (!payload || !("data" in payload))
     throw new ApiError("INVALID_RESPONSE", "服务响应格式不正确。");
   return {
     data: payload.data as T,
     etag: response.headers.get("ETag") ?? "",
+    collectionEtag: response.headers.get("X-Collection-ETag") ?? undefined,
     pagination: payload.pagination,
   };
 }

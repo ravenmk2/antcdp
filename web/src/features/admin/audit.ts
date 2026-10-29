@@ -14,6 +14,21 @@ export interface AuditEvent {
   detail: Record<string, unknown>;
 }
 export const actionLabels: Record<string, string> = {
+  "service_connection.created": "创建服务连接",
+  "service_connection.updated": "更新服务连接",
+  "service_connection.deleted": "删除服务连接",
+  "service_connection.fallback_changed": "修改兜底凭证",
+  "service_credential.created": "创建访问凭证",
+  "service_credential.updated": "更新访问凭证",
+  "service_credential.deleted": "删除访问凭证",
+  "service_credential.authentication_replaced": "替换认证信息",
+  "service_credential.preferred_changed": "修改首选凭证",
+  "service_connection.webhook_updated": "更新 Webhook 接收设置",
+    "service_connection.webhook_verification_replaced": "替换 Webhook 验证秘密",
+    "webhook_endpoint.created": "创建 Webhook 接入点",
+  "webhook_endpoint.updated": "更新 Webhook 接入点",
+  "webhook_endpoint.deleted": "删除 Webhook 接入点",
+  "webhook_endpoint.verification_replaced": "替换接入点验证秘密",
   "integration.created": "创建服务集成",
   "integration.update": "更新服务集成",
   "integration.deleted": "删除服务集成",

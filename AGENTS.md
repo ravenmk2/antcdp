@@ -25,14 +25,15 @@ antcdp/
 - [docs/architecture.md](docs/architecture.md)：技术选型、模块边界、前后端结构与视觉基线、实施顺序。
 - [docs/technology-decisions.md](docs/technology-decisions.md)：sqlx/sqlc、bcrypt/HMAC 与 MySQL 版本及命名的比较和建议。
 - [docs/extensibility.md](docs/extensibility.md)：受控设置 KV、独立凭据表、仓储/事务接口和未来模块的扩展边界。
-- [docs/service-integrations.md](docs/service-integrations.md)：外部服务集成设计与首期 GitLab 实现边界，包含公共集成、GitLab 扩展与凭证三表、首选与默认、记录内加密秘密、服务专属接口及 GitLab Webhook 接入验证。
+- [docs/service-integrations.md](docs/service-integrations.md)：服务集成领域与三表设计，包含服务连接、访问凭证、连接内 Webhook 接收设置、首选与兜底、事务及通知模块边界；本次迁移合并为最终版本 5，删除接入点表。
+- [docs/service-integrations-api.md](docs/service-integrations-api.md)：服务集成 API、类型目录、连接/凭证/Webhook 设置 DTO、权限、条件请求、诊断与入站接收契约。
 - [docs/domain-model.md](docs/domain-model.md)：注册与用户身份、创始人保护、权限、会话、头像及审计规则。
 - [docs/api.md](docs/api.md)：HTTP 接口、头像草稿绑定、审计游标查询、授权、并发控制与错误契约。
 - [docs/database.md](docs/database.md)：MySQL 表关系、字段职责、索引、事务与生命周期。
 - [docs/projects-and-teams.md](docs/projects-and-teams.md)：项目与团队规则、数据库设计与待确认项。
 - [docs/projects-and-teams-detail.md](docs/projects-and-teams-detail.md)：项目与团队的权限矩阵、API/DTO、选择器、图标、并发事务、工作区快捷入口与控制台交互、实施及验收详细设计，包含当前实现与目标契约差异。
 - [docs/projects-and-teams-schema.sql](docs/projects-and-teams-schema.sql)：九张项目、团队、图标及侧栏偏好表的 DDL 阅读副本，非运行迁移，迁移已通过 MySQL 8.0 验证。
-- [docs/schema.sql](docs/schema.sql)：完整 19 张目标业务表的 DDL 阅读副本（一期 7 张、协作迁移 9 张、集成迁移 3 张）；实际执行使用嵌入式 goose 迁移，集成结构已通过真实 MySQL 新装与升级验证。
+- [docs/schema.sql](docs/schema.sql)：完整 19 张目标业务表的 DDL 阅读副本（一期 7 张、协作 9 张、服务集成新设计 3 张）；实际执行使用嵌入式 goose 迁移，当前合并结构版本 5，验证范围见开发说明，全部业务表不设物理外键/CHECK。
 - [docs/deployment.md](docs/deployment.md)：容器目录、配置、主密钥、持久化安装锁、安装恢复、备份与升级设计。
 
 ## UI 开发约定

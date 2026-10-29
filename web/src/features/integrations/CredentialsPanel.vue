@@ -22,7 +22,7 @@ import {
   available,
   message,
   diagnosticLabels,
-  type Credential,
+  type ServiceCredential,
   type Diagnostic,
 } from "./types";
 const props = defineProps<{
@@ -30,7 +30,7 @@ const props = defineProps<{
   serviceType: string;
   system?: boolean;
   readonly?: boolean;
-  integrationEnabled: boolean;
+  connectionEnabled: boolean;
 }>();
 const adapter = computed(() => serviceUI[props.serviceType]!);
 const providerValues = ref<Record<string, string>>({});
@@ -38,16 +38,17 @@ const clearSecret = () => {
   for (const field of adapter.value.secretFields)
     providerValues.value[field.key] = "";
 };
-const rows = ref<Credential[]>([]),
+const rows = ref<ServiceCredential[]>([]),
   loading = ref(true),
   busy = ref(false),
   error = ref(""),
   collection = ref(""),
-  defaultID = ref<string | null>(null),
-  defaultTag = ref("");
+  preferredTag = ref(""),
+  fallbackID = ref<string | null>(null),
+  fallbackTag = ref("");
 const dialog = ref(false),
   mode = ref<"create" | "edit" | "secret">("create"),
-  selected = ref<Credential>(),
+  selected = ref<ServiceCredential>(),
   editTag = ref(""),
   formError = ref("");
 const form = reactive({
@@ -65,14 +66,14 @@ let clockTimer: ReturnType<typeof setInterval>;
 onMounted(() => { clockTimer = setInterval(() => { clock.value = Date.now(); }, 60000); });
 onUnmounted(() => clearInterval(clockTimer));
 const stateLabels: Record<string, string> = { available: "可用", expiring: "即将到期", expired: "已过期", disabled: "已停用", missing: "未配置秘密" };
-function stateOf(row: Credential) {
+function stateOf(row: ServiceCredential) {
   if (!row.enabled) return "disabled";
   if (!row.has_secret) return "missing";
   const expires = row.expires_at ? Date.parse(row.expires_at) : Infinity;
   if (expires <= clock.value) return "expired";
   return expires - clock.value <= 7 * 86400000 ? "expiring" : "available";
 }
-function expiryHint(row: Credential) {
+function expiryHint(row: ServiceCredential) {
   if (!row.expires_at) return "";
   const remaining = Date.parse(row.expires_at) - clock.value;
   return remaining <= 0 ? "已过期" : remaining < 86400000 ? "不足 1 天到期" : `${Math.ceil(remaining / 86400000)} 天后到期`;
@@ -95,12 +96,12 @@ async function copyCode(code: string) {
     ElMessage.success("code 已复制");
   } catch { ElMessage.error("无法复制，请选中 code 手动复制"); }
 }
-function menuAction(command: string, row: Credential) {
+function menuAction(command: string, row: ServiceCredential) {
   if (command === "secret") void open("secret", row);
   else if (command === "diagnostics") void last(row);
   else void action(command, row);
 }
-const integrationBase = computed(() =>
+const connectionBase = computed(() =>
   props.base.replace(/\/credentials$/, ""),
 );
 let generation = 0;
@@ -109,26 +110,32 @@ async function load() {
   loading.value = true;
   error.value = "";
   try {
-    const r = await request<{ items: Credential[]; mutation_version: string }>(
+    const r = await request<{ items: ServiceCredential[]; mutation_version: string }>(
       props.base,
     );
+    const preferred = await request<{ credential_id: string | null }>(props.base + "/preferred");
+    if (preferred.data.credential_id !== (r.data.items.find(row => row.is_preferred)?.id ?? null)) {
+      throw new Error("首选设置已变化，请重新加载后操作");
+    }
     let def:
       | { data: { credential_id: string | null }; etag: string }
       | undefined;
     if (props.system)
-      def = await request(integrationBase.value + "/default-credential");
+      def = await request(connectionBase.value + "/fallback-credential");
     if (g !== generation) return;
     rows.value = r.data.items;
-    collection.value = r.data.mutation_version;
+    collection.value = r.etag;
+    preferredTag.value = preferred.etag;
     if (def) {
-      defaultID.value = def.data.credential_id;
-      defaultTag.value = def.etag;
+      fallbackID.value = def.data.credential_id;
+      fallbackTag.value = def.etag;
     }
   } catch (e) {
     if (g === generation) {
       error.value = message(e);
       rows.value = [];
       collection.value = "";
+      preferredTag.value = "";
     }
   } finally {
     if (g === generation) loading.value = false;
@@ -144,7 +151,7 @@ watch(
   },
   { immediate: true },
 );
-async function open(modeValue: "create" | "edit" | "secret", row?: Credential) {
+async function open(modeValue: "create" | "edit" | "secret", row?: ServiceCredential) {
   formError.value = "";
   mode.value = modeValue;
   selected.value = row;
@@ -167,7 +174,7 @@ async function open(modeValue: "create" | "edit" | "secret", row?: Credential) {
   });
   if (row) {
     try {
-      const r = await request<Credential>(props.base + "/" + row.id);
+      const r = await request<ServiceCredential>(props.base + "/" + row.id);
       selected.value = r.data;
       editTag.value = r.etag;
       Object.assign(form, {
@@ -226,17 +233,17 @@ async function save() {
           code: form.code,
           name: form.name,
           description: form.description,
-          auth_method: adapter.value.authMethod,
-          identity_config: adapter.value.identityBody(providerValues.value),
-          secret: adapter.value.secretBody(providerValues.value),
+          authentication: { auth_method: adapter.value.authMethod,
+            identity_config: adapter.value.identityBody(providerValues.value),
+            secret: adapter.value.secretBody(providerValues.value) },
           expires_at: expires,
         },
       });
     else if (mode.value === "secret")
-      await request(props.base + "/" + selected.value!.id + "/secret", {
+      await request(props.base + "/" + selected.value!.id + "/authentication", {
         method: "PUT",
         etag: editTag.value,
-        body: adapter.value.secretBody(providerValues.value),
+        body: { auth_method: adapter.value.authMethod, identity_config: adapter.value.identityBody(providerValues.value), secret: adapter.value.secretBody(providerValues.value) },
       });
     else
       await request(props.base + "/" + selected.value!.id, {
@@ -255,19 +262,20 @@ async function save() {
     await load();
     ElMessage.success("凭证已保存");
   } catch (e) {
+    clearSecret();
     formError.value = message(e);
   } finally {
     busy.value = false;
   }
 }
-async function action(kind: string, row: Credential) {
+async function action(kind: string, row: ServiceCredential) {
   if (busy.value) return;
   busy.value = true;
   error.value = "";
   try {
     if (kind === "delete") {
       await ElMessageBox.confirm(
-        `删除“${row.name}”？首选或默认引用也会清除。`,
+        `删除“${row.name}”？首选或兜底引用也会清除。`,
         "删除凭证",
         {
           type: "warning",
@@ -275,32 +283,33 @@ async function action(kind: string, row: Credential) {
           cancelButtonText: "取消",
         },
       );
-      const r = await request<Credential>(props.base + "/" + row.id);
+      const r = await request<ServiceCredential>(props.base + "/" + row.id);
       await request(props.base + "/" + row.id, {
         method: "DELETE",
         etag: r.etag,
-        body: { expected_collection_version: collection.value },
+        headers: { "X-Collection-If-Match": collection.value },
       });
     }
-    if (kind === "preferred")
+    if (kind === "preferred") {
       await request(props.base + "/preferred", {
         method: row.is_preferred ? "DELETE" : "PUT",
-        etag: collection.value,
+        etag: preferredTag.value,
         body: row.is_preferred ? undefined : { credential_id: row.id },
       });
-    if (kind === "default")
-      await request(integrationBase.value + "/default-credential", {
-        method: defaultID.value === row.id ? "DELETE" : "PUT",
-        etag: defaultTag.value,
+    }
+    if (kind === "fallback")
+      await request(connectionBase.value + "/fallback-credential", {
+        method: fallbackID.value === row.id ? "DELETE" : "PUT",
+        etag: fallbackTag.value,
         body:
-          defaultID.value === row.id ? undefined : { credential_id: row.id },
+          fallbackID.value === row.id ? undefined : { credential_id: row.id },
       });
     if (kind === "verify") {
-      const r = await request<{ diagnostic: Diagnostic }>(
+      const r = await request<Diagnostic>(
         props.base + "/" + row.id + "/verify",
-        { method: "POST" },
+        { method: "POST", etag: `"${row.version}"`, body: {} },
       );
-      diagnostics.value[row.id] = r.data.diagnostic;
+      diagnostics.value[row.id] = r.data;
     }
     await load();
   } catch (e) {
@@ -309,12 +318,12 @@ async function action(kind: string, row: Credential) {
     busy.value = false;
   }
 }
-async function last(row: Credential) {
+async function last(row: ServiceCredential) {
   try {
-    const r = await request<Diagnostic | null>(
+    const r = await request<{ latest: Diagnostic | null }>(
       props.base + "/" + row.id + "/diagnostics",
     );
-    diagnostics.value[row.id] = r.data;
+    diagnostics.value[row.id] = r.data.latest;
   } catch (e) {
     error.value = message(e);
   }
@@ -331,7 +340,7 @@ useUnsaved(
         <h2>{{ system ? "系统凭证" : "凭证" }}</h2>
         <p>
           首选在当前归属内优先使用。{{
-            system ? "默认凭证用于后续缺失时回退。" : "秘密保存后不可读取。"
+            system ? "兜底凭证用于后续缺失时回退。" : "秘密保存后不可读取。"
           }}
         </p>
       </div>
@@ -363,28 +372,28 @@ useUnsaved(
         <tbody><tr v-for="row in visibleRows" :key="row.id">
           <td><strong class="credential-name" :title="row.description">{{ row.name }}</strong><div class="credential-code"><code :title="row.code">{{ row.code }}</code><button class="copy-code" :aria-label="`复制 ${row.code}`" @click="copyCode(row.code)">⧉</button></div><span v-if="row.description" class="credential-description" :title="row.description">{{ row.description }}</span></td>
           <td data-label="状态"><span class="credential-status" :class="stateOf(row)">{{ stateLabels[stateOf(row)] }}</span></td>
-          <td data-label="使用设置"><div><span v-if="row.is_preferred" class="integration-badge">首选</span><span v-if="defaultID === row.id" class="integration-badge fallback">默认回退</span><span v-if="!row.is_preferred && defaultID !== row.id" class="muted">—</span></div></td>
+          <td data-label="使用设置"><div><span v-if="row.is_preferred" class="integration-badge">首选</span><span v-if="fallbackID === row.id" class="integration-badge fallback">兜底</span><span v-if="!row.is_preferred && fallbackID !== row.id" class="muted">—</span></div></td>
           <td data-label="有效期"><div><span :title="row.expires_at ? new Date(row.expires_at).toLocaleString() : ''">{{ row.expires_at ? new Date(row.expires_at).toLocaleDateString() : '未设置' }}</span><small v-if="row.expires_at" class="cell-subtext">{{ expiryHint(row) }}</small></div></td>
-          <td data-label="最近验证"><div v-if="diagnostics[row.id]"><span class="diagnostic-status">{{ diagnostics[row.id]!.outdated ? '历史结果 · ' : '' }}{{ diagnosticLabels[diagnostics[row.id]!.status] }}</span><small v-if="diagnostics[row.id]!.username" class="cell-subtext">{{ diagnostics[row.id]!.username }}</small><small class="cell-subtext">{{ new Date(diagnostics[row.id]!.started_at).toLocaleString() }}</small></div><ElButton v-else-if="diagnostics[row.id] === undefined" link @click="last(row)">查看记录</ElButton><span v-else class="muted">尚无记录</span></td>
+          <td data-label="最近验证"><div v-if="diagnostics[row.id]"><span class="diagnostic-status">{{ diagnostics[row.id]!.outdated ? '历史结果 · ' : '' }}{{ diagnosticLabels[diagnostics[row.id]!.status] }}</span><small v-if="diagnostics[row.id]!.summary.external_identity?.username" class="cell-subtext">{{ diagnostics[row.id]!.summary.external_identity?.username }}</small><small class="cell-subtext">{{ new Date(diagnostics[row.id]!.started_at).toLocaleString() }}</small></div><ElButton v-else-if="diagnostics[row.id] === undefined" link @click="last(row)">查看记录</ElButton><span v-else class="muted">尚无记录</span></td>
           <td class="actions-column"><div v-if="!readonly" class="credential-row-actions"><ElButton link :disabled="busy" @click="open('edit', row)">编辑</ElButton><ElDropdown trigger="click" @command="(command: string) => menuAction(command, row)"><ElButton link :disabled="busy" :aria-label="`${row.name}更多操作`">···</ElButton><template #dropdown><ElDropdownMenu>
-            <ElDropdownItem command="secret">替换秘密</ElDropdownItem>
-            <ElDropdownItem command="verify" :disabled="!available(row) || !integrationEnabled">验证凭证</ElDropdownItem>
+            <ElDropdownItem command="secret">替换认证信息</ElDropdownItem>
+            <ElDropdownItem command="verify" :disabled="!available(row) || !connectionEnabled">验证凭证</ElDropdownItem>
             <ElDropdownItem command="diagnostics">最近验证</ElDropdownItem>
             <ElDropdownItem command="preferred" divided :disabled="!row.is_preferred && !available(row)">{{ row.is_preferred ? '取消首选' : '设为首选' }}</ElDropdownItem>
-            <ElDropdownItem v-if="system" command="default" :disabled="defaultID !== row.id && !available(row)">{{ defaultID === row.id ? '清除默认回退' : '设为默认回退' }}</ElDropdownItem>
+            <ElDropdownItem v-if="system" command="fallback" :disabled="fallbackID !== row.id && !available(row)">{{ fallbackID === row.id ? '清除兜底' : '设为兜底' }}</ElDropdownItem>
             <ElDropdownItem command="delete" divided>删除凭证</ElDropdownItem>
           </ElDropdownMenu></template></ElDropdown></div><span v-else class="muted">只读</span></td>
         </tr></tbody>
       </table>
     </div>
-    <div v-if="rows.length" class="credential-legend"><span>首选 · 当前归属内优先使用</span><span v-if="system">默认回退 · 其它凭证缺失时使用</span><span>秘密保存后不可读取</span></div>
+    <div v-if="rows.length" class="credential-legend"><span>首选 · 当前归属内优先使用</span><span v-if="system">兜底 · 其它凭证缺失时使用</span><span>秘密保存后不可读取</span></div>
     <ElDialog
       v-model="dialog"
       :title="
         mode === 'create'
           ? '添加凭证'
           : mode === 'secret'
-            ? '替换凭证秘密'
+            ? '替换凭证认证信息'
             : '编辑凭证'
       "
       width="min(560px, 94vw)"

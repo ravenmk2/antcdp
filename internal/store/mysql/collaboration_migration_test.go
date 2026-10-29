@@ -14,7 +14,7 @@ import (
 )
 
 // Uses a distinct empty schema and preserves it for inspection. In particular,
-// this tests the real goose 1 -> 2 -> 3 -> 4 upgrade, not importing the reference DDL.
+// this tests the real goose 1 -> 2 -> 3 -> 4 -> 5 upgrade, not importing the reference DDL.
 func TestCollaborationMigrationUpgrade(t *testing.T) {
 	dsn := os.Getenv("ANTCDP_TEST_UPGRADE_MYSQL_DSN")
 	if dsn == "" {
@@ -71,10 +71,7 @@ func TestCollaborationMigrationUpgrade(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err = s.Migrate(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err = s.SchemaReady(ctx); err != nil {
+	if _, err = p.UpTo(ctx, 4); err != nil {
 		t.Fatal(err)
 	}
 	var legacy struct {
@@ -96,6 +93,35 @@ func TestCollaborationMigrationUpgrade(t *testing.T) {
 	}
 	if _, err = s.db.ExecContext(ctx, insertCredential, 2, "redis"); err != nil {
 		t.Fatal("different service cannot reuse code", err)
+	}
+	if _, err = p.UpTo(ctx, 5); err != nil {
+		t.Fatal(err)
+	}
+	var countNew, oldTables, constraints int
+	if err = s.db.GetContext(ctx, &countNew, "SELECT COUNT(*) FROM service_connection"); err != nil || countNew != 0 {
+		t.Fatal("module reset", err)
+	}
+	if err = s.db.GetContext(ctx, &oldTables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('integration','integration_gitlab','integration_credential')"); err != nil || oldTables != 0 {
+		t.Fatal("legacy tables retained", err)
+	}
+	if err = s.db.GetContext(ctx, &constraints, "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_TYPE IN ('CHECK','FOREIGN KEY')"); err != nil || constraints != 0 {
+		t.Fatal("constraints remain", err)
+	}
+	if err = s.SchemaReady(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Reject intermediate structures even when they carry the same version 5.
+	if _, err = s.db.ExecContext(ctx, "ALTER TABLE service_connection_gitlab DROP COLUMN webhook_updated_at"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SchemaReady(ctx); err == nil {
+		t.Fatal("incomplete consolidated schema passed readiness")
+	}
+	if _, err = s.db.ExecContext(ctx, "ALTER TABLE service_connection_gitlab ADD COLUMN webhook_updated_at DATETIME(3) NULL"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.db.GetContext(ctx, &oldTables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('webhook_endpoint','webhook_endpoint_gitlab')"); err != nil || oldTables != 0 {
+		t.Fatal("endpoint tables retained", err)
 	}
 	var ids []uint64
 	if err = s.db.SelectContext(ctx, &ids, "SELECT user_id FROM user_sidebar_preference ORDER BY user_id"); err != nil {
@@ -137,18 +163,6 @@ func TestCollaborationMigrationUpgrade(t *testing.T) {
 	}
 	if _, err = s.db.ExecContext(ctx, "INSERT INTO user_project_shortcut(user_id,project_id,sort_order,created_at) VALUES (41,?,2,UTC_TIMESTAMP(3))", projectID); err == nil {
 		t.Fatal("duplicate pin accepted")
-	}
-	if _, err = s.db.ExecContext(ctx, "UPDATE user_project_shortcut SET sort_order=0 WHERE user_id=41"); err == nil {
-		t.Fatal("zero position accepted")
-	}
-	if _, err = s.db.ExecContext(ctx, "DELETE FROM user_sidebar_preference WHERE user_id=41"); err == nil {
-		t.Fatal("preference FK failed")
-	}
-	if _, err = s.db.ExecContext(ctx, "UPDATE project SET icon_key='box',icon_file_id=1 WHERE id=?", projectID); err == nil {
-		t.Fatal("invalid icon reference accepted")
-	}
-	if _, err = s.db.ExecContext(ctx, "UPDATE user_sidebar_preference SET project_version=0 WHERE user_id=41"); err == nil {
-		t.Fatal("zero version accepted")
 	}
 	if _, err = s.db.ExecContext(ctx, "UPDATE user_sidebar_preference SET project_version=project_version+1 WHERE user_id=41 AND project_version=1"); err != nil {
 		t.Fatal(err)

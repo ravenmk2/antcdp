@@ -7,7 +7,6 @@ import {
   ElButton,
   ElInput,
   ElDialog,
-  ElSwitch,
   ElSelect,
   ElOption,
   ElMessageBox,
@@ -19,10 +18,11 @@ import {
 import AppLayout from "../../app/AppLayout.vue";
 import ServiceIcon from "./ServiceIcon.vue";
 import CredentialsPanel from "./CredentialsPanel.vue";
+import WebhookSettings from "./WebhookSettings.vue";
 import { serviceUI } from "./providers";
 import ProviderFields from "./ProviderFields.vue";
 import { request } from "../../shared/api";
-import { message, type Capability, type Integration } from "./types";
+import { message, type Capability, type ServiceConnection } from "./types";
 import "./integrations.css";
 const route = useRoute(),
   router = useRouter();
@@ -31,9 +31,9 @@ const projectID = computed(() => String(route.params.projectID ?? ""));
 const scopeLabel = computed(() =>
   admin.value ? "服务集成" : projectID.value ? "项目集成凭证" : "个人集成凭证",
 );
-const items = ref<Integration[]>([]),
+const items = ref<ServiceConnection[]>([]),
   types = ref<Capability[]>([]),
-  selected = ref<Integration>(),
+  selected = ref<ServiceConnection>(),
   loading = ref(true),
   busy = ref(false),
   error = ref(""),
@@ -45,14 +45,13 @@ const items = ref<Integration[]>([]),
   readonly = ref(false),
   projectName = ref("");
 const dialog = ref(false),
-  editing = ref(false),
   formError = ref("");
 const providerValues = ref<Record<string, string>>({});
 const form = reactive({
   service_type: "",
+  code: "",
   name: "",
   description: "",
-  enabled: true,
 });
 watch(
   () => form.service_type,
@@ -66,12 +65,12 @@ const capability = computed(() =>
 );
 const providerPath = computed(() =>
   selected.value
-    ? `/admin/integrations/${selected.value.service_type}/${selected.value.id}`
+    ? `/admin/service-connections/${selected.value.service_type}/${selected.value.id}`
     : "",
 );
 const credentialsPath = computed(() =>
   selected.value
-    ? `${admin.value ? "/admin" : projectID.value ? "/projects/" + projectID.value : "/me"}/integrations/${selected.value.service_type}/${selected.value.id}/credentials`
+    ? `${admin.value ? "/admin" : projectID.value ? "/projects/" + projectID.value : "/me"}/service-connections/${selected.value.service_type}/${selected.value.id}/credentials`
     : "",
 );
 const filterTypes = computed(() => {
@@ -90,7 +89,7 @@ const visible = computed(() =>
     (i) =>
       (!typeFilter.value || i.service_type === typeFilter.value) &&
       (!statusFilter.value || i.enabled === (statusFilter.value === "enabled")) &&
-      `${i.name} ${i.description}`
+      `${i.name} ${i.code} ${i.description}`
         .toLowerCase()
         .includes(query.value.trim().toLowerCase()),
   ),
@@ -103,8 +102,8 @@ async function load() {
   selected.value = undefined;
   try {
     const [t, r] = await Promise.all([
-      request<Capability[]>("/integrations/types"),
-      request<Integration[]>("/integrations"),
+      request<{ items: Capability[] }>("/service-types"),
+      request<{ items: ServiceConnection[] }>("/service-connections"),
     ]);
     let project:
       | {
@@ -117,24 +116,24 @@ async function load() {
     if (projectID.value)
       project = (await request<typeof project>(`/projects/${projectID.value}`))
         .data;
-    let detail: { data: Integration; etag: string } | undefined;
+    let detail: { data: ServiceConnection; etag: string } | undefined;
     if (id.value && admin.value) {
-      const entry = r.data.find((v) => v.id === id.value);
-      if (!entry) throw new Error("集成不存在");
-      detail = await request<Integration>(
-        `/admin/integrations/${entry.service_type}/${entry.id}`,
+      const entry = r.data.items.find((v) => v.id === id.value);
+      if (!entry) throw new Error("连接不存在");
+      detail = await request<ServiceConnection>(
+        `/admin/service-connections/${entry.service_type}/${entry.id}`,
       );
     }
     if (g !== generation) return;
-    types.value = t.data.filter((t) => serviceUI[t.service_type]);
-    items.value = r.data;
+    types.value = t.data.items.filter((t) => serviceUI[t.service_type]);
+    items.value = r.data.items;
     projectName.value = project?.name ?? "";
     readonly.value = project?.status === "archived";
     if (detail) {
       selected.value = detail.data;
       tag.value = detail.etag;
     } else if (!admin.value && id.value) {
-      selected.value = r.data.find((v) => v.id === id.value);
+      selected.value = r.data.items.find((v) => v.id === id.value);
     }
   } catch (e) {
     if (g === generation) error.value = message(e);
@@ -151,7 +150,7 @@ watch(
   },
   { immediate: true },
 );
-function choose(item: Integration) {
+function choose(item: ServiceConnection) {
   void router.push({
     path: admin.value
       ? `/admin/integrations/${item.id}`
@@ -162,66 +161,48 @@ function choose(item: Integration) {
   });
 }
 function openCreate() {
-  editing.value = false;
   providerValues.value = {};
   formError.value = "";
   Object.assign(form, {
     service_type: types.value.find((t) => t.service_type === typeFilter.value)?.service_type ?? types.value[0]?.service_type ?? "",
+    code: "",
     name: "",
     description: "",
-    enabled: true,
   });
   dialog.value = true;
 }
-function openEdit() {
-  if (!selected.value) return;
-  editing.value = true;
-  formError.value = "";
-  Object.assign(form, selected.value);
-  dialog.value = true;
+function openEdit() { tab.value = "connection"; }
+function connectionSaved(value: ServiceConnection, etag: string) {
+  selected.value = value; tag.value = etag;
+  const index = items.value.findIndex(item => item.id === value.id);
+  if (index >= 0) items.value[index] = value;
 }
 async function save() {
   if (busy.value) return;
   formError.value = "";
   if (!form.name.trim()) {
-    formError.value = "请输入集成名称";
+    formError.value = "请输入连接名称";
     return;
   }
   busy.value = true;
   try {
-    if (editing.value)
-      await request(providerPath.value, {
-        method: "PATCH",
-        etag: tag.value,
-        body: {
-          name: form.name,
-          description: form.description,
-          enabled: form.enabled,
-        },
-      });
-    else {
-      const r = await request<Integration>(
-        `/admin/integrations/${form.service_type}`,
+      const r = await request<ServiceConnection>(
+        `/admin/service-connections/${form.service_type}`,
         {
           method: "POST",
           body: {
             name: form.name,
             description: form.description,
-            ...serviceUI[form.service_type]!.connectionBody(
-              providerValues.value,
-            ),
+            code: form.code,
+            config: serviceUI[form.service_type]!.connectionBody(providerValues.value),
           },
         },
       );
       dialog.value = false;
       busy.value = false;
       choose(r.data);
-      ElMessage.success("集成已创建");
+      ElMessage.success("连接已创建");
       return;
-    }
-    dialog.value = false;
-    await load();
-    ElMessage.success("资料已保存");
   } catch (e) {
     formError.value = message(e);
   } finally {
@@ -234,15 +215,13 @@ async function remove() {
   error.value = "";
   try {
     await ElMessageBox.confirm(
-      `删除“${selected.value.name}”？Webhook 接收地址会立即失效。存在任何归属的凭证时无法删除。`,
-      "删除集成",
+      `删除“${selected.value.name}”？请先移除全部凭证。Webhook 设置和秘密将一并删除，接收地址立即失效，请自行移除远端 Hook。`,
+      "删除连接",
       { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" },
     );
-    const cfg = await request(providerPath.value + "/config");
     await request(providerPath.value, {
       method: "DELETE",
       etag: tag.value,
-      body: { expected_config_version: cfg.etag },
     });
     busy.value = false;
     await router.push("/admin/integrations");
@@ -268,7 +247,13 @@ const breadcrumbs = computed(() => [
         },
       ]
     : []),
-  { label: scopeLabel.value, to: selected.value ? listPath.value + (typeFilter.value ? `?type=${encodeURIComponent(typeFilter.value)}` : "") : undefined },
+  { label: scopeLabel.value, to: selected.value || typeFilter.value ? listPath.value : undefined },
+  ...(!projectID.value && (selected.value || typeFilter.value)
+    ? [{
+        label: selected.value ? capability.value?.name ?? selected.value.service_type : selectedTypeName.value,
+        to: selected.value ? `${listPath.value}?type=${encodeURIComponent(selected.value.service_type)}` : undefined,
+      }]
+    : []),
   ...(selected.value ? [{ label: selected.value.name }] : []),
 ]);
 useUnsaved(
@@ -312,7 +297,7 @@ useUnsaved(
             type="primary"
             :disabled="!types.length"
             @click="openCreate"
-            >添加集成</ElButton
+            >添加连接</ElButton
           >
         </div>
         <div class="integration-browser">
@@ -327,35 +312,35 @@ useUnsaved(
               <span>{{ type.name }}</span><span class="service-count">{{ type.count }}</span>
             </button>
           </nav>
-          <section class="integration-results" aria-label="集成列表">
+          <section class="integration-results" aria-label="连接列表">
             <div class="service-mobile-filter">
               <label>服务类型<ElSelect v-model="typeFilter" placeholder="全部服务" aria-label="服务类型筛选">
                 <ElOption label="全部服务" value="" />
                 <ElOption v-for="type in filterTypes" :key="type.service_type" :label="`${type.name}（${type.count}）`" :value="type.service_type" />
               </ElSelect></label>
             </div>
-            <div class="integration-result-heading"><h2>{{ selectedTypeName }}</h2><span aria-live="polite">{{ visible.length }} 个集成</span></div>
+            <div class="integration-result-heading"><h2>{{ selectedTypeName }}</h2><span aria-live="polite">{{ visible.length }} 个连接</span></div>
             <div class="integration-filters">
-              <ElInput v-model="query" clearable placeholder="搜索集成名称或说明" aria-label="搜索集成" />
-              <ElSelect v-model="statusFilter" placeholder="全部状态" aria-label="集成状态筛选">
+              <ElInput v-model="query" clearable placeholder="搜索连接名称或说明" aria-label="搜索连接" />
+              <ElSelect v-model="statusFilter" placeholder="全部状态" aria-label="连接状态筛选">
                 <ElOption label="全部状态" value="" /><ElOption label="已启用" value="enabled" /><ElOption label="已停用" value="disabled" />
               </ElSelect>
             </div>
             <div v-if="!visible.length" class="integration-empty">
-              <h3>{{ items.length ? '没有匹配的集成' : '连接你的第一个服务' }}</h3>
+              <h3>{{ items.length ? '没有匹配的连接' : '连接你的第一个服务' }}</h3>
               <p>{{ items.length ? '尝试更换服务类型、状态或搜索关键词。' : admin ? '添加服务连接后，即可配置凭证和事件接收。' : '请联系系统管理员添加服务连接。' }}</p>
               <ClearFiltersButton v-if="items.length" @click="resetFilters" />
-              <ElButton v-else-if="admin" :disabled="!types.length" @click="openCreate">添加集成</ElButton>
+              <ElButton v-else-if="admin" :disabled="!types.length" @click="openCreate">添加连接</ElButton>
             </div>
             <div v-if="visible.length" class="integration-table-wrap">
               <table class="integration-table instances-table">
-                <thead><tr><th>集成名称</th><th>服务类型</th><th>说明</th><th>状态</th><th class="actions-column">操作</th></tr></thead>
+                <thead><tr><th>连接名称</th><th>服务类型</th><th>说明</th><th>状态</th><th class="actions-column">操作</th></tr></thead>
                 <tbody><tr v-for="item in visible" :key="item.id">
-                  <td><div class="instance-identity"><ServiceIcon :type="item.service_type" /><button class="instance-name" @click="choose(item)">{{ item.name }}</button></div></td>
+                  <td><div class="instance-identity"><ServiceIcon :type="item.service_type" /><button class="instance-name" @click="choose(item)">{{ item.name }}</button></div><code class="credential-code">{{ item.code }}</code></td>
                   <td data-label="服务类型">{{ filterTypes.find(t => t.service_type === item.service_type)?.name ?? item.service_type }}</td>
                   <td data-label="说明"><span class="instance-description" :title="item.description">{{ item.description || '未填写说明' }}</span></td>
                   <td data-label="状态"><span class="integration-status" :class="{ enabled: item.enabled }">{{ item.enabled ? '已启用' : '已停用' }}</span></td>
-                  <td class="actions-column"><ElButton link @click="choose(item)">{{ admin ? '管理集成' : '管理凭证' }} →</ElButton></td>
+                  <td class="actions-column"><ElButton link @click="choose(item)">{{ admin ? '管理连接' : '管理凭证' }} →</ElButton></td>
                 </tr></tbody>
               </table>
             </div>
@@ -363,29 +348,25 @@ useUnsaved(
         </div>
       </template>
       <template v-else-if="selected && !loading">
-        <RouterLink class="integration-back" :to="{ path: listPath, query: { type: typeFilter || undefined } }">← 返回集成列表</RouterLink>
         <div class="integration-toolbar integration-detail-header">
           <div class="integration-detail-identity"><ServiceIcon :type="selected.service_type" /><div>
-            <span class="integration-provider">{{
-              capability?.name ?? selected.service_type
-            }}</span>
             <h1>
               {{ selected.name }}
               <span class="integration-badge">{{
                 selected.enabled ? "已启用" : "已停用"
               }}</span>
             </h1>
-            <p>{{ selected.description }}</p>
+            <code>{{ selected.code }}</code><p>{{ selected.description }}</p>
           </div></div>
           <div v-if="admin" class="integration-actions">
             <ElButton :disabled="busy" @click="openEdit">编辑资料</ElButton
             ><ElDropdown trigger="click" @command="remove">
-              <ElButton :disabled="busy" aria-label="集成更多操作">更多操作</ElButton>
-              <template #dropdown><ElDropdownMenu><ElDropdownItem command="delete">删除集成</ElDropdownItem></ElDropdownMenu></template>
+              <ElButton :disabled="busy" aria-label="连接更多操作">更多操作</ElButton>
+              <template #dropdown><ElDropdownMenu><ElDropdownItem command="delete">删除连接</ElDropdownItem></ElDropdownMenu></template>
             </ElDropdown>
           </div>
         </div>
-        <nav v-if="admin" class="integration-tabs" aria-label="集成配置">
+        <nav v-if="admin" class="integration-tabs" aria-label="连接配置">
           <button
             :aria-pressed="tab === 'connection'"
             :class="{ active: tab === 'connection' }"
@@ -400,15 +381,15 @@ useUnsaved(
           >
             系统凭证</button
           ><button
-            v-if="capability?.webhook"
+            v-if="capability?.webhook.supported"
             :aria-pressed="tab === 'webhook'"
             :class="{ active: tab === 'webhook' }"
             @click="tab = 'webhook'"
           >
-            Webhook
+            Webhook 接收设置
           </button>
         </nav>
-        <p v-if="!selected.enabled" class="integration-note">此集成已停用。可以继续维护配置与凭证，外部验证和事件接收暂不可用。</p>
+        <p v-if="!selected.enabled" class="integration-note">此连接已停用。可以继续维护配置与凭证，外部验证和事件接收暂不可用。</p>
         <div class="integration-detail-body" :class="{ 'credentials-body': tab === 'credentials' }">
         <CredentialsPanel
           v-if="capability?.credentials"
@@ -418,28 +399,28 @@ useUnsaved(
           :service-type="selected.service_type"
           :system="admin"
           :readonly="readonly"
-          :integration-enabled="selected.enabled"
+          :connection-enabled="selected.enabled"
         />
         <component
           :is="serviceUI[selected.service_type]?.settings"
           v-if="admin && serviceUI[selected.service_type]"
           :key="providerPath"
-          v-show="tab !== 'credentials'"
+          v-show="tab === 'connection'"
           :base="providerPath"
-          :tab="tab"
-          :enabled="selected.enabled"
-          :integration-i-d="selected.id"
+          :connection="selected"
+          :etag="tag"
+          @saved="connectionSaved"
         />
+        <WebhookSettings v-if="admin && capability?.webhook.supported" v-show="tab === 'webhook'"
+          :key="providerPath + '/webhook'" :base="providerPath + '/webhook'" :connection-enabled="selected.enabled" />
         </div>
       </template>
       <ElDialog
         v-model="dialog"
         :title="
-          editing
-            ? '编辑集成资料'
-            : types.length === 1
-              ? '添加 ' + types[0]?.name + ' 集成'
-              : '添加服务集成'
+          types.length === 1
+              ? '添加 ' + types[0]?.name + ' 连接'
+              : '添加服务连接'
         "
         width="min(600px, 94vw)"
         :close-on-click-modal="false"
@@ -450,14 +431,14 @@ useUnsaved(
           <div v-if="formError" class="error-banner" role="alert">
             {{ formError }}
           </div>
-          <label v-if="!editing && types.length > 1"
+          <label v-if="types.length > 1"
             >服务类型<ElSelect v-model="form.service_type"
               ><ElOption
                 v-for="type in types"
                 :key="type.service_type"
                 :value="type.service_type"
                 :label="type.name" /></ElSelect></label
-          ><label
+          ><label>连接 code（可选）<ElInput v-model="form.code" maxlength="64" :disabled="busy" /><small>全局唯一，创建后不可修改；留空自动生成。</small></label><label
             >名称<ElInput
               v-model="form.name"
               maxlength="100"
@@ -469,20 +450,14 @@ useUnsaved(
               maxlength="1000"
               :disabled="busy" /></label
           ><ProviderFields
-            v-if="!editing && serviceUI[form.service_type]"
+            v-if="serviceUI[form.service_type]"
             v-model="providerValues"
             :fields="serviceUI[form.service_type]!.connectionFields"
             :disabled="busy"
-          /><label v-if="editing"
-            >启用集成<ElSwitch v-model="form.enabled" :disabled="busy" /><small
-              >停用后禁止外部验证与 Webhook 接收，配置和凭证仍可维护。</small
-            ></label
-          >
+          />
           <div class="integration-actions">
             <ElButton :disabled="busy" @click="dialog = false">取消</ElButton
-            ><ElButton native-type="submit" type="primary" :loading="busy">{{
-              editing ? "保存" : "创建集成"
-            }}</ElButton>
+            ><ElButton native-type="submit" type="primary" :loading="busy">创建连接</ElButton>
           </div>
         </form>
       </ElDialog>

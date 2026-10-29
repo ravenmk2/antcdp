@@ -65,8 +65,6 @@
 .integration-status { color: var(--text-muted); font-size: 13px; white-space: nowrap; }
 .integration-status.enabled { color: var(--success); }
 .integration-status::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 7px; background: currentColor; vertical-align: middle; }
-.integration-back { display: inline-block; font-size: 14px; color: var(--text-secondary); text-decoration: none; margin-bottom: 24px; }
-.integration-back:hover { color: var(--text-primary); text-decoration: underline; }
 .integration-detail-header { padding-bottom: 12px; }
 .integration-detail-body { padding: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
 .credential-filters { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 0; border-bottom: 1px solid var(--border); }
@@ -78,12 +76,6 @@
 .connection-form summary { cursor: pointer; font-size: 14px; }
 .connection-form details[open] summary { margin-bottom: 16px; }
 .webhook-settings { max-width: 900px; }
-.integration-provider {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  color: var(--text-muted);
-}
 .integration-badge {
   display: inline-block;
   font-weight: 400;
@@ -203,7 +195,7 @@
 
 }
 
-.integrations-page button:focus-visible, .integration-back:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.integrations-page button:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
 @media (max-width: 1000px) {
   .integration-browser { grid-template-columns: 160px minmax(0, 1fr); gap: 20px; }
 

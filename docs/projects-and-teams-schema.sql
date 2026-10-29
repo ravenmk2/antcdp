@@ -3,7 +3,7 @@
 -- Assumes phase A tables already exist; do not import into production.
 -- Draft defaults and verification boundaries: projects-and-teams-detail.md.
 -- MySQL 8.0.16+, InnoDB, UTC DATETIME(3). Application supplies timestamps.
--- Existing avatar_file stays unchanged. No seed data, no DROP statements.
+-- Final structure after migration 5: keys/indexes only, no physical FK/CHECK rules. No seed data.
 
 CREATE TABLE `icon_file` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -22,17 +22,7 @@ CREATE TABLE `icon_file` (
     UNIQUE KEY uq_icon_file_storage_key (storage_key),
     KEY idx_icon_file_expiry (state, expires_at, id),
     KEY idx_icon_file_orphaned (state, orphaned_at, id),
-    KEY idx_icon_file_uploader (uploaded_by_user_id, created_at, id),
-    CONSTRAINT fk_icon_file_uploader FOREIGN KEY (uploaded_by_user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_icon_file_type CHECK (content_type = 'image/png'),
-    CONSTRAINT ck_icon_file_dimensions CHECK (width = 256 AND height = 256),
-    CONSTRAINT ck_icon_file_size CHECK (size_bytes BETWEEN 1 AND 524288),
-    CONSTRAINT ck_icon_file_state CHECK (state IN ('staged', 'attached', 'orphaned')),
-    CONSTRAINT ck_icon_file_lifecycle CHECK (
-        (state = 'staged' AND expires_at IS NOT NULL AND orphaned_at IS NULL)
-        OR (state = 'attached' AND expires_at IS NULL AND orphaned_at IS NULL)
-        OR (state = 'orphaned' AND expires_at IS NULL AND orphaned_at IS NOT NULL)
-    )
+    KEY idx_icon_file_uploader (uploaded_by_user_id, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `project` (
@@ -54,15 +44,7 @@ CREATE TABLE `project` (
     UNIQUE KEY uq_project_name (name),
     UNIQUE KEY uq_project_icon (icon_file_id),
     KEY idx_project_status_created (archived_at, created_at, id),
-    KEY idx_project_creator (created_by_user_id),
-    CONSTRAINT fk_project_creator FOREIGN KEY (created_by_user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_project_icon FOREIGN KEY (icon_file_id) REFERENCES icon_file (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_project_code_length CHECK (CHAR_LENGTH(code) BETWEEN 2 AND 64),
-    CONSTRAINT ck_project_name_length CHECK (CHAR_LENGTH(name) BETWEEN 1 AND 100),
-    CONSTRAINT ck_project_description_size CHECK (OCTET_LENGTH(description) <= 102400),
-    CONSTRAINT ck_project_icon_choice CHECK (icon_key IS NULL OR icon_file_id IS NULL),
-    CONSTRAINT ck_project_icon_key CHECK (icon_key IS NULL OR CHAR_LENGTH(icon_key) BETWEEN 1 AND 64),
-    CONSTRAINT ck_project_versions CHECK (row_version >= 1 AND membership_version >= 1)
+    KEY idx_project_creator (created_by_user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `team` (
@@ -84,15 +66,7 @@ CREATE TABLE `team` (
     UNIQUE KEY uq_team_name (name),
     UNIQUE KEY uq_team_icon (icon_file_id),
     KEY idx_team_status_created (dissolved_at, created_at, id),
-    KEY idx_team_creator (created_by_user_id),
-    CONSTRAINT fk_team_creator FOREIGN KEY (created_by_user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_team_icon FOREIGN KEY (icon_file_id) REFERENCES icon_file (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_team_code_length CHECK (CHAR_LENGTH(code) BETWEEN 2 AND 64),
-    CONSTRAINT ck_team_name_length CHECK (CHAR_LENGTH(name) BETWEEN 1 AND 100),
-    CONSTRAINT ck_team_description_size CHECK (OCTET_LENGTH(description) <= 102400),
-    CONSTRAINT ck_team_icon_choice CHECK (icon_key IS NULL OR icon_file_id IS NULL),
-    CONSTRAINT ck_team_icon_key CHECK (icon_key IS NULL OR CHAR_LENGTH(icon_key) BETWEEN 1 AND 64),
-    CONSTRAINT ck_team_versions CHECK (row_version >= 1 AND membership_version >= 1)
+    KEY idx_team_creator (created_by_user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `project_member` (
@@ -102,10 +76,7 @@ CREATE TABLE `project_member` (
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (project_id, user_id),
-    KEY idx_project_member_user (user_id, project_id),
-    CONSTRAINT fk_project_member_object FOREIGN KEY (project_id) REFERENCES `project` (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_project_member_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_project_member_role CHECK (role IN ('admin', 'member'))
+    KEY idx_project_member_user (user_id, project_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `team_member` (
@@ -115,10 +86,7 @@ CREATE TABLE `team_member` (
     created_at DATETIME(3) NOT NULL,
     updated_at DATETIME(3) NOT NULL,
     PRIMARY KEY (team_id, user_id),
-    KEY idx_team_member_user (user_id, team_id),
-    CONSTRAINT fk_team_member_object FOREIGN KEY (team_id) REFERENCES `team` (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_team_member_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_team_member_role CHECK (role IN ('admin', 'member'))
+    KEY idx_team_member_user (user_id, team_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `project_team` (
@@ -126,9 +94,7 @@ CREATE TABLE `project_team` (
     team_id BIGINT UNSIGNED NOT NULL,
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (project_id, team_id),
-    KEY idx_project_team_team (team_id, project_id),
-    CONSTRAINT fk_project_team_project FOREIGN KEY (project_id) REFERENCES `project` (id) ON DELETE RESTRICT,
-    CONSTRAINT fk_project_team_team FOREIGN KEY (team_id) REFERENCES `team` (id) ON DELETE RESTRICT
+    KEY idx_project_team_team (team_id, project_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Application rules: full code regex, trim/name validation, icon-key allowlist,
@@ -143,9 +109,7 @@ CREATE TABLE `user_sidebar_preference` (
     project_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     team_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     updated_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (user_id),
-    CONSTRAINT fk_user_sidebar_preference_user FOREIGN KEY (user_id) REFERENCES `user` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_user_sidebar_preference_versions CHECK (project_version >= 1 AND team_version >= 1)
+    PRIMARY KEY (user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `user_project_shortcut` (
@@ -155,10 +119,7 @@ CREATE TABLE `user_project_shortcut` (
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (user_id, project_id),
     KEY idx_user_project_shortcut_order (user_id, sort_order, project_id),
-    KEY idx_user_project_shortcut_target (project_id, user_id),
-    CONSTRAINT fk_user_project_shortcut_preference FOREIGN KEY (user_id) REFERENCES user_sidebar_preference (user_id) ON DELETE RESTRICT,
-    CONSTRAINT fk_user_project_shortcut_target FOREIGN KEY (project_id) REFERENCES `project` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_user_project_shortcut_order CHECK (sort_order >= 1)
+    KEY idx_user_project_shortcut_target (project_id, user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `user_team_shortcut` (
@@ -168,10 +129,7 @@ CREATE TABLE `user_team_shortcut` (
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (user_id, team_id),
     KEY idx_user_team_shortcut_order (user_id, sort_order, team_id),
-    KEY idx_user_team_shortcut_target (team_id, user_id),
-    CONSTRAINT fk_user_team_shortcut_preference FOREIGN KEY (user_id) REFERENCES user_sidebar_preference (user_id) ON DELETE RESTRICT,
-    CONSTRAINT fk_user_team_shortcut_target FOREIGN KEY (team_id) REFERENCES `team` (id) ON DELETE RESTRICT,
-    CONSTRAINT ck_user_team_shortcut_order CHECK (sort_order >= 1)
+    KEY idx_user_team_shortcut_target (team_id, user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- sort_order is deliberately not UNIQUE: transactionally reorder a group,

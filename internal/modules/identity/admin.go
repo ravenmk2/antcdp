@@ -296,8 +296,8 @@ func (s *Service) DeleteUser(ctx context.Context, raw string, id uint64, etag, c
 				return e
 			}
 		}
-		if cleaner, ok := tx.(interface{ DeletePersonalIntegrationCredentials(uint64) error }); ok {
-			if e := cleaner.DeletePersonalIntegrationCredentials(u.ID); e != nil {
+		if cleaner, ok := tx.(interface{ DeletePersonalServiceCredentials(uint64) error }); ok {
+			if e := cleaner.DeletePersonalServiceCredentials(u.ID); e != nil {
 				return e
 			}
 		}
