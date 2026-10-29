@@ -21,8 +21,8 @@ import (
 
 func ValidateConfig(raw string, ca *string) error {
 	u, e := url.Parse(raw)
-	if e != nil || len(raw) > 2048 || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.ContainsAny(raw, "\r\n\\") || strings.Contains(u.EscapedPath(), "%") {
-		return httpx.Invalid("base_url", "https_url_required")
+	if e != nil || len(raw) > 2048 || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.ContainsAny(raw, "\r\n\\") || strings.Contains(u.EscapedPath(), "%") {
+		return httpx.Invalid("base_url", "http_url_required")
 	}
 	if ip, e := netip.ParseAddr(u.Hostname()); e == nil && !allowedIP(ip) {
 		return httpx.Invalid("base_url", "address_not_allowed")

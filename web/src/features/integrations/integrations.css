@@ -291,3 +291,14 @@
   .credential-filters .el-input { max-width: none; width: 100%; }
   .integration-detail-body.credentials-body { padding: 0; }
 }
+
+.instance-text { min-width: 0; flex: 1; }
+.integration-detail-identity { flex: 1; }
+.connection-code { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 4px; color: var(--text-muted); font-size: 13px; }
+.connection-code > span { flex-shrink: 0; }
+.connection-code code { font-family: "Cascadia Code", Consolas, monospace; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.connection-code .copy-code { display: inline-flex; align-items: center; border-radius: 4px; }
+.connection-code .ui-icon { width: 15px; height: 15px; }
+.el-dropdown-menu__item.connection-danger-action { color: var(--danger); gap: 8px; }
+.el-dropdown-menu__item.connection-danger-action:not(.is-disabled):hover,
+.el-dropdown-menu__item.connection-danger-action:not(.is-disabled):focus { color: var(--danger); background: var(--surface-subtle); }

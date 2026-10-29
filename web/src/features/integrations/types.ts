@@ -55,7 +55,7 @@ export function message(e: unknown) {
             .map(
               (d) =>
                 ({
-                  base_url: "请输入 HTTPS 地址，不能包含查询参数或本机地址",
+                  base_url: "请输入 HTTP 或 HTTPS 地址，不能包含查询参数或本机地址",
                   custom_ca_pem: "CA 证书格式不正确",
                   token: "令牌格式不正确",
                   name: "请检查名称",

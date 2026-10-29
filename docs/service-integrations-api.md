@@ -223,3 +223,5 @@ kind 为 connection_check / credential_verification / webhook_receipt。入站�
 403 用于缺少角色等请求级授权；目标属于其他个人/项目归属、路径父子不匹配统一 404，避免枚举。具体字段错误用 error.details 数组，引用通用错误协议，不返回数据库约束名、远端正文、认证身份或输入秘密。
 
 不保留旧 `/integrations`、`/default-credential`、内嵌 `/webhook-secret`、独立 `/config` 或旧 webhook 地址别名。运行路由、合并后的迁移 5 与正式前端已采用本契约，三表、归属隔离、版本/锁、诊断和连接内 Webhook 设置已加入回归验证，具体范围见[开发说明](development.md)。此文不是已发布 OpenAPI 描述，后续以实现 DTO 生成 OpenAPI 并与本文核对。
+
+GitLab `config.base_url` 支持 HTTP、HTTPS、自定义端口和子路径，禁止 userinfo/query/fragment；非法协议返回字段原因 `http_url_required`。HTTP 不使用 TLS，已有公共 CA 配置保留供切回 HTTPS 使用；现有目标地址限制不变。

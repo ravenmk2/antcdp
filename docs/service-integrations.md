@@ -91,7 +91,7 @@ UNIQUE(code) 全局唯一；UNIQUE(service_type,name) 同类型名称唯一。co
 | base_url | 必填基础 URL，最长 2048 字符，可含合法子路径 |
 | custom_ca_pem | 可空公共 CA，最多 16 KiB，不接收私钥 |
 
-地址和 CA 不含认证材料，使用主表 row_version。该扩展另外保存 Webhook 设置、加密秘密和独立版本（见 4.4）。主表与扩展同事务创建和删除；地址/CA 编辑仅更新相应列，Webhook 编辑仅更新 webhook_* 列，互不覆盖。缺失或类型错配返回受控完整性错误，不当作未配置。GitLab URL 必须 HTTPS，禁止 userinfo/query/fragment，严格校验证书，不提供跳过 TLS 开关；API 路径由适配器构造。
+地址和 CA 不含认证材料，使用主表 row_version。该扩展另外保存 Webhook 设置、加密秘密和独立版本（见 4.4）。主表与扩展同事务创建和删除；地址/CA 编辑仅更新相应列，Webhook 编辑仅更新 webhook_* 列，互不覆盖。缺失或类型错配返回受控完整性错误，不当作未配置。GitLab URL 支持 HTTP 和 HTTPS，禁止 userinfo/query/fragment，HTTPS 严格校验证书，不提供跳过 TLS 开关；API 路径由适配器构造。
 
 ### 4.3 service_credential
 
@@ -214,7 +214,7 @@ Webhook 设置显式选择 secret_token 或 signing_token，禁止按请求自�
 
 ## 8. 网络、审计与验收
 
-GitLab 对外只允许 HTTPS，严格校验证书和主机名；允许受控业务私网，拒绝回环、未指定、链路本地和云元数据地址。校验 DNS 全部地址并按已验证地址拨号，不使用环境代理、不跟随重定向。总超时 10 秒、响应上限 1 MiB、验证全局并发上限 8，另设入口限流。后续数据库协议须单独定义端口/TLS/网络策略。
+GitLab 对外支持 HTTP 和 HTTPS；HTTPS 严格校验证书和主机名；允许受控业务私网，拒绝回环、未指定、链路本地和云元数据地址。校验 DNS 全部地址并按已验证地址拨号，不使用环境代理、不跟随重定向。总超时 10 秒、响应上限 1 MiB、验证全局并发上限 8，另设入口限流。后续数据库协议须单独定义端口/TLS/网络策略。
 
 审计动作：service_connection.created/updated/deleted/fallback_changed，service_credential.created/updated/authentication_replaced/deleted/preferred_changed，service_connection.webhook_updated/webhook_verification_replaced。启停纳入 updated 并记布尔变化。只保存白名单元信息，不记录秘密、认证身份材料、内部地址或请求全文；个人凭证审计也不得泄漏身份信息。高频接收和诊断不逐条写业务审计。
 

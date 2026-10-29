@@ -7,7 +7,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"strconv"
 	"testing"
@@ -53,12 +55,12 @@ func TestWebhookVerification(t *testing.T) {
 	}
 }
 func TestNetworkValidation(t *testing.T) {
-	for _, raw := range []string{"http://gitlab.example.com", "https://user:password@example.com", "https://example.com/?token=x", "https://example.com/#fragment", "https://127.0.0.1", "https://[::1]", "https://169.254.169.254", "https://0.0.0.0", "https://example.com/%2e%2e/admin"} {
+	for _, raw := range []string{"ftp://gitlab.example.com", "http://127.0.0.1", "http://169.254.169.254", "https://user:password@example.com", "https://example.com/?token=x", "https://example.com/#fragment", "https://127.0.0.1", "https://[::1]", "https://169.254.169.254", "https://0.0.0.0", "https://example.com/%2e%2e/admin"} {
 		if ValidateConfig(raw, nil) == nil {
 			t.Errorf("accepted %s", raw)
 		}
 	}
-	for _, raw := range []string{"https://gitlab.example.com/gitlab", "https://10.0.0.20", "https://[fd00::1]"} {
+	for _, raw := range []string{"http://gitlab.example.com", "http://10.0.0.20:8080/gitlab", "https://gitlab.example.com/gitlab", "https://10.0.0.20", "https://[fd00::1]"} {
 		if e := ValidateConfig(raw, nil); e != nil {
 			t.Errorf("rejected business endpoint %s", raw)
 		}
@@ -110,5 +112,46 @@ func TestDialRejectsActualLocalAddresses(t *testing.T) {
 			conn.Close()
 			t.Fatalf("connected to forbidden address %s", address)
 		}
+	}
+}
+
+// Exercise the real probe and guarded transport over an allowed interface,
+// including subpath construction, without contacting an external service.
+func TestHTTPConnectionProbe(t *testing.T) {
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var listener net.Listener
+	for _, address := range addresses {
+		prefix, err := netip.ParsePrefix(address.String())
+		if err != nil || !prefix.Addr().Is4() || !allowedIP(prefix.Addr()) {
+			continue
+		}
+		listener, err = net.Listen("tcp", net.JoinHostPort(prefix.Addr().String(), "0"))
+		if err == nil {
+			break
+		}
+	}
+	if listener == nil {
+		t.Skip("no allowed local network interface")
+	}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/gitlab/-/health" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	server.Listener.Close()
+	server.Listener = listener
+	server.Start()
+	defer server.Close()
+	config := &GitLabConfig{BaseURL: server.URL + "/gitlab"}
+	if err := ValidateConfig(config.BaseURL, nil); err != nil {
+		t.Fatal(err)
+	}
+	result := probe(context.Background(), config, "", time.Now())
+	if result.Status != "succeeded" {
+		t.Fatalf("HTTP probe failed: %+v", result)
 	}
 }

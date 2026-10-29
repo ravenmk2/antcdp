@@ -40,11 +40,11 @@ useUnsaved(() => dirty.value, () => busy.value);
     <div v-if="error" class="error-banner" role="alert">{{ error }} <ElButton link @click="reload">重新加载</ElButton></div>
     <form class="integration-form connection-form" @submit.prevent="save">
       <h2>GitLab 服务连接</h2><p>资料与访问配置一起保存。连接测试不使用访问凭证。</p>
-      <label>连接 code<ElInput :model-value="connection.code" readonly /></label>
+      <label>编码<ElInput :model-value="connection.code" readonly /></label>
       <label>名称<ElInput v-model="form.name" maxlength="100" :disabled="busy" /></label>
       <label>说明<ElInput v-model="form.description" type="textarea" maxlength="1000" :disabled="busy" /></label>
-      <label>实例地址<ElInput v-model="form.base_url" maxlength="2048" :disabled="busy" placeholder="https://gitlab.example.com" /><small>支持子路径，要求 HTTPS。</small></label>
-      <details><summary>高级 TLS 配置</summary><label>公共 CA（可选）<ElInput v-model="form.custom_ca_pem" type="textarea" :rows="5" maxlength="16384" :disabled="busy" /><small>始终校验证书和主机名，不接收私钥。</small></label></details>
+      <label>实例地址<ElInput v-model="form.base_url" maxlength="2048" :disabled="busy" placeholder="https://gitlab.example.com" /><small>支持 HTTP、HTTPS 和子路径。</small></label>
+      <details><summary>高级 TLS 配置</summary><p v-if="!form.base_url.toLowerCase().startsWith('https://')" class="integration-note">仅适用于 HTTPS，已有 CA 配置保留。</p><label>公共 CA（可选）<ElInput v-model="form.custom_ca_pem" type="textarea" :rows="5" maxlength="16384" :disabled="busy || !form.base_url.toLowerCase().startsWith('https://')" /><small>始终校验证书和主机名，不接收私钥。</small></label></details>
       <label>启用连接<ElSwitch v-model="form.enabled" :disabled="busy" /><small>停用后阻止外部验证及Webhook 接收，凭证和接收开关设置保留。</small></label>
       <div class="integration-actions"><ElButton type="primary" native-type="submit" :disabled="!dirty" :loading="busy">保存连接</ElButton><ElButton :disabled="busy || dirty || !connection.enabled" @click="test">测试已保存连接</ElButton><ElButton :disabled="busy" @click="reload">重新加载</ElButton></div>
       <p v-if="diagnostic" class="integration-note">{{ diagnostic.outdated ? '历史结果 · ' : '' }}{{ diagnosticLabels[diagnostic.status] }} · {{ new Date(diagnostic.started_at).toLocaleString() }}</p>

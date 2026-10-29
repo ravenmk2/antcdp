@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import UiIcon from "../../shared/UiIcon.vue";
+import ConnectionCode from "./ConnectionCode.vue";
 import ClearFiltersButton from "../../shared/ClearFiltersButton.vue";
 import { useUnsaved } from "./unsaved";
 import { computed, reactive, ref, watch } from "vue";
@@ -171,7 +173,7 @@ function openCreate() {
   });
   dialog.value = true;
 }
-function openEdit() { tab.value = "connection"; }
+
 function connectionSaved(value: ServiceConnection, etag: string) {
   selected.value = value; tag.value = etag;
   const index = items.value.findIndex(item => item.id === value.id);
@@ -321,7 +323,7 @@ useUnsaved(
             </div>
             <div class="integration-result-heading"><h2>{{ selectedTypeName }}</h2><span aria-live="polite">{{ visible.length }} 个连接</span></div>
             <div class="integration-filters">
-              <ElInput v-model="query" clearable placeholder="搜索连接名称或说明" aria-label="搜索连接" />
+              <ElInput v-model="query" clearable placeholder="搜索连接名称、编码或说明" aria-label="搜索连接" />
               <ElSelect v-model="statusFilter" placeholder="全部状态" aria-label="连接状态筛选">
                 <ElOption label="全部状态" value="" /><ElOption label="已启用" value="enabled" /><ElOption label="已停用" value="disabled" />
               </ElSelect>
@@ -336,7 +338,7 @@ useUnsaved(
               <table class="integration-table instances-table">
                 <thead><tr><th>连接名称</th><th>服务类型</th><th>说明</th><th>状态</th><th class="actions-column">操作</th></tr></thead>
                 <tbody><tr v-for="item in visible" :key="item.id">
-                  <td><div class="instance-identity"><ServiceIcon :type="item.service_type" /><button class="instance-name" @click="choose(item)">{{ item.name }}</button></div><code class="credential-code">{{ item.code }}</code></td>
+                  <td><div class="instance-identity"><ServiceIcon :type="item.service_type" /><div class="instance-text"><button class="instance-name" @click="choose(item)">{{ item.name }}</button><ConnectionCode :code="item.code" /></div></div></td>
                   <td data-label="服务类型">{{ filterTypes.find(t => t.service_type === item.service_type)?.name ?? item.service_type }}</td>
                   <td data-label="说明"><span class="instance-description" :title="item.description">{{ item.description || '未填写说明' }}</span></td>
                   <td data-label="状态"><span class="integration-status" :class="{ enabled: item.enabled }">{{ item.enabled ? '已启用' : '已停用' }}</span></td>
@@ -356,13 +358,12 @@ useUnsaved(
                 selected.enabled ? "已启用" : "已停用"
               }}</span>
             </h1>
-            <code>{{ selected.code }}</code><p>{{ selected.description }}</p>
+            <ConnectionCode :code="selected.code" /><p>{{ selected.description }}</p>
           </div></div>
           <div v-if="admin" class="integration-actions">
-            <ElButton :disabled="busy" @click="openEdit">编辑资料</ElButton
-            ><ElDropdown trigger="click" @command="remove">
-              <ElButton :disabled="busy" aria-label="连接更多操作">更多操作</ElButton>
-              <template #dropdown><ElDropdownMenu><ElDropdownItem command="delete">删除连接</ElDropdownItem></ElDropdownMenu></template>
+            <ElDropdown trigger="click" @command="remove">
+              <button class="icon-btn" :disabled="busy" aria-label="连接更多操作" title="更多操作"><UiIcon name="more" /></button>
+              <template #dropdown><ElDropdownMenu><ElDropdownItem command="delete" class="connection-danger-action"><UiIcon name="delete" />删除连接</ElDropdownItem></ElDropdownMenu></template>
             </ElDropdown>
           </div>
         </div>
@@ -438,7 +439,7 @@ useUnsaved(
                 :key="type.service_type"
                 :value="type.service_type"
                 :label="type.name" /></ElSelect></label
-          ><label>连接 code（可选）<ElInput v-model="form.code" maxlength="64" :disabled="busy" /><small>全局唯一，创建后不可修改；留空自动生成。</small></label><label
+          ><label>编码（可选）<ElInput v-model="form.code" maxlength="64" :disabled="busy" /><small>全局唯一，创建后不可修改；留空自动生成。</small></label><label
             >名称<ElInput
               v-model="form.name"
               maxlength="100"

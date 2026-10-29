@@ -32,6 +32,7 @@ export const serviceUI: Record<string, ServiceUI> = {
         key: "base_url",
         label: "GitLab 实例地址",
         placeholder: "https://gitlab.example.com",
+        help: "支持 HTTP、HTTPS 和子路径。",
         limit: 2048,
       },
       {

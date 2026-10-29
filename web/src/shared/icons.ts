@@ -1,4 +1,6 @@
 import {
+  Copy,
+  Trash2,
   Archive,
   Pin,
   Pencil,
@@ -47,6 +49,8 @@ import {
 
 // Keep application names independent of the icon library and persisted resource keys.
 export const icons = {
+  "copy": Copy,
+  "delete": Trash2,
   "archive": Archive,
   "pin": Pin,
   "edit": Pencil,
