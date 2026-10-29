@@ -129,6 +129,18 @@ a:focus-visible {
 .el-button + .el-button {
   margin-left: 0;
 }
+/* Footer spacing must not rely on Element Plus button margins. */
+.el-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.el-dialog__footer > div {
+  width: 100%;
+  min-width: 0;
+}
 .el-message-box__btns {
   display: flex;
   justify-content: flex-end;

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import UiIcon from "../../shared/UiIcon.vue";
+import ConnectionCode from "./ConnectionCode.vue";
 import ClearFiltersButton from "../../shared/ClearFiltersButton.vue";
 import { serviceUI } from "./providers";
 import ProviderFields from "./ProviderFields.vue";
@@ -6,6 +8,8 @@ import { useUnsaved } from "./unsaved";
 import { computed, reactive, ref, watch, onMounted, onUnmounted } from "vue";
 import {
   ElButton,
+  ElTabs,
+  ElTabPane,
   ElDialog,
   ElInput,
   ElSelect,
@@ -46,6 +50,7 @@ const rows = ref<ServiceCredential[]>([]),
   preferredTag = ref(""),
   fallbackID = ref<string | null>(null),
   fallbackTag = ref("");
+const formTab = ref("basic");
 const dialog = ref(false),
   mode = ref<"create" | "edit" | "secret">("create"),
   selected = ref<ServiceCredential>(),
@@ -83,21 +88,9 @@ const visibleRows = computed(() => rows.value.filter(row =>
   `${row.name} ${row.code} ${row.description} ${row.identity_config.username ?? ""}`.toLowerCase().includes(search.value.trim().toLowerCase()),
 ));
 const diagnostics = ref<Record<string, Diagnostic | null>>({});
-async function copyCode(code: string) {
-  try {
-    if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(code);
-    else {
-      const input = document.createElement("textarea");
-      input.value = code; input.style.position = "fixed"; input.style.opacity = "0";
-      document.body.appendChild(input);
-      try { input.select(); if (!document.execCommand("copy")) throw new Error("复制失败"); }
-      finally { input.remove(); }
-    }
-    ElMessage.success("code 已复制");
-  } catch { ElMessage.error("无法复制，请选中 code 手动复制"); }
-}
 function menuAction(command: string, row: ServiceCredential) {
-  if (command === "secret") void open("secret", row);
+  if (command === "edit") void open("edit", row);
+  else if (command === "secret") void open("secret", row);
   else if (command === "diagnostics") void last(row);
   else void action(command, row);
 }
@@ -154,6 +147,7 @@ watch(
 async function open(modeValue: "create" | "edit" | "secret", row?: ServiceCredential) {
   formError.value = "";
   mode.value = modeValue;
+  formTab.value = modeValue === "secret" ? "authentication" : "basic";
   selected.value = row;
   providerValues.value = { ...row?.identity_config };
   clearSecret();
@@ -202,6 +196,7 @@ async function save() {
   if (busy.value) return;
   formError.value = "";
   if (mode.value !== "secret" && !form.name.trim()) {
+    formTab.value = "basic";
     formError.value = "请输入凭证名称";
     return;
   }
@@ -209,6 +204,7 @@ async function save() {
     mode.value !== "edit" &&
     adapter.value.validateSecret(providerValues.value)
   ) {
+    formTab.value = "authentication";
     formError.value = adapter.value.validateSecret(providerValues.value);
     return;
   }
@@ -217,8 +213,12 @@ async function save() {
     form.code.trim() &&
     !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(form.code.trim())
   ) {
-    formError.value = "code 须以小写字母或数字开头，仅含小写字母、数字、下划线或短横线，最长 64 位";
+    formTab.value = "basic";
+    formError.value = "编码须以小写字母或数字开头，仅含小写字母、数字、下划线或短横线，最长 64 位";
     return;
+  }
+  if (mode.value !== "secret" && form.expires_at && !Number.isFinite(Date.parse(form.expires_at))) {
+    formTab.value = "lifecycle"; formError.value = "请输入有效的到期时间"; return;
   }
   busy.value = true;
   try {
@@ -334,59 +334,41 @@ useUnsaved(
 );
 </script>
 <template>
-  <section class="integration-section">
-    <div class="integration-toolbar">
-      <div>
-        <h2>{{ system ? "系统凭证" : "凭证" }}</h2>
-        <p>
-          首选在当前归属内优先使用。{{
-            system ? "兜底凭证用于后续缺失时回退。" : "秘密保存后不可读取。"
-          }}
-        </p>
-      </div>
-      <ElButton
-        v-if="!readonly"
-        type="primary"
-        :disabled="busy || loading || !collection"
-        @click="open('create')"
-        >添加凭证</ElButton
-      >
-    </div>
-    <p v-if="readonly" class="integration-note">项目已归档，凭证只读。</p>
-    <div v-if="error" class="error-banner" role="alert">
-      {{ error }} <ElButton link @click="load">重新加载</ElButton>
-    </div>
-    <p v-if="loading" role="status">正在加载凭证…</p>
-    <div v-else-if="!rows.length && !error" class="integration-empty">
-      尚未添加凭证。每个归属可维护多份独立身份。
-    </div>
-    <div v-if="rows.length" class="credential-filters">
+  <section class="integration-section credential-list" aria-label="凭证列表">
+    <div class="credential-filters table-toolbar console-list-toolbar">
       <ElInput v-model="search" clearable placeholder="搜索名称、编码、用户名或说明" aria-label="搜索凭证" />
       <ElSelect v-model="stateFilter" placeholder="全部状态" aria-label="凭证状态筛选"><ElOption label="全部状态" value="" /><ElOption v-for="(label, value) in stateLabels" :key="value" :label="label" :value="value" /></ElSelect>
-      <span aria-live="polite">{{ visibleRows.length }} 份凭证</span>
+      <ElButton v-if="!readonly" class="credential-create" type="primary" :disabled="busy || loading || !collection" @click="open('create')"><UiIcon name="plus" />添加凭证</ElButton>
     </div>
-    <p v-if="rows.length && !visibleRows.length" class="integration-empty">没有匹配的凭证。<ClearFiltersButton link @click="search = ''; stateFilter = ''" /></p>
-    <div v-if="visibleRows.length" class="integration-table-wrap">
+    <div class="credential-list-content" :aria-busy="loading">
+      <p v-if="readonly" class="credential-readonly">项目已归档，凭证只读。</p>
+      <div v-if="loading" class="credential-list-state" role="status">正在加载凭证…</div>
+      <div v-else-if="error" class="credential-list-state" role="alert">{{ error }}<ElButton @click="load">重新加载</ElButton></div>
+      <div v-else-if="!rows.length" class="credential-list-state" role="status">尚未添加凭证</div>
+      <div v-else-if="!visibleRows.length" class="credential-list-state" role="status">没有匹配的凭证<ClearFiltersButton link @click="search = ''; stateFilter = ''" /></div>
+      <div v-else class="integration-table-wrap">
       <table class="integration-table credentials-table">
-        <thead><tr><th>凭证 / code</th><th>状态</th><th>使用设置</th><th>有效期</th><th>最近验证</th><th class="actions-column">操作</th></tr></thead>
+        <thead><tr><th>凭证名称</th><th>状态</th><th>使用设置</th><th>有效期</th><th>最近验证</th><th class="actions-column">操作</th></tr></thead>
         <tbody><tr v-for="row in visibleRows" :key="row.id">
-          <td><strong class="credential-name" :title="row.description">{{ row.name }}</strong><div class="credential-code"><code :title="row.code">{{ row.code }}</code><button class="copy-code" :aria-label="`复制 ${row.code}`" @click="copyCode(row.code)">⧉</button></div><small v-if="row.identity_config.username" class="cell-subtext">用户：{{ row.identity_config.username }}</small><span v-if="row.description" class="credential-description" :title="row.description">{{ row.description }}</span></td>
+          <td><strong class="credential-name" :title="row.description">{{ row.name }}</strong><ConnectionCode class="credential-code" :code="row.code" /><small v-if="row.identity_config.username" class="cell-subtext">用户：{{ row.identity_config.username }}</small><span v-if="row.description" class="credential-description" :title="row.description">{{ row.description }}</span></td>
           <td data-label="状态"><span class="credential-status" :class="stateOf(row)">{{ stateLabels[stateOf(row)] }}</span></td>
           <td data-label="使用设置"><div><span v-if="row.is_preferred" class="integration-badge">首选</span><span v-if="fallbackID === row.id" class="integration-badge fallback">兜底</span><span v-if="!row.is_preferred && fallbackID !== row.id" class="muted">—</span></div></td>
           <td data-label="有效期"><div><span :title="row.expires_at ? new Date(row.expires_at).toLocaleString() : ''">{{ row.expires_at ? new Date(row.expires_at).toLocaleDateString() : '未设置' }}</span><small v-if="row.expires_at" class="cell-subtext">{{ expiryHint(row) }}</small></div></td>
-          <td data-label="最近验证"><div v-if="diagnostics[row.id]"><span class="diagnostic-status">{{ diagnostics[row.id]!.outdated ? '历史结果 · ' : '' }}{{ diagnosticText(diagnostics[row.id]!) }}</span><small v-if="diagnostics[row.id]!.summary.external_identity?.username" class="cell-subtext">{{ diagnostics[row.id]!.summary.external_identity?.username }}</small><small class="cell-subtext">{{ new Date(diagnostics[row.id]!.started_at).toLocaleString() }}</small></div><ElButton v-else-if="diagnostics[row.id] === undefined" link @click="last(row)">查看记录</ElButton><span v-else class="muted">尚无记录</span></td>
-          <td class="actions-column"><div v-if="!readonly" class="credential-row-actions"><ElButton link :disabled="busy" @click="open('edit', row)">编辑</ElButton><ElDropdown trigger="click" @command="(command: string) => menuAction(command, row)"><ElButton link :disabled="busy" :aria-label="`${row.name}更多操作`">···</ElButton><template #dropdown><ElDropdownMenu>
-            <ElDropdownItem command="secret">替换认证信息</ElDropdownItem>
-            <ElDropdownItem command="verify" :disabled="!available(row) || !connectionEnabled">验证凭证</ElDropdownItem>
-            <ElDropdownItem command="diagnostics">最近验证</ElDropdownItem>
-            <ElDropdownItem command="preferred" divided :disabled="!row.is_preferred && !available(row)">{{ row.is_preferred ? '取消首选' : '设为首选' }}</ElDropdownItem>
-            <ElDropdownItem v-if="system" command="fallback" :disabled="fallbackID !== row.id && !available(row)">{{ fallbackID === row.id ? '清除兜底' : '设为兜底' }}</ElDropdownItem>
-            <ElDropdownItem command="delete" divided>删除凭证</ElDropdownItem>
+          <td data-label="最近验证"><div v-if="diagnostics[row.id]"><span class="diagnostic-status">{{ diagnostics[row.id]!.outdated ? '历史结果 · ' : '' }}{{ diagnosticText(diagnostics[row.id]!) }}</span><small v-if="diagnostics[row.id]!.summary.external_identity?.username" class="cell-subtext">{{ diagnostics[row.id]!.summary.external_identity?.username }}</small><small class="cell-subtext">{{ new Date(diagnostics[row.id]!.started_at).toLocaleString() }}</small></div><button v-else-if="diagnostics[row.id] === undefined" class="credential-action" :disabled="busy" @click="last(row)">查看记录</button><span v-else class="muted">尚无记录</span></td>
+          <td class="actions-column"><div v-if="!readonly" class="credential-row-actions"><ElDropdown trigger="click" popper-class="credential-action-menu" @command="(command: string) => menuAction(command, row)"><button class="credential-action credential-more" :disabled="busy" :aria-label="`${row.name}更多操作`"><UiIcon name="more" /></button><template #dropdown><ElDropdownMenu>
+            <ElDropdownItem command="edit"><UiIcon name="edit" />编辑凭证</ElDropdownItem>
+            <ElDropdownItem command="secret"><UiIcon name="key" />替换认证信息</ElDropdownItem>
+            <ElDropdownItem command="verify" :disabled="!available(row) || !connectionEnabled"><UiIcon name="shield" />验证凭证</ElDropdownItem>
+            <ElDropdownItem command="diagnostics"><UiIcon name="log" />最近验证</ElDropdownItem>
+            <ElDropdownItem command="preferred" divided :disabled="!row.is_preferred && !available(row)"><UiIcon name="pin" />{{ row.is_preferred ? '取消首选' : '设为首选' }}</ElDropdownItem>
+            <ElDropdownItem v-if="system" command="fallback" :disabled="fallbackID !== row.id && !available(row)"><UiIcon name="layers" />{{ fallbackID === row.id ? '清除兜底' : '设为兜底' }}</ElDropdownItem>
+            <ElDropdownItem command="delete" class="credential-delete" divided><UiIcon name="delete" />删除凭证</ElDropdownItem>
           </ElDropdownMenu></template></ElDropdown></div><span v-else class="muted">只读</span></td>
         </tr></tbody>
       </table>
+      </div>
     </div>
-    <div v-if="rows.length" class="credential-legend"><span>首选 · 当前归属内优先使用</span><span v-if="system">兜底 · 其它凭证缺失时使用</span><span>秘密保存后不可读取</span></div>
+    <div v-if="!loading && !error" class="table-footer"><span aria-live="polite">共 {{ visibleRows.length }} 份凭证</span></div>
     <ElDialog
       v-model="dialog"
       :title="
@@ -396,64 +378,32 @@ useUnsaved(
             ? '替换凭证认证信息'
             : '编辑凭证'
       "
-      width="min(560px, 94vw)"
+      width="min(680px, 96vw)"
+      class="integration-dialog"
       :close-on-click-modal="false"
       :close-on-press-escape="!busy"
       :show-close="!busy"
       @closed="clearSecret"
     >
-      <form class="integration-form" @submit.prevent="save">
-        <div v-if="formError" class="error-banner" role="alert">
-          {{ formError }}
-        </div>
-        <template v-if="mode !== 'secret'"
-          ><h3 class="credential-form-heading">基本资料</h3><label
-            >凭证 code{{ mode === 'create' ? '（可选）' : '' }}<ElInput
-              v-model="form.code"
-              maxlength="64"
-              :readonly="mode === 'edit'"
-              :disabled="busy"
-              autocomplete="off" />
-            <small>同服务类型全局唯一，创建后不可修改。<template v-if="mode === 'create'">留空自动生成无短横线的 UUID；手动填写允许小写字母、数字、下划线和短横线。</template></small></label
-          ><label
-            >名称<ElInput
-              v-model="form.name"
-              maxlength="100"
-              :disabled="busy"
-              autocomplete="off" /></label
-          ><label
-            >说明<ElInput
-              v-model="form.description"
-              type="textarea"
-              maxlength="1000"
-              :disabled="busy" /></label
-          >
-        </template>
-        <h3 v-if="mode !== 'edit'" class="credential-form-heading">认证材料 · {{ adapter.authLabel }}</h3>
-        <ProviderFields
-          v-if="mode !== 'edit'"
-          v-model="providerValues"
-          :fields="adapter.identityFields"
-          :disabled="busy"
-        />
-        <ProviderFields
-          v-if="mode !== 'edit'"
-          v-model="providerValues"
-          :fields="adapter.secretFields"
-          :disabled="busy"
-        />
-        <template v-if="mode !== 'secret'">
-          <h3 class="credential-form-heading">有效期与状态</h3>
-          <label>到期时间（本地时间，可选）<input v-model="form.expires_at" type="datetime-local" :disabled="busy" /></label>
-          <label v-if="mode === 'edit'">启用<ElSwitch v-model="form.enabled" :disabled="busy" /></label>
-        </template>
-        <div class="integration-actions">
-          <ElButton :disabled="busy" @click="dialog = false">取消</ElButton
-          ><ElButton type="primary" native-type="submit" :loading="busy"
-            >保存</ElButton
-          >
-        </div>
+      <form id="credential-editor" novalidate class="integration-form credential-editor" @submit.prevent="save">
+        <div v-if="formError" class="error-banner" role="alert">{{ formError }}</div>
+        <ElTabs v-model="formTab" class="credential-editor-tabs">
+          <ElTabPane v-if="mode !== 'secret'" label="基本信息" name="basic">
+            <div class="integration-form">
+              <div class="form-pair"><label>名称<ElInput v-model="form.name" maxlength="100" :disabled="busy" autocomplete="off" /></label><label>编码{{ mode === 'create' ? '（可选）' : '' }}<ElInput v-model="form.code" maxlength="64" :readonly="mode === 'edit'" :disabled="busy" /></label></div>
+
+              <label>说明（可选）<ElInput v-model="form.description" type="textarea" :rows="3" maxlength="1000" :disabled="busy" /></label>
+            </div>
+          </ElTabPane>
+          <ElTabPane v-if="mode !== 'edit'" label="认证信息" name="authentication">
+            <div class="integration-form"><ProviderFields :show-help="false" v-model="providerValues" :fields="adapter.identityFields" :disabled="busy" /><ProviderFields :show-help="false" v-model="providerValues" :fields="adapter.secretFields" :disabled="busy" /></div>
+          </ElTabPane>
+          <ElTabPane v-if="mode !== 'secret'" label="有效期与状态" name="lifecycle">
+            <div class="integration-form"><label>到期时间（本地时间）<input v-model="form.expires_at" type="datetime-local" :disabled="busy" /></label><label v-if="mode === 'edit'">启用凭证<ElSwitch v-model="form.enabled" :disabled="busy" /></label></div>
+          </ElTabPane>
+        </ElTabs>
       </form>
+      <template #footer><div class="wizard-footer"><ElButton :disabled="busy" @click="dialog = false">取消</ElButton><ElButton type="primary" native-type="submit" form="credential-editor" :loading="busy">{{ mode === 'create' ? '添加凭证' : '保存修改' }}</ElButton></div></template>
     </ElDialog>
   </section>
 </template>

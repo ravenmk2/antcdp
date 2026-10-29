@@ -2,7 +2,7 @@
 import { ElInput, ElSelect, ElOption } from "element-plus";
 import type { ProviderField } from "./providers";
 const values = defineModel<Record<string, string>>({ required: true });
-defineProps<{ fields: ProviderField[]; disabled?: boolean }>();
+defineProps<{ fields: ProviderField[]; disabled?: boolean; showHelp?: boolean }>();
 </script>
 <template>
   <label v-for="field in fields" :key="field.key"
@@ -24,10 +24,10 @@ defineProps<{ fields: ProviderField[]; disabled?: boolean }>();
       :show-password="field.type === 'password'"
       :autocomplete="field.type === 'password' ? 'new-password' : 'off'"
       :maxlength="field.limit"
-      :placeholder="field.placeholder"
+      :placeholder="showHelp === false ? undefined : field.placeholder"
       :rows="3"
       :disabled="disabled"
     />
-    <small v-if="field.help">{{ field.help }}</small>
+    <small v-if="field.help && showHelp !== false">{{ field.help }}</small>
   </label>
 </template>

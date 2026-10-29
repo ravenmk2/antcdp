@@ -41,7 +41,6 @@ useUnsaved(() => dirty.value, () => busy.value);
     <div v-if="error" class="error-banner" role="alert">{{ error }} <ElButton link @click="reload">重新加载</ElButton></div>
     <form class="integration-form connection-form" @submit.prevent="save">
       <h2>{{ serviceName }} 服务连接</h2><p>资料与访问配置一起保存。连接测试不使用访问凭证。</p>
-      <label>编码<ElInput :model-value="connection.code" readonly /></label>
       <label>名称<ElInput v-model="form.name" maxlength="100" :disabled="busy" /></label>
       <label>说明<ElInput v-model="form.description" type="textarea" maxlength="1000" :disabled="busy" /></label>
       <label>实例地址<ElInput v-model="form.base_url" maxlength="2048" :disabled="busy" :placeholder="connection.service_type === 'jenkins' ? 'https://jenkins.example.com/jenkins' : 'https://gitlab.example.com'" /><small>支持 HTTP、HTTPS 和子路径。</small></label>
