@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"errors"
-	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"net"
 	"net/http"
 	"net/netip"
@@ -17,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
 func ValidateConfig(raw string, ca *string) error {

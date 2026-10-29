@@ -102,7 +102,7 @@ func probe(ctx context.Context, g *GitLabConfig, token string, started time.Time
 	if err != nil {
 		return d
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	body, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
 	if err != nil || len(body) > 1<<20 {
 		d.Summary["reason"] = "invalid_response"

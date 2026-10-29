@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +13,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 )
 
 func TestWebhookVerification(t *testing.T) {
@@ -109,7 +110,7 @@ func TestDialRejectsActualLocalAddresses(t *testing.T) {
 	for _, address := range []string{"127.0.0.1:443", "[::1]:443", "169.254.169.254:80", "100.100.100.200:80"} {
 		conn, err := tr.DialContext(context.Background(), "tcp", address)
 		if err == nil {
-			conn.Close()
+			_ = conn.Close()
 			t.Fatalf("connected to forbidden address %s", address)
 		}
 	}
@@ -142,7 +143,9 @@ func TestHTTPConnectionProbe(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
-	server.Listener.Close()
+	if err := server.Listener.Close(); err != nil {
+		t.Fatal(err)
+	}
 	server.Listener = listener
 	server.Start()
 	defer server.Close()

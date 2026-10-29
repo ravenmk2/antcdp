@@ -229,7 +229,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 		}()
 	}
 	first, second := <-statuses, <-statuses
-	if !(first == http.StatusNoContent && second == 412 || second == http.StatusNoContent && first == 412) {
+	if (first != http.StatusNoContent || second != http.StatusPreconditionFailed) && (second != http.StatusNoContent || first != http.StatusPreconditionFailed) {
 		t.Fatalf("concurrent selection: %d/%d", first, second)
 	}
 	admin.call(t, "PUT", sys+"/"+one+"/authentication", auth, 200, tag(admin, sys+"/"+one))
