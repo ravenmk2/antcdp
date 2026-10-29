@@ -8,11 +8,12 @@ import ts from 'typescript';
 function wizard(failCredential = false) {
   const source = readFileSync(new URL('../src/features/integrations/IntegrationsPage.vue', import.meta.url), 'utf8').split('<script setup lang="ts">')[1].split('</script>')[0];
   const calls = [], routes = [];
-  const adapter = { connectionBody: v => ({ ...v }), identityBody: v => ({ username: v.username }), secretBody: v => ({ token: v.token }), secretFields: [{ key: 'token' }], validateSecret: v => v.token ? '' : '请输入 API Token', authMethod: 'jenkins_api_token' };
+  const providersContext = { exports: {}, require: name => name === 'vue' ? { markRaw: v => v } : {} };
+  vm.runInNewContext(ts.transpileModule(readFileSync(new URL('../src/features/integrations/providers.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, providersContext);
   const context = { exports: {}, URL, console, require(name) {
     if (name === 'vue') return { ref: value => ({ value }), reactive: v => v, computed: fn => ({ get value() { return fn(); } }), watch() {} };
     if (name === 'vue-router') return { useRoute: () => ({ path: '/admin/integrations', params: {}, query: {} }), useRouter: () => ({ push: v => routes.push(v), replace() {} }) };
-    if (name === './providers') return { serviceUI: { jenkins: adapter } };
+    if (name === './providers') return providersContext.exports;
     if (name === './unsaved') return { useUnsaved() {} };
     if (name === './types') return { message: e => e.message };
     if (name === 'element-plus') return { ElMessage: { success() {}, info() {} }, ElMessageBox: { confirm: async () => {} } };
@@ -27,7 +28,7 @@ function wizard(failCredential = false) {
     } };
     return {};
   } };
-  const code = ts.transpileModule(source + '\nexports.controller = { form, providerValues, credential, credentialValues, createdConnection, step, formError, nextStep, save, items, visible, page, pageSize, pageCount, pagedConnections, readPage, readPageSize, typeFilter, query };', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const code = ts.transpileModule(source + '\nexports.controller = { form, providerValues, credential, credentialValues, createdConnection, authMethod, step, formError, nextStep, save, items, visible, page, pageSize, pageCount, pagedConnections, readPage, readPageSize, typeFilter, query };', { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   vm.runInNewContext(code, context);
   const c = context.exports.controller;
   Object.assign(c.form, { service_type: 'jenkins', name: 'Test' });
@@ -74,4 +75,18 @@ test('connection pagination slices filtered results and supports page sizes', ()
   c.pageSize.value = 10; assert.equal(c.pageCount.value, 2);
   c.query.value = 'conn-44'; assert.equal(c.pagedConnections.value.length, 1);
   assert.equal(c.readPage('-2'), 1); assert.equal(c.readPageSize('999'), 20);
+});
+
+test('Elasticsearch API key wizard sends empty identity and chosen method', async () => {
+ const { c, calls } = wizard(); c.form.service_type = 'elasticsearch'; c.authMethod.value = 'elasticsearch_api_key';
+ c.credentialValues.value = { username: 'stale-user', token: 'aWQ6c2VjcmV0' }; await c.save();
+ const auth = calls[2].options.body.authentication;
+ assert.equal(auth.auth_method, 'elasticsearch_api_key'); assert.equal(Object.keys(auth.identity_config).length, 0);
+});
+test('OpenObserve defaults organization while preserving explicit override', async () => {
+ for (const org of [undefined, 'custom_org']) {
+ const { c, calls } = wizard(); c.form.service_type = 'openobserve';
+ if (org !== undefined) c.providerValues.value.default_organization = org;
+ await c.save(true); assert.equal(calls[0].options.body.config.default_organization, org ?? 'default');
+ }
 });

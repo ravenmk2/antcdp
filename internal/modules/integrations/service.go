@@ -62,12 +62,14 @@ type CommonWrite struct {
 	Enabled     Field[bool]   `json:"enabled"`
 }
 type HTTPConfigCreate struct {
-	BaseURL string  `json:"base_url"`
-	CA      *string `json:"custom_ca_pem"`
+	DefaultOrganization Field[string] `json:"default_organization"`
+	BaseURL             string        `json:"base_url"`
+	CA                  *string       `json:"custom_ca_pem"`
 }
 type HTTPConfigPatch struct {
-	BaseURL Field[string] `json:"base_url"`
-	CA      Field[string] `json:"custom_ca_pem"`
+	DefaultOrganization Field[string] `json:"default_organization"`
+	BaseURL             Field[string] `json:"base_url"`
+	CA                  Field[string] `json:"custom_ca_pem"`
 }
 type ConnectionCreate struct {
 	Code        Field[string]     `json:"code"`
@@ -329,7 +331,16 @@ func (s *Service) Create(ctx context.Context, raw string, w ConnectionCreate, me
 			return err
 		}
 		v.Config = HTTPConfig{BaseURL: strings.TrimRight(w.Config.BaseURL, "/"), CA: w.Config.CA}
-		if err = ValidateConfig(v.Config.BaseURL, v.Config.CA); err != nil {
+		if v.Type == "openobserve" {
+			v.Config.DefaultOrganization = "default"
+		}
+		if w.Config.DefaultOrganization.Set {
+			if v.Type != "openobserve" || w.Config.DefaultOrganization.Null {
+				return httpx.Invalid("default_organization", "invalid_format")
+			}
+			v.Config.DefaultOrganization = w.Config.DefaultOrganization.Value
+		}
+		if err = validateTypedConfig(v.Type, &v.Config); err != nil {
 			return err
 		}
 		v.ConfigJSON, err = json.Marshal(v.Config)
@@ -369,12 +380,13 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 				return httpx.Invalid("body", "empty_patch")
 			}
 			before, _ := json.Marshal(v)
+			oldOrg := v.Config.DefaultOrganization
 			oldURL, oldCA, oldEnabled := v.Config.BaseURL, v.Config.CA, v.Enabled
 			if err := applyCommon(w.CommonWrite, &v.Name, &v.Description, &v.Enabled); err != nil {
 				return err
 			}
 			if w.Config.Set {
-				if w.Config.Null || (!w.Config.Value.BaseURL.Set && !w.Config.Value.CA.Set) {
+				if w.Config.Null || (!w.Config.Value.BaseURL.Set && !w.Config.Value.CA.Set && !w.Config.Value.DefaultOrganization.Set) {
 					return httpx.Invalid("config", "invalid_format")
 				}
 				cfg := w.Config.Value
@@ -390,7 +402,13 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 						v.Config.CA = &cfg.CA.Value
 					}
 				}
-				if err := ValidateConfig(v.Config.BaseURL, v.Config.CA); err != nil {
+				if cfg.DefaultOrganization.Set {
+					if v.Type != "openobserve" || cfg.DefaultOrganization.Null {
+						return httpx.Invalid("default_organization", "invalid_format")
+					}
+					v.Config.DefaultOrganization = cfg.DefaultOrganization.Value
+				}
+				if err := validateTypedConfig(v.Type, &v.Config); err != nil {
 					return err
 				}
 			}
@@ -398,7 +416,7 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 			if bytes.Equal(before, after) {
 				return nil
 			}
-			configChanged := oldURL != v.Config.BaseURL || !sameString(oldCA, v.Config.CA)
+			configChanged := oldOrg != v.Config.DefaultOrganization || oldURL != v.Config.BaseURL || !sameString(oldCA, v.Config.CA)
 			v.Version++
 			if configChanged {
 				v.ConfigVersion++

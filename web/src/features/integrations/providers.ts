@@ -76,3 +76,27 @@ export const serviceUI: Record<string, ServiceUI> = {
     validateSecret: (v) => (v.token ? "" : "请输入 API Token"),
   },
 };
+
+function observabilityUI(kind: string, label: string): ServiceUI {
+ return {
+ settings: markRaw(HTTPConnectionSettings), authMethod: kind + "_basic", authLabel: "用户名与密码",
+ connectionFields: [
+ { key: "base_url", label: label + " API 地址", placeholder: "https://" + kind + ".example.com", limit: 2048 },
+ ...(kind === "openobserve" ? [{ key: "default_organization", label: "默认组织", placeholder: "default", limit: 128, help: "省略时使用 default，未来操作可指定其他组织。" }] : []),
+ { key: "custom_ca_pem", label: "自定义 CA（可选）", type: "textarea", limit: 16384 }],
+ identityFields: [{ key: "username", label: kind === "openobserve" ? "用户名 / 邮箱" : "用户名", limit: 255 }],
+ secretFields: [{ key: "token", label: kind === "openobserve" ? "密码 / 服务账号 Token" : "密码", type: "password", limit: 8192 }],
+ connectionBody: v => ({ base_url: v.base_url ?? "", custom_ca_pem: v.custom_ca_pem || null, ...(kind === "openobserve" ? { default_organization: v.default_organization ?? "default" } : {}) }),
+ identityBody: v => ({ username: v.username ?? "" }), secretBody: v => ({ token: v.token ?? "" }),
+ validateSecret: v => !v.username ? "请输入用户名" : !v.token ? "请输入密码或 Token" : "",
+ };
+}
+serviceUI.openobserve = observabilityUI("openobserve", "OpenObserve");
+serviceUI.elasticsearch = observabilityUI("elasticsearch", "Elasticsearch");
+export function authenticationUI(kind: string, method?: string): ServiceUI {
+ const base = serviceUI[kind]!;
+ if (kind !== "elasticsearch" || method !== "elasticsearch_api_key") return base;
+ return { ...base, authMethod: "elasticsearch_api_key", authLabel: "API Key", identityFields: [],
+ secretFields: [{ key: "token", label: "API Key（encoded）", type: "password", limit: 8192, help: "填写完整 encoded 值，不包含 ApiKey 前缀。" }],
+ identityBody: () => ({}), validateSecret: v => v.token ? "" : "请输入 API Key" };
+}

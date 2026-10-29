@@ -1,6 +1,6 @@
 # 外部服务集成设计
 
-更新日期：2026-10-29。本文是重新设计后的目标契约，取代旧 `integration / integration_gitlab / integration_credential` 三表方案，不要求本模块旧表、旧 API、旧标识和旧接收地址兼容。GitLab 与 Jenkins 管理 API 和正式页面已实现；迁移 5 保留已合并的 GitLab 结构，最终迁移 6 将 GitLab 地址及 CA 搬入连接 config JSON，保留版本 5 的数据及密文，不创建 Jenkins 表。旧集成的历史重建规则仅适用于迁移 5，实际交付状态见[开发说明](development.md)。
+更新日期：2026-10-29。本文是重新设计后的目标契约，取代旧 `integration / integration_gitlab / integration_credential` 三表方案，不要求本模块旧表、旧 API、旧标识和旧接收地址兼容。GitLab、Jenkins、OpenObserve 与 Elasticsearch 管理 API 和正式页面已实现；迁移 5 保留已合并的 GitLab 结构，最终迁移 6 将 GitLab 地址及 CA 搬入连接 config JSON，保留版本 5 的数据及密文，不创建 Jenkins 表。旧集成的历史重建规则仅适用于迁移 5，实际交付状态见[开发说明](development.md)。
 
 ## 1. 目标与范围
 
@@ -13,7 +13,7 @@
 | 排查 BUG | MySQL 查询、OpenObserve / Elasticsearch 检索 | 连接保存地址和默认上下文；查询、索引、时间范围由操作提供 |
 | 接收代码平台事件 | GitLab Webhook | 连接内的 Webhook 设置管理验证、接收和诊断；事件筛选与项目绑定属于消费方 |
 
-本次不设计工作流节点、触发规则、执行图、运行记录、可靠分发和运行时凭证选择链。不开放任意 HTTP 代理、SQL 查询或 Agent 执行 API。GitLab 和 Jenkins 已支持连接及凭证维护、连接测试和凭证验证；MySQL、OpenObserve、Elasticsearch 等确定扩展方式，适配器完成前不注册可创建类型，不预建空表。
+本次不设计工作流节点、触发规则、执行图、运行记录、可靠分发和运行时凭证选择链。不开放任意 HTTP 代理、SQL 查询或 Agent 执行 API。GitLab、Jenkins、OpenObserve、Elasticsearch 支持连接及凭证维护、连接测试和凭证验证；MySQL 等适配器完成前不注册可创建类型，不预建空表。
 
 ### 通知模块边界
 
@@ -50,8 +50,8 @@ erDiagram
 | gitlab | 基础 URL、公共 CA | identity={} / Access Token | 仓库、分支、MR ID |
 | jenkins | 基础 URL、公共 CA | 用户名 / API Token | Job、构建参数 |
 | mysql | 主机、端口、默认数据库、TLS | 用户名 / 密码或客户端私钥 | 查询、绑定参数 |
-| openobserve | 地址、默认组织 | 用户名或密钥标识 / 密码或 API Key | 日志流、时间范围、条件 |
-| elasticsearch | 节点列表、TLS | 用户名或密钥标识 / 密码或 API Key | 索引、检索条件 |
+| openobserve | 地址、默认组织（默认 default）、公共 CA | 用户名 / 密码或服务账号 Token（Basic） | 日志流、时间范围、条件 |
+| elasticsearch | 单个 API 入口、公共 CA | 用户名 / 密码，或完整 encoded API Key | 索引、检索条件 |
 
 后续服务的认证组合仅为建模示例，确切协议、DTO 和验证应随适配器设计。RabbitMQ、Redis、PostgreSQL、MongoDB、Nacos 同样按实际需求扩展。默认数据库、组织等不是授权范围；凭证维护权、未来凭证使用权与执行合并/部署/查询的业务授权分开，执行模块须在解密和远端调用前完成业务授权。
 
@@ -240,3 +240,9 @@ GitLab 对外支持 HTTP 和 HTTPS；HTTPS 严格校验证书和主机名；允�
 诊断分别表达 HTTP 可达、识别 Jenkins API、认证结果，具体 Job 构建权限保持 unknown。401 表示认证失败；403 表示访问被拒绝，认证结论保持 unknown；重定向不跟随，代理页和不完整 JSON 不判为成功。响应最多 1 MiB，沿用超时、并发、DNS/IP 与 TLS 限制，只保存白名单摘要。人工 expires_at 不等于远端 Token 到期信息。
 
 本次不支持密码认证、crumb 配置、Job 默认值、构建操作或入站回调。operations 为空，webhook.supported=false。未来执行模块负责 Job、参数、授权及队列/构建跟踪；不得以触发构建作为凭证验证。
+
+## OpenObserve / Elasticsearch 兼容范围
+
+OpenObserve 以开源版当前稳定版本为目标，2026-10-29 官方发布页最新稳定版为 v1.1.2。Elasticsearch 以 7.17.x、8.x、9.x 为验证基线，使用通用 HTTP API，尽量兼容更早 7.x，不承诺所有历史次版本。实际验证范围见开发说明。
+
+OpenObserve 连接的 default_organization 默认 default、可编辑；未来操作显式组织优先，否则使用连接默认值。默认上下文不授予权限，访问失败不回退。凭证属于连接而非某个组织。无认证 Elasticsearch 无需创建凭证；只做连接探测，不将匿名响应认定为已保存凭证有效。两种服务均不含检索、Webhook 或执行能力，准确配置与探测协议见[API 契约](service-integrations-api.md#openobserve-与-elasticsearch-管理契约)。

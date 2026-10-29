@@ -100,7 +100,7 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 		r, a, err := s.List(c.Request.Context(), rawSession(c), false)
 		finish(c, r, a, err, 200)
 	})
-	for _, kind := range []string{"gitlab", "jenkins"} {
+	for _, kind := range []string{"gitlab", "jenkins", "openobserve", "elasticsearch"} {
 		s := s.ForType(kind)
 		base := "/admin/service-connections/" + kind
 		api.GET(base, func(c *gin.Context) {

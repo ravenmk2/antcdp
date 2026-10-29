@@ -3,7 +3,7 @@ import DiagnosticResult from "./DiagnosticResult.vue";
 import UiIcon from "../../shared/UiIcon.vue";
 import ConnectionCode from "./ConnectionCode.vue";
 import ClearFiltersButton from "../../shared/ClearFiltersButton.vue";
-import { serviceUI } from "./providers";
+import { authenticationUI } from "./providers";
 import ProviderFields from "./ProviderFields.vue";
 import { useUnsaved } from "./unsaved";
 import { computed, reactive, ref, watch, onMounted, onUnmounted } from "vue";
@@ -36,7 +36,9 @@ const props = defineProps<{
   readonly?: boolean;
   connectionEnabled: boolean;
 }>();
-const adapter = computed(() => serviceUI[props.serviceType]!);
+const authMethod = ref("");
+const adapter = computed(() => authenticationUI(props.serviceType, authMethod.value));
+watch(authMethod, () => { providerValues.value = {}; }, { flush: "sync" });
 const providerValues = ref<Record<string, string>>({});
 const clearSecret = () => {
   for (const field of adapter.value.secretFields)
@@ -149,6 +151,7 @@ async function open(modeValue: "create" | "edit" | "secret", row?: ServiceCreden
   mode.value = modeValue;
   formTab.value = modeValue === "secret" ? "authentication" : "basic";
   selected.value = row;
+ authMethod.value = row?.auth_method ?? (props.serviceType + "_basic");
   providerValues.value = { ...row?.identity_config };
   clearSecret();
   Object.assign(form, {
@@ -170,6 +173,9 @@ async function open(modeValue: "create" | "edit" | "secret", row?: ServiceCreden
     try {
       const r = await request<ServiceCredential>(props.base + "/" + row.id);
       selected.value = r.data;
+      authMethod.value = r.data.auth_method;
+      providerValues.value = { ...r.data.identity_config };
+      clearSecret();
       editTag.value = r.etag;
       Object.assign(form, {
         code: r.data.code,
@@ -396,7 +402,7 @@ useUnsaved(
             </div>
           </ElTabPane>
           <ElTabPane v-if="mode !== 'edit'" label="认证信息" name="authentication">
-            <div class="integration-form"><ProviderFields :show-help="false" v-model="providerValues" :fields="adapter.identityFields" :disabled="busy" /><ProviderFields :show-help="false" v-model="providerValues" :fields="adapter.secretFields" :disabled="busy" /></div>
+            <div class="integration-form"><label v-if="serviceType === 'elasticsearch'">认证方式<ElSelect v-model="authMethod" :disabled="busy"><ElOption value="elasticsearch_basic" label="用户名与密码" /><ElOption value="elasticsearch_api_key" label="API Key" /></ElSelect></label><ProviderFields :show-help="false" v-model="providerValues" :fields="adapter.identityFields" :disabled="busy" /><ProviderFields :show-help="false" v-model="providerValues" :fields="adapter.secretFields" :disabled="busy" /></div>
           </ElTabPane>
           <ElTabPane v-if="mode !== 'secret'" label="有效期与状态" name="lifecycle">
             <div class="integration-form"><label>到期时间（本地时间）<input v-model="form.expires_at" type="datetime-local" :disabled="busy" /></label><label v-if="mode === 'edit'">启用凭证<ElSwitch v-model="form.enabled" :disabled="busy" /></label></div>

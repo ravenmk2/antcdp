@@ -17,7 +17,7 @@
 | [数据访问与密码方案比较](technology-decisions.md) | sqlx/sqlc、bcrypt/HMAC 的比较、采用方向与限制 |
 | [扩展性与存储边界](extensibility.md) | 受控 KV、独立凭据表、事务与仓储接口，以及未来模块的边界 |
 | [外部服务集成设计](service-integrations.md) | 服务连接、访问凭证、类型化连接 config JSON、访问凭证及 GitLab Webhook 的三表模型，首选/兜底、事务和通知模块边界；已替换旧实现 |
-| [服务集成 API](service-integrations-api.md) | 新模型的类型目录、维护路由、DTO、权限、条件请求、诊断和入站契约；不兼容旧模块接口 |
+| [服务集成 API](service-integrations-api.md) | GitLab/Jenkins/OpenObserve/Elasticsearch 类型目录、维护路由、DTO、权限、条件请求、诊断和入站契约；不兼容旧模块接口 |
 | [领域模型与权限](domain-model.md) | 用户、创始人、管理员、注册、会话、头像与审计的规则 |
 | [API 设计](api.md) | HTTP 约定、接口清单、请求响应、错误与并发控制 |
 | [数据库设计](database.md) | 表关系、字段职责、索引、事务与生命周期 |

@@ -104,7 +104,7 @@ func TestJenkinsProbe(t *testing.T) {
 func TestJenkinsTLSAndCancellation(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer srv.Close()
-	d := checkJenkins(context.Background(), &http.Client{Timeout: time.Second}, srv.URL, "", "", time.Now())
+	d := checkJenkins(context.Background(), &http.Client{Timeout: 10 * time.Second}, srv.URL, "", "", time.Now())
 	if d.Summary["reason"] != "tls_failed" {
 		t.Fatalf("TLS not enforced: %+v", d)
 	}

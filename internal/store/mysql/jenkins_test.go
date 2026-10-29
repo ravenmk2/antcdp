@@ -17,15 +17,28 @@ import (
 
 func verifyJenkinsIntegrations(t *testing.T, db *Store, installer *install.Service, admin, member, other *apiClient, memberID string) {
 	t.Helper()
-	base := "/admin/service-connections/jenkins"
+	verifyHTTPServiceIntegrations(t, db, installer, admin, member, other, memberID, "jenkins", "Jenkins")
+	for _, kind := range []string{"openobserve", "elasticsearch"} {
+		t.Run(kind, func(t *testing.T) {
+			verifyHTTPServiceIntegrations(t, db, installer, admin, member, other, memberID, kind, kind)
+		})
+	}
+}
+func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.Service, admin, member, other *apiClient, memberID, kind, label string) {
+	t.Helper()
+	base := "/admin/service-connections/" + kind
+	method := kind + "_basic"
+	if kind == "jenkins" {
+		method = "jenkins_api_token"
+	}
 	tag := func(client *apiClient, path string) map[string]string {
 		client.call(t, "GET", path, nil, 200, nil)
 		return map[string]string{"If-Match": client.last.Header().Get("ETag")}
 	}
-	created := testData(admin.call(t, "POST", base, map[string]any{"name": "Jenkins 集成测试", "config": map[string]any{"base_url": "https://jenkins.example.com/jenkins/"}}, 201, nil))
+	created := testData(admin.call(t, "POST", base, map[string]any{"name": label + " 集成测试", "config": map[string]any{"base_url": "https://jenkins.example.com/jenkins/"}}, 201, nil))
 	id := created["id"].(string)
 	path := base + "/" + id
-	if created["service_type"] != "jenkins" || admin.last.Header().Get("Location") != "/api/v1"+path {
+	if created["service_type"] != kind || admin.last.Header().Get("Location") != "/api/v1"+path {
 		t.Fatal("incorrect Jenkins representation")
 	}
 	// Persisted JSON is typed and schema-versioned; reads must reject corruption.
@@ -54,12 +67,21 @@ func verifyJenkinsIntegrations(t *testing.T, db *Store, installer *install.Servi
 	if !strings.Contains(types, "jenkins_api_token") {
 		t.Fatal("Jenkins capability missing")
 	}
+	if kind == "openobserve" {
+		if created["config"].(map[string]any)["default_organization"] != "default" {
+			t.Fatal("missing default organization")
+		}
+		for _, org := range []any{"", nil, "../admin"} {
+			admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"default_organization": org}}, 422, tag(admin, path))
+		}
+		admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"default_organization": "team_logs"}}, 200, tag(admin, path))
+	}
 	old := tag(admin, path)
 	admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"base_url": "http://jenkins.example.com/ci"}}, 200, old)
 	admin.call(t, "PATCH", path, map[string]any{"name": "stale"}, 412, old)
 	admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"job": "forbidden"}}, 422, tag(admin, path))
 	sys := path + "/credentials"
-	auth := map[string]any{"auth_method": "jenkins_api_token", "identity_config": map[string]string{"username": "build-bot"}, "secret": map[string]string{"token": "jenkins-private-test-token"}}
+	auth := map[string]any{"auth_method": method, "identity_config": map[string]string{"username": "build-bot"}, "secret": map[string]string{"token": "jenkins-private-test-token"}}
 	create := func(client *apiClient, collection, name string) string {
 		result := testData(client.call(t, "POST", collection, map[string]any{"name": name, "authentication": auth}, 201, tag(client, collection)))
 		if result["identity_config"].(map[string]any)["username"] != "build-bot" || strings.Contains(fmt.Sprint(result), "jenkins-private-test-token") {
@@ -70,12 +92,12 @@ func verifyJenkinsIntegrations(t *testing.T, db *Store, installer *install.Servi
 	cid := create(admin, sys, "系统构建账号")
 	cp := sys + "/" + cid
 	admin.call(t, "POST", sys, map[string]any{"name": "wrong method", "authentication": map[string]any{"auth_method": "gitlab_access_token", "identity_config": map[string]string{}, "secret": map[string]string{"token": "test-token"}}}, 422, tag(admin, sys))
-	admin.call(t, "PUT", cp+"/authentication", map[string]any{"auth_method": "jenkins_api_token", "identity_config": map[string]string{"username": "bot", "extra": "forbidden"}, "secret": map[string]string{"token": "test-token"}}, 422, tag(admin, cp))
+	admin.call(t, "PUT", cp+"/authentication", map[string]any{"auth_method": method, "identity_config": map[string]string{"username": "bot", "extra": "forbidden"}, "secret": map[string]string{"token": "test-token"}}, 422, tag(admin, cp))
 	admin.call(t, "GET", "/admin/service-connections/gitlab/"+id+"/credentials/"+cid, nil, 404, nil)
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": cid}, 200, tag(admin, sys+"/preferred"))
 	admin.call(t, "PUT", path+"/fallback-credential", map[string]string{"credential_id": cid}, 200, tag(admin, path+"/fallback-credential"))
 	store := func() (identity.Store, error) { return db, nil }
-	svc := (&integrations.Service{Identity: identity.New(store), Store: store, Cipher: installer.IntegrationSecret, ETag: installer.IntegrationETag}).ForType("jenkins")
+	svc := (&integrations.Service{Identity: identity.New(store), Store: store, Cipher: installer.IntegrationSecret, ETag: installer.IntegrationETag}).ForType(kind)
 	connectionID, _ := strconv.ParseUint(id, 10, 64)
 	credentialID, _ := strconv.ParseUint(cid, 10, 64)
 	raw := admin.cookies["antcdp_session"].Value
@@ -92,6 +114,13 @@ func verifyJenkinsIntegrations(t *testing.T, db *Store, installer *install.Servi
 	if tag(admin, cp)["If-Match"] != credentialTag {
 		t.Fatal("verification changed edit version")
 	}
+	if kind == "openobserve" {
+		admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"default_organization": "another_org"}}, 200, tag(admin, path))
+		diagnostic := testData(admin.call(t, "GET", cp+"/diagnostics", nil, 200, nil))["latest"].(map[string]any)
+		if diagnostic["outdated"] != true {
+			t.Fatal("organization change did not invalidate verification")
+		}
+	}
 	svc.Probe = func(ctx context.Context, _ *integrations.HTTPConfig, _ string, started time.Time) integrations.Diagnostic {
 		bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()
@@ -104,6 +133,13 @@ func verifyJenkinsIntegrations(t *testing.T, db *Store, installer *install.Servi
 	var apiErr *httpx.Error
 	if !errors.As(err, &apiErr) || apiErr.Code != "STATE_CHANGED" {
 		t.Fatal("stale result accepted", err)
+	}
+	if kind == "elasticsearch" {
+		keyAuth := map[string]any{"auth_method": "elasticsearch_api_key", "identity_config": map[string]string{}, "secret": map[string]string{"token": "aWQ6c2VjcmV0"}}
+		admin.call(t, "PUT", cp+"/authentication", keyAuth, 200, tag(admin, cp))
+		if testData(admin.call(t, "GET", cp, nil, 200, nil))["auth_method"] != "elasticsearch_api_key" {
+			t.Fatal("API key replacement failed")
+		}
 	}
 	auth["identity_config"] = map[string]string{"username": "new-bot"}
 	admin.call(t, "PUT", cp+"/authentication", auth, 200, tag(admin, cp))
@@ -126,13 +162,13 @@ func verifyJenkinsIntegrations(t *testing.T, db *Store, installer *install.Servi
 	admin.call(t, "POST", cp+"/verify", map[string]any{}, 409, tag(admin, cp))
 	admin.call(t, "PATCH", path, map[string]any{"enabled": false}, 200, tag(admin, path))
 	admin.call(t, "POST", path+"/test", map[string]any{}, 409, tag(admin, path))
-	mine := "/me/service-connections/jenkins/" + id + "/credentials"
+	mine := "/me/service-connections/" + kind + "/" + id + "/credentials"
 	personal := create(member, mine, "个人构建账号")
 	admin.call(t, "GET", mine+"/"+personal, nil, 404, nil)
 	other.call(t, "GET", mine+"/"+personal, nil, 404, nil)
-	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": "Jenkins_Project", "name": "Jenkins 项目权限", "admin_user_ids": []string{memberID}}, 201, nil))
+	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": label + "_Project", "name": label + " 项目权限", "admin_user_ids": []string{memberID}}, 201, nil))
 	projectPath := "/projects/" + project["id"].(string)
-	pp := projectPath + "/service-connections/jenkins/" + id + "/credentials"
+	pp := projectPath + "/service-connections/" + kind + "/" + id + "/credentials"
 	pc := create(member, pp, "项目构建账号")
 	other.call(t, "GET", pp, nil, 403, nil)
 	admin.call(t, "POST", projectPath+"/archive", nil, 204, tag(admin, projectPath))

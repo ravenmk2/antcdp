@@ -22,7 +22,7 @@ import AppLayout from "../../app/AppLayout.vue";
 import ServiceIcon from "./ServiceIcon.vue";
 import CredentialsPanel from "./CredentialsPanel.vue";
 import WebhookSettings from "./WebhookSettings.vue";
-import { serviceUI } from "./providers";
+import { serviceUI, authenticationUI } from "./providers";
 import ProviderFields from "./ProviderFields.vue";
 import { request } from "../../shared/api";
 import { message, type Capability, type ServiceConnection } from "./types";
@@ -76,6 +76,9 @@ function nextStep() {
   step.value++;
 }
 const providerValues = ref<Record<string, string>>({});
+const authMethod = ref("elasticsearch_basic");
+const credentialAdapter = computed(() => authenticationUI(form.service_type, authMethod.value));
+watch(authMethod, () => { credentialValues.value = {}; }, { flush: "sync" });
 const form = reactive({
   service_type: "",
   code: "",
@@ -86,7 +89,7 @@ watch(
   () => form.service_type,
   (_value, previous) => {
     if (dialog.value && previous && (Object.values(providerValues.value).some(Boolean) || Object.values(credentialValues.value).some(Boolean))) ElMessage.info("服务类型已更换，原类型的连接配置和认证材料已清空。");
-    providerValues.value = {};
+    providerValues.value = _value === "openobserve" ? { default_organization: "default" } : {};
     credentialValues.value = {};
   },
 );
@@ -234,7 +237,7 @@ async function save(skipCredential = false) {
     return;
   }
   if (!skipCredential) {
-    formError.value = !credential.name.trim() ? "请输入凭证名称" : serviceUI[form.service_type]!.validateSecret(credentialValues.value);
+    formError.value = !credential.name.trim() ? "请输入凭证名称" : credentialAdapter.value.validateSecret(credentialValues.value);
     if (formError.value) return;
     if (credential.code.trim() && !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(credential.code.trim())) { formError.value = "凭证编码格式不正确，请使用小写字母、数字、下划线或短横线，以字母或数字开头"; return; }
     if (credential.expires_at && !Number.isFinite(Date.parse(credential.expires_at))) { formError.value = "请输入有效的到期时间"; return; }
@@ -259,7 +262,7 @@ async function save(skipCredential = false) {
       if (!skipCredential) {
         const base = `/admin/service-connections/${form.service_type}/${createdConnection.value.id}/credentials`;
         const collection = await request(base);
-        const adapter = serviceUI[form.service_type]!;
+        const adapter = credentialAdapter.value;
         await request(base, { method: "POST", etag: collection.etag, body: {
           name: credential.name, code: credential.code.trim(), description: "",
           expires_at: credential.expires_at ? new Date(credential.expires_at).toISOString() : null,
@@ -486,8 +489,9 @@ useUnsaved(
             <div class="wizard-summary"><ServiceIcon :type="form.service_type" /><div><strong>{{ form.name }}</strong><small>{{ providerValues.base_url }}</small></div><span v-if="createdConnection">已创建</span></div>
 
               <div class="form-pair"><label>凭证名称<ElInput v-model="credential.name" maxlength="100" :disabled="busy" /></label><label>编码（可选）<ElInput v-model="credential.code" maxlength="64" :disabled="busy" /></label></div>
-              <ProviderFields :show-help="false" v-model="credentialValues" :fields="serviceUI[form.service_type]!.identityFields" :disabled="busy" />
-              <ProviderFields :show-help="false" v-model="credentialValues" :fields="serviceUI[form.service_type]!.secretFields" :disabled="busy" />
+              <label v-if="form.service_type === 'elasticsearch'">认证方式<ElSelect v-model="authMethod" :disabled="busy"><ElOption value="elasticsearch_basic" label="用户名与密码" /><ElOption value="elasticsearch_api_key" label="API Key" /></ElSelect></label>
+<ProviderFields :show-help="false" v-model="credentialValues" :fields="credentialAdapter.identityFields" :disabled="busy" />
+              <ProviderFields :show-help="false" v-model="credentialValues" :fields="credentialAdapter.secretFields" :disabled="busy" />
               <label>到期时间（本地时间，可选）<input v-model="credential.expires_at" type="datetime-local" :disabled="busy" /></label>
           </template>
         </form>

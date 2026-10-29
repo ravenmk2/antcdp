@@ -29,8 +29,9 @@ type ServiceConnection struct {
 	EditVersion         string          `db:"-" json:"version"`
 }
 type HTTPConfig struct {
-	BaseURL string  `db:"base_url" json:"base_url"`
-	CA      *string `db:"custom_ca_pem" json:"custom_ca_pem"`
+	DefaultOrganization string  `db:"-" json:"default_organization,omitempty"`
+	BaseURL             string  `db:"base_url" json:"base_url"`
+	CA                  *string `db:"custom_ca_pem" json:"custom_ca_pem"`
 }
 type ServiceCredential struct {
 	ID                uint64          `db:"id" json:"id,string"`
@@ -129,8 +130,7 @@ func (c *ServiceCredential) ValidRecord() bool {
 	if c.ID == 0 || c.ConnectionID == 0 || c.Creator == 0 || names(c.Name, c.Description) != nil || c.Preferred && !c.Enabled || !c.SecretValid || c.Version == 0 || c.MaterialVersion == 0 || c.AuthSchemaVersion != 1 || !c.HasSecret || !credentialCodePattern.MatchString(c.Code) {
 		return false
 	}
-	provider, ok := adapters[c.Type]
-	if !ok || c.AuthMethod != provider.method || provider.identity(c.Identity) != nil {
+	if validateIdentityFor(c.Type, c.AuthMethod, c.Identity) != nil {
 		return false
 	}
 	switch c.Ownership {
