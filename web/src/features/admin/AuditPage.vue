@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ClearFiltersButton from "../../shared/ClearFiltersButton.vue";
 import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from "vue";
 import { ElButton, ElDatePicker } from "element-plus";
 import { useListSearch } from "../../shared/listSearch";
@@ -136,7 +137,7 @@ onBeforeUnmount(() => {
             @change="listSearch.run"
           />
         </div>
-        <ElButton :disabled="!hasFilters" @click="clearFilters">清除筛选</ElButton>
+        <ClearFiltersButton :disabled="!hasFilters" @click="clearFilters" />
         <RefreshButton :loading="loading" @click="listSearch.run" />
       </div>
       <div v-if="events.length" class="table-scroll">

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ClearFiltersButton from "../../shared/ClearFiltersButton.vue";
 import { serviceUI } from "./providers";
 import ProviderFields from "./ProviderFields.vue";
 import { useUnsaved } from "./unsaved";
@@ -355,7 +356,7 @@ useUnsaved(
       <ElSelect v-model="stateFilter" placeholder="全部状态" aria-label="凭证状态筛选"><ElOption label="全部状态" value="" /><ElOption v-for="(label, value) in stateLabels" :key="value" :label="label" :value="value" /></ElSelect>
       <span aria-live="polite">{{ visibleRows.length }} 份凭证</span>
     </div>
-    <p v-if="rows.length && !visibleRows.length" class="integration-empty">没有匹配的凭证。<ElButton link @click="search = ''; stateFilter = ''">清除筛选</ElButton></p>
+    <p v-if="rows.length && !visibleRows.length" class="integration-empty">没有匹配的凭证。<ClearFiltersButton link @click="search = ''; stateFilter = ''" /></p>
     <div v-if="visibleRows.length" class="integration-table-wrap">
       <table class="integration-table credentials-table">
         <thead><tr><th>凭证 / code</th><th>状态</th><th>使用设置</th><th>有效期</th><th>最近验证</th><th class="actions-column">操作</th></tr></thead>

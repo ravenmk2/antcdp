@@ -2319,7 +2319,6 @@ small {
 .avatar > svg {
   width: 62%;
   height: 62%;
-  stroke-width: 1.65;
 }
 .avatar img {
   width: 100%;
@@ -4423,3 +4422,29 @@ textarea::placeholder {
   .table-footer .pagination { margin-left: auto; }
   .users-toolbar .users-create { margin-left: 0; }
 }
+
+/* Console list controls share the audit toolbar's spacing and search treatment. */
+.console-list-toolbar { flex-wrap: wrap; gap: 12px; }
+.console-list-toolbar .search-box { min-width: 200px; }
+.collab-console-toolbar { background: var(--surface); border: 1px solid var(--border); border-radius: 12px 12px 0 0; }
+.collaboration-page .collab-console-toolbar ~ .collab-table-panel { border-top: 0; border-radius: 0 0 12px 12px; }
+@media (max-width: 700px) {
+  .console-list-toolbar .search-box { flex-basis: 100%; max-width: none; }
+}
+
+.collaboration-page .collab-console-toolbar ~ .collab-table-panel { border-radius: 0; border-bottom: 0; }
+.collab-console-footer { background: var(--surface); border: 1px solid var(--border); border-radius: 0 0 12px 12px; flex-wrap: wrap; }
+.collab-console-footer .pagination { margin-left: auto; }
+
+.collab-console-toolbar > .console-create-action { margin-left: auto; flex-shrink: 0; }
+
+.collaboration-page .collab-console-toolbar ~ .collab-team-list { border-top: 0; border-bottom: 0; border-radius: 0; }
+
+/* Empty and loading lists remain inside the same surface as their controls. */
+.collaboration-page .collab-console-toolbar + .collab-empty {
+  background: var(--surface);
+  border-inline: 1px solid var(--border);
+  padding: 48px 24px;
+}
+.collaboration-page .collab-console-toolbar + .collab-empty h2 { margin-top: 0; }
+.collaboration-page .collab-console-toolbar + .collab-empty p { margin: 0; }

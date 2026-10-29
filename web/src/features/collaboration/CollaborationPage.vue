@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import PageSizeSelect from "../../shared/PageSizeSelect.vue";
+import StatusSegmented from "../../shared/StatusSegmented.vue";
+import ClearFiltersButton from "../../shared/ClearFiltersButton.vue";
 import { computed, ref, reactive, watch, onUnmounted, nextTick } from "vue";
 import {
   useRoute,
@@ -53,6 +56,7 @@ const kind = computed<Kind>(() =>
 );
 const label = computed(() => (kind.value === "teams" ? "团队" : "项目"));
 const consoleMode = computed(() => route.path.startsWith("/admin"));
+const unifiedListControls = computed(() => consoleMode.value || kind.value === "teams");
 const base = computed(
   () => `${consoleMode.value ? "/admin" : ""}/${kind.value}`,
 );
@@ -69,6 +73,7 @@ const memberPage = ref(1),
   memberTotal = ref(0),
   memberSearch = ref("");
 watch(memberPage, load);
+const listPageSize = ref(20);
 const loading = ref(false),
   busy = ref(false),
   error = ref(""),
@@ -273,7 +278,7 @@ async function load() {
       const common = `scope=${consoleMode.value ? "all" : "mine"}&q=${encodeURIComponent(query.value)}`;
       const [result, active, ended] = await Promise.all([
         api<Page>(
-          `${endpoint}?${common}&status=${status.value}&page=${page.value}&page_size=20`,
+          `${endpoint}?${common}&status=${status.value}&page=${page.value}&page_size=${unifiedListControls.value ? listPageSize.value : 20}`,
         ),
         api<Page>(`${endpoint}?${common}&status=active&page=1&page_size=1`),
         api<Page>(
@@ -321,6 +326,11 @@ watch(status, () => {
   else void load();
 });
 watch(page, load);
+watch(listPageSize, () => {
+  listSearch.cancel();
+  if (page.value !== 1) page.value = 1;
+  else void load();
+});
 async function searchUsers(q: string) {
   const seq = ++optionSequence;
   try {
@@ -584,7 +594,18 @@ async function removeTeam(t: Resource) {
         ><ElButton :disabled="loading || busy" @click="load">重新加载</ElButton>
       </div>
       <template v-if="!id">
-        <div class="collab-toolbar">
+        <div v-if="unifiedListControls" class="table-toolbar console-list-toolbar collab-console-toolbar">
+          <label class="search-box"><UiIcon name="search" /><input
+            v-model="query" type="search" :aria-label="`搜索${label}`" placeholder="搜索名称、编码或摘要" autocomplete="off"
+            @input="listSearch.input" @keydown.enter="listSearch.enter"
+            @compositionstart="listSearch.compositionStart" @compositionend="listSearch.compositionEnd"
+          /></label>
+          <StatusSegmented v-model="status" :options="filters.map(filter => ({ ...filter, count: error ? undefined : counts[filter.value] }))" />
+          <ClearFiltersButton :disabled="!query && status === 'active'" @click="query = ''; status = 'active'; listSearch.run()" />
+          <RefreshButton :loading="loading" :disabled="busy" @click="listSearch.run" />
+          <div v-if="consoleMode" class="console-create-action"><ElButton class="console-create" type="primary" @click="edit(true)"><UiIcon name="plus" />创建{{ label }}</ElButton></div>
+        </div>
+        <div v-else class="collab-toolbar">
           <nav class="collab-status-tabs" aria-label="状态筛选">
             <button
               v-for="filter in filters"
@@ -640,15 +661,14 @@ async function removeTeam(t: Resource) {
           </h2>
           <p>
             {{
-              query
-                ? "尝试其他关键词或调整筛选条件。"
+              query || status === endStatus
+                ? "当前筛选条件下没有结果，可切换状态或清除筛选。"
                 : consoleMode
                   ? `创建${label}后，即可添加成员开始协作。`
                   : `你参与的${label}会显示在这里。需要加入时，请联系${label}或系统管理员。`
             }}
           </p>
-          <ElButton v-if="query || status !== 'active'" @click="query = ''; status = 'active'; listSearch.run()">清除筛选</ElButton>
-          <ElButton v-else-if="consoleMode" type="primary" @click="edit(true)">创建{{ label }}</ElButton>
+          <ClearFiltersButton v-if="!unifiedListControls && (query || status !== 'active')" @click="query = ''; status = 'active'; listSearch.run()" />
         </div>
         <template v-else-if="rows.length">
           <div v-if="consoleMode" class="collab-table-panel">
@@ -784,7 +804,7 @@ async function removeTeam(t: Resource) {
               </div>
             </article>
           </div>
-          <footer v-if="!error" class="collab-list-footer">
+          <footer v-if="!error && !unifiedListControls" class="collab-list-footer">
             <span
               >共 {{ total }} 个{{ label
               }}</span
@@ -797,6 +817,17 @@ async function removeTeam(t: Resource) {
             />
           </footer>
         </template>
+        <footer v-if="unifiedListControls && !error" class="table-footer collab-console-footer">
+          <div class="list-page-summary">
+            <span>共 {{ total }} 个{{ label }}</span>
+            <PageSizeSelect v-model="listPageSize" :disabled="loading" />
+          </div>
+          <div class="pagination">
+            <button class="page-button" :disabled="page <= 1 || loading" aria-label="上一页" @click="page--"><UiIcon name="chevron-left" /></button>
+            <span>{{ page }} / {{ Math.max(1, Math.ceil(total / listPageSize)) }}</span>
+            <button class="page-button" :disabled="page * listPageSize >= total || loading" aria-label="下一页" @click="page++"><UiIcon name="chevron" /></button>
+          </div>
+        </footer>
       </template>
       <template v-else-if="detail">
         <section class="collab-detail-heading">
@@ -899,7 +930,7 @@ async function removeTeam(t: Resource) {
             :aria-current="tab === 'teams' ? 'page' : undefined"
             @click="tab = 'teams'"
           >
-            <UiIcon :name="kind === 'projects' ? 'users' : 'database'" />{{
+            <UiIcon :name="kind === 'projects' ? 'users' : 'folder'" />{{
               kind === "projects" ? "参与团队" : "加入项目"
             }}<span class="collab-count">{{ teams.length }}</span>
           </button>

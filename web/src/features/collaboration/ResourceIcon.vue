@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { icons, iconStrokeWidth } from "../../shared/icons";
 withDefaults(
   defineProps<{
     iconKey?: string | null;
@@ -9,16 +10,18 @@ withDefaults(
   }>(),
   { fallback: "folder" },
 );
-const paths: Record<string, string> = {
-  folder: "M3 6h6l2 2h10v12H3V6Z",
-  code: "m8 7-5 5 5 5m8-10 5 5-5 5m-3-14-2 18",
-  box: "m12 3 9 5v9l-9 5-9-5V8l9-5Zm0 9 9-4M3 8l9 4v10",
-  globe:
-    "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0ZM3 12h18M12 3a18 18 0 0 1 0 18 18 18 0 0 1 0-18Z",
-  bolt: "m14 2-11 12h8l-1 8 11-13h-8l1-7Z",
-  layers: "m12 3 10 5-10 5L2 8l10-5ZM2 12l10 5 10-5M2 16l10 5 10-5",
-  team: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.87M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm8 .13a4 4 0 0 1 0 7.75",
+const resourceIcons = {
+  folder: icons.folder,
+  code: icons.code,
+  box: icons.box,
+  globe: icons.globe,
+  bolt: icons.bolt,
+  layers: icons.layers,
+  team: icons.team,
 };
+function resourceIcon(key: string) {
+  return resourceIcons[key as keyof typeof resourceIcons] || resourceIcons.folder;
+}
 </script>
 <template>
   <span
@@ -27,18 +30,13 @@ const paths: Record<string, string> = {
     ><img
       v-if="fileId || imageUrl"
       :src="imageUrl || `/api/v1/icons/${fileId}`"
-      alt="" /><svg
+      alt="" /><component
+      :is="resourceIcon(iconKey || fallback)"
       v-else
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
+      :stroke-width="iconStrokeWidth"
       aria-hidden="true"
-    >
-      <path :d="paths[iconKey || fallback] || paths.folder" /></svg
-  ></span>
+      focusable="false"
+    /></span>
 </template>
 <style scoped>
 .resource-icon {

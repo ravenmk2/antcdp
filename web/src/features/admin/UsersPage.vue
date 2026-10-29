@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import StatusSegmented from "../../shared/StatusSegmented.vue";
+import ClearFiltersButton from "../../shared/ClearFiltersButton.vue";
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import {
   ElButton,
@@ -289,30 +291,7 @@ onUnmounted(clearPassword);
   <AppLayout>
     <div v-if="error" class="error-banner" role="alert">{{ error }}</div>
     <section class="panel" aria-label="用户列表" :aria-busy="loading">
-      <div class="tabs">
-        <button
-          v-for="status in [
-            { value: '', label: '全部用户', count: counts?.users_total },
-            { value: 'active', label: '正常账号', count: counts?.users_active },
-            {
-              value: 'disabled',
-              label: '已禁用',
-              count: counts?.users_disabled,
-            },
-          ]"
-          :key="status.value"
-          class="tab"
-          :class="{ active: filters.status === status.value }"
-          @click="
-            filters.status = status.value;
-            listSearch.run();
-          "
-        >
-          {{ status.label
-          }}<span class="tab-count">{{ status.count ?? "…" }}</span>
-        </button>
-      </div>
-      <div class="table-toolbar users-toolbar">
+      <div class="table-toolbar users-toolbar console-list-toolbar">
         <label class="search-box"
           ><UiIcon name="search" /><input
             v-model="filters.q"
@@ -324,7 +303,13 @@ onUnmounted(clearPassword);
             @compositionstart="listSearch.compositionStart"
             @compositionend="listSearch.compositionEnd"
             @keydown.enter="listSearch.enter" /></label
-        ><select
+        >
+        <StatusSegmented :model-value="filters.status" :options="[
+          { value: '', label: '全部用户', count: counts?.users_total ?? '…' },
+          { value: 'active', label: '正常账号', count: counts?.users_active ?? '…' },
+          { value: 'disabled', label: '已禁用', count: counts?.users_disabled ?? '…' },
+        ]" @update:model-value="filters.status = $event; listSearch.run()" />
+        <select
           v-model="filters.identity"
           class="select-filter"
           aria-label="筛选用户身份"
@@ -334,8 +319,9 @@ onUnmounted(clearPassword);
           <option value="founder">创始人</option>
           <option value="admin">管理员</option>
           <option value="user">普通用户</option></select
-        ><RefreshButton :loading="loading" @click="listSearch.run" />
-        <ElButton :disabled="!hasFilters" @click="clearFilters">清除筛选</ElButton>
+        >
+        <ClearFiltersButton :disabled="!hasFilters" @click="clearFilters" />
+        <RefreshButton :loading="loading" @click="listSearch.run" />
         <ElButton class="users-create" type="primary" @click="createUser"><UiIcon name="plus" />添加用户</ElButton>
       </div>
       <div v-if="users.length" class="table-scroll">

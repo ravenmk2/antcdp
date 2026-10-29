@@ -9,6 +9,7 @@
     "build": "vue-tsc --noEmit && vite build"
   },
   "dependencies": {
+    "@lucide/vue": "1.63.0",
     "element-plus": "2.14.7",
     "markdown-it": "15.0.3",
     "pinia": "4.1.0",

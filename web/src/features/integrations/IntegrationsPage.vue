@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ClearFiltersButton from "../../shared/ClearFiltersButton.vue";
 import { useUnsaved } from "./unsaved";
 import { computed, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -343,7 +344,7 @@ useUnsaved(
             <div v-if="!visible.length" class="integration-empty">
               <h3>{{ items.length ? '没有匹配的集成' : '连接你的第一个服务' }}</h3>
               <p>{{ items.length ? '尝试更换服务类型、状态或搜索关键词。' : admin ? '添加服务连接后，即可配置凭证和事件接收。' : '请联系系统管理员添加服务连接。' }}</p>
-              <ElButton v-if="items.length" @click="resetFilters">清除筛选</ElButton>
+              <ClearFiltersButton v-if="items.length" @click="resetFilters" />
               <ElButton v-else-if="admin" :disabled="!types.length" @click="openCreate">添加集成</ElButton>
             </div>
             <div v-if="visible.length" class="integration-table-wrap">

@@ -185,7 +185,7 @@ async function userCommand(command: string | number | object) {
             aria-label="项目管理"
             to="/admin/projects"
             :class="{ active: route.path.startsWith('/admin/projects') }"
-            ><UiIcon name="database" /><span class="nav-text"
+            ><UiIcon name="folder" /><span class="nav-text"
               >项目管理</span
             ></RouterLink
           >
@@ -280,7 +280,7 @@ async function userCommand(command: string | number | object) {
               <ElDropdownItem
                 v-if="!identity.session?.require_password_change"
                 command="/projects"
-                ><UiIcon name="database" />我的项目</ElDropdownItem
+                ><UiIcon name="folder" />我的项目</ElDropdownItem
               >
               <ElDropdownItem
                 v-if="!identity.session?.require_password_change"
@@ -367,7 +367,7 @@ async function userCommand(command: string | number | object) {
                 <ElDropdownItem
                   v-if="!identity.session?.require_password_change"
                   command="/projects"
-                  ><UiIcon name="database" />我的项目</ElDropdownItem
+                  ><UiIcon name="folder" />我的项目</ElDropdownItem
                 >
                 <ElDropdownItem
                   v-if="!identity.session?.require_password_change"
