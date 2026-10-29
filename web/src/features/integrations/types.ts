@@ -98,3 +98,14 @@ export function diagnosticText(d: Diagnostic): string {
   const reason = d.summary.reason ? diagnosticReasons[d.summary.reason] : undefined;
   return reason ? `${d.summary.reachability === "reachable" ? "HTTP 可达；" : ""}${reason}` : (diagnosticLabels[d.status] ?? "未知验证结果");
 }
+
+export function diagnosticTone(d: Diagnostic): "success" | "danger" | "warning" | "muted" {
+  if (d.outdated) return "muted";
+  switch (d.status) {
+    case "succeeded":
+    case "received_not_dispatched": return "success";
+    case "failed": return "danger";
+    case "unsupported": return "warning";
+    default: return "muted";
+  }
+}

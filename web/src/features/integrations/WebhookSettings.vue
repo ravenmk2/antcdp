@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import DiagnosticResult from "./DiagnosticResult.vue";
 import { ref, watch } from "vue";
 import { ElButton, ElDialog, ElInput, ElSelect, ElOption, ElMessage, ElMessageBox } from "element-plus";
 import { request } from "../../shared/api";
-import { message, diagnosticLabels, type WebhookSettings, type Diagnostic } from "./types";
+import { message, type WebhookSettings, type Diagnostic } from "./types";
 import { useUnsaved } from "./unsaved";
 
 const props = defineProps<{ base: string; connectionEnabled: boolean }>();
@@ -89,7 +90,7 @@ useUnsaved(() => secretDialog.value || !!oneTime.value, () => busy.value);
       </div>
       <p v-if="!connectionEnabled" class="integration-note">连接已停用，当前不会接收；接收开关设置保留。</p>
       <h3>最近接收</h3>
-      <p v-if="diagnostic">{{ diagnostic.outdated ? '历史结果 · ' : '' }}{{ diagnosticLabels[diagnostic.status] }} · {{ diagnostic.summary.event_type }}<span v-if="diagnostic.summary.source_project_id"> · GitLab 项目 {{ diagnostic.summary.source_project_id }}</span> · {{ new Date(diagnostic.started_at).toLocaleString() }}</p>
+      <p v-if="diagnostic" class="diagnostic-detail"><DiagnosticResult :diagnostic="diagnostic" /> · {{ diagnostic.summary.event_type }}<span v-if="diagnostic.summary.source_project_id"> · GitLab 项目 {{ diagnostic.summary.source_project_id }}</span> · {{ new Date(diagnostic.started_at).toLocaleString() }}</p>
       <p v-else>尚无已认证事件。保存秘密后需显式启用接收。</p>
     </div>
     <ElDialog v-model="secretDialog" title="配置 Webhook 验证秘密" width="min(560px, 94vw)" :close-on-click-modal="false" :show-close="!busy" :close-on-press-escape="!busy" @closed="token = ''">

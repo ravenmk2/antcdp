@@ -17,7 +17,7 @@ async function renderState(overrides = {}) {
   const values = { readonly: false, busy: false, loading: false, error: '', collection: 'v1', search: '', stateFilter: '', stateLabels: { available: '可用' }, rows: [], visibleRows: [], diagnostics: {}, fallbackID: null, system: true, connectionEnabled: true, dialog: false, mode: 'create', clearSecret() {}, open() {}, load() {}, last() {}, menuAction() {}, stateOf: () => 'available', available: () => true, ...overrides };
   const app = createSSRApp({ data: () => values, render });
   const passthrough = { setup: (_, { slots }) => () => h('span', slots.default?.()) };
-  for (const name of ['ElTabs', 'ElTabPane', 'ElSwitch', 'ProviderFields', 'ElInput', 'ElSelect', 'ElOption', 'ElButton', 'UiIcon', 'ConnectionCode', 'ClearFiltersButton', 'ElDropdown', 'ElDropdownMenu', 'ElDropdownItem']) app.component(name, passthrough);
+  for (const name of ['DiagnosticResult', 'ElTabs', 'ElTabPane', 'ElSwitch', 'ProviderFields', 'ElInput', 'ElSelect', 'ElOption', 'ElButton', 'UiIcon', 'ConnectionCode', 'ClearFiltersButton', 'ElDropdown', 'ElDropdownMenu', 'ElDropdownItem']) app.component(name, passthrough);
   app.component('ElDialog', { render: () => null });
   app.config.warnHandler = message => { throw new Error(message); };
   return renderToString(app);

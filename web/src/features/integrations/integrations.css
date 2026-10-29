@@ -402,3 +402,15 @@
 .credential-list-content { border-top: 1px solid var(--border); }
 .credential-list-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; min-height: 180px; padding: 32px 24px; text-align: center; color: var(--text-muted); overflow-wrap: anywhere; }
 .credential-list .credential-readonly { margin: 0; padding: 12px 24px; }
+
+.diagnostic-success { color: var(--success); }
+.diagnostic-danger { color: var(--danger); }
+.diagnostic-warning, .diagnostic-history { color: var(--warning); }
+.diagnostic-muted, .diagnostic-detail { color: var(--text-muted); }
+
+/* Detail spacing is owned by one outer inset, without stacking page padding. */
+.content:has(> .integration-detail-page) { padding-top: 20px; }
+.integrations-page.integration-detail-page { padding-top: 0; }
+.integration-detail-page .integration-detail-header { padding-bottom: 0; }
+.integration-detail-header h1 { margin: 0 0 4px; }
+.integration-detail-header + .integration-tabs { margin: 12px 0 20px; }

@@ -333,7 +333,7 @@ useUnsaved(
 </script>
 <template>
   <AppLayout :breadcrumbs="breadcrumbs"
-    ><main class="integrations-page" :class="{ 'integration-list-page': !selected }">
+    ><main class="integrations-page" :class="{ 'integration-list-page': !selected, 'integration-detail-page': !!selected }">
       <nav
         v-if="!admin && !projectID"
         class="integration-tabs"
@@ -411,7 +411,7 @@ useUnsaved(
                 selected.enabled ? "已启用" : "已停用"
               }}</span>
             </h1>
-            <ConnectionCode :code="selected.code" /><p>{{ selected.description }}</p>
+            <ConnectionCode :code="selected.code" /><p v-if="selected.description">{{ selected.description }}</p>
           </div></div>
           <div v-if="admin" class="integration-actions">
             <ElDropdown trigger="click" @command="remove">

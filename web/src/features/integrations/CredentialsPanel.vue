@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DiagnosticResult from "./DiagnosticResult.vue";
 import UiIcon from "../../shared/UiIcon.vue";
 import ConnectionCode from "./ConnectionCode.vue";
 import ClearFiltersButton from "../../shared/ClearFiltersButton.vue";
@@ -25,7 +26,6 @@ import { request } from "../../shared/api";
 import {
   available,
   message,
-  diagnosticText,
   type ServiceCredential,
   type Diagnostic,
 } from "./types";
@@ -354,7 +354,7 @@ useUnsaved(
           <td data-label="状态"><span class="credential-status" :class="stateOf(row)">{{ stateLabels[stateOf(row)] }}</span></td>
           <td data-label="使用设置"><div><span v-if="row.is_preferred" class="integration-badge">首选</span><span v-if="fallbackID === row.id" class="integration-badge fallback">兜底</span><span v-if="!row.is_preferred && fallbackID !== row.id" class="muted">—</span></div></td>
           <td data-label="有效期"><div><span :title="row.expires_at ? new Date(row.expires_at).toLocaleString() : ''">{{ row.expires_at ? new Date(row.expires_at).toLocaleDateString() : '未设置' }}</span><small v-if="row.expires_at" class="cell-subtext">{{ expiryHint(row) }}</small></div></td>
-          <td data-label="最近验证"><div v-if="diagnostics[row.id]"><span class="diagnostic-status">{{ diagnostics[row.id]!.outdated ? '历史结果 · ' : '' }}{{ diagnosticText(diagnostics[row.id]!) }}</span><small v-if="diagnostics[row.id]!.summary.external_identity?.username" class="cell-subtext">{{ diagnostics[row.id]!.summary.external_identity?.username }}</small><small class="cell-subtext">{{ new Date(diagnostics[row.id]!.started_at).toLocaleString() }}</small></div><button v-else-if="diagnostics[row.id] === undefined" class="credential-action" :disabled="busy" @click="last(row)">查看记录</button><span v-else class="muted">尚无记录</span></td>
+          <td data-label="最近验证"><div v-if="diagnostics[row.id]"><DiagnosticResult :diagnostic="diagnostics[row.id]!" /><small v-if="diagnostics[row.id]!.summary.external_identity?.username" class="cell-subtext">{{ diagnostics[row.id]!.summary.external_identity?.username }}</small><small class="cell-subtext">{{ new Date(diagnostics[row.id]!.started_at).toLocaleString() }}</small></div><button v-else-if="diagnostics[row.id] === undefined" class="credential-action" :disabled="busy" @click="last(row)">查看记录</button><span v-else class="muted">尚无记录</span></td>
           <td class="actions-column"><div v-if="!readonly" class="credential-row-actions"><ElDropdown trigger="click" popper-class="credential-action-menu" @command="(command: string) => menuAction(command, row)"><button class="credential-action credential-more" :disabled="busy" :aria-label="`${row.name}更多操作`"><UiIcon name="more" /></button><template #dropdown><ElDropdownMenu>
             <ElDropdownItem command="edit"><UiIcon name="edit" />编辑凭证</ElDropdownItem>
             <ElDropdownItem command="secret"><UiIcon name="key" />替换认证信息</ElDropdownItem>

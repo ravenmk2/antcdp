@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import DiagnosticResult from "./DiagnosticResult.vue";
 import { computed, reactive, ref, watch } from "vue";
 import { ElButton, ElInput, ElSwitch, ElMessage, ElMessageBox } from "element-plus";
 import { request } from "../../shared/api";
 import { useUnsaved } from "./unsaved";
-import { message, diagnosticText, type Diagnostic, type ServiceConnection } from "./types";
+import { message, type Diagnostic, type ServiceConnection } from "./types";
 const props = defineProps<{ base: string; connection: ServiceConnection; etag: string }>();
 const serviceName = computed(() => props.connection.service_type === "jenkins" ? "Jenkins" : "GitLab");
 const emit = defineEmits<{ saved: [connection: ServiceConnection, etag: string] }>();
@@ -47,7 +48,7 @@ useUnsaved(() => dirty.value, () => busy.value);
       <details><summary>高级 TLS 配置</summary><p v-if="!form.base_url.toLowerCase().startsWith('https://')" class="integration-note">仅适用于 HTTPS，已有 CA 配置保留。</p><label>公共 CA（可选）<ElInput v-model="form.custom_ca_pem" type="textarea" :rows="5" maxlength="16384" :disabled="busy || !form.base_url.toLowerCase().startsWith('https://')" /><small>始终校验证书和主机名，不接收私钥。</small></label></details>
       <label>启用连接<ElSwitch v-model="form.enabled" :disabled="busy" /><small>{{ connection.service_type === "jenkins" ? "停用后阻止连接测试和凭证验证，已有凭证保留。" : "停用后阻止外部验证及 Webhook 接收，凭证和接收开关设置保留。" }}</small></label>
       <div class="integration-actions"><ElButton type="primary" native-type="submit" :disabled="!dirty" :loading="busy">保存连接</ElButton><ElButton :disabled="busy || dirty || !connection.enabled" @click="test">测试已保存连接</ElButton><ElButton :disabled="busy" @click="reload">重新加载</ElButton></div>
-      <p v-if="diagnostic" class="integration-note">{{ diagnostic.outdated ? '历史结果 · ' : '' }}{{ diagnosticText(diagnostic) }} · {{ new Date(diagnostic.started_at).toLocaleString() }}</p>
+      <p v-if="diagnostic" class="integration-note diagnostic-detail"><DiagnosticResult :diagnostic="diagnostic" /> · {{ new Date(diagnostic.started_at).toLocaleString() }}</p>
     </form>
   </section>
 </template>
