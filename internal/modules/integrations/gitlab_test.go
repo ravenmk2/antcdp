@@ -105,7 +105,7 @@ func TestSecretBindingAndCollectionABA(t *testing.T) {
 }
 
 func TestDialRejectsActualLocalAddresses(t *testing.T) {
-	tr := transport(&GitLabConfig{})
+	tr := transport(&HTTPConfig{})
 	defer tr.CloseIdleConnections()
 	for _, address := range []string{"127.0.0.1:443", "[::1]:443", "169.254.169.254:80", "100.100.100.200:80"} {
 		conn, err := tr.DialContext(context.Background(), "tcp", address)
@@ -149,7 +149,7 @@ func TestHTTPConnectionProbe(t *testing.T) {
 	server.Listener = listener
 	server.Start()
 	defer server.Close()
-	config := &GitLabConfig{BaseURL: server.URL + "/gitlab"}
+	config := &HTTPConfig{BaseURL: server.URL + "/gitlab"}
 	if err := ValidateConfig(config.BaseURL, nil); err != nil {
 		t.Fatal(err)
 	}

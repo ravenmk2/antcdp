@@ -1,6 +1,6 @@
 -- AntCDP complete target schema: 19 business tables, MySQL 8.0.16+ / InnoDB.
--- Phase A: 7 tables. Collaboration/sidebar: 9 tables. Integrations: 3 tables.
--- Consolidated migration 5 final schema. No physical FK/CHECK rules.
+-- Phase A: 7 tables. Collaboration/sidebar: 9 tables. Integrations: 4 tables.
+-- Migration 6 schema (consolidated GitLab migration 5 plus Jenkins). No physical FK/CHECK rules.
 -- This file is a review snapshot, NOT an upgrade migration or proof of deployment.
 -- Review reference only. Runtime migrations live in internal/store/migrations/mysql/.
 -- Designed for an empty schema; do not import into an existing installation.
@@ -252,8 +252,7 @@ CREATE TABLE `user_team_shortcut` (
 -- create a row in each new-account transaction. No data seeds in this reference.
 
 -- Service integrations target design (2026-10-29), see docs/service-integrations.md.
--- Replaces the old three-table model in the DESIGN ONLY. Runtime migrations
--- 00003/00004 and deployed data still use the old model; this is not a migration.
+-- Final runtime migration 6 reference; this file is not an executable migration.
 -- ServiceType/ServiceAdapter are code registrations; notification channels,
 -- workflow definitions, execution records and event inboxes are out of scope.
 CREATE TABLE `service_connection` (
@@ -263,6 +262,8 @@ CREATE TABLE `service_connection` (
     name VARCHAR(100) COLLATE utf8mb4_0900_as_ci NOT NULL,
     description VARCHAR(1000) NOT NULL DEFAULT '',
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    config JSON NOT NULL,
+    config_schema_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     fallback_credential_id BIGINT UNSIGNED NULL,
     row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     config_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
@@ -281,11 +282,9 @@ CREATE TABLE `service_connection` (
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Exactly one extension for a GitLab connection. The parent owns the aggregate
--- row_version and config_version; both rows are created/updated/deleted atomically.
+-- row_version and config_version; webhook_version is independent. Create/delete atomically.
 CREATE TABLE `service_connection_gitlab` (
     connection_id BIGINT UNSIGNED NOT NULL,
-    base_url VARCHAR(2048) NOT NULL,
-    custom_ca_pem TEXT NULL,
     webhook_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     webhook_verification_method VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'secret_token',
     webhook_secret_ciphertext BLOB NULL,

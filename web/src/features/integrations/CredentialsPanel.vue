@@ -21,7 +21,7 @@ import { request } from "../../shared/api";
 import {
   available,
   message,
-  diagnosticLabels,
+  diagnosticText,
   type ServiceCredential,
   type Diagnostic,
 } from "./types";
@@ -80,7 +80,7 @@ function expiryHint(row: ServiceCredential) {
 }
 const visibleRows = computed(() => rows.value.filter(row =>
   (!stateFilter.value || stateOf(row) === stateFilter.value) &&
-  `${row.name} ${row.code} ${row.description}`.toLowerCase().includes(search.value.trim().toLowerCase()),
+  `${row.name} ${row.code} ${row.description} ${row.identity_config.username ?? ""}`.toLowerCase().includes(search.value.trim().toLowerCase()),
 ));
 const diagnostics = ref<Record<string, Diagnostic | null>>({});
 async function copyCode(code: string) {
@@ -361,7 +361,7 @@ useUnsaved(
       尚未添加凭证。每个归属可维护多份独立身份。
     </div>
     <div v-if="rows.length" class="credential-filters">
-      <ElInput v-model="search" clearable placeholder="搜索名称、code 或说明" aria-label="搜索凭证" />
+      <ElInput v-model="search" clearable placeholder="搜索名称、编码、用户名或说明" aria-label="搜索凭证" />
       <ElSelect v-model="stateFilter" placeholder="全部状态" aria-label="凭证状态筛选"><ElOption label="全部状态" value="" /><ElOption v-for="(label, value) in stateLabels" :key="value" :label="label" :value="value" /></ElSelect>
       <span aria-live="polite">{{ visibleRows.length }} 份凭证</span>
     </div>
@@ -370,11 +370,11 @@ useUnsaved(
       <table class="integration-table credentials-table">
         <thead><tr><th>凭证 / code</th><th>状态</th><th>使用设置</th><th>有效期</th><th>最近验证</th><th class="actions-column">操作</th></tr></thead>
         <tbody><tr v-for="row in visibleRows" :key="row.id">
-          <td><strong class="credential-name" :title="row.description">{{ row.name }}</strong><div class="credential-code"><code :title="row.code">{{ row.code }}</code><button class="copy-code" :aria-label="`复制 ${row.code}`" @click="copyCode(row.code)">⧉</button></div><span v-if="row.description" class="credential-description" :title="row.description">{{ row.description }}</span></td>
+          <td><strong class="credential-name" :title="row.description">{{ row.name }}</strong><div class="credential-code"><code :title="row.code">{{ row.code }}</code><button class="copy-code" :aria-label="`复制 ${row.code}`" @click="copyCode(row.code)">⧉</button></div><small v-if="row.identity_config.username" class="cell-subtext">用户：{{ row.identity_config.username }}</small><span v-if="row.description" class="credential-description" :title="row.description">{{ row.description }}</span></td>
           <td data-label="状态"><span class="credential-status" :class="stateOf(row)">{{ stateLabels[stateOf(row)] }}</span></td>
           <td data-label="使用设置"><div><span v-if="row.is_preferred" class="integration-badge">首选</span><span v-if="fallbackID === row.id" class="integration-badge fallback">兜底</span><span v-if="!row.is_preferred && fallbackID !== row.id" class="muted">—</span></div></td>
           <td data-label="有效期"><div><span :title="row.expires_at ? new Date(row.expires_at).toLocaleString() : ''">{{ row.expires_at ? new Date(row.expires_at).toLocaleDateString() : '未设置' }}</span><small v-if="row.expires_at" class="cell-subtext">{{ expiryHint(row) }}</small></div></td>
-          <td data-label="最近验证"><div v-if="diagnostics[row.id]"><span class="diagnostic-status">{{ diagnostics[row.id]!.outdated ? '历史结果 · ' : '' }}{{ diagnosticLabels[diagnostics[row.id]!.status] }}</span><small v-if="diagnostics[row.id]!.summary.external_identity?.username" class="cell-subtext">{{ diagnostics[row.id]!.summary.external_identity?.username }}</small><small class="cell-subtext">{{ new Date(diagnostics[row.id]!.started_at).toLocaleString() }}</small></div><ElButton v-else-if="diagnostics[row.id] === undefined" link @click="last(row)">查看记录</ElButton><span v-else class="muted">尚无记录</span></td>
+          <td data-label="最近验证"><div v-if="diagnostics[row.id]"><span class="diagnostic-status">{{ diagnostics[row.id]!.outdated ? '历史结果 · ' : '' }}{{ diagnosticText(diagnostics[row.id]!) }}</span><small v-if="diagnostics[row.id]!.summary.external_identity?.username" class="cell-subtext">{{ diagnostics[row.id]!.summary.external_identity?.username }}</small><small class="cell-subtext">{{ new Date(diagnostics[row.id]!.started_at).toLocaleString() }}</small></div><ElButton v-else-if="diagnostics[row.id] === undefined" link @click="last(row)">查看记录</ElButton><span v-else class="muted">尚无记录</span></td>
           <td class="actions-column"><div v-if="!readonly" class="credential-row-actions"><ElButton link :disabled="busy" @click="open('edit', row)">编辑</ElButton><ElDropdown trigger="click" @command="(command: string) => menuAction(command, row)"><ElButton link :disabled="busy" :aria-label="`${row.name}更多操作`">···</ElButton><template #dropdown><ElDropdownMenu>
             <ElDropdownItem command="secret">替换认证信息</ElDropdownItem>
             <ElDropdownItem command="verify" :disabled="!available(row) || !connectionEnabled">验证凭证</ElDropdownItem>
@@ -427,13 +427,15 @@ useUnsaved(
               type="textarea"
               maxlength="1000"
               :disabled="busy" /></label
-          ><ProviderFields
-            v-if="mode === 'create'"
-            v-model="providerValues"
-            :fields="adapter.identityFields"
-            :disabled="busy" />
+          >
         </template>
         <h3 v-if="mode !== 'edit'" class="credential-form-heading">认证材料 · {{ adapter.authLabel }}</h3>
+        <ProviderFields
+          v-if="mode !== 'edit'"
+          v-model="providerValues"
+          :fields="adapter.identityFields"
+          :disabled="busy"
+        />
         <ProviderFields
           v-if="mode !== 'edit'"
           v-model="providerValues"

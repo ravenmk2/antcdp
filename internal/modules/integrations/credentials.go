@@ -155,14 +155,14 @@ func (s *Service) Credentials(ctx context.Context, raw string, id, cid uint64, o
 				return err
 			}
 			w := input.(CredentialCreate)
-			if err := validateAuthentication(w.Authentication); err != nil {
+			if err := validateAuthenticationFor(v.Type, w.Authentication); err != nil {
 				return err
 			}
 			code, err := codeValue(w.Code)
 			if err != nil {
 				return err
 			}
-			cr = &ServiceCredential{ConnectionID: id, Type: v.Type, Code: code, Ownership: owner.Type, Name: strings.TrimSpace(w.Name), Enabled: true, AuthMethod: w.Authentication.Method, AuthSchemaVersion: 1, Identity: json.RawMessage(`{}`), Version: 1, MaterialVersion: 1, Creator: a.User.ID}
+			cr = &ServiceCredential{ConnectionID: id, Type: v.Type, Code: code, Ownership: owner.Type, Name: strings.TrimSpace(w.Name), Enabled: true, AuthMethod: w.Authentication.Method, AuthSchemaVersion: 1, Identity: w.Authentication.Identity, Version: 1, MaterialVersion: 1, Creator: a.User.ID}
 			if err = applyCommon(CommonWrite{Description: w.Description}, &cr.Name, &cr.Description, &cr.Enabled); err != nil {
 				return err
 			}
@@ -178,7 +178,7 @@ func (s *Service) Credentials(ctx context.Context, raw string, id, cid uint64, o
 			if err = r.InsertCredential(cr); err != nil {
 				return err
 			}
-			sealed, err := s.Cipher(purpose("credential", id, cr.ID, cr.AuthMethod), w.Authentication.Secret.Token, true)
+			sealed, err := s.Cipher(credentialPurpose(v.Type, "credential", id, cr.ID, cr.AuthMethod), w.Authentication.Secret.Token, true)
 			if err != nil {
 				return err
 			}
@@ -215,10 +215,10 @@ func (s *Service) Credentials(ctx context.Context, raw string, id, cid uint64, o
 			action = "updated"
 		case "authentication":
 			w := input.(Authentication)
-			if err := validateAuthentication(&w); err != nil {
+			if err := validateAuthenticationFor(v.Type, &w); err != nil {
 				return err
 			}
-			sealed, err := s.Cipher(purpose("credential", id, cid, w.Method), w.Secret.Token, true)
+			sealed, err := s.Cipher(credentialPurpose(v.Type, "credential", id, cid, w.Method), w.Secret.Token, true)
 			if err != nil {
 				return err
 			}
@@ -227,7 +227,7 @@ func (s *Service) Credentials(ctx context.Context, raw string, id, cid uint64, o
 			}
 			cr.AuthMethod = w.Method
 			cr.AuthSchemaVersion = 1
-			cr.Identity = json.RawMessage(`{}`)
+			cr.Identity = w.Identity
 			cr.HasSecret = true
 			cr.Version++
 			cr.MaterialVersion++

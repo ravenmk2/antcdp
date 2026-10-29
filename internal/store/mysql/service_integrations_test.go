@@ -18,6 +18,7 @@ import (
 )
 
 func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Service, admin, member, other *apiClient, adminID, memberID string) {
+	verifyJenkinsIntegrations(t, db, installer, admin, member, other, memberID)
 	base := "/admin/service-connections/gitlab"
 	tag := func(client *apiClient, path string) map[string]string {
 		client.call(t, "GET", path, nil, 200, nil)
@@ -46,7 +47,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	admin.call(t, "PATCH", path, map[string]any{"name": "invalid precondition"}, 422, map[string]string{"If-Match": "*"})
 	original := testData(admin.call(t, "GET", path, nil, 200, nil))
 	oldTag := admin.last.Header().Get("ETag")
-	admin.call(t, "PATCH", path, map[string]any{"name": "must rollback", "config": map[string]any{"base_url": "http://unsafe.example.com"}}, 422, map[string]string{"If-Match": oldTag})
+	admin.call(t, "PATCH", path, map[string]any{"name": "must rollback", "config": map[string]any{"base_url": "http://127.0.0.1"}}, 422, map[string]string{"If-Match": oldTag})
 	unchanged := testData(admin.call(t, "GET", path, nil, 200, nil))
 	if original["name"] != unchanged["name"] || oldTag != admin.last.Header().Get("ETag") {
 		t.Fatal("invalid aggregate PATCH committed partial state")
@@ -241,7 +242,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	raw := admin.cookies["antcdp_session"].Value
 	credentialTag := tag(admin, sys+"/"+one)["If-Match"]
 	collectionTag := tag(admin, sys)["If-Match"]
-	svc.Probe = func(ctx context.Context, _ *integrations.GitLabConfig, token string, started time.Time) integrations.Diagnostic {
+	svc.Probe = func(ctx context.Context, _ *integrations.HTTPConfig, token string, started time.Time) integrations.Diagnostic {
 		if token != "glpat-private-test-token" {
 			t.Fatal("incorrect decrypted authentication")
 		}
@@ -253,7 +254,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	if tag(admin, sys+"/"+one)["If-Match"] != credentialTag || tag(admin, sys)["If-Match"] != collectionTag {
 		t.Fatal("diagnostic changed edit versions")
 	}
-	svc.Probe = func(ctx context.Context, _ *integrations.GitLabConfig, _ string, started time.Time) integrations.Diagnostic {
+	svc.Probe = func(ctx context.Context, _ *integrations.HTTPConfig, _ string, started time.Time) integrations.Diagnostic {
 		// This would time out if Verify held the parent lock across the remote call.
 		bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()

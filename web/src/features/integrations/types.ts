@@ -37,7 +37,7 @@ export interface WebhookSettings {
 export interface Diagnostic {
   id: string; kind: string; outdated: boolean; status: string; started_at: string; finished_at: string;
   summary: { reachability?: string; authentication?: string; permissions?: string; reason?: string;
-    external_identity?: { id: string; username: string }; event_type?: string; source_project_id?: string; delivery_id?: string };
+    service?: string; http_status?: number; external_identity?: { id?: string; username: string }; event_type?: string; source_project_id?: string; delivery_id?: string };
 }
 export const diagnosticLabels: Record<string, string> = {
   succeeded: "验证通过（不代表已获得具体业务权限）",
@@ -57,6 +57,7 @@ export function message(e: unknown) {
                 ({
                   base_url: "请输入 HTTP 或 HTTPS 地址，不能包含查询参数或本机地址",
                   custom_ca_pem: "CA 证书格式不正确",
+                  username: "用户名不能为空，不能包含冒号、控制字符或首尾空白",
                   token: "令牌格式不正确",
                   name: "请检查名称",
  code: "code 须以小写字母或数字开头，仅含小写字母、数字、下划线或短横线，最长 64 位",
@@ -78,4 +79,22 @@ export function available(c: ServiceCredential) {
     c.has_secret &&
     (!c.expires_at || Date.parse(c.expires_at) > Date.now())
   );
+}
+
+const diagnosticReasons: Record<string, string> = {
+  connection_failed: "连接失败，请检查地址、网络或 TLS 证书",
+  dns_failed: "域名解析失败", timeout: "连接超时", tls_failed: "TLS 证书验证失败",
+  authentication_failed: "认证失败，请检查用户名和 API Token",
+  access_denied: "访问被拒绝，请检查 Jenkins 权限或前置代理",
+  redirected: "请求被重定向，请填写可直接访问 API 的基础地址",
+  unexpected_status: "服务返回异常状态", invalid_response: "响应不是预期的服务 API 数据",
+  identity_mismatch: "远端身份与填写的用户名不一致，请检查代理认证配置",
+};
+export function diagnosticText(d: Diagnostic): string {
+  if (d.status === "succeeded" && d.kind === "connection_check")
+    return d.summary.service === "jenkins" ? "连接可达，已识别 Jenkins API（未验证身份）" : "连接可达（未验证身份）";
+  if (d.status === "succeeded" && d.kind === "credential_verification")
+    return d.summary.service === "jenkins" ? "身份认证成功；构建权限未验证" : "身份认证成功；具体业务权限未验证";
+  const reason = d.summary.reason ? diagnosticReasons[d.summary.reason] : undefined;
+  return reason ? `${d.summary.reachability === "reachable" ? "HTTP 可达；" : ""}${reason}` : (diagnosticLabels[d.status] ?? "未知验证结果");
 }

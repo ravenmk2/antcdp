@@ -161,11 +161,11 @@ HMAC 是消息认证算法，不单独作为用户密码存储。PBKDF2-HMAC 是
 
 ### 服务集成重构（2026-10-29）
 
-integrations 模块管理 ServiceConnection、ServiceCredential 和 WebhookSettings，GitLab 是首个三表完整样例；[领域设计](service-integrations.md)和[API 契约](service-integrations-api.md)替代旧三表设计。连接将公共字段与类型扩展作为一个聚合，同事务保存并共用编辑版本；Webhook 设置存于服务扩展，使用独立版本，无接入点表。凭证归属、首选、兜底和秘密加密由通用用例维护；类型化配置、认证、受控访问和事件解析由服务适配器提供，持久化由仓储及 UnitOfWork 实现。
+integrations 模块管理 ServiceConnection、ServiceCredential 和 WebhookSettings，GitLab 与 Jenkins 共用连接和凭证管理，将出站配置存入连接 config JSON，GitLab 独立表仅保存 Webhook，当前共三张表；[领域设计](service-integrations.md)和[API 契约](service-integrations-api.md)替代旧三表设计。连接将公共字段与类型化 JSON 配置作为一个聚合，同事务保存并共用编辑版本；Webhook 设置存于服务扩展，使用独立版本，无接入点表。凭证归属、首选、兜底和秘密加密由通用用例维护；类型化配置、认证、受控访问和事件解析由服务适配器提供，持久化由仓储及 UnitOfWork 实现。
 
-服务类型与适配器在代码中注册，不建服务类型/工具表。Jenkins、MySQL、日志服务按真实需求扩展，未实现类型不发布能力。模块可提供操作能力供未来 Agent 工具包装，但本轮不定义执行 API、工作流细节或运行时凭证选择链。外部 MySQL 服务适配器与 AntCDP 自身 MySQL 存储适配器分开。WebhookSettings 仅管理入站验证、接收与诊断，事件筛选和项目绑定属于消费方，不承担收件箱或可靠分发。
+服务类型与适配器在代码中注册，不建服务类型/工具表。Jenkins 已实现用户名/API Token 认证及只读身份验证；MySQL、日志服务按真实需求扩展，未实现类型不发布能力。模块可提供操作能力供未来 Agent 工具包装，但本轮不定义执行 API、工作流细节或运行时凭证选择链。外部 MySQL 服务适配器与 AntCDP 自身 MySQL 存储适配器分开。WebhookSettings 仅管理入站验证、接收与诊断，事件筛选和项目绑定属于消费方，不承担收件箱或可靠分发。
 
-schema.sql 与合并后的迁移版本 5 的最终结构均为 19 张业务表，包含集成三表。本次中间迁移合并，删除接入点及其扩展表定义。迁移 5 清除旧三表配置及凭证，并移除全部业务表的外键与 CHECK；主键、唯一键、索引及字段定义保留，关联/状态由应用事务保证。API 和正式前端已重构，不提供旧模块兼容别名；发布与验证记录见开发说明。
+schema.sql 与迁移版本 6 的当前结构均为 19 张业务表，包含集成三表；最终迁移 6 将版本 5 的 GitLab 地址及 CA 搬入 config JSON，保留数据及密文，不创建 Jenkins 表。历史中间迁移合并时已删除接入点及其扩展表定义。迁移 5 清除旧三表配置及凭证，并移除全部业务表的外键与 CHECK；主键、唯一键、索引及字段定义保留，关联/状态由应用事务保证。API 和正式前端已重构，不提供旧模块兼容别名；发布与验证记录见开发说明。
 
 ## 参考
 

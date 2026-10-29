@@ -14,7 +14,7 @@ import (
 )
 
 // Uses a distinct empty schema and preserves it for inspection. In particular,
-// this tests the real goose 1 -> 2 -> 3 -> 4 -> 5 upgrade, not importing the reference DDL.
+// this tests the real goose 1 -> 2 -> 3 -> 4 -> 5 -> 6 upgrade, not importing the reference DDL.
 func TestCollaborationMigrationUpgrade(t *testing.T) {
 	dsn := os.Getenv("ANTCDP_TEST_UPGRADE_MYSQL_DSN")
 	if dsn == "" {
@@ -107,10 +107,51 @@ func TestCollaborationMigrationUpgrade(t *testing.T) {
 	if err = s.db.GetContext(ctx, &constraints, "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_TYPE IN ('CHECK','FOREIGN KEY')"); err != nil || constraints != 0 {
 		t.Fatal("constraints remain", err)
 	}
+	// Version 6 must preserve existing GitLab configuration, credentials and ciphertext.
+	for _, query := range []string{
+		"INSERT INTO service_connection(id,service_type,code,name,created_by_user_id,created_at,updated_at) VALUES(99,'gitlab','existing-gitlab','Existing GitLab',41,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))",
+		"INSERT INTO service_connection_gitlab(connection_id,base_url,webhook_secret_ciphertext,webhook_secret_format_version,webhook_secret_key_version) VALUES(99,'https://gitlab.example.com/subpath','existing-hook-ciphertext',1,'v1')",
+		`INSERT INTO service_credential(connection_id,service_type,code,ownership_type,name,auth_method,auth_schema_version,identity_config,secret_ciphertext,secret_format_version,secret_key_version,created_by_user_id,created_at,updated_at) VALUES(99,'gitlab','existing-token','system','Existing token','gitlab_access_token',1,'{}','existing-token-ciphertext',1,'v1',41,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`,
+	} {
+		if _, err = s.db.ExecContext(ctx, query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = s.SchemaReady(ctx); err == nil {
+		t.Fatal("version 5 accepted by version 6 executable")
+	}
+	if _, err = p.UpTo(ctx, 6); err != nil {
+		t.Fatal(err)
+	}
+	var preserved string
+	if err = s.db.GetContext(ctx, &preserved, "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(s.config,'$.base_url')),'/',g.webhook_secret_ciphertext,'/',c.secret_ciphertext) FROM service_connection_gitlab g JOIN service_connection s ON s.id=g.connection_id JOIN service_credential c ON c.connection_id=g.connection_id WHERE g.connection_id=99"); err != nil || preserved != "https://gitlab.example.com/subpath/existing-hook-ciphertext/existing-token-ciphertext" {
+		t.Fatal("JSON migration modified GitLab data", err)
+	}
 	if err = s.SchemaReady(ctx); err != nil {
 		t.Fatal(err)
 	}
-	// Reject intermediate structures even when they carry the same version 5.
+	var configVersion uint64
+	if err = s.db.GetContext(ctx, &configVersion, "SELECT config_schema_version FROM service_connection WHERE id=99"); err != nil || configVersion != 1 {
+		t.Fatal("missing config schema", err)
+	}
+	var forbiddenTables int
+	if err = s.db.GetContext(ctx, &forbiddenTables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='service_connection_jenkins'"); err != nil || forbiddenTables != 0 {
+		t.Fatal("intermediate Jenkins table retained", err)
+	}
+	// Reject intermediate structures even when they carry the same version 6.
+	if _, err = s.db.ExecContext(ctx, "CREATE TABLE service_connection_jenkins (connection_id BIGINT UNSIGNED PRIMARY KEY)"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SchemaReady(ctx); err == nil {
+		t.Fatal("intermediate version 6 accepted")
+	}
+	if err = s.Migrate(ctx); err == nil {
+		t.Fatal("intermediate version 6 silently accepted by migrate")
+	}
+	if _, err = s.db.ExecContext(ctx, "DROP TABLE service_connection_jenkins"); err != nil {
+		t.Fatal(err)
+	}
+
 	if _, err = s.db.ExecContext(ctx, "ALTER TABLE service_connection_gitlab DROP COLUMN webhook_updated_at"); err != nil {
 		t.Fatal(err)
 	}

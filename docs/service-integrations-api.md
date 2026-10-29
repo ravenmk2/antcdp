@@ -1,6 +1,6 @@
 # 服务集成 API 设计
 
-更新日期：2026-10-29。状态：已实现的 GitLab 管理与接收契约；不兼容旧 `/integrations` 接口及以 integration_id 路由的 Webhook。领域及数据库见[外部服务集成设计](service-integrations.md)，通用 HTTP 规则见 [API 设计](api.md)。本页所有路径均相对 `/api/v1`，仅入站接收免登录会话和 CSRF。
+更新日期：2026-10-29。状态：已实现的 GitLab/Jenkins 管理及 GitLab 接收契约；不兼容旧 `/integrations` 接口及以 integration_id 路由的 Webhook。领域及数据库见[外部服务集成设计](service-integrations.md)，通用 HTTP 规则见 [API 设计](api.md)。本页所有路径均相对 `/api/v1`，仅入站接收免登录会话和 CSRF。
 
 ## 1. 通用协议与条件写入
 
@@ -41,13 +41,13 @@ ServiceType 由代码注册，示例为 GitLab 适配器完成后可发布的能
 }
 ```
 
-operations 只列真实实现且可用的适配器操作，本轮维护接口不虚构执行能力。类型能力不是调用授权。未实现的 Jenkins/MySQL/日志类型不发布，钉钉机器人属于未来通知模块，不在此目录。
+operations 只列真实实现且可用的适配器操作，本轮维护接口不虚构执行能力。类型能力不是调用授权。Jenkins 已发布；未实现的 MySQL/日志类型不发布，钉钉机器人属于未来通知模块，不在此目录。
 
 ConnectionSummary 精确投影为 id、code、service_type、name、description、enabled；不包含地址、CA、创建者、凭证计数/名称、兜底、Webhook 设置或编辑版本。普通用户不提供配置详情接口。目录可包含已停用连接，便于维护已有凭证。
 
 ## 3. 服务连接
 
-维护路由带服务类型，创建体不接受 service_type。以下 `C=/admin/service-connections/gitlab`，`c` 为 connection_id；未来服务采用对应类型路径及 DTO。所有请求核对父子归属及类型，不匹配统一 404。数据库扩展缺失/错配是 500 DATA_INTEGRITY_ERROR，不当作未配置。
+维护路由带服务类型，创建体不接受 service_type。以下 `C=/admin/service-connections/gitlab`，`c` 为 connection_id；未来服务采用对应类型路径及 DTO。所有请求核对父子归属及类型，不匹配统一 404。数据库配置 JSON 无效、结构版本不支持或 GitLab Webhook 扩展缺失/错配是 500 DATA_INTEGRITY_ERROR，不当作未配置。
 
 | 方法/路径 | 请求 | 响应/前置条件 |
 | --- | --- | --- |
@@ -77,7 +77,7 @@ ConnectionSummary 精确投影为 id、code、service_type、name、description�
 }
 ```
 
-name/config/base_url 必填；description 缺省空字符串，enabled 缺省 true，custom_ca_pem 缺省 null。base_url 最长 2048 字符，CA 最多 16 KiB，其余 URL/TLS 校验见领域设计。创建同时写主表与正确扩展，失败全部回滚。
+name/config/base_url 必填；description 缺省空字符串，enabled 缺省 true，custom_ca_pem 缺省 null。base_url 最长 2048 字符，CA 最多 16 KiB，其余 URL/TLS 校验见领域设计。创建写入主表类型化 config JSON；GitLab 同事务创建 Webhook 扩展，Jenkins 无扩展表，失败全部回滚。config_schema_version 为内部结构版本，不由客户端提交，现有 DTO 和 PATCH 合并语义保持不变。
 
 Connection 返回字段：id、code、service_type、name、description、enabled、config、version、created_at、updated_at。config 与上述 GitLab 配置同形。不包含子列表、诊断、兜底或内部版本。服务配置与公共资料共用一个聚合 ETag，可一次 PATCH 原子提交；不再提供旧的独立 `/config` 资源和第二份编辑版本。只修改 config 中实际变化的访问字段才递增内部 config_version。
 
@@ -222,6 +222,26 @@ kind 为 connection_check / credential_verification / webhook_receipt。入站�
 
 403 用于缺少角色等请求级授权；目标属于其他个人/项目归属、路径父子不匹配统一 404，避免枚举。具体字段错误用 error.details 数组，引用通用错误协议，不返回数据库约束名、远端正文、认证身份或输入秘密。
 
-不保留旧 `/integrations`、`/default-credential`、内嵌 `/webhook-secret`、独立 `/config` 或旧 webhook 地址别名。运行路由、合并后的迁移 5 与正式前端已采用本契约，三表、归属隔离、版本/锁、诊断和连接内 Webhook 设置已加入回归验证，具体范围见[开发说明](development.md)。此文不是已发布 OpenAPI 描述，后续以实现 DTO 生成 OpenAPI 并与本文核对。
+不保留旧 `/integrations`、`/default-credential`、内嵌 `/webhook-secret`、独立 `/config` 或旧 webhook 地址别名。运行路由、迁移 5/6 与正式前端已采用本契约，三表、归属隔离、版本/锁、诊断和连接内 Webhook 设置已加入回归验证，具体范围见[开发说明](development.md)。此文不是已发布 OpenAPI 描述，后续以实现 DTO 生成 OpenAPI 并与本文核对。
 
 GitLab `config.base_url` 支持 HTTP、HTTPS、自定义端口和子路径，禁止 userinfo/query/fragment；非法协议返回字段原因 `http_url_required`。HTTP 不使用 TLS，已有公共 CA 配置保留供切回 HTTPS 使用；现有目标地址限制不变。
+
+## Jenkins 管理契约
+
+将第 3、4 节路由中的 `gitlab` 替换为 `jenkins`，即可使用相同的连接、系统/项目/个人凭证、首选、兜底及诊断接口。类型由路由决定，禁止请求体覆盖；类型与连接不匹配返回 404。config 为 `{base_url,custom_ca_pem}`，公共字段、权限、ETag、启停/删除和诊断快照规则全部复用。Jenkins 无 `/webhook` 管理或接收路由。
+
+`GET /service-types` 增加 Jenkins：service_type=jenkins、name=Jenkins、credentials/connection_test/credential_verification=true、auth_methods=[jenkins_api_token]、webhook={supported:false,verification_methods:[]}、operations=[]。
+
+创建与替换认证的完整 Authentication：
+
+```json
+{
+  "auth_method": "jenkins_api_token",
+  "identity_config": { "username": "antcdp-bot" },
+  "secret": { "token": "user-api-token" }
+}
+```
+
+username 必填、最多 255 UTF-8 字节，不含冒号、控制字符或首尾空白。普通凭证编辑不能修改用户名；替换认证同时提交用户名和 Token。身份可读，秘密不可读。
+
+Jenkins Diagnostic.summary 增加 service（jenkins/unknown）、reachability、http_status（收到响应时）。凭证验证另有 authentication（valid/invalid/unknown）、permissions=unknown、remote_expires_at=null，成功后提供 external_identity={username}。reason 为受控值：connection_failed、dns_failed、tls_failed、timeout、authentication_failed、access_denied、redirected、unexpected_status、invalid_response、identity_mismatch。403 保持认证 unknown；连接可达不等于认证成功，认证成功不等于具备构建权限。探测规则见领域设计。

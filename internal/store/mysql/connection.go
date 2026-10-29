@@ -160,7 +160,10 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return errors.New("database is newer than this executable")
 	}
 	_, err = p.Up(ctx)
-	return err
+	if err != nil {
+		return err
+	}
+	return s.SchemaReady(ctx)
 }
 
 type discardGooseLogger struct{}
@@ -178,7 +181,7 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if v != 5 {
+	if v != 6 {
 		return errors.New("database migration version does not match this executable")
 	}
 	var tables int
@@ -190,11 +193,21 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 	}
 	// The task's intermediate version 5 used endpoint tables. A version number
 	// alone must not accept that schema after consolidating the migration.
+	var configColumns, oldConfigColumns int
+	if err = s.db.GetContext(ctx, &configColumns, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='service_connection' AND ((COLUMN_NAME='config' AND DATA_TYPE='json' AND IS_NULLABLE='NO') OR (COLUMN_NAME='config_schema_version' AND DATA_TYPE='bigint' AND IS_NULLABLE='NO'))"); err != nil {
+		return err
+	}
+	if err = s.db.GetContext(ctx, &oldConfigColumns, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='service_connection_gitlab' AND COLUMN_NAME IN ('base_url','custom_ca_pem')"); err != nil {
+		return err
+	}
+	if configColumns != 2 || oldConfigColumns != 0 {
+		return install.ErrIncompleteSchema
+	}
 	var webhookColumns, obsolete int
 	if err = s.db.GetContext(ctx, &webhookColumns, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='service_connection_gitlab' AND COLUMN_NAME IN ('webhook_enabled','webhook_verification_method','webhook_secret_ciphertext','webhook_secret_format_version','webhook_secret_key_version','webhook_version','webhook_last_receipt','webhook_updated_at')"); err != nil {
 		return err
 	}
-	if err = s.db.GetContext(ctx, &obsolete, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('webhook_endpoint','webhook_endpoint_gitlab')"); err != nil {
+	if err = s.db.GetContext(ctx, &obsolete, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('webhook_endpoint','webhook_endpoint_gitlab','service_connection_jenkins')"); err != nil {
 		return err
 	}
 	if webhookColumns != 8 || obsolete != 0 {

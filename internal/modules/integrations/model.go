@@ -9,25 +9,26 @@ import (
 )
 
 type ServiceConnection struct {
-	ID                 uint64       `db:"id" json:"id,string"`
-	Type               string       `db:"service_type" json:"service_type"`
-	Code               string       `db:"code" json:"code"`
-	Name               string       `db:"name" json:"name"`
-	Description        string       `db:"description" json:"description"`
-	Enabled            bool         `db:"enabled" json:"enabled"`
-	FallbackID         *uint64      `db:"fallback_credential_id" json:"-"`
-	Version            uint64       `db:"row_version" json:"-"`
-	ConfigVersion      uint64       `db:"config_version" json:"-"`
-	CredentialsVersion uint64       `db:"credentials_version" json:"-"`
-	FallbackVersion    uint64       `db:"fallback_version" json:"-"`
-	Creator            uint64       `db:"created_by_user_id" json:"-"`
-	CreatedAt          time.Time    `db:"created_at" json:"created_at"`
-	UpdatedAt          time.Time    `db:"updated_at" json:"updated_at"`
-	Config             GitLabConfig `db:"-" json:"config"`
-	EditVersion        string       `db:"-" json:"version"`
+	ConfigJSON          json.RawMessage `db:"config" json:"-"`
+	ConfigSchemaVersion uint64          `db:"config_schema_version" json:"-"`
+	ID                  uint64          `db:"id" json:"id,string"`
+	Type                string          `db:"service_type" json:"service_type"`
+	Code                string          `db:"code" json:"code"`
+	Name                string          `db:"name" json:"name"`
+	Description         string          `db:"description" json:"description"`
+	Enabled             bool            `db:"enabled" json:"enabled"`
+	FallbackID          *uint64         `db:"fallback_credential_id" json:"-"`
+	Version             uint64          `db:"row_version" json:"-"`
+	ConfigVersion       uint64          `db:"config_version" json:"-"`
+	CredentialsVersion  uint64          `db:"credentials_version" json:"-"`
+	FallbackVersion     uint64          `db:"fallback_version" json:"-"`
+	Creator             uint64          `db:"created_by_user_id" json:"-"`
+	CreatedAt           time.Time       `db:"created_at" json:"created_at"`
+	UpdatedAt           time.Time       `db:"updated_at" json:"updated_at"`
+	Config              HTTPConfig      `db:"-" json:"config"`
+	EditVersion         string          `db:"-" json:"version"`
 }
-type GitLabConfig struct {
-	ID      uint64  `db:"connection_id" json:"-"`
+type HTTPConfig struct {
 	BaseURL string  `db:"base_url" json:"base_url"`
 	CA      *string `db:"custom_ca_pem" json:"custom_ca_pem"`
 }
@@ -106,10 +107,8 @@ func (s *Service) fallbackTag(v *ServiceConnection) string {
 type Repository interface {
 	Connections() ([]ServiceConnection, error)
 	Connection(uint64) (*ServiceConnection, error) // locks parent before child access
-	GitLabConfig(uint64) (*GitLabConfig, error)
 	InsertConnection(*ServiceConnection) error
 	SaveConnection(*ServiceConnection) error
-	SaveGitLabConfig(*GitLabConfig) error
 	DeleteConnection(uint64) error
 	Credentials(uint64, CredentialOwnership) ([]ServiceCredential, error)
 	Credential(uint64) (*ServiceCredential, error)
@@ -127,11 +126,11 @@ type Repository interface {
 
 // ValidRecord detects unsupported or malformed persisted authentication/ownership.
 func (c *ServiceCredential) ValidRecord() bool {
-	if c.ID == 0 || c.ConnectionID == 0 || c.Creator == 0 || names(c.Name, c.Description) != nil || c.Preferred && !c.Enabled || !c.SecretValid || c.Version == 0 || c.MaterialVersion == 0 || c.AuthSchemaVersion != 1 || c.Type != "gitlab" || c.AuthMethod != "gitlab_access_token" || !c.HasSecret || !credentialCodePattern.MatchString(c.Code) {
+	if c.ID == 0 || c.ConnectionID == 0 || c.Creator == 0 || names(c.Name, c.Description) != nil || c.Preferred && !c.Enabled || !c.SecretValid || c.Version == 0 || c.MaterialVersion == 0 || c.AuthSchemaVersion != 1 || !c.HasSecret || !credentialCodePattern.MatchString(c.Code) {
 		return false
 	}
-	var obj map[string]json.RawMessage
-	if json.Unmarshal(c.Identity, &obj) != nil || obj == nil || len(obj) != 0 {
+	provider, ok := adapters[c.Type]
+	if !ok || c.AuthMethod != provider.method || provider.identity(c.Identity) != nil {
 		return false
 	}
 	switch c.Ownership {

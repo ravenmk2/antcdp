@@ -69,7 +69,7 @@ func saveDiagnostic(r Repository, kind string, id uint64, d storedDiagnostic) er
 	}
 	return r.SaveDiagnostics(kind, id, data)
 }
-func probe(ctx context.Context, g *GitLabConfig, token string, started time.Time) (d Diagnostic) {
+func probe(ctx context.Context, g *HTTPConfig, token string, started time.Time) (d Diagnostic) {
 	kind := "connection_check"
 	if token != "" {
 		kind = "credential_verification"
@@ -140,8 +140,8 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 	default:
 		return Result{}, nil, httpx.E(429, "RATE_LIMITED", "外部验证繁忙，请稍后重试")
 	}
-	var g GitLabConfig
-	var token string
+	var g HTTPConfig
+	var token, username string
 	snapshot := storedDiagnostic{}
 	a, err := s.access(ctx, raw, owner, id, true, func(_ identity.Tx, r Repository, _ *identity.Auth, v *ServiceConnection, owner CredentialOwnership) error {
 		if !v.Enabled {
@@ -168,21 +168,28 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 		}
 		snapshot.CredentialVersion = cr.Version
 		snapshot.MaterialVersion = cr.MaterialVersion
+		var identity struct {
+			Username string `json:"username"`
+		}
+		if err := json.Unmarshal(cr.Identity, &identity); err != nil {
+			return integrity()
+		}
+		username = identity.Username
 		sealed, err := r.Secret("credential", cid)
 		if err != nil {
 			return err
 		}
-		token, err = s.Cipher(purpose("credential", id, cid, cr.AuthMethod), sealed, false)
+		token, err = s.Cipher(credentialPurpose(v.Type, "credential", id, cid, cr.AuthMethod), sealed, false)
 		return err
 	})
 	if err != nil {
 		return Result{}, a, err
 	}
-	run := s.Probe
-	if run == nil {
-		run = probe
+	if s.Probe != nil {
+		snapshot.Diagnostic = s.Probe(ctx, &g, token, time.Now().UTC())
+	} else {
+		snapshot.Diagnostic = adapters[s.serviceType()].probe(ctx, &g, username, token, time.Now().UTC())
 	}
-	snapshot.Diagnostic = run(ctx, &g, token, time.Now().UTC())
 	var out Result
 	a, err = s.access(ctx, raw, owner, id, true, func(_ identity.Tx, r Repository, _ *identity.Auth, v *ServiceConnection, owner CredentialOwnership) error {
 		if !v.Enabled || v.Version != snapshot.ConnectionVersion || v.ConfigVersion != snapshot.ConfigVersion {
@@ -231,7 +238,7 @@ func (s *Service) Receive(ctx context.Context, connection uint64, h http.Header,
 		if v == nil || v.Type != "gitlab" || !v.Enabled {
 			return fail()
 		}
-		if _, err = config(r, connection); err != nil {
+		if _, err = config(r, v); err != nil {
 			return err
 		}
 		settings, err = webhookFor(r, connection)
@@ -296,7 +303,7 @@ func (s *Service) Receive(ctx context.Context, connection uint64, h http.Header,
 		if v == nil || !v.Enabled || v.Version != snapshot.ConnectionVersion {
 			return changedState()
 		}
-		if _, err = config(r, connection); err != nil {
+		if _, err = config(r, v); err != nil {
 			return err
 		}
 		current, err := webhookFor(r, connection)

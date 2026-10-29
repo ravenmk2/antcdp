@@ -26,24 +26,20 @@ func (t *identityTx) Connections() ([]i.ServiceConnection, error) {
 }
 func (t *identityTx) Connection(id uint64) (*i.ServiceConnection, error) {
 	v := &i.ServiceConnection{}
-	err := t.tx.GetContext(t.ctx, v, "SELECT "+connectionColumns+" FROM service_connection WHERE id=? FOR UPDATE", id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	return v, err
-}
-func (t *identityTx) GitLabConfig(id uint64) (*i.GitLabConfig, error) {
-	v := &i.GitLabConfig{}
-	err := t.tx.GetContext(t.ctx, v, "SELECT connection_id,base_url,custom_ca_pem FROM service_connection_gitlab WHERE connection_id=?", id)
+	err := t.tx.GetContext(t.ctx, v, "SELECT "+connectionColumns+",config,config_schema_version FROM service_connection WHERE id=? FOR UPDATE", id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	return v, err
 }
 func (t *identityTx) InsertConnection(v *i.ServiceConnection) error {
+	_, err := i.DecodeConnectionConfig(v.Type, v.ConfigSchemaVersion, v.ConfigJSON)
+	if err != nil {
+		return err
+	}
 	v.CreatedAt = time.Now().UTC().Truncate(time.Millisecond)
 	v.UpdatedAt = v.CreatedAt
-	result, err := t.tx.NamedExecContext(t.ctx, "INSERT INTO service_connection(service_type,code,name,description,enabled,created_by_user_id,created_at,updated_at) VALUES(:service_type,:code,:name,:description,:enabled,:created_by_user_id,:created_at,:updated_at)", v)
+	result, err := t.tx.NamedExecContext(t.ctx, "INSERT INTO service_connection(service_type,code,name,description,enabled,config,config_schema_version,created_by_user_id,created_at,updated_at) VALUES(:service_type,:code,:name,:description,:enabled,:config,:config_schema_version,:created_by_user_id,:created_at,:updated_at)", v)
 	if err != nil {
 		return err
 	}
@@ -52,20 +48,20 @@ func (t *identityTx) InsertConnection(v *i.ServiceConnection) error {
 		return err
 	}
 	v.ID = uint64(id)
-	v.Config.ID = v.ID
-	_, err = t.tx.ExecContext(t.ctx, "INSERT INTO service_connection_gitlab(connection_id,base_url,custom_ca_pem) VALUES(?,?,?)", v.ID, v.Config.BaseURL, v.Config.CA)
+	if v.Type == "gitlab" {
+		_, err = t.tx.ExecContext(t.ctx, "INSERT INTO service_connection_gitlab(connection_id) VALUES(?)", v.ID)
+	}
 	return err
 }
 func (t *identityTx) SaveConnection(v *i.ServiceConnection) error {
-	_, err := t.tx.NamedExecContext(t.ctx, "UPDATE service_connection SET updated_at=IF(row_version<>:row_version,UTC_TIMESTAMP(3),updated_at),name=:name,description=:description,enabled=:enabled,fallback_credential_id=:fallback_credential_id,row_version=:row_version,config_version=:config_version,credentials_version=:credentials_version,fallback_version=:fallback_version WHERE id=:id", v)
+	if _, err := i.DecodeConnectionConfig(v.Type, v.ConfigSchemaVersion, v.ConfigJSON); err != nil {
+		return err
+	}
+	_, err := t.tx.NamedExecContext(t.ctx, "UPDATE service_connection SET updated_at=IF(row_version<>:row_version,UTC_TIMESTAMP(3),updated_at),name=:name,description=:description,enabled=:enabled,config=:config,config_schema_version=:config_schema_version,fallback_credential_id=:fallback_credential_id,row_version=:row_version,config_version=:config_version,credentials_version=:credentials_version,fallback_version=:fallback_version WHERE id=:id", v)
 	if err != nil {
 		return err
 	}
 	return t.tx.GetContext(t.ctx, &v.UpdatedAt, "SELECT updated_at FROM service_connection WHERE id=?", v.ID)
-}
-func (t *identityTx) SaveGitLabConfig(v *i.GitLabConfig) error {
-	_, err := t.tx.NamedExecContext(t.ctx, "UPDATE service_connection_gitlab SET base_url=:base_url,custom_ca_pem=:custom_ca_pem WHERE connection_id=:connection_id", v)
-	return err
 }
 func (t *identityTx) DeleteConnection(id uint64) error {
 	if _, err := t.tx.ExecContext(t.ctx, "DELETE FROM service_connection_gitlab WHERE connection_id=?", id); err != nil {

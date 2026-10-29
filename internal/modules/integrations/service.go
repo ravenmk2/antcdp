@@ -22,13 +22,14 @@ var credentialCodePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 var strongTagPattern = regexp.MustCompile(`^"[a-f0-9]{64}"$`)
 
 type Service struct {
+	Type      string
 	Identity  *identity.Service
 	Store     func() (identity.Store, error)
 	Cipher    func(purpose, value string, seal bool) (string, error)
 	ETag      func(string) string
 	PublicURL string
 	// Probe is a controlled test seam. Production uses the restricted GitLab transport.
-	Probe func(context.Context, *GitLabConfig, string, time.Time) Diagnostic
+	Probe func(context.Context, *HTTPConfig, string, time.Time) Diagnostic
 }
 
 // Field distinguishes omission from explicit null. Nested object decoding is strict too.
@@ -60,24 +61,24 @@ type CommonWrite struct {
 	Description Field[string] `json:"description"`
 	Enabled     Field[bool]   `json:"enabled"`
 }
-type GitLabConfigCreate struct {
+type HTTPConfigCreate struct {
 	BaseURL string  `json:"base_url"`
 	CA      *string `json:"custom_ca_pem"`
 }
-type GitLabConfigPatch struct {
+type HTTPConfigPatch struct {
 	BaseURL Field[string] `json:"base_url"`
 	CA      Field[string] `json:"custom_ca_pem"`
 }
 type ConnectionCreate struct {
-	Code        Field[string]       `json:"code"`
-	Name        string              `json:"name"`
-	Description Field[string]       `json:"description"`
-	Enabled     Field[bool]         `json:"enabled"`
-	Config      *GitLabConfigCreate `json:"config"`
+	Code        Field[string]     `json:"code"`
+	Name        string            `json:"name"`
+	Description Field[string]     `json:"description"`
+	Enabled     Field[bool]       `json:"enabled"`
+	Config      *HTTPConfigCreate `json:"config"`
 }
 type ConnectionWrite struct {
 	CommonWrite
-	Config Field[GitLabConfigPatch] `json:"config"`
+	Config Field[HTTPConfigPatch] `json:"config"`
 }
 type TokenSecret struct {
 	Token string `json:"token"`
@@ -181,18 +182,23 @@ func repo(tx identity.Tx) (Repository, error) {
 	}
 	return r, nil
 }
-func config(r Repository, id uint64) (*GitLabConfig, error) {
-	g, err := r.GitLabConfig(id)
+func config(r Repository, v *ServiceConnection) (*HTTPConfig, error) {
+	g, err := DecodeConnectionConfig(v.Type, v.ConfigSchemaVersion, v.ConfigJSON)
 	if err != nil {
 		return nil, err
 	}
-	if g == nil || g.ID != id || ValidateConfig(g.BaseURL, g.CA) != nil {
-		return nil, integrity()
+	if v.Type == "gitlab" {
+		if _, err := webhookFor(r, v.ID); err != nil {
+			return nil, err
+		}
 	}
 	return g, nil
 }
 func (s *Service) access(ctx context.Context, raw string, owner CredentialOwnership, id uint64, write bool, fn func(identity.Tx, Repository, *identity.Auth, *ServiceConnection, CredentialOwnership) error) (*identity.Auth, error) {
 	return s.Identity.BusinessAccess(ctx, raw, nil, func(tx identity.Tx, a *identity.Auth) error {
+		if _, ok := adapters[s.serviceType()]; !ok {
+			return fail()
+		}
 		r, err := repo(tx)
 		if err != nil {
 			return err
@@ -242,13 +248,13 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 			if err != nil {
 				return err
 			}
-			if v == nil || v.Type != "gitlab" {
+			if v == nil || v.Type != s.serviceType() {
 				return fail()
 			}
 			if v.Version == 0 || v.ConfigVersion == 0 || v.CredentialsVersion == 0 || v.FallbackVersion == 0 {
 				return integrity()
 			}
-			g, err := config(r, id)
+			g, err := config(r, v)
 			if err != nil {
 				return err
 			}
@@ -297,7 +303,7 @@ func (s *Service) List(ctx context.Context, raw string, admin bool) (Result, *id
 		}
 		items := []map[string]any{}
 		for _, v := range rows {
-			if admin && v.Type != "gitlab" {
+			if admin && v.Type != s.serviceType() {
 				continue
 			}
 			items = append(items, map[string]any{"id": fmt.Sprint(v.ID), "code": v.Code, "service_type": v.Type, "name": v.Name, "description": v.Description, "enabled": v.Enabled})
@@ -317,20 +323,24 @@ func (s *Service) Create(ctx context.Context, raw string, w ConnectionCreate, me
 		if err != nil {
 			return err
 		}
-		v := &ServiceConnection{Type: "gitlab", Code: code, Enabled: true, Version: 1, ConfigVersion: 1, CredentialsVersion: 1, FallbackVersion: 1, Creator: a.User.ID}
+		v := &ServiceConnection{Type: s.serviceType(), ConfigSchemaVersion: 1, Code: code, Enabled: true, Version: 1, ConfigVersion: 1, CredentialsVersion: 1, FallbackVersion: 1, Creator: a.User.ID}
 		v.Name = strings.TrimSpace(w.Name)
 		if err = applyCommon(CommonWrite{Description: w.Description, Enabled: w.Enabled}, &v.Name, &v.Description, &v.Enabled); err != nil {
 			return err
 		}
-		v.Config = GitLabConfig{BaseURL: strings.TrimRight(w.Config.BaseURL, "/"), CA: w.Config.CA}
+		v.Config = HTTPConfig{BaseURL: strings.TrimRight(w.Config.BaseURL, "/"), CA: w.Config.CA}
 		if err = ValidateConfig(v.Config.BaseURL, v.Config.CA); err != nil {
+			return err
+		}
+		v.ConfigJSON, err = json.Marshal(v.Config)
+		if err != nil {
 			return err
 		}
 		if err = r.InsertConnection(v); err != nil {
 			return err
 		}
 		out = s.connectionResult(v)
-		out.Location = fmt.Sprintf("/api/v1/admin/service-connections/gitlab/%d", v.ID)
+		out.Location = fmt.Sprintf("/api/v1/admin/service-connections/%s/%d", v.Type, v.ID)
 		return audit(tx, a, "service_connection", v.ID, v.Name, "created", map[string]any{}, meta)
 	})
 	return out, a, err
@@ -392,9 +402,11 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 			v.Version++
 			if configChanged {
 				v.ConfigVersion++
-				if err := r.SaveGitLabConfig(&v.Config); err != nil {
+				encoded, err := json.Marshal(v.Config)
+				if err != nil {
 					return err
 				}
+				v.ConfigJSON = encoded
 			}
 			if err := r.SaveConnection(v); err != nil {
 				return err
@@ -471,7 +483,7 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 func sameString(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 func sameID(a, b *uint64) bool     { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 func purpose(kind string, connection, id uint64, method string) string {
-	return fmt.Sprintf("service-integrations/gitlab/%s/%d/%d/%s/v1", kind, connection, id, method)
+	return credentialPurpose("gitlab", kind, connection, id, method)
 }
 func owned(cr *ServiceCredential, v *ServiceConnection, o CredentialOwnership) bool {
 	if cr == nil || cr.ConnectionID != v.ID || cr.Type != v.Type || cr.Ownership != o.Type {
@@ -487,22 +499,6 @@ func owned(cr *ServiceCredential, v *ServiceConnection, o CredentialOwnership) b
 	}
 	return false
 }
-func validateAuthentication(a *Authentication) error {
-	if a == nil {
-		return httpx.Invalid("authentication", "required")
-	}
-	if a.Method != "gitlab_access_token" {
-		return httpx.Invalid("authentication.auth_method", "unsupported")
-	}
-	var identity map[string]json.RawMessage
-	if len(a.Identity) == 0 || json.Unmarshal(a.Identity, &identity) != nil || identity == nil || len(identity) != 0 {
-		return httpx.Invalid("authentication.identity_config", "invalid_format")
-	}
-	if a.Secret == nil {
-		return httpx.Invalid("authentication.secret", "required")
-	}
-	return validateToken(a.Secret.Token)
-}
 func validateToken(token string) error {
 	if len(token) < 8 || len(token) > 8192 || strings.ContainsAny(token, "\r\n\x00") || strings.TrimSpace(token) != token || strings.Trim(token, "*") == "" {
 		return httpx.Invalid("token", "invalid_format")
@@ -517,4 +513,8 @@ func newCredentialCode() (string, error) {
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return hex.EncodeToString(b[:]), nil
+}
+
+func credentialPurpose(serviceType, kind string, connection, id uint64, method string) string {
+	return fmt.Sprintf("service-integrations/%s/%s/%d/%d/%s/v1", serviceType, kind, connection, id, method)
 }

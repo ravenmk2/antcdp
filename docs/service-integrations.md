@@ -1,6 +1,6 @@
 # 外部服务集成设计
 
-更新日期：2026-10-29。本文是重新设计后的目标契约，取代旧 `integration / integration_gitlab / integration_credential` 三表方案，不要求本模块旧表、旧 API、旧标识和旧接收地址兼容。三表、API 与正式页面已实现；本次迁移已合并为最终版本 5，删除中间版本 6。旧集成及本次中间结构不要求数据迁移，实际交付状态见[开发说明](development.md)。
+更新日期：2026-10-29。本文是重新设计后的目标契约，取代旧 `integration / integration_gitlab / integration_credential` 三表方案，不要求本模块旧表、旧 API、旧标识和旧接收地址兼容。GitLab 与 Jenkins 管理 API 和正式页面已实现；迁移 5 保留已合并的 GitLab 结构，最终迁移 6 将 GitLab 地址及 CA 搬入连接 config JSON，保留版本 5 的数据及密文，不创建 Jenkins 表。旧集成的历史重建规则仅适用于迁移 5，实际交付状态见[开发说明](development.md)。
 
 ## 1. 目标与范围
 
@@ -13,7 +13,7 @@
 | 排查 BUG | MySQL 查询、OpenObserve / Elasticsearch 检索 | 连接保存地址和默认上下文；查询、索引、时间范围由操作提供 |
 | 接收代码平台事件 | GitLab Webhook | 连接内的 Webhook 设置管理验证、接收和诊断；事件筛选与项目绑定属于消费方 |
 
-本次不设计工作流节点、触发规则、执行图、运行记录、可靠分发和运行时凭证选择链。不开放任意 HTTP 代理、SQL 查询或 Agent 执行 API。GitLab 是本轮数据库/API 的完整建模样例；Jenkins、MySQL、OpenObserve、Elasticsearch 等确定扩展方式，适配器完成前不注册可创建类型，不预建空表。
+本次不设计工作流节点、触发规则、执行图、运行记录、可靠分发和运行时凭证选择链。不开放任意 HTTP 代理、SQL 查询或 Agent 执行 API。GitLab 和 Jenkins 已支持连接及凭证维护、连接测试和凭证验证；MySQL、OpenObserve、Elasticsearch 等确定扩展方式，适配器完成前不注册可创建类型，不预建空表。
 
 ### 通知模块边界
 
@@ -37,11 +37,11 @@
 
 ```mermaid
 erDiagram
-    service_connection ||--o| service_connection_gitlab : config_for_gitlab
+    service_connection ||--o| service_connection_gitlab : webhook_for_gitlab
     service_connection ||--o{ service_credential : authenticates_outbound
 ```
 
-从所有类型看扩展关系为 0..1；类型为 gitlab 时必须恰好一条对应扩展。类型与适配器是代码注册项，不建表。关系均为逻辑关联。同一实际部署可建立多条连接，例如相同 MySQL 主机的不同默认数据库，地址不唯一。凭证不能改变连接的访问地址。
+从所有类型看扩展关系为 0..1；类型为 gitlab 时必须恰好一条 Webhook 扩展，jenkins 不使用扩展表。类型与适配器是代码注册项，不建表。关系均为逻辑关联。同一实际部署可建立多条连接，例如相同 MySQL 主机的不同默认数据库，地址不唯一。凭证不能改变连接的访问地址。
 
 ## 3. 配置、认证与执行边界
 
@@ -55,13 +55,13 @@ erDiagram
 
 后续服务的认证组合仅为建模示例，确切协议、DTO 和验证应随适配器设计。RabbitMQ、Redis、PostgreSQL、MongoDB、Nacos 同样按实际需求扩展。默认数据库、组织等不是授权范围；凭证维护权、未来凭证使用权与执行合并/部署/查询的业务授权分开，执行模块须在解密和远端调用前完成业务授权。
 
-采用代码注册和类型化结构，拒绝未知字段、认证方式和结构版本。公共表只保存公共管理字段，稳定服务字段进入一对一扩展表；节点列表可用受控 JSON 数组。identity_config 及加密 secret 由 service_type + auth_method 定义，不提供自由 JSON 编辑器、任意请求头或运行时插件加载。带秘密的 DSN、userinfo、query 和 URI 不能进入普通配置，也不能进入日志、诊断或审计。
+采用代码注册和类型化结构，拒绝未知字段、认证方式和结构版本。连接表保存公共管理字段和类型化 config JSON；配置由 service_type 与 config_schema_version 决定，节点列表可用受控 JSON 数组。identity_config 及加密 secret 由 service_type + auth_method 定义，不提供自由 JSON 编辑器、任意请求头或运行时插件加载。带秘密的 DSN、userinfo、query 和 URI 不能进入普通配置，也不能进入日志、诊断或审计。
 
 适配器可声明 gitlab.create_branch、gitlab.merge_merge_request、jenkins.trigger_build、mysql.query、openobserve.search_logs、elasticsearch.search 等能力。这些名称不是已经实现的操作，本次不建立 tool/operation 表、不提供执行 HTTP API。外部 MySQL 服务适配器与 AntCDP 自身 MySQL 仓储适配器职责独立。
 
 ## 4. 数据库结构
 
-完整 DDL 见 [schema.sql](schema.sql)。本模块 GitLab 目标结构为三张表，加上一期七张和协作九张，共 19 张目标业务表。其他服务按需增加配置扩展表。不设凭证集合表、一对一秘密表、事件收件箱或工作流表。
+完整 DDL 见 [schema.sql](schema.sql)。本模块包含连接、凭证两张公共表及 GitLab Webhook 扩展，共三张表；加上一期七张和协作九张，共 19 张目标业务表。新增服务优先使用类型化 config JSON，仅在需要独立生命周期、查询或约束时增加业务表。不设凭证集合表、一对一秘密表、事件收件箱或工作流表。
 
 采用 BIGINT UNSIGNED ID、UTC DATETIME(3)、单数 snake_case。三表不设置物理外键或 CHECK；保留主键、唯一键、索引、类型、可空性和默认值。所有写入口在事务内验证关联、布尔、正版本号、归属组合、JSON 和秘密封装，不能依靠生成列兜底非法归属。既有十六张表的物理外键与 CHECK 也由迁移 5 移除；关联和状态规则通过应用校验、锁与事务保证。
 
@@ -71,6 +71,8 @@ erDiagram
 | --- | --- |
 | id、service_type、code | 稳定身份、不可变类型、不可变程序标识 |
 | name、description、enabled | 公共资料和整条连接的管理开关 |
+| config | 非空 JSON 对象，按服务类型校验的出站配置，不含秘密 |
+| config_schema_version | 配置结构版本，当前为 1，与编辑/诊断失效版本独立 |
 | fallback_credential_id | 可空，同连接系统凭证的逻辑引用 |
 | row_version | 公共资料及服务配置共用的聚合编辑版本 |
 | config_version | 影响出站访问的配置版本，地址/CA 等变化时递增 |
@@ -85,13 +87,15 @@ UNIQUE(code) 全局唯一；UNIQUE(service_type,name) 同类型名称唯一。co
 
 ### 4.2 service_connection_gitlab
 
-| 字段 | 职责 |
-| --- | --- |
-| connection_id | 主键，逻辑引用 service_connection.id |
-| base_url | 必填基础 URL，最长 2048 字符，可含合法子路径 |
-| custom_ca_pem | 可空公共 CA，最多 16 KiB，不接收私钥 |
+connection_id 为主键，逻辑引用 service_connection.id。此表仅保存 Webhook 开关、验证方式、加密秘密、独立 webhook_version、最近接收诊断与更新时间（见 4.4）。每条 GitLab 连接固定一行，即使尚未启用 Webhook。与主表同事务创建和删除；缺失或类型错配返回受控完整性错误，不当作未配置。地址/CA 编辑更新主表 config，Webhook 编辑仅更新扩展中的 webhook_* 列，互不覆盖。
 
-地址和 CA 不含认证材料，使用主表 row_version。该扩展另外保存 Webhook 设置、加密秘密和独立版本（见 4.4）。主表与扩展同事务创建和删除；地址/CA 编辑仅更新相应列，Webhook 编辑仅更新 webhook_* 列，互不覆盖。缺失或类型错配返回受控完整性错误，不当作未配置。GitLab URL 支持 HTTP 和 HTTPS，禁止 userinfo/query/fragment，HTTPS 严格校验证书，不提供跳过 TLS 开关；API 路径由适配器构造。
+### 类型化连接配置
+
+GitLab 与 Jenkins 当前均采用 `config={base_url,custom_ca_pem}`：base_url 必填、最长 2048 字符，custom_ca_pem 可空、最多 16 KiB、不接收私钥。支持 HTTP、HTTPS、端口及部署子路径，禁止 userinfo/query/fragment，HTTPS 严格校验证书，不提供跳过 TLS 开关；API 路径由适配器构造。
+
+持久化读写均按注册适配器解码与校验；未知字段、非对象、无效配置或不支持的结构版本返回受控完整性错误。API 保持类型化 DTO，不开放自由 JSON 编辑。config_schema_version 当前为 1，结构演进时显式迁移；row_version 控制连接编辑并发，config_version 控制出站诊断失效，三者职责独立。Token 等秘密继续在凭证表加密保存，不进入 config。
+
+Jenkins 使用 `jenkins_api_token`，`identity_config={username}`、`secret={token}`。用户名为非秘密登录名，必填、最多 255 UTF-8 字节，禁止首尾空白、冒号及控制字符；拒绝未知字段。Token 与 GitLab 一样加密保存，独立认证替换完整提交用户名和 Token。加密用途按服务类型绑定，既有 GitLab 用途字符串保持不变。
 
 ### 4.3 service_credential
 
@@ -228,3 +232,11 @@ GitLab 对外支持 HTTP 和 HTTPS；HTTPS 严格校验证书和主机名；允�
 - 页面区分连接/凭证/Webhook 设置、首选/兜底，明确未分发工作流，通知模块不混入服务类型目录。
 
 新装、升级及 HTTP 生命周期的实际验证范围与限制见开发说明。详细 HTTP 契约见[服务集成 API](service-integrations-api.md)。关联规则见[领域模型](domain-model.md)、[数据库](database.md)、[架构](architecture.md)、[扩展性](extensibility.md)及[UI 规范](ui-design.md)。
+
+## Jenkins 验证与能力边界
+
+连接测试无认证 GET `{base_url}/whoAmI/api/json`；凭证验证主动发送 HTTP Basic（用户名 + API Token），只请求同一个只读身份接口。检查成功状态、JSON 媒体类型及 name/authenticated/anonymous 字段。认证成功要求 authenticated=true、anonymous=false，且远端 name 与配置用户名一致；不同身份返回 identity_mismatch，不信任代理自动登录为其他用户。
+
+诊断分别表达 HTTP 可达、识别 Jenkins API、认证结果，具体 Job 构建权限保持 unknown。401 表示认证失败；403 表示访问被拒绝，认证结论保持 unknown；重定向不跟随，代理页和不完整 JSON 不判为成功。响应最多 1 MiB，沿用超时、并发、DNS/IP 与 TLS 限制，只保存白名单摘要。人工 expires_at 不等于远端 Token 到期信息。
+
+本次不支持密码认证、crumb 配置、Job 默认值、构建操作或入站回调。operations 为空，webhook.supported=false。未来执行模块负责 Job、参数、授权及队列/构建跟踪；不得以触发构建作为凭证验证。

@@ -48,7 +48,7 @@ func allowedIP(ip netip.Addr) bool {
 	}
 	return true
 }
-func transport(g *GitLabConfig) *http.Transport {
+func transport(g *HTTPConfig) *http.Transport {
 	roots, _ := x509.SystemCertPool()
 	if roots == nil {
 		roots = x509.NewCertPool()

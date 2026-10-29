@@ -91,7 +91,7 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 			return
 		}
 		a, err := o.Identity.BusinessAccess(c.Request.Context(), rawSession(c), nil, func(identity.Tx, *identity.Auth) error { return nil })
-		finish(c, i.Result{Data: gin.H{"items": []gin.H{{"service_type": "gitlab", "name": "GitLab", "credentials": true, "connection_test": true, "credential_verification": true, "auth_methods": []string{"gitlab_access_token"}, "operations": []string{}, "webhook": gin.H{"supported": true, "verification_methods": []string{"secret_token", "signing_token"}}}}}}, a, err, 200)
+		finish(c, i.Result{Data: gin.H{"items": i.Types()}}, a, err, 200)
 	})
 	api.GET("/service-connections", func(c *gin.Context) {
 		if !noQuery(c) {
@@ -100,86 +100,29 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 		r, a, err := s.List(c.Request.Context(), rawSession(c), false)
 		finish(c, r, a, err, 200)
 	})
-	base := "/admin/service-connections/gitlab"
-	api.GET(base, func(c *gin.Context) {
-		if !noQuery(c) {
-			return
-		}
-		r, a, err := s.List(c.Request.Context(), rawSession(c), true)
-		finish(c, r, a, err, 200)
-	})
-	api.POST(base, func(c *gin.Context) {
-		var w i.ConnectionCreate
-		if !httpx.Decode(c, &w) {
-			return
-		}
-		r, a, err := s.Create(c.Request.Context(), rawSession(c), w, metadata(c))
-		finish(c, r, a, err, 201)
-	})
-	for _, route := range []struct{ method, path, op string }{
-		{"GET", "", "get"}, {"PATCH", "", "update"}, {"DELETE", "", "delete"},
-		{"GET", "/fallback-credential", "fallback"}, {"PUT", "/fallback-credential", "set_fallback"}, {"DELETE", "/fallback-credential", "clear_fallback"}, {"GET", "/diagnostics", "diagnostics"},
-	} {
-		api.Handle(route.method, base+"/:connection_id"+route.path, func(c *gin.Context) {
+	for _, kind := range []string{"gitlab", "jenkins"} {
+		s := s.ForType(kind)
+		base := "/admin/service-connections/" + kind
+		api.GET(base, func(c *gin.Context) {
 			if !noQuery(c) {
 				return
 			}
-			id, ok := collaborationID(c, "connection_id")
-			if !ok {
-				return
-			}
-			var input any
-			switch route.op {
-			case "update":
-				input = &i.ConnectionWrite{}
-			case "set_fallback":
-				input = &i.SelectionWrite{}
-			}
-			input, ok = integrationInput(c, input)
-			if !ok {
-				return
-			}
-			r, a, err := s.Admin(c.Request.Context(), rawSession(c), id, route.op, c.GetHeader("If-Match"), input, metadata(c))
-			status := 200
-			if route.method == "DELETE" {
-				status = 204
-			}
-			finish(c, r, a, err, status)
+			r, a, err := s.List(c.Request.Context(), rawSession(c), true)
+			finish(c, r, a, err, 200)
 		})
-	}
-	verifyLimiter := newLimiter(20, time.Minute)
-	allowVerify := func(c *gin.Context) bool {
-		if !verifyLimiter.Allow(c.ClientIP()) {
-			c.Header("Retry-After", "60")
-			httpx.Write(c, httpx.E(429, "RATE_LIMITED", "验证过于频繁"))
-			return false
-		}
-		return true
-	}
-	api.POST(base+"/:connection_id/test", func(c *gin.Context) {
-		if !noQuery(c) {
-			return
-		}
-		id, ok := collaborationID(c, "connection_id")
-		if !ok {
-			return
-		}
-		if _, ok = integrationInput(c, &struct{}{}); !ok {
-			return
-		}
-		if !allowVerify(c) {
-			return
-		}
-		r, a, err := s.Verify(c.Request.Context(), rawSession(c), id, 0, i.CredentialOwnership{Type: "system"}, c.GetHeader("If-Match"))
-		finish(c, r, a, err, 200)
-	})
-	for _, group := range []struct{ path, ownership string }{{base, "system"}, {"/me/service-connections/gitlab", "personal"}, {"/projects/:id/service-connections/gitlab", "project"}} {
-		prefix := group.path + "/:connection_id/credentials"
+		api.POST(base, func(c *gin.Context) {
+			var w i.ConnectionCreate
+			if !httpx.Decode(c, &w) {
+				return
+			}
+			r, a, err := s.Create(c.Request.Context(), rawSession(c), w, metadata(c))
+			finish(c, r, a, err, 201)
+		})
 		for _, route := range []struct{ method, path, op string }{
-			{"GET", "", "list"}, {"POST", "", "create"}, {"GET", "/preferred", "get_preferred"}, {"PUT", "/preferred", "preferred"}, {"DELETE", "/preferred", "clear_preferred"},
-			{"GET", "/:credential_id", "get"}, {"PATCH", "/:credential_id", "update"}, {"DELETE", "/:credential_id", "delete"}, {"PUT", "/:credential_id/authentication", "authentication"}, {"GET", "/:credential_id/diagnostics", "diagnostics"}, {"POST", "/:credential_id/verify", "verify"},
+			{"GET", "", "get"}, {"PATCH", "", "update"}, {"DELETE", "", "delete"},
+			{"GET", "/fallback-credential", "fallback"}, {"PUT", "/fallback-credential", "set_fallback"}, {"DELETE", "/fallback-credential", "clear_fallback"}, {"GET", "/diagnostics", "diagnostics"},
 		} {
-			api.Handle(route.method, prefix+route.path, func(c *gin.Context) {
+			api.Handle(route.method, base+"/:connection_id"+route.path, func(c *gin.Context) {
 				if !noQuery(c) {
 					return
 				}
@@ -187,63 +130,35 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 				if !ok {
 					return
 				}
-				owner := i.CredentialOwnership{Type: group.ownership}
-				if owner.Type == "project" {
-					owner.Owner, ok = collaborationID(c, "id")
-					if !ok {
-						return
-					}
-				}
-				var cid uint64
-				if c.Param("credential_id") != "" {
-					cid, ok = collaborationID(c, "credential_id")
-					if !ok {
-						return
-					}
-				}
 				var input any
 				switch route.op {
-				case "create":
-					input = &i.CredentialCreate{}
 				case "update":
-					input = &i.CredentialWrite{}
-				case "preferred":
+					input = &i.ConnectionWrite{}
+				case "set_fallback":
 					input = &i.SelectionWrite{}
-				case "authentication":
-					input = &i.Authentication{}
-				case "verify":
-					input = &struct{}{}
 				}
 				input, ok = integrationInput(c, input)
 				if !ok {
 					return
 				}
-				if route.op == "verify" {
-					if !allowVerify(c) {
-						return
-					}
-					r, a, err := s.Verify(c.Request.Context(), rawSession(c), id, cid, owner, c.GetHeader("If-Match"))
-					finish(c, r, a, err, 200)
-					return
-				}
-				r, a, err := s.Credentials(c.Request.Context(), rawSession(c), id, cid, owner, route.op, c.GetHeader("If-Match"), c.GetHeader("X-Collection-If-Match"), input, metadata(c))
+				r, a, err := s.Admin(c.Request.Context(), rawSession(c), id, route.op, c.GetHeader("If-Match"), input, metadata(c))
 				status := 200
-				if route.op == "create" {
-					status = 201
-				}
 				if route.method == "DELETE" {
 					status = 204
 				}
 				finish(c, r, a, err, status)
 			})
 		}
-	}
-	webhook := base + "/:connection_id/webhook"
-	for _, route := range []struct{ method, path, op string }{
-		{"GET", "", "get"}, {"PATCH", "", "update"},
-		{"PUT", "/verification", "verification"}, {"POST", "/verification/generate", "generate"}, {"GET", "/receiver", "receiver"}, {"GET", "/diagnostics", "diagnostics"},
-	} {
-		api.Handle(route.method, webhook+route.path, func(c *gin.Context) {
+		verifyLimiter := newLimiter(20, time.Minute)
+		allowVerify := func(c *gin.Context) bool {
+			if !verifyLimiter.Allow(c.ClientIP()) {
+				c.Header("Retry-After", "60")
+				httpx.Write(c, httpx.E(429, "RATE_LIMITED", "验证过于频繁"))
+				return false
+			}
+			return true
+		}
+		api.POST(base+"/:connection_id/test", func(c *gin.Context) {
 			if !noQuery(c) {
 				return
 			}
@@ -251,22 +166,113 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 			if !ok {
 				return
 			}
-			var input any
-			switch route.op {
-			case "update":
-				input = &i.WebhookWrite{}
-			case "verification":
-				input = &i.VerificationWrite{}
-			case "generate":
-				input = &struct{}{}
-			}
-			input, ok = integrationInput(c, input)
-			if !ok {
+			if _, ok = integrationInput(c, &struct{}{}); !ok {
 				return
 			}
-			r, a, err := s.Webhook(c.Request.Context(), rawSession(c), id, route.op, c.GetHeader("If-Match"), input, metadata(c))
+			if !allowVerify(c) {
+				return
+			}
+			r, a, err := s.Verify(c.Request.Context(), rawSession(c), id, 0, i.CredentialOwnership{Type: "system"}, c.GetHeader("If-Match"))
 			finish(c, r, a, err, 200)
 		})
+		for _, group := range []struct{ path, ownership string }{{base, "system"}, {"/me/service-connections/" + kind, "personal"}, {"/projects/:id/service-connections/" + kind, "project"}} {
+			prefix := group.path + "/:connection_id/credentials"
+			for _, route := range []struct{ method, path, op string }{
+				{"GET", "", "list"}, {"POST", "", "create"}, {"GET", "/preferred", "get_preferred"}, {"PUT", "/preferred", "preferred"}, {"DELETE", "/preferred", "clear_preferred"},
+				{"GET", "/:credential_id", "get"}, {"PATCH", "/:credential_id", "update"}, {"DELETE", "/:credential_id", "delete"}, {"PUT", "/:credential_id/authentication", "authentication"}, {"GET", "/:credential_id/diagnostics", "diagnostics"}, {"POST", "/:credential_id/verify", "verify"},
+			} {
+				api.Handle(route.method, prefix+route.path, func(c *gin.Context) {
+					if !noQuery(c) {
+						return
+					}
+					id, ok := collaborationID(c, "connection_id")
+					if !ok {
+						return
+					}
+					owner := i.CredentialOwnership{Type: group.ownership}
+					if owner.Type == "project" {
+						owner.Owner, ok = collaborationID(c, "id")
+						if !ok {
+							return
+						}
+					}
+					var cid uint64
+					if c.Param("credential_id") != "" {
+						cid, ok = collaborationID(c, "credential_id")
+						if !ok {
+							return
+						}
+					}
+					var input any
+					switch route.op {
+					case "create":
+						input = &i.CredentialCreate{}
+					case "update":
+						input = &i.CredentialWrite{}
+					case "preferred":
+						input = &i.SelectionWrite{}
+					case "authentication":
+						input = &i.Authentication{}
+					case "verify":
+						input = &struct{}{}
+					}
+					input, ok = integrationInput(c, input)
+					if !ok {
+						return
+					}
+					if route.op == "verify" {
+						if !allowVerify(c) {
+							return
+						}
+						r, a, err := s.Verify(c.Request.Context(), rawSession(c), id, cid, owner, c.GetHeader("If-Match"))
+						finish(c, r, a, err, 200)
+						return
+					}
+					r, a, err := s.Credentials(c.Request.Context(), rawSession(c), id, cid, owner, route.op, c.GetHeader("If-Match"), c.GetHeader("X-Collection-If-Match"), input, metadata(c))
+					status := 200
+					if route.op == "create" {
+						status = 201
+					}
+					if route.method == "DELETE" {
+						status = 204
+					}
+					finish(c, r, a, err, status)
+				})
+			}
+		}
+		if kind != "gitlab" {
+			continue
+		}
+		webhook := base + "/:connection_id/webhook"
+		for _, route := range []struct{ method, path, op string }{
+			{"GET", "", "get"}, {"PATCH", "", "update"},
+			{"PUT", "/verification", "verification"}, {"POST", "/verification/generate", "generate"}, {"GET", "/receiver", "receiver"}, {"GET", "/diagnostics", "diagnostics"},
+		} {
+			api.Handle(route.method, webhook+route.path, func(c *gin.Context) {
+				if !noQuery(c) {
+					return
+				}
+				id, ok := collaborationID(c, "connection_id")
+				if !ok {
+					return
+				}
+				var input any
+				switch route.op {
+				case "update":
+					input = &i.WebhookWrite{}
+				case "verification":
+					input = &i.VerificationWrite{}
+				case "generate":
+					input = &struct{}{}
+				}
+				input, ok = integrationInput(c, input)
+				if !ok {
+					return
+				}
+				r, a, err := s.Webhook(c.Request.Context(), rawSession(c), id, route.op, c.GetHeader("If-Match"), input, metadata(c))
+				finish(c, r, a, err, 200)
+			})
+		}
 	}
 	webhookLimiter := newLimiter(120, time.Minute)
 	api.POST("/webhooks/gitlab/:connection_id", func(c *gin.Context) {

@@ -6,9 +6,17 @@ AntCDP 首次交付采用全新安装，不迁移旧系统运行数据。使用�
 
 ## 1. 目录与运行边界
 
-### 合并后的迁移版本 5：服务连接与单例 Webhook
+### 当前最终迁移版本 6：类型化连接配置
 
-本次任务新增迁移合并为 `00005_service_connections.sql`，删除过程迁移 6；历史迁移 1–4 保持原样。新装及版本 4 升级均依次执行到最终版本 5，最终为 19 张业务表，其中集成只有 service_connection、service_connection_gitlab、service_credential 三张。
+本次仅保留 `00006_connection_config.sql`，删除未定稿的 Jenkins 建表迁移；历史迁移 1–5 保留。最终迁移 6 从版本 5 将 GitLab 地址及 CA 复制到 service_connection.config JSON，新增 config_schema_version，随后移除 GitLab 表中的原配置列。GitLab 表仅保留 Webhook，Jenkins 不建扩展表，最终为 19 张业务表。迁移不改凭证和 Webhook 密文。
+
+升级前停止应用并保存匹配的数据库/数据目录备份，再执行显式迁移。就绪检查同时核对版本 6、JSON 配置列、GitLab 旧配置列已移除以及 Jenkins 旧表不存在。迁移命令结束后也执行结构检查。
+
+曾部署过创建 Jenkins 表的中间版本 6 的实例，不能直接套用此最终迁移或仅修改版本号。该实例需要单独维护转换：备份后将两种连接配置复制到主表并核对数据，再移除旧配置列和 Jenkins 表，验证最终结构后启动。仓库不保留过程迁移；维护转换与验证结果见开发说明。回退须恢复匹配备份，不自动执行 Down。
+
+### 历史迁移版本 5：服务连接与单例 Webhook
+
+本次任务新增迁移合并为 `00005_service_connections.sql`，删除过程迁移 6；历史迁移 1–4 保持原样。当时的新装及版本 4 升级均依次执行到版本 5，最终为 19 张业务表，其中集成只有 service_connection、service_connection_gitlab、service_credential 三张。
 
 迁移 5 重建旧集成模块，Webhook 设置、验证秘密和独立版本存入 GitLab 连接扩展，无接入点实体表。旧集成及本次中间版本的配置、秘密、首选/兜底和接收地址不要求保留；用户、项目、团队、审计和安装身份保留。旧管理接口不兼容，远端 Hook 需按新的连接接收地址重新配置。
 
