@@ -47,13 +47,20 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	admin.call(t, "PATCH", path, map[string]any{"name": "invalid precondition"}, 422, map[string]string{"If-Match": "*"})
 	original := testData(admin.call(t, "GET", path, nil, 200, nil))
 	oldTag := admin.last.Header().Get("ETag")
+	// HTTP is supported; use a forbidden loopback address to exercise rollback.
 	admin.call(t, "PATCH", path, map[string]any{"name": "must rollback", "config": map[string]any{"base_url": "http://127.0.0.1"}}, 422, map[string]string{"If-Match": oldTag})
 	unchanged := testData(admin.call(t, "GET", path, nil, 200, nil))
-	if original["name"] != unchanged["name"] || oldTag != admin.last.Header().Get("ETag") {
+	if original["name"] != unchanged["name"] || original["config"].(map[string]any)["base_url"] != unchanged["config"].(map[string]any)["base_url"] || oldTag != admin.last.Header().Get("ETag") {
 		t.Fatal("invalid aggregate PATCH committed partial state")
 	}
 	admin.call(t, "PATCH", path, map[string]any{"name": "GitLab 新连接", "config": map[string]any{"base_url": "https://gitlab.example.com/subpath", "custom_ca_pem": nil}}, 200, map[string]string{"If-Match": oldTag})
 	admin.call(t, "PATCH", path, map[string]any{"name": "stale"}, 412, map[string]string{"If-Match": oldTag})
+	const httpURL = "http://gitlab.example.com/subpath"
+	admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"base_url": httpURL}}, 200, tag(admin, path))
+	persistedHTTP := testData(admin.call(t, "GET", path, nil, 200, nil))
+	if persistedHTTP["config"].(map[string]any)["base_url"] != httpURL {
+		t.Fatal("supported HTTP GitLab URL was not persisted")
+	}
 	for _, ca := range []any{"", nil} {
 		updated := testData(admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"custom_ca_pem": ca}}, 200, tag(admin, path)))
 		persisted := testData(admin.call(t, "GET", path, nil, 200, nil))
