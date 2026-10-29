@@ -167,6 +167,7 @@ onUnmounted(() => {
             }}</RouterLink>
           </div>
         </template>
+        <p class="font-credit">字体：<a href="/fonts/misans/license.pdf" target="_blank" rel="noopener">MiSans</a></p>
       </div>
     </main>
     </div>
@@ -219,6 +220,8 @@ onUnmounted(() => {
 .signin-forgot .btn { padding: 0; min-height: auto; font-size: 13px; }
 .signin-submit { width: 100%; min-height: 44px; border-radius: 7px; }
 .signin-bottom { margin-top: 24px; text-align: center; font-size: 13px; color: var(--text-muted); }
+.font-credit { margin: 20px 0 0; text-align: center; font-size: 12px; color: var(--text-muted); }
+.font-credit a { text-decoration: underline; text-underline-offset: 3px; }
 .signin-bottom a { margin-left: 8px; color: var(--text-primary); font-weight: 500; }
 .signin-bottom a:hover, .signin-forgot .btn:hover { text-decoration: underline; }
 .registering .signin-form h1 { margin-bottom: 24px; }

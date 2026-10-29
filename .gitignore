@@ -5,5 +5,8 @@
 /dist/
 /web/dist/
 /web/node_modules/
+/web/.cache/fonts/
+/web/public/fonts/misans/
+/web/public/fonts/misans-staging/
 /data/
 *.test.exe

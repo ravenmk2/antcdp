@@ -75,14 +75,14 @@
 
 ## 3. 中文排版
 
-推荐系统字体栈：
+首选 MiSans，保留系统字体兜底：
 
 ```css
-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+font-family: "MiSans", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
   "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
 ```
 
-字体使用系统可用字体，不依赖在线字体服务。中文使用正常字距；字重承担层级，避免大段粗体。用户名、ID、时间与技术值可使用 Cascadia Code / Consolas / monospace；数字优先等宽排列。
+MiSans 使用官方 WOFF2 字符分片，构建时下载并校验 SHA-256，随前端产物发布；字体二进制和缓存不提交 Git。运行时从本站按需加载，不请求第三方字体服务。采用 `font-display: swap`，加载期间或失败时使用系统字体。包含 400、450、500、600、650、700 字重；官方静态资源不含 550，因此将 550–600 映射到 600 字形。登录页注明使用 MiSans，并链接随应用发布的原始许可协议。中文使用正常字距；字重承担层级，避免大段粗体。用户名、ID、时间与技术值可使用 Cascadia Code / Consolas / monospace；数字优先等宽排列。
 
 | 层级 | 建议大小与行高 |
 | --- | --- |

@@ -3,8 +3,11 @@ package server
 import (
 	"io/fs"
 	"net/http"
+	"regexp"
 	"strings"
 )
+
+var immutableFontPath = regexp.MustCompile(`^fonts/misans/[a-f0-9]{64}\.woff2$`)
 
 // SPAHandler returns a static file handler with history-mode fallback: paths matching a
 // real file are served directly; everything else falls back to index.html for the frontend
@@ -25,6 +28,12 @@ func SPAHandler(dist fs.FS) http.Handler {
 			st, statErr := f.Stat()
 			_ = f.Close()
 			if statErr == nil && !st.IsDir() {
+				if immutableFontPath.MatchString(p) {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else if strings.HasPrefix(p, "fonts/misans/") {
+					// Stable filenames (including fonts.css) must pick up new releases.
+					w.Header().Set("Cache-Control", "no-cache")
+				}
 				fileServer.ServeHTTP(w, r)
 				return
 			}

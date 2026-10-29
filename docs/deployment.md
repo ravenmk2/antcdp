@@ -6,6 +6,8 @@ AntCDP 首次交付采用全新安装，不迁移旧系统运行数据。使用�
 
 ## 1. 目录与运行边界
 
+MiSans 字体随前端产物嵌入应用。已存在的 `/fonts/misans/<64 位小写 SHA-256>.woff2` 返回 `Cache-Control: public, max-age=31536000, immutable`，支持浏览器长期复用；字体内容变化会生成新文件名。该目录下固定名称的 CSS、许可等文件返回 `no-cache`，每次使用前需向服务器验证，避免发布后继续使用旧字体清单。缺失字体返回 404，不赋予一年缓存；此策略不提供完整应用离线运行能力。
+
 ### 当前最终迁移版本 6：类型化连接配置
 
 本次仅保留 `00006_connection_config.sql`，删除未定稿的 Jenkins 建表迁移；历史迁移 1–5 保留。最终迁移 6 从版本 5 将 GitLab 地址及 CA 复制到 service_connection.config JSON，新增 config_schema_version，随后移除 GitLab 表中的原配置列。GitLab 表仅保留 Webhook，Jenkins 不建扩展表，最终为 19 张业务表。迁移不改凭证和 Webhook 密文。

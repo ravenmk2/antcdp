@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
-    "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build"
+    "fonts": "node scripts/prepare-fonts.mjs",
+    "dev": "npm run fonts && vite",
+    "build": "npm run fonts && vue-tsc --noEmit && vite build"
   },
   "dependencies": {
     "@lucide/vue": "1.63.0",

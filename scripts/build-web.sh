@@ -6,6 +6,7 @@
 # Otherwise a placeholder is written so go embed compiles before the frontend
 # exists. To customize the frontend build (framework, output dir, extra
 # steps), edit this one file — build.sh and the CI workflows all call it.
+# npm run build prepares pinned MiSans resources before Vite bundles the app.
 set -euo pipefail
 
 if [[ -f web/package.json ]]; then
