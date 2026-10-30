@@ -935,6 +935,7 @@ async function removeTeam(t: Resource) {
             }}<span class="collab-count">{{ teams.length }}</span>
           </button>
           <RouterLink v-if="kind === 'projects' && (detail.direct_role === 'admin' || identity.isAdmin)" :to="`/projects/${detail.id}/integrations`" class="tab">集成凭证</RouterLink>
+          <RouterLink v-if="kind === 'projects' && (detail.direct_role === 'admin' || identity.isAdmin)" :to="`/projects/${detail.id}/remote-hosts`" class="tab">SSH 凭证</RouterLink>
         </nav>
         <div v-if="tab === 'overview'" class="collab-overview-grid">
           <article class="collab-document">

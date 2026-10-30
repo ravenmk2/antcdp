@@ -1,5 +1,7 @@
 # API 设计
 
+远程主机使用独立业务模块、前端组件、SSH 管理 API 和主机/公钥/凭证三表，迁移 7 保留既有 SSH 数据并从服务集成存储分离；范围和信任规则见[远程主机管理](remote-hosts.md)。
+
 服务集成已于 2026-10-29 重新设计：领域边界见[外部服务集成设计](service-integrations.md)，完整路径、DTO、权限、条件请求和错误见[服务集成 API](service-integrations-api.md)。新契约已实现，不兼容旧 `/integrations` 接口；当前运行状态见[开发说明](development.md)。
 
 统一使用 `/api/v1`：类型目录 `/service-types`、有限连接目录 `/service-connections`、类型明确的维护路径 `/admin/service-connections/{gitlab|jenkins|openobserve|elasticsearch|mysql|postgresql}/{id}`，以及项目/个人凭证路径。连接资料和服务配置构成同一聚合，使用同一个编辑 ETag；凭证、首选、兜底及连接内 Webhook 接收设置有各自条件请求。接收地址改用 `/webhooks/gitlab/{connection_id}`，仅验证接收，不承诺工作流入队或执行。钉钉机器人、邮件、短信属于未来通知模块，本轮没有通知发送接口。

@@ -1,0 +1,1 @@
+<script setup lang="ts">import UiIcon from "../../shared/UiIcon.vue";defineProps<{type?:string}>();</script><template><span class="remote-host-service-icon"><UiIcon name="server" /></span></template>

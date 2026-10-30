@@ -151,7 +151,7 @@ onUnmounted(() => {
             :class="{ active: security }"
             >账号安全</RouterLink
           >
-          <RouterLink class="tab" to="/account/integrations">集成凭证</RouterLink>
+          <RouterLink class="tab" to="/account/integrations">集成凭证</RouterLink><RouterLink class="tab" to="/account/remote-hosts">SSH 凭证</RouterLink>
         </nav>
         <ElForm
           v-if="!security"

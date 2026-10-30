@@ -1,6 +1,8 @@
 # 数据库设计
 
-项目、团队及图标表设计见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 现汇总 19 张目标业务表（一期 7 张 + 协作 9 张 + 服务集成 3 张）。合并后的迁移 5 重建旧集成模块，最终迁移 6 将出站配置移入连接 config JSON，最终共 19 张业务表。实际交付边界见[开发说明](development.md)。
+远程主机使用独立业务模块、前端组件、SSH 管理 API 和主机/公钥/凭证三表，迁移 7 保留既有 SSH 数据并从服务集成存储分离；范围和信任规则见[远程主机管理](remote-hosts.md)。
+
+项目、团队及图标表设计见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 现汇总 22 张目标业务表（一期 7 张 + 协作 9 张 + 服务集成 3 张 + 远程主机 3 张）。合并后的迁移 5 重建旧集成模块，最终迁移 6 将出站配置移入连接 config JSON，迁移 7 将 SSH 主机、公钥和凭证拆为独立三表，共 22 张业务表。实际交付边界见[开发说明](development.md)。
 
 字段约束、关系查询、事务和版本详见 [详细设计](projects-and-teams-detail.md)，九张新增表有独立 [DDL 阅读副本](projects-and-teams-schema.sql)。该副本依赖一期 user 表，不能作为生产迁移直接导入；MySQL 8.0 验证范围见开发说明，8.4 仍待验证。
 
@@ -47,7 +49,7 @@ erDiagram
 
 详见[外部服务集成设计](service-integrations.md#4-数据库结构)。service_connection 保存公共资料、类型化 config JSON、config_schema_version、兜底引用、聚合/集合版本及出站诊断；GitLab 与 Jenkins 的地址和 CA 均存入 config。service_connection_gitlab 仅保存此连接的 Webhook 设置、加密秘密、独立 webhook_version 和最近接收诊断；service_credential 保存凭证归属、认证材料和首选。不设接入点表；事件筛选和项目绑定属于消费方。服务类型/适配器为代码注册，不建表。
 
-集成三表不设置物理外键或 CHECK。生成列与唯一索引约束同连接同归属最多一份首选；引用存在、类型扩展、系统兜底、归属组合、秘密完整性及 JSON 结构由事务保证。所有子对象写入先锁父连接；删除连接要求凭证为空，Webhook 设置随连接扩展删除。诊断独立于编辑/集合表示，不递增编辑版本或更新时间。Webhook 不承担事件收件箱；通知渠道不使用这些表预建模型。全部 19 张业务表均不设置物理外键/CHECK；迁移 5 移除既有约束，保留键、索引和字段定义。
+集成三表不设置物理外键或 CHECK。生成列与唯一索引约束同连接同归属最多一份首选；引用存在、类型扩展、系统兜底、归属组合、秘密完整性及 JSON 结构由事务保证。所有子对象写入先锁父连接；删除连接要求凭证为空，Webhook 设置随连接扩展删除。诊断独立于编辑/集合表示，不递增编辑版本或更新时间。Webhook 不承担事件收件箱；通知渠道不使用这些表预建模型。全部 22 张业务表均不设置物理外键/CHECK；迁移 5 移除既有约束，保留键、索引和字段定义。
 
 侧栏关系通过 preference.user_id 间接逻辑关联 user；两个分组分别维护版本。固定及排序按账号保存、跨设备共享；目标和顺序分别有索引，sort_order 不设唯一。新账号创建同步初始化 preference，升级迁移为未删除账号补行；删除账号明确删除快捷及偏好行。权限失去后的自动清理与授权变更同事务，保留其他成员来源及暂时禁用账号的偏好。详见 [详细设计 2.3 和 4.5 节](projects-and-teams-detail.md#23-侧栏持久化模型)。
 
@@ -165,3 +167,7 @@ erDiagram
 MySQL DDL 会隐式提交，不能靠一个事务撤销整次安装。恢复、备份和升级流程见 [部署设计](deployment.md)。实现验收必须在目标 MySQL 上运行全新建库、升级及安装中断场景；本次已在隔离 MySQL 8.3.0 验证新装、1→5 升级、重复迁移及 HTTP 生命周期；8.0/8.4 对新迁移的复验仍待完成。
 
 MySQL 语法约束参考：[MySQL 8.0 CHECK 支持起点](https://dev.mysql.com/doc/refman/8.0/en/create-table-check-constraints.html)、[DDL 隐式提交](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html)；迁移连接参数参考 [goose 官方说明](https://github.com/pressly/goose)。
+
+## 远程主机三表（迁移 7）
+
+`remote_host`、`remote_host_key`、`remote_host_credential` 独立于服务集成表。完整字段及索引见 [schema.sql](schema.sql)，归属、信任与迁移密文兼容规则见[远程主机管理](remote-hosts.md#独立存储)。迁移保留既有 SSH 数据身份与版本，不重置其他模块。历史公钥确认元数据缺失时为 NULL，新信任写入操作者与时间。

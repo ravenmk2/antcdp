@@ -174,3 +174,7 @@ schema.sql 与迁移版本 6 的当前结构均为 19 张业务表，包含集�
 - [gorilla/csrf](https://github.com/gorilla/csrf) 支持 JSON 客户端通过请求头发送 CSRF 令牌。
 - [Go bcrypt](https://pkg.go.dev/golang.org/x/crypto/bcrypt)、[OWASP 密码存储](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html) 与 [认证建议](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)：算法限制和成本的参考；最少 8 个字符是本项目确认的产品规则，不代表这些来源推荐的无 MFA 长度基线，具体 cost 在实施时测量。
 - [MySQL 隐式提交](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html)：安装恢复需单独处理 DDL。
+
+### SSH 主机管理
+
+远程主机由独立 `remotehosts` 业务包、HTTP 注册、MySQL 仓储与前端 `remote-hosts` 功能目录实现，不引用服务集成业务实体或页面组件。迁移 7 使用主机、公钥、凭证三表，密文和 ETag 使用独立派生用途；仅迁移旧材料时兼容旧 SSH 加密绑定。身份/协作权限、审计和基础 UI 仍为公共能力。协议使用 golang.org/x/crypto/ssh，本期不执行命令或打开 SFTP。见[远程主机管理](remote-hosts.md)。

@@ -14,7 +14,7 @@ const render = new Function('Vue', ts.transpileModule(code, { compilerOptions: {
 render._rc = true;
 const row = { id: '1', name: 'Test credential', code: 'test-credential', identity_config: {}, description: '', expires_at: null, is_preferred: false };
 async function renderState(overrides = {}) {
-  const values = { readonly: false, busy: false, loading: false, error: '', collection: 'v1', search: '', stateFilter: '', stateLabels: { available: '可用' }, rows: [], visibleRows: [], diagnostics: {}, fallbackID: null, system: true, connectionEnabled: true, dialog: false, mode: 'create', clearSecret() {}, open() {}, load() {}, last() {}, menuAction() {}, stateOf: () => 'available', available: () => true, ...overrides };
+  const values = { serviceType:"gitlab", readonly: false, busy: false, loading: false, error: '', collection: 'v1', search: '', stateFilter: '', stateLabels: { available: '可用' }, rows: [], visibleRows: [], diagnostics: {}, fallbackID: null, system: true, connectionEnabled: true, dialog: false, mode: 'create', clearSecret() {}, open() {}, load() {}, last() {}, menuAction() {}, stateOf: () => 'available', available: () => true, ...overrides };
   const app = createSSRApp({ data: () => values, render });
   const passthrough = { setup: (_, { slots }) => () => h('span', slots.default?.()) };
   for (const name of ['DiagnosticResult', 'ElTabs', 'ElTabPane', 'ElSwitch', 'ProviderFields', 'ElInput', 'ElSelect', 'ElOption', 'ElButton', 'UiIcon', 'ConnectionCode', 'ClearFiltersButton', 'ElDropdown', 'ElDropdownMenu', 'ElDropdownItem']) app.component(name, passthrough);

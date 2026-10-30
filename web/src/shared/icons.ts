@@ -44,6 +44,8 @@ import {
   Layers,
   Bot,
   Plug,
+  Server,
+  Power,
   FunnelX,
 } from "@lucide/vue";
 
@@ -95,6 +97,8 @@ export const icons = {
   "team": UsersRound,
   "bot": Bot,
   "service": Plug,
+  "server": Server,
+  "power": Power,
   "clear-filters": FunnelX,
 } as const;
 

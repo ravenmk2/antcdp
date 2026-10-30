@@ -127,6 +127,7 @@ func TestCollaborationMigrationUpgrade(t *testing.T) {
 	if err = s.db.GetContext(ctx, &preserved, "SELECT CONCAT(JSON_UNQUOTE(JSON_EXTRACT(s.config,'$.base_url')),'/',g.webhook_secret_ciphertext,'/',c.secret_ciphertext) FROM service_connection_gitlab g JOIN service_connection s ON s.id=g.connection_id JOIN service_credential c ON c.connection_id=g.connection_id WHERE g.connection_id=99"); err != nil || preserved != "https://gitlab.example.com/subpath/existing-hook-ciphertext/existing-token-ciphertext" {
 		t.Fatal("JSON migration modified GitLab data", err)
 	}
+	verifyRemoteHostMigration(t, ctx, s, p)
 	if err = s.SchemaReady(ctx); err != nil {
 		t.Fatal(err)
 	}

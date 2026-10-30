@@ -124,6 +124,7 @@ func New(o Options) http.Handler {
 	})
 	registerIdentity(api, o)
 	registerIntegrations(api, o)
+	registerRemoteHosts(api, o)
 	r.NoRoute(func(c *gin.Context) {
 		if c.Request.URL.Path == "/api" || strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			httpx.Write(c, httpx.E(404, "NOT_FOUND", "接口不存在"))

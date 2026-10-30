@@ -14,6 +14,17 @@ export interface AuditEvent {
   detail: Record<string, unknown>;
 }
 export const actionLabels: Record<string, string> = {
+  "remote_host.verified": "测试远程主机",
+ "ssh_credential.verified": "验证 SSH 凭证",
+ "remote_host.created": "创建远程主机",
+  "remote_host.updated": "更新远程主机",
+  "remote_host.deleted": "删除远程主机",
+  "remote_host.fallback_changed": "修改兜底凭证",
+  "ssh_credential.created": "创建SSH 凭证",
+  "ssh_credential.updated": "更新SSH 凭证",
+  "ssh_credential.deleted": "删除SSH 凭证",
+  "ssh_credential.authentication_replaced": "替换认证信息",
+  "ssh_credential.preferred_changed": "修改首选凭证",
   "service_connection.created": "创建服务连接",
   "service_connection.updated": "更新服务连接",
   "service_connection.deleted": "删除服务连接",

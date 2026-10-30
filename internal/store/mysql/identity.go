@@ -39,14 +39,14 @@ func (s *Store) Transact(ctx context.Context, fn func(identity.Tx) error) error 
 		var dbErr *driver.MySQLError
 		if errors.As(err, &dbErr) && dbErr.Number == 1062 {
 
-			for key, code := range map[string]string{"uq_service_connection_code": "CONNECTION_CODE_CONFLICT", "uq_service_credential_code": "CREDENTIAL_CODE_CONFLICT"} {
+			for key, code := range map[string]string{"uq_remote_host_code": "CONNECTION_CODE_CONFLICT", "uq_remote_host_credential_code": "CREDENTIAL_CODE_CONFLICT", "uq_service_connection_code": "CONNECTION_CODE_CONFLICT", "uq_service_credential_code": "CREDENTIAL_CODE_CONFLICT"} {
 				if strings.Contains(dbErr.Message, key) {
 					e := httpx.E(409, code, "code 已存在")
 					e.Details = []httpx.Detail{{Code: "conflict", Field: "code"}}
 					return e
 				}
 			}
-			if strings.Contains(dbErr.Message, "uq_service_") {
+			if strings.Contains(dbErr.Message, "uq_service_") || strings.Contains(dbErr.Message, "uq_remote_host") {
 				e := httpx.E(409, "NAME_CONFLICT", "名称或首选设置发生冲突")
 				e.Details = []httpx.Detail{{Code: "conflict", Field: "name"}}
 				return e

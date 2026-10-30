@@ -19,6 +19,7 @@ import (
 
 func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Service, admin, member, other *apiClient, adminID, memberID string) {
 	verifyJenkinsIntegrations(t, db, installer, admin, member, other, memberID)
+	t.Run("remote_hosts", func(t *testing.T) { verifyRemoteHosts(t, db, installer, admin, member, other) })
 	base := "/admin/service-connections/gitlab"
 	tag := func(client *apiClient, path string) map[string]string {
 		client.call(t, "GET", path, nil, 200, nil)

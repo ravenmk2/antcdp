@@ -595,6 +595,24 @@ func (s *Service) Migrate(ctx context.Context, username, secret string) error {
 
 // IntegrationSecret keeps the installation key inside the installation service.
 func (s *Service) IntegrationSecret(purpose, value string, seal bool) (string, error) {
+	return s.resourceSecret("integrations", purpose, value, seal)
+}
+
+// RemoteHostSecret uses an independent derived key for new material. Legacy SSH
+// ciphertext can only be opened with its original purpose and derivation.
+func (s *Service) RemoteHostSecret(purpose, value string, seal bool) (string, error) {
+	namespace := "remote-hosts"
+	if strings.HasPrefix(purpose, "service-integrations/ssh/credential/") {
+		if seal {
+			return "", errors.New("legacy SSH encryption is read-only")
+		}
+		namespace = "integrations"
+	} else if !strings.HasPrefix(purpose, "remote-hosts/ssh/credential/") {
+		return "", errors.New("invalid remote host purpose")
+	}
+	return s.resourceSecret(namespace, purpose, value, seal)
+}
+func (s *Service) resourceSecret(namespace, purpose, value string, seal bool) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.state != Ready || len(s.key) != 32 {
@@ -604,7 +622,7 @@ func (s *Service) IntegrationSecret(purpose, value string, seal bool) (string, e
 	if err != nil {
 		return "", err
 	}
-	key := cryptox.Derive(s.key, "integrations")
+	key := cryptox.Derive(s.key, namespace)
 	if seal {
 		return cryptox.Encrypt(key, f.InstallationID, purpose, value)
 	}
@@ -616,6 +634,15 @@ func (s *Service) IntegrationETag(value string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	mac := hmac.New(sha256.New, cryptox.Derive(s.key, "service-integrations-etags"))
+	mac.Write([]byte(value))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// RemoteHostETag isolates host edit versions from service-integration versions.
+func (s *Service) RemoteHostETag(value string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	mac := hmac.New(sha256.New, cryptox.Derive(s.key, "remote-host-etags"))
 	mac.Write([]byte(value))
 	return hex.EncodeToString(mac.Sum(nil))
 }

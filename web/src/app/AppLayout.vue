@@ -210,6 +210,7 @@ async function userCommand(command: string | number | object) {
             ></RouterLink
           >
           <RouterLink class="nav-item" title="服务集成" aria-label="服务集成" to="/admin/integrations" :class="{active:route.path.startsWith('/admin/integrations')}"><UiIcon name="globe"/><span class="nav-text">服务集成</span></RouterLink>
+          <RouterLink class="nav-item" title="远程主机" aria-label="远程主机" to="/admin/remote-hosts" :class="{active:route.path.startsWith('/admin/remote-hosts')}"><UiIcon name="server"/><span class="nav-text">远程主机</span></RouterLink>
           <RouterLink
             class="nav-item"
             title="系统设置"

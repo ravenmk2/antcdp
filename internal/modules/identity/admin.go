@@ -301,6 +301,12 @@ func (s *Service) DeleteUser(ctx context.Context, raw string, id uint64, etag, c
 				return e
 			}
 		}
+
+		if cleaner, ok := tx.(interface{ DeletePersonalRemoteHostCredentials(uint64) error }); ok {
+			if e := cleaner.DeletePersonalRemoteHostCredentials(u.ID); e != nil {
+				return e
+			}
+		}
 		return s.audit(tx, a.User, "user.deleted", "user", strconv.FormatUint(u.ID, 10), u.DisplayName, meta, nil)
 	})
 }

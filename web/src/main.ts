@@ -22,6 +22,7 @@ const CollaborationPage = () =>
 import { useIdentity } from "./features/identity/store";
 import { onAuthFailure } from "./shared/api";
 
+const RemoteHostsPage = () => import("./features/remote-hosts/RemoteHostsPage.vue");
 const IntegrationsPage = () =>
   import("./features/integrations/IntegrationsPage.vue");
 const pinia = createPinia();
@@ -30,6 +31,21 @@ const router = createRouter({
   history: createWebHistory(),
   scrollBehavior: (_to, _from, savedPosition) => savedPosition ?? { top: 0 },
   routes: [
+    {
+      path: "/admin/remote-hosts/:integrationID?",
+      component: RemoteHostsPage,
+      meta: { title: "远程主机", admin: true },
+    },
+    {
+      path: "/account/remote-hosts/:integrationID?",
+      component: RemoteHostsPage,
+      meta: { title: "个人 SSH 凭证" },
+    },
+    {
+      path: "/projects/:projectID/remote-hosts/:integrationID?",
+      component: RemoteHostsPage,
+      meta: { title: "项目 SSH 凭证" },
+    },
     {
       path: "/admin/integrations/:integrationID?",
       component: IntegrationsPage,

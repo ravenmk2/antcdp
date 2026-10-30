@@ -30,6 +30,17 @@ var targetPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
 
 // Labels are search aliases for the same stable action codes used by clients.
 var labels = map[string]string{
+	"remote_host.verified":                             "测试远程主机",
+	"ssh_credential.verified":                          "验证 SSH 凭证",
+	"remote_host.created":                              "创建远程主机",
+	"remote_host.updated":                              "更新远程主机",
+	"remote_host.deleted":                              "删除远程主机",
+	"remote_host.fallback_changed":                     "修改兜底凭证",
+	"ssh_credential.created":                           "创建SSH 凭证",
+	"ssh_credential.updated":                           "更新SSH 凭证",
+	"ssh_credential.deleted":                           "删除SSH 凭证",
+	"ssh_credential.authentication_replaced":           "替换认证信息",
+	"ssh_credential.preferred_changed":                 "修改首选凭证",
 	"service_connection.created":                       "创建服务连接",
 	"service_connection.updated":                       "更新服务连接",
 	"service_connection.deleted":                       "删除服务连接",
@@ -159,7 +170,7 @@ func PublicDetail(action string, raw json.RawMessage) json.RawMessage {
 			}
 		}
 	}
-	if strings.HasPrefix(action, "service_connection.") || strings.HasPrefix(action, "service_credential.") || strings.HasPrefix(action, "webhook_endpoint.") {
+	if strings.HasPrefix(action, "remote_host.") || strings.HasPrefix(action, "ssh_credential.") || strings.HasPrefix(action, "service_connection.") || strings.HasPrefix(action, "service_credential.") || strings.HasPrefix(action, "webhook_endpoint.") {
 		for _, key := range []string{"enabled", "enabled_before", "enabled_after", "config_changed"} {
 			var value bool
 			if json.Unmarshal(src[key], &value) == nil {

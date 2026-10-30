@@ -181,14 +181,14 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if v != 6 {
+	if v != 7 {
 		return errors.New("database migration version does not match this executable")
 	}
 	var tables int
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event','icon_file','project','team','project_member','team_member','project_team','user_sidebar_preference','user_project_shortcut','user_team_shortcut','service_connection','service_connection_gitlab','service_credential')"); err != nil {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event','icon_file','project','team','project_member','team_member','project_team','user_sidebar_preference','user_project_shortcut','user_team_shortcut','service_connection','service_connection_gitlab','service_credential','remote_host','remote_host_key','remote_host_credential')"); err != nil {
 		return err
 	}
-	if tables != 19 {
+	if tables != 22 {
 		return install.ErrIncompleteSchema
 	}
 	// The task's intermediate version 5 used endpoint tables. A version number
@@ -211,6 +211,13 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 		return err
 	}
 	if webhookColumns != 8 || obsolete != 0 {
+		return install.ErrIncompleteSchema
+	}
+	var remoteColumns int
+	if err = s.db.GetContext(ctx, &remoteColumns, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='remote_host' AND COLUMN_NAME IN ('host','port','config_version','credentials_version')) OR (TABLE_NAME='remote_host_key' AND COLUMN_NAME IN ('host_id','algorithm','public_key','fingerprint_sha256','trusted_by_user_id','trusted_at')) OR (TABLE_NAME='remote_host_credential' AND COLUMN_NAME IN ('host_id','username','secret_ciphertext','secret_format_version','owner_key','preferred_slot')))`); err != nil {
+		return err
+	}
+	if remoteColumns != 16 {
 		return install.ErrIncompleteSchema
 	}
 	instance, err := s.Instance(ctx)
