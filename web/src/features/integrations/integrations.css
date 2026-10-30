@@ -414,3 +414,26 @@
 .integration-detail-page .integration-detail-header { padding-bottom: 0; }
 .integration-detail-header h1 { margin: 0 0 4px; }
 .integration-detail-header + .integration-tabs { margin: 12px 0 20px; }
+
+/* Keep the empty-state adjustment inside the connection list panel. */
+.connection-list-panel > .integration-empty { border: 0; border-radius: 0; margin: 0; }
+.connection-settings-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
+.connection-settings-heading h2 { margin-bottom: 4px; }
+.connection-settings-heading p { margin: 0; font-size: 13px; }
+.connection-properties { margin: 0; max-width: 900px; }
+.connection-properties > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 24px; padding: 12px 0; }
+.connection-properties dt { color: var(--text-muted); }
+.connection-properties dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.connection-technical-value, .connection-properties pre { font-family: Consolas, monospace; font-size: 14px; }
+.connection-properties pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.connection-read-tls { margin-top: 18px; border-block: 1px solid var(--border); }
+.connection-read-tls summary { cursor: pointer; padding: 16px 0; }
+.connection-read-tls summary span { font-size: 13px; color: var(--text-muted); margin-left: 14px; }
+.connection-read-tls p { font-size: 13px; }
+.connection-test-section { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-top: 22px; }
+.connection-test-section p { font-size: 13px; margin: 7px 0 0; }
+.connection-test-section > .el-button { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .connection-properties > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .connection-test-section { flex-direction: column; }
+}
