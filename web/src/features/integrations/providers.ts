@@ -100,3 +100,24 @@ export function authenticationUI(kind: string, method?: string): ServiceUI {
  secretFields: [{ key: "token", label: "API Key（encoded）", type: "password", limit: 8192, help: "填写完整 encoded 值，不包含 ApiKey 前缀。" }],
  identityBody: () => ({}), validateSecret: v => v.token ? "" : "请输入 API Key" };
 }
+
+function databaseUI(kind: string, label: string, port: number): ServiceUI {
+  return {
+    settings: markRaw(HTTPConnectionSettings), authMethod: kind + "_password", authLabel: "用户名与密码",
+    connectionFields: [
+      { key: "host", label: "主机", placeholder: "db.example.com", limit: 253 },
+      { key: "port", label: "端口", placeholder: String(port), limit: 5 },
+      { key: "database", label: "默认数据库", limit: 255 },
+      { key: "tls_mode", label: "TLS 模式", options: [{ value: "verify-full", label: "启用并校验证书" }, { value: "disable", label: "禁用 TLS（默认）" }], help: "默认禁用 TLS；启用后校验证书和主机名。" },
+      { key: "custom_ca_pem", label: "自定义 CA（可选）", type: "textarea", limit: 16384 },
+    ],
+    identityFields: [{ key: "username", label: "数据库用户名", limit: 255 }],
+    secretFields: [{ key: "token", label: "密码", type: "password", limit: 8192, help: "保存后无法查看。" }],
+    connectionBody: v => ({ host: v.host ?? "", port: Number(v.port ?? port), database: v.database ?? "", tls_mode: v.tls_mode ?? "disable", custom_ca_pem: v.custom_ca_pem || null }),
+    identityBody: v => ({ username: v.username ?? "" }),
+    secretBody: v => ({ token: v.token ?? "" }),
+    validateSecret: v => !v.username?.trim() ? "请输入数据库用户名" : !v.token ? "请输入密码" : "",
+  };
+}
+serviceUI.mysql = databaseUI("mysql", "MySQL", 3306);
+serviceUI.postgresql = databaseUI("postgresql", "PostgreSQL", 5432);

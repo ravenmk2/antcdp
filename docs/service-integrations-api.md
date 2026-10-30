@@ -41,7 +41,7 @@ ServiceType 由代码注册，示例为 GitLab 适配器完成后可发布的能
 }
 ```
 
-operations 只列真实实现且可用的适配器操作，本轮维护接口不虚构执行能力。类型能力不是调用授权。Jenkins 已发布；未实现的 MySQL 类型不发布，钉钉机器人属于未来通知模块，不在此目录。
+operations 只列真实实现且可用的适配器操作，本轮维护接口不虚构执行能力。类型能力不是调用授权。Jenkins 已发布；MySQL、PostgreSQL 已提供维护和验证能力（见 MySQL / PostgreSQL 契约），钉钉机器人属于未来通知模块，不在此目录。
 
 ConnectionSummary 精确投影为 id、code、service_type、name、description、enabled；不包含地址、CA、创建者、凭证计数/名称、兜底、Webhook 设置或编辑版本。普通用户不提供配置详情接口。目录可包含已停用连接，便于维护已有凭证。
 
@@ -263,3 +263,25 @@ Elasticsearch config 为 `{base_url,custom_ca_pem}`，单个 HTTP API 入口。�
 凭证探测：OpenObserve GET `/api/{default_organization}/streams?fetchSchema=false&type=logs`，只读取列表，不读取日志正文；有效空列表也通过，诊断 organization_access=allowed、authentication=valid、permissions=unknown。不返回流名或声明日志检索权限。403 保持 authentication/organization_access=unknown；404 为 endpoint_not_found。Elasticsearch GET `/_security/_authenticate`，校验身份；API Key 要求 api_key 认证类型与 ID，Basic 核对用户名。安全功能关闭或接口不可用时不能把验证标为成功。
 
 沿用十秒超时、1 MiB 响应上限、禁止重定向、受控 DNS/目标地址、严格 TLS、自定义 CA 和诊断快照。结果不保存远端正文，403 不等同密码错误；新增 reason=endpoint_not_found。external_identity 仅在 ES 返回有效身份后提供 username。人工 expires_at 不受远端诊断修改。
+
+## MySQL / PostgreSQL（2026-10-30）
+
+类型目录注册 `mysql`（MySQL）和 `postgresql`（PostgreSQL），均声明 credentials、connection_test、credential_verification=true，operations=[]，webhook.supported=false。路由类型替换为对应标识，复用管理员连接及系统/项目/个人凭证、首选、兜底、诊断接口；没有 Webhook 管理或接收接口。权限、ETag、归属隔离、停用、过期和删除限制不变。
+
+连接 config 示例：
+
+```json
+{"host":"db.example.com","port":3306,"database":"app","tls_mode":"disable","custom_ca_pem":null}
+```
+
+主机、端口、默认数据库分别填写。host 必填，仅接受主机名或 IP（IPv6 不加方括号），不包含协议、端口、路径或凭证；最长 253 字节，沿用受限 IP 和 DNS 检查。port 为 1–65535 整数，创建省略时 MySQL 默认 3306、PostgreSQL 默认 5432。database 为必填默认数据库，最长 255 字节，不含路径分隔符或控制字符。PATCH 省略字段保持原值，null 返回 422。
+
+创建省略 tls_mode 时默认 disable；用户可选择 verify-full 校验证书链和主机名，支持自定义 CA。PATCH 不自动改变原 TLS 选择。禁用时保留 CA。HTTP 类型拒绝数据库专属字段；数据库类型不接受 default_organization。主机、端口、默认数据库、TLS 或 CA 变更均使旧诊断过期。
+
+兼容已保存的 base_url 配置：读取时拆分为 host、port、database，并保持原有 TLS 模式；修改配置后保存为结构化字段，不需要数据库结构迁移。旧 base_url 输入暂保留兼容，禁止与结构化字段混用。前端只提交独立字段。
+
+认证方式分别为 `mysql_password`、`postgresql_password`，identity_config={username}、secret={token}；token 表示密码。用户名沿用 Jenkins 的非空、最长 255 字节、无冒号/控制字符/首尾空白规则；密码为 1–8192 UTF-8 字节，不含 CR/LF/NUL，不裁剪空白，无额外最小强度限制。秘密只写入加密凭据字段，不出现在连接 URL、响应、审计或诊断中。
+
+`POST .../test` 只验证 TCP 可达性，成功 summary 为 reachability=reachable、transport=tcp、service=unknown，不代表数据库/TLS/身份验证成功。`POST .../credentials/{id}/verify` 使用原生驱动登录并执行固定 SELECT 1，成功 summary 包含 service=mysql/postgresql、authentication=valid、database_access=allowed、permissions=unknown；不返回表数据。PostgreSQL trust 不视为密码验证通过。PostgreSQL 探测不采用进程 PGSERVICE 服务文件，若配置了非空 PGSERVICE 则拒绝探测，避免继承非本连接的目标或认证设置。
+
+远端失败仍返回 HTTP 200 Diagnostic(status=failed)，白名单 reason 包括 authentication_failed、access_denied、database_not_found、dns_failed、timeout、tls_failed、connection_failed。驱动原始错误不返回。服务状态、并发版本及本地授权失败沿用既有 HTTP 错误。

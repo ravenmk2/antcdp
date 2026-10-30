@@ -18,7 +18,7 @@ import (
 func verifyJenkinsIntegrations(t *testing.T, db *Store, installer *install.Service, admin, member, other *apiClient, memberID string) {
 	t.Helper()
 	verifyHTTPServiceIntegrations(t, db, installer, admin, member, other, memberID, "jenkins", "Jenkins")
-	for _, kind := range []string{"openobserve", "elasticsearch"} {
+	for _, kind := range []string{"openobserve", "elasticsearch", "mysql", "postgresql"} {
 		t.Run(kind, func(t *testing.T) {
 			verifyHTTPServiceIntegrations(t, db, installer, admin, member, other, memberID, kind, kind)
 		})
@@ -31,11 +31,21 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 	if kind == "jenkins" {
 		method = "jenkins_api_token"
 	}
+	initialURL, updatedURL := "https://jenkins.example.com/jenkins/", "http://jenkins.example.com/ci"
+	if kind == "mysql" || kind == "postgresql" {
+		method = kind + "_password"
+		initialURL = kind + "://db.example.com/app"
+		updatedURL = kind + "://db.example.com/other"
+	}
 	tag := func(client *apiClient, path string) map[string]string {
 		client.call(t, "GET", path, nil, 200, nil)
 		return map[string]string{"If-Match": client.last.Header().Get("ETag")}
 	}
-	created := testData(admin.call(t, "POST", base, map[string]any{"name": label + " 集成测试", "config": map[string]any{"base_url": "https://jenkins.example.com/jenkins/"}}, 201, nil))
+	initialConfig := map[string]any{"base_url": initialURL}
+	if kind == "mysql" || kind == "postgresql" {
+		initialConfig = map[string]any{"host": "db.example.com", "database": "app"}
+	}
+	created := testData(admin.call(t, "POST", base, map[string]any{"name": label + " 集成测试", "config": initialConfig}, 201, nil))
 	id := created["id"].(string)
 	path := base + "/" + id
 	if created["service_type"] != kind || admin.last.Header().Get("Location") != "/api/v1"+path {
@@ -77,7 +87,7 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 		admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"default_organization": "team_logs"}}, 200, tag(admin, path))
 	}
 	old := tag(admin, path)
-	admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"base_url": "http://jenkins.example.com/ci"}}, 200, old)
+	admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"base_url": updatedURL}}, 200, old)
 	admin.call(t, "PATCH", path, map[string]any{"name": "stale"}, 412, old)
 	admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"job": "forbidden"}}, 422, tag(admin, path))
 	sys := path + "/credentials"
@@ -103,7 +113,11 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 	raw := admin.cookies["antcdp_session"].Value
 	credentialTag := tag(admin, cp)["If-Match"]
 	svc.Probe = func(_ context.Context, cfg *integrations.HTTPConfig, token string, started time.Time) integrations.Diagnostic {
-		if token != "jenkins-private-test-token" || cfg.BaseURL != "http://jenkins.example.com/ci" {
+		configMatches := cfg.BaseURL == updatedURL
+		if kind == "mysql" || kind == "postgresql" {
+			configMatches = cfg.Host == "db.example.com" && cfg.Database == "other"
+		}
+		if token != "jenkins-private-test-token" || !configMatches {
 			t.Fatal("incorrect decrypted credential/config")
 		}
 		return integrations.Diagnostic{ID: "jenkins-verified", Kind: "credential_verification", Status: "succeeded", StartedAt: started, FinishedAt: time.Now(), Summary: map[string]any{"authentication": "valid", "permissions": "unknown"}}
@@ -113,6 +127,19 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 	}
 	if tag(admin, cp)["If-Match"] != credentialTag {
 		t.Fatal("verification changed edit version")
+	}
+	if kind == "mysql" || kind == "postgresql" {
+		if created["config"].(map[string]any)["tls_mode"] != "disable" {
+			t.Fatal("TLS default missing")
+		}
+		admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"tls_mode": "verify-full"}}, 200, tag(admin, path))
+		diagnostic := testData(admin.call(t, "GET", cp+"/diagnostics", nil, 200, nil))["latest"].(map[string]any)
+		if diagnostic["outdated"] != true {
+			t.Fatal("TLS change did not invalidate verification")
+		}
+		for _, mode := range []any{nil, "", "prefer", "skip-verify"} {
+			admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"tls_mode": mode}}, 422, tag(admin, path))
+		}
 	}
 	if kind == "openobserve" {
 		admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"default_organization": "another_org"}}, 200, tag(admin, path))

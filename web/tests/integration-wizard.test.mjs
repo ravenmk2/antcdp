@@ -90,3 +90,17 @@ test('OpenObserve defaults organization while preserving explicit override', asy
  await c.save(true); assert.equal(calls[0].options.body.config.default_organization, org ?? 'default');
  }
 });
+
+test('database wizard sends separate host, port and default database with TLS disabled', async () => {
+ for (const kind of ['mysql','postgresql']) {
+  const { c, calls } = wizard(); c.form.service_type = kind; c.step.value = 2;
+  c.providerValues.value = { host: 'db.example.com', port: '0', database: 'app' };
+  c.nextStep(); assert.equal(c.step.value,2);
+  c.providerValues.value.port = kind === 'mysql' ? '3306' : '5432';
+  c.nextStep(); assert.equal(c.step.value,3); await c.save();
+  const cfg = calls[0].options.body.config;
+  assert.equal(cfg.tls_mode,'disable'); assert.equal(cfg.host,'db.example.com');
+  assert.equal(cfg.port,kind === 'mysql' ? 3306 : 5432); assert.equal(cfg.database,'app'); assert.equal(cfg.base_url,undefined);
+  assert.equal(calls[2].options.body.authentication.auth_method,kind+'_password');
+ }
+});

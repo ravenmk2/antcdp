@@ -69,8 +69,13 @@ function nextStep() {
   if (!serviceUI[form.service_type]) { formError.value = "请选择服务类型"; return; }
   if (step.value === 2) {
     if (!form.name.trim()) { formError.value = "请输入连接名称"; return; }
-    try { const url = new URL(providerValues.value.base_url ?? ""); if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) throw new Error(); }
-    catch { formError.value = "请输入有效的 HTTP 或 HTTPS 实例地址，且不要包含用户名和密码"; return; }
+    if (["mysql", "postgresql"].includes(form.service_type)) {
+      const v = providerValues.value, port = Number(v.port ?? (form.service_type === "mysql" ? 3306 : 5432));
+      if (!v.host?.trim() || /[\s/@?#,]/.test(v.host) || !Number.isInteger(port) || port < 1 || port > 65535 || !v.database?.trim()) { formError.value = "请填写主机、有效端口和默认数据库"; return; }
+    } else {
+      try { const url = new URL(providerValues.value.base_url ?? ""); if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password || url.search || url.hash) throw new Error(); }
+      catch { formError.value = "请输入有效的 HTTP 或 HTTPS 实例地址"; return; }
+    }
     if (form.code && !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(form.code)) { formError.value = "编码须以小写字母或数字开头，仅含小写字母、数字、下划线或短横线，最长 64 位"; return; }
   }
   step.value++;
@@ -89,7 +94,7 @@ watch(
   () => form.service_type,
   (_value, previous) => {
     if (dialog.value && previous && (Object.values(providerValues.value).some(Boolean) || Object.values(credentialValues.value).some(Boolean))) ElMessage.info("服务类型已更换，原类型的连接配置和认证材料已清空。");
-    providerValues.value = _value === "openobserve" ? { default_organization: "default" } : {};
+    providerValues.value = _value === "openobserve" ? { default_organization: "default" } : ["mysql", "postgresql"].includes(_value) ? { tls_mode: "disable", port: _value === "mysql" ? "3306" : "5432" } : {};
     credentialValues.value = {};
   },
 );
@@ -486,7 +491,7 @@ useUnsaved(
             <details class="form-more"><summary>更多设置 · 说明与 TLS</summary><label>说明<ElInput v-model="form.description" type="textarea" :rows="2" maxlength="1000" /></label><ProviderFields :show-help="false" v-model="providerValues" :fields="serviceUI[form.service_type]!.connectionFields.filter(f => f.key === 'custom_ca_pem')" /></details>
           </template>
           <template v-else>
-            <div class="wizard-summary"><ServiceIcon :type="form.service_type" /><div><strong>{{ form.name }}</strong><small>{{ providerValues.base_url }}</small></div><span v-if="createdConnection">已创建</span></div>
+            <div class="wizard-summary"><ServiceIcon :type="form.service_type" /><div><strong>{{ form.name }}</strong><small>{{ ["mysql", "postgresql"].includes(form.service_type) ? `${providerValues.host}:${providerValues.port} / ${providerValues.database}` : providerValues.base_url }}</small></div><span v-if="createdConnection">已创建</span></div>
 
               <div class="form-pair"><label>凭证名称<ElInput v-model="credential.name" maxlength="100" :disabled="busy" /></label><label>编码（可选）<ElInput v-model="credential.code" maxlength="64" :disabled="busy" /></label></div>
               <label v-if="form.service_type === 'elasticsearch'">认证方式<ElSelect v-model="authMethod" :disabled="busy"><ElOption value="elasticsearch_basic" label="用户名与密码" /><ElOption value="elasticsearch_api_key" label="API Key" /></ElSelect></label>

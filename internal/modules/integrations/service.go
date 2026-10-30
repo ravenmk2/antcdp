@@ -62,11 +62,19 @@ type CommonWrite struct {
 	Enabled     Field[bool]   `json:"enabled"`
 }
 type HTTPConfigCreate struct {
+	Host                Field[string] `json:"host"`
+	Port                Field[int]    `json:"port"`
+	Database            Field[string] `json:"database"`
+	TLSMode             Field[string] `json:"tls_mode"`
 	DefaultOrganization Field[string] `json:"default_organization"`
 	BaseURL             string        `json:"base_url"`
 	CA                  *string       `json:"custom_ca_pem"`
 }
 type HTTPConfigPatch struct {
+	Host                Field[string] `json:"host"`
+	Port                Field[int]    `json:"port"`
+	Database            Field[string] `json:"database"`
+	TLSMode             Field[string] `json:"tls_mode"`
 	DefaultOrganization Field[string] `json:"default_organization"`
 	BaseURL             Field[string] `json:"base_url"`
 	CA                  Field[string] `json:"custom_ca_pem"`
@@ -330,7 +338,19 @@ func (s *Service) Create(ctx context.Context, raw string, w ConnectionCreate, me
 		if err = applyCommon(CommonWrite{Description: w.Description, Enabled: w.Enabled}, &v.Name, &v.Description, &v.Enabled); err != nil {
 			return err
 		}
-		v.Config = HTTPConfig{BaseURL: strings.TrimRight(w.Config.BaseURL, "/"), CA: w.Config.CA}
+		v.Config = HTTPConfig{BaseURL: connectionURL(v.Type, w.Config.BaseURL), CA: w.Config.CA}
+		if isDatabase(v.Type) {
+			v.Config.TLSMode = "disable"
+		}
+		if err := applyDatabaseFields(v.Type, &v.Config, w.Config.Host, w.Config.Port, w.Config.Database); err != nil {
+			return err
+		}
+		if w.Config.TLSMode.Set {
+			if !isDatabase(v.Type) || w.Config.TLSMode.Null {
+				return httpx.Invalid("tls_mode", "invalid_format")
+			}
+			v.Config.TLSMode = w.Config.TLSMode.Value
+		}
 		if v.Type == "openobserve" {
 			v.Config.DefaultOrganization = "default"
 		}
@@ -380,21 +400,35 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 				return httpx.Invalid("body", "empty_patch")
 			}
 			before, _ := json.Marshal(v)
-			oldOrg := v.Config.DefaultOrganization
-			oldURL, oldCA, oldEnabled := v.Config.BaseURL, v.Config.CA, v.Enabled
+			oldConfig, _ := json.Marshal(v.Config)
+			oldEnabled := v.Enabled
 			if err := applyCommon(w.CommonWrite, &v.Name, &v.Description, &v.Enabled); err != nil {
 				return err
 			}
 			if w.Config.Set {
-				if w.Config.Null || (!w.Config.Value.BaseURL.Set && !w.Config.Value.CA.Set && !w.Config.Value.DefaultOrganization.Set) {
+				if w.Config.Null || (!w.Config.Value.Host.Set && !w.Config.Value.Port.Set && !w.Config.Value.Database.Set && !w.Config.Value.TLSMode.Set && !w.Config.Value.BaseURL.Set && !w.Config.Value.CA.Set && !w.Config.Value.DefaultOrganization.Set) {
 					return httpx.Invalid("config", "invalid_format")
 				}
 				cfg := w.Config.Value
+				if err := applyDatabaseFields(v.Type, &v.Config, cfg.Host, cfg.Port, cfg.Database); err != nil {
+					return err
+				}
+				if cfg.TLSMode.Set {
+					if !isDatabase(v.Type) || cfg.TLSMode.Null {
+						return httpx.Invalid("tls_mode", "invalid_format")
+					}
+					v.Config.TLSMode = cfg.TLSMode.Value
+				}
 				if cfg.BaseURL.Null {
 					return httpx.Invalid("config.base_url", "required")
 				}
 				if cfg.BaseURL.Set {
-					v.Config.BaseURL = strings.TrimRight(cfg.BaseURL.Value, "/")
+					v.Config.BaseURL = connectionURL(v.Type, cfg.BaseURL.Value)
+					if isDatabase(v.Type) && !cfg.Host.Set && !cfg.Port.Set && !cfg.Database.Set {
+						v.Config.Host = ""
+						v.Config.Port = 0
+						v.Config.Database = ""
+					}
 				}
 				if cfg.CA.Set {
 					v.Config.CA = nil
@@ -416,7 +450,8 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 			if bytes.Equal(before, after) {
 				return nil
 			}
-			configChanged := oldOrg != v.Config.DefaultOrganization || oldURL != v.Config.BaseURL || !sameString(oldCA, v.Config.CA)
+			newConfig, _ := json.Marshal(v.Config)
+			configChanged := !bytes.Equal(oldConfig, newConfig)
 			v.Version++
 			if configChanged {
 				v.ConfigVersion++
@@ -498,8 +533,7 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 	})
 	return out, a, err
 }
-func sameString(a, b *string) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
-func sameID(a, b *uint64) bool     { return a == nil && b == nil || a != nil && b != nil && *a == *b }
+func sameID(a, b *uint64) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 func purpose(kind string, connection, id uint64, method string) string {
 	return credentialPurpose("gitlab", kind, connection, id, method)
 }
@@ -535,4 +569,11 @@ func newCredentialCode() (string, error) {
 
 func credentialPurpose(serviceType, kind string, connection, id uint64, method string) string {
 	return fmt.Sprintf("service-integrations/%s/%s/%d/%d/%s/v1", serviceType, kind, connection, id, method)
+}
+
+func connectionURL(kind, raw string) string {
+	if isDatabase(kind) {
+		return raw
+	}
+	return strings.TrimRight(raw, "/")
 }

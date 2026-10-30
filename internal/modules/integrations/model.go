@@ -28,9 +28,16 @@ type ServiceConnection struct {
 	Config              HTTPConfig      `db:"-" json:"config"`
 	EditVersion         string          `db:"-" json:"version"`
 }
+
+// HTTPConfig is the shared persisted connection configuration. Database adapters
+// use host, port, database and TLSMode; HTTP adapters reject database fields.
 type HTTPConfig struct {
+	Host                string  `db:"-" json:"host,omitempty"`
+	Port                int     `db:"-" json:"port,omitempty"`
+	Database            string  `db:"-" json:"database,omitempty"`
+	TLSMode             string  `db:"-" json:"tls_mode,omitempty"`
 	DefaultOrganization string  `db:"-" json:"default_organization,omitempty"`
-	BaseURL             string  `db:"base_url" json:"base_url"`
+	BaseURL             string  `db:"base_url" json:"base_url,omitempty"`
 	CA                  *string `db:"custom_ca_pem" json:"custom_ca_pem"`
 }
 type ServiceCredential struct {

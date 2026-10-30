@@ -1,6 +1,6 @@
 # 外部服务集成设计
 
-更新日期：2026-10-29。本文是重新设计后的目标契约，取代旧 `integration / integration_gitlab / integration_credential` 三表方案，不要求本模块旧表、旧 API、旧标识和旧接收地址兼容。GitLab、Jenkins、OpenObserve 与 Elasticsearch 管理 API 和正式页面已实现；迁移 5 保留已合并的 GitLab 结构，最终迁移 6 将 GitLab 地址及 CA 搬入连接 config JSON，保留版本 5 的数据及密文，不创建 Jenkins 表。旧集成的历史重建规则仅适用于迁移 5，实际交付状态见[开发说明](development.md)。
+更新日期：2026-10-29。本文是重新设计后的目标契约，取代旧 `integration / integration_gitlab / integration_credential` 三表方案，不要求本模块旧表、旧 API、旧标识和旧接收地址兼容。GitLab、Jenkins、OpenObserve、Elasticsearch、MySQL 与 PostgreSQL 管理 API 和正式页面已实现；迁移 5 保留已合并的 GitLab 结构，最终迁移 6 将 GitLab 地址及 CA 搬入连接 config JSON，保留版本 5 的数据及密文，不创建 Jenkins 表。旧集成的历史重建规则仅适用于迁移 5，实际交付状态见[开发说明](development.md)。
 
 ## 1. 目标与范围
 
@@ -13,7 +13,7 @@
 | 排查 BUG | MySQL 查询、OpenObserve / Elasticsearch 检索 | 连接保存地址和默认上下文；查询、索引、时间范围由操作提供 |
 | 接收代码平台事件 | GitLab Webhook | 连接内的 Webhook 设置管理验证、接收和诊断；事件筛选与项目绑定属于消费方 |
 
-本次不设计工作流节点、触发规则、执行图、运行记录、可靠分发和运行时凭证选择链。不开放任意 HTTP 代理、SQL 查询或 Agent 执行 API。GitLab、Jenkins、OpenObserve、Elasticsearch 支持连接及凭证维护、连接测试和凭证验证；MySQL 等适配器完成前不注册可创建类型，不预建空表。
+本次不设计工作流节点、触发规则、执行图、运行记录、可靠分发和运行时凭证选择链。不开放任意 HTTP 代理、SQL 查询或 Agent 执行 API。GitLab、Jenkins、OpenObserve、Elasticsearch、MySQL、PostgreSQL 支持连接及凭证维护、连接测试和凭证验证；未实现的适配器不注册可创建类型，不预建空表。
 
 ### 通知模块边界
 
@@ -246,3 +246,11 @@ GitLab 对外支持 HTTP 和 HTTPS；HTTPS 严格校验证书和主机名；允�
 OpenObserve 以开源版当前稳定版本为目标，2026-10-29 官方发布页最新稳定版为 v1.1.2。Elasticsearch 以 7.17.x、8.x、9.x 为验证基线，使用通用 HTTP API，尽量兼容更早 7.x，不承诺所有历史次版本。实际验证范围见开发说明。
 
 OpenObserve 连接的 default_organization 默认 default、可编辑；未来操作显式组织优先，否则使用连接默认值。默认上下文不授予权限，访问失败不回退。凭证属于连接而非某个组织。无认证 Elasticsearch 无需创建凭证；只做连接探测，不将匿名响应认定为已保存凭证有效。两种服务均不含检索、Webhook 或执行能力，准确配置与探测协议见[API 契约](service-integrations-api.md#openobserve-与-elasticsearch-管理契约)。
+
+## MySQL / PostgreSQL 连接（2026-10-30）
+
+两种数据库复用连接 config JSON 与加密凭证，不新增表或迁移。类型分别为 `mysql`、`postgresql`。连接分别保存主机、端口和必填默认数据库，身份与密码单独保存在凭证中。TLS 默认 `disable`；可选择 `verify-full` 校验证书及主机名，支持自定义公共 CA，不支持跳过证书校验或自动降级。旧 URL 配置读取时自动拆分，保留原 TLS 选择。
+
+连接测试仅建立 TCP 连接，证明端口可达，不识别数据库服务或验证 TLS。凭证验证使用原生驱动连接指定数据库并执行固定 `SELECT 1`，不读取业务表、不执行写操作、不开放任意 SQL API。成功表示该账号能够访问目标数据库，业务权限仍为 unknown。PostgreSQL 要求密码认证（password / MD5 / SCRAM），不把 trust 连接当作密码验证成功。
+
+沿用受控 DNS 与 IP 检查，支持私网，禁止回环、链路本地、元数据及特殊地址；解析后直接拨号到已校验 IP。诊断整体超时 10 秒，复用 8 个出站并发槽；错误仅保存白名单原因，不保存驱动错误原文或密码。数据库协议错误分别归类认证失败、访问拒绝、数据库不存在，网络失败沿用现有分类。

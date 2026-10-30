@@ -26,6 +26,8 @@ type adapter struct {
 }
 
 var adapters = map[string]adapter{
+	"mysql":      databaseAdapter("mysql", "MySQL"),
+	"postgresql": databaseAdapter("postgresql", "PostgreSQL"),
 	"gitlab": {decodeConfig: decodeHTTPConfig, name: "GitLab", method: "gitlab_access_token", identity: gitlabIdentity, probe: func(ctx context.Context, cfg *HTTPConfig, _, token string, started time.Time) Diagnostic {
 		return probe(ctx, cfg, token, started)
 	}, webhookMethods: []string{"secret_token", "signing_token"}},
@@ -36,7 +38,7 @@ var adapters = map[string]adapter{
 
 func Types() []map[string]any {
 	items := []map[string]any{}
-	for _, kind := range []string{"gitlab", "jenkins", "openobserve", "elasticsearch"} {
+	for _, kind := range []string{"gitlab", "jenkins", "openobserve", "elasticsearch", "mysql", "postgresql"} {
 		a := adapters[kind]
 		methods := []string{a.method}
 		if kind == "elasticsearch" {
@@ -84,7 +86,7 @@ func validateAuthenticationFor(kind string, a *Authentication) error {
 	if a.Secret == nil {
 		return httpx.Invalid("authentication.secret", "required")
 	}
-	if a.Method == "openobserve_basic" || a.Method == "elasticsearch_basic" {
+	if isDatabase(kind) || a.Method == "openobserve_basic" || a.Method == "elasticsearch_basic" {
 		if len(a.Secret.Token) == 0 || len(a.Secret.Token) > 8192 || !utf8.ValidString(a.Secret.Token) || strings.ContainsAny(a.Secret.Token, "\r\n\x00") {
 			return httpx.Invalid("token", "invalid_format")
 		}
@@ -125,6 +127,16 @@ func decodeTypedConfig(kind string, version uint64, raw json.RawMessage) (*HTTPC
 	if _, exists := fields["default_organization"]; exists && kind != "openobserve" {
 		return nil, integrity()
 	}
+	if _, exists := fields["tls_mode"]; exists && !isDatabase(kind) {
+		return nil, integrity()
+	}
+	if !isDatabase(kind) {
+		for _, key := range []string{"host", "port", "database"} {
+			if _, exists := fields[key]; exists {
+				return nil, integrity()
+			}
+		}
+	}
 	var cfg *HTTPConfig
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -154,6 +166,15 @@ func validateTypedConfig(kind string, cfg *HTTPConfig) error {
 		}
 	} else if cfg.DefaultOrganization != "" {
 		return httpx.Invalid("default_organization", "unsupported")
+	}
+	if isDatabase(kind) {
+		return validateDatabaseConfig(kind, cfg)
+	}
+	if cfg.Host != "" || cfg.Port != 0 || cfg.Database != "" {
+		return httpx.Invalid("config", "unsupported")
+	}
+	if cfg.TLSMode != "" {
+		return httpx.Invalid("tls_mode", "unsupported")
 	}
 	return ValidateConfig(cfg.BaseURL, cfg.CA)
 }
