@@ -1,0 +1,11 @@
+/* Shared code display and clipboard feedback. No service-specific behavior. */
+
+:where(.copyable-code) .copy-code { flex-shrink: 0; border: 0; background: none; color: var(--text-muted); cursor: pointer; padding: 4px; font-size: 16px; }
+:where(.copyable-code) .copy-code:hover { color: var(--text-primary); background: var(--surface-subtle); }
+.copyable-code { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 4px; color: var(--text-muted); font-size: 13px; }
+.copyable-code > span { flex-shrink: 0; }
+.copyable-code code { font-family: "Cascadia Code", Consolas, monospace; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.copyable-code .copy-code { display: inline-flex; align-items: center; border-radius: 4px; }
+.copyable-code .ui-icon { width: 15px; height: 15px; }
+.copyable-code .copy-code.copied,
+.copyable-code .copy-code.copied:hover { color: var(--success); }

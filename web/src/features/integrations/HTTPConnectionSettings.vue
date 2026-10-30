@@ -45,36 +45,36 @@ async function test() {
 useUnsaved(() => dirty.value, () => busy.value);
 </script>
 <template>
-  <section class="integration-section connection-settings">
+  <section class="connection-ui-section connection-settings">
     <div v-if="error" class="error-banner" role="alert">{{ error }} <ElButton link @click="reload">重新加载</ElButton></div>
-    <div class="connection-settings-heading"><div><h2>{{ serviceName }} 服务连接</h2><p>{{ editing ? '编辑连接资料与访问配置，保存后生效。' : '连接资料与访问配置' }}</p></div><ElButton v-if="!editing" :disabled="busy" @click="startEditing"><UiIcon name="edit" />编辑</ElButton></div>
+    <div class="connection-ui-settings-heading"><div><h2>{{ serviceName }} 服务连接</h2><p>{{ editing ? '编辑连接资料与访问配置，保存后生效。' : '连接资料与访问配置' }}</p></div><ElButton v-if="!editing" :disabled="busy" @click="startEditing"><UiIcon name="edit" />编辑</ElButton></div>
     <div v-if="!editing" class="connection-read-view">
-      <dl class="connection-properties">
+      <dl class="connection-ui-properties">
         <div><dt>连接名称</dt><dd>{{ connection.name }}</dd></div>
         <div><dt>说明</dt><dd>{{ connection.description || '未填写' }}</dd></div>
         <template v-if="isDatabase">
-          <div><dt>主机</dt><dd class="connection-technical-value">{{ connection.config?.host }}</dd></div>
-          <div><dt>端口</dt><dd class="connection-technical-value">{{ connection.config?.port }}</dd></div>
-          <div><dt>默认数据库</dt><dd class="connection-technical-value">{{ connection.config?.database || '未配置' }}</dd></div>
+          <div><dt>主机</dt><dd class="connection-ui-technical-value">{{ connection.config?.host }}</dd></div>
+          <div><dt>端口</dt><dd class="connection-ui-technical-value">{{ connection.config?.port }}</dd></div>
+          <div><dt>默认数据库</dt><dd class="connection-ui-technical-value">{{ connection.config?.database || '未配置' }}</dd></div>
           <div><dt>TLS 模式</dt><dd>{{ connection.config?.tls_mode === 'verify-full' ? '启用并校验证书' : '禁用 TLS' }}</dd></div>
         </template>
-        <div v-else><dt>实例地址</dt><dd class="connection-technical-value">{{ connection.config?.base_url }}</dd></div>
+        <div v-else><dt>实例地址</dt><dd class="connection-ui-technical-value">{{ connection.config?.base_url }}</dd></div>
         <div v-if="connection.service_type === 'openobserve'"><dt>默认组织</dt><dd>{{ connection.config?.default_organization || 'default' }}</dd></div>
-        <div><dt>连接状态</dt><dd><span class="integration-status" :class="{ enabled: connection.enabled }">{{ connection.enabled ? '已启用' : '已停用' }}</span></dd></div>
+        <div><dt>连接状态</dt><dd><span class="connection-ui-status" :class="{ enabled: connection.enabled }">{{ connection.enabled ? '已启用' : '已停用' }}</span></dd></div>
       </dl>
       <details class="connection-read-tls"><summary>高级 TLS 配置 <span>{{ connection.config?.custom_ca_pem ? '已配置自定义 CA' : '未配置自定义 CA' }}</span></summary>
         <p v-if="!savedCAEnabled">当前未启用 TLS，已有 CA 配置保留但不生效。</p>
         <template v-else><p>使用系统信任的证书颁发机构及已配置的公共 CA，校验证书和主机名。</p></template>
-        <dl class="connection-properties"><div><dt>公共 CA</dt><dd><pre v-if="connection.config?.custom_ca_pem">{{ connection.config.custom_ca_pem }}</pre><span v-else>未配置</span></dd></div></dl>
+        <dl class="connection-ui-properties"><div><dt>公共 CA</dt><dd><pre v-if="connection.config?.custom_ca_pem">{{ connection.config.custom_ca_pem }}</pre><span v-else>未配置</span></dd></div></dl>
       </details>
-      <div class="connection-test-section"><div><h3>连接测试</h3>
+      <div class="connection-ui-test-section"><div><h3>连接测试</h3>
         <p v-if="diagnostic" class="diagnostic-detail"><DiagnosticResult :diagnostic="diagnostic" /> · {{ new Date(diagnostic.started_at).toLocaleString() }}</p>
         <p v-else>{{ diagnosticLoaded ? '尚无测试记录' : '测试记录尚未加载' }}</p>
         <p>{{ isDatabase ? '连接测试仅检查 TCP 可达性；凭证验证会连接指定数据库并执行 SELECT 1，不检查业务表权限。' : '连接测试不使用访问凭证，不代表身份认证或业务权限验证通过。' }}</p>
         <p v-if="connection.service_type === 'elasticsearch'">支持无认证集群，无需创建空凭证。</p>
       </div><ElButton :disabled="busy || !connection.enabled" @click="test">测试已保存连接</ElButton></div>
     </div>
-    <form v-else class="integration-form connection-form" @submit.prevent="save">
+    <form v-else class="connection-ui-form connection-ui-config-form" @submit.prevent="save">
       <p v-if="isDatabase" class="integration-note">连接测试仅检查 TCP 可达性；凭证验证会连接指定数据库并执行 SELECT 1，不检查业务表权限。</p>
       <label>名称<ElInput v-model="form.name" maxlength="100" :disabled="busy" /></label>
       <label>说明<ElInput v-model="form.description" type="textarea" maxlength="1000" :disabled="busy" /></label>
@@ -89,7 +89,7 @@ useUnsaved(() => dirty.value, () => busy.value);
       <label v-if="isDatabase">TLS 模式<ElSelect v-model="form.tls_mode" :disabled="busy"><ElOption value="verify-full" label="启用并校验证书" /><ElOption value="disable" label="禁用 TLS" /></ElSelect><small>默认禁用 TLS；启用后校验证书和主机名。</small></label>
       <details><summary>高级 TLS 配置</summary><p v-if="!caEnabled" class="integration-note">启用 TLS 后使用，已有 CA 配置保留。</p><label>公共 CA（可选）<ElInput v-model="form.custom_ca_pem" type="textarea" :rows="5" maxlength="16384" :disabled="busy || !caEnabled" /><small>始终校验证书和主机名，不接收私钥。</small></label></details>
       <label>启用连接<ElSwitch v-model="form.enabled" :disabled="busy" /><small>{{ connection.service_type !== "gitlab" ? "停用后阻止连接测试和凭证验证，已有凭证保留。" : "停用后阻止外部验证及 Webhook 接收，凭证和接收开关设置保留。" }}</small></label>
-      <div class="integration-actions"><ElButton type="primary" native-type="submit" :disabled="!dirty" :loading="busy">保存连接</ElButton><ElButton :disabled="busy" @click="cancelEditing">取消</ElButton></div>
+      <div class="connection-ui-actions"><ElButton type="primary" native-type="submit" :disabled="!dirty" :loading="busy">保存连接</ElButton><ElButton :disabled="busy" @click="cancelEditing">取消</ElButton></div>
     </form>
   </section>
 </template>

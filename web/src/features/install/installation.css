@@ -1,0 +1,513 @@
+/* installation: owned styles; keep responsive rules next to their source definitions. */
+.install-page {
+  min-height: 100vh;
+  background: var(--surface-subtle);
+  display: flex;
+  flex-direction: column;
+}
+.install-header {
+  height: 95px;
+  padding: 0 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.install-header .brand {
+  font-size: 21px;
+  padding: 0;
+}
+.install-header .brand-mark {
+  width: 32px;
+  height: 32px;
+}
+.install-header .brand-mark svg {
+  width: 23px;
+  height: 23px;
+}
+.install-header .flex {
+  gap: 15px;
+}
+.install-label {
+  padding-left: 15px;
+  border-left: 1px solid var(--border);
+}
+.install-card {
+  width: 920px;
+  max-width: calc(100% - 60px);
+  margin: 28px auto 35px;
+  display: grid;
+  grid-template-columns: 245px 1fr;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 15px 55px var(--shadow-color);
+  overflow: hidden;
+  min-height: 590px;
+}
+.install-sidebar {
+  padding: 32px 27px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+}
+.install-sidebar .eyebrow {
+  letter-spacing: 2px;
+  margin-bottom: 15px;
+}
+.install-sidebar h2 {
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 36px;
+}
+.install-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  position: relative;
+  color: var(--text-muted);
+}
+.install-step:not(:last-child):before {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  border-left: 1px solid var(--border-control);
+}
+.step-number {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-control);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+.install-step.active .step-number {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 4px var(--shadow-color);
+}
+.install-step.done .step-number {
+  border-color: var(--border-control);
+  color: var(--accent);
+}
+.step-number svg {
+  width: 12px;
+  height: 12px;
+}
+.step-copy {
+  padding-top: 3px;
+}
+.step-copy small {
+  display: block;
+  margin-top: 6px;
+}
+.install-form-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.install-form-body {
+  padding: 37px 43px;
+  flex: 1;
+}
+.install-form-body h1 {
+  margin: 12px 0 8px;
+  font-weight: 600;
+}
+.install-form-body > .subtitle {
+  margin-bottom: 26px;
+}
+.install-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 43px;
+  border-top: 1px solid var(--line);
+}
+.install-footer {
+  margin: auto auto 24px;
+  text-align: center;
+}
+.welcome-icon {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  border-radius: 16px;
+  margin: 5px 0 25px;
+  color: var(--accent);
+}
+.welcome-icon svg {
+  width: 34px;
+  height: 34px;
+}
+.install-feature {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 19px;
+}
+.install-feature .feature-icon {
+  width: 33px;
+  height: 33px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text-muted);
+}
+.install-feature h3 {
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.install-complete-list {
+  margin-top: 27px;
+  border: 1px solid var(--line);
+  padding: 16px 18px;
+  border-radius: 9px;
+}
+.install-complete-list .flex {
+  padding: 8px 0;
+}
+.install-complete-list svg {
+  color: var(--success);
+  width: 14px;
+  height: 14px;
+}
+@media (max-width: 850px) {
+  .install-card {
+    grid-template-columns: 210px 1fr;
+    max-width: calc(100% - 36px);
+  }
+  .install-sidebar {
+    padding: 30px 23px;
+  }
+  .install-form-body {
+    padding: 32px;
+  }
+  .install-form-footer {
+    padding: 19px 32px;
+  }
+  .install-header {
+    height: 80px;
+    padding: 0 28px;
+  }
+}
+@media (max-width: 600px) {
+  .install-header {
+    height: 76px;
+    padding: 0 20px;
+  }
+  .install-label {
+    display: none;
+  }
+  .install-header .brand {
+    font-size: 19px;
+  }
+  .install-card {
+    display: block;
+    max-width: calc(100% - 28px);
+    margin: 8px auto 22px;
+    border-radius: 12px;
+    min-height: 0;
+  }
+  .install-sidebar {
+    padding: 20px;
+  }
+  .install-sidebar > .eyebrow,
+.install-sidebar > h2 {
+    display: none;
+  }
+  .install-steps {
+    display: flex;
+    justify-content: space-between;
+    gap: 7px;
+  }
+  .install-step {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    flex: 1;
+    font-size: 13px;
+  }
+  .install-step:not(:last-child):before {
+    left: calc(50% + 17px);
+    right: calc(-50% + 17px);
+    top: 12px;
+    bottom: auto;
+    border-left: 0;
+    border-top: 1px solid var(--border-control);
+  }
+  .step-copy {
+    padding: 0;
+    white-space: nowrap;
+  }
+  .step-copy small {
+    display: none;
+  }
+  .install-form-body {
+    padding: 27px 23px;
+  }
+  .install-form-body h1 {
+    font-size: 22px;
+  }
+  .install-form-footer {
+    padding: 18px 23px;
+  }
+  .install-footer {
+    font-size: 13px;
+    padding: 0 22px;
+  }
+}
+.install-label {
+  font-size: 14px;
+}
+.install-form-body h1 {
+  font-size: 26px;
+}
+.install-form-body > .subtitle {
+  font-size: 14px;
+  line-height: 1.8;
+}
+.install-feature h3 {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.install-feature p {
+  font-size: 13px;
+  line-height: 1.75;
+}
+.install-sidebar h2 {
+  font-size: 19px;
+}
+.install-sidebar .eyebrow {
+  font-size: 12px;
+}
+.install-step {
+  font-size: 14px;
+  min-height: 78px;
+}
+.step-copy small {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.step-number {
+  font-size: 13px;
+  width: 27px;
+  height: 27px;
+}
+.install-step:not(:last-child):before {
+  left: 13px;
+  top: 29px;
+}
+.install-form-footer .step-counter {
+  font-size: 13px;
+}
+.install-footer {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.install-complete-list .flex {
+  font-size: 14px;
+}
+@media (max-width: 850px) {
+  .install-card {
+    grid-template-columns: 215px minmax(0, 1fr);
+  }
+  .install-sidebar {
+    padding-inline: 21px;
+  }
+}
+@media (max-width: 600px) {
+  .install-header {
+    padding-inline: 20px;
+  }
+  .install-card {
+    display: block;
+  }
+  .install-sidebar {
+    padding: 20px 12px;
+  }
+  .install-step {
+    font-size: 13px;
+    min-height: 0;
+    gap: 9px;
+  }
+  .step-copy {
+    font-size: 13px;
+  }
+  .step-number {
+    width: 25px;
+    height: 25px;
+    font-size: 13px;
+  }
+  .install-step:not(:last-child):before {
+    left: calc(50% + 16px);
+    right: calc(-50% + 16px);
+    top: 12px;
+  }
+  .install-form-body {
+    padding: 28px 23px;
+  }
+  .install-form-body h1 {
+    font-size: 25px;
+  }
+  .install-form-body > .subtitle {
+    font-size: 14px;
+    line-height: 1.8;
+  }
+  .install-feature h3 {
+    font-size: 14px;
+  }
+  .install-feature p {
+    font-size: 13px;
+  }
+  .install-feature {
+    align-items: flex-start;
+  }
+  .install-form-footer {
+    padding: 18px 23px;
+  }
+  .install-footer {
+    font-size: 13px;
+    padding: 0 20px;
+  }
+}
+.welcome-icon .product-logo {
+  width: 43px;
+  height: 43px;
+}
+.install-label,
+.install-form-body > .subtitle,
+.install-feature p,
+.install-form-footer .step-counter,
+.install-complete-list .flex {
+  color: var(--text-muted);
+}
+.install-footer {
+  color: var(--text-muted);
+}
+
+.install-form-side.el-form {
+  display: flex;
+  flex-direction: column;
+}
+.install-page .brand img {
+  filter: brightness(0) invert(1);
+}
+.install-form-body .el-form-item {
+  margin-bottom: 22px;
+}
+.install-form-body .form-row .el-form-item {
+  min-width: 0;
+}
+.install-form-body .database-form-row {
+  row-gap: 0;
+}
+.install-form-body .database-form-row .el-input-number .el-input__inner {
+  text-align: left;
+}
+.install-form-body .database-form-row .el-input-number .el-input__wrapper {
+  padding-inline: 12px;
+}
+.install-form-body .installation-db-confirm {
+  margin-bottom: 23px;
+}
+.install-form-body > .error-banner {
+  margin-top: 20px;
+}
+.install-form-body > .eyebrow {
+  margin-bottom: 0;
+}
+.installation-state {
+  padding-block: 48px;
+}
+.installation-enter {
+  margin-top: 25px;
+}
+.connection-options {
+  margin-bottom: 22px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.connection-options summary {
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+.install-page .brand img {
+  filter: none;
+}
+.install-header .brand-mark {
+  border-radius: 0;
+}
+.install-page {
+  background: var(--canvas);
+}
+.install-steps-side::before,
+.install-steps-side::after {
+  display: none;
+}
+.install-sidebar {
+  background: var(--sidebar-surface);
+  color: var(--text-primary);
+  border-right: 1px solid var(--border);
+}
+.install-label,
+.step-copy small,
+.install-sidebar .eyebrow {
+  color: var(--text-muted);
+}
+.install-step {
+  color: var(--text-secondary);
+}
+.install-sidebar h2,
+.install-step.active {
+  color: var(--text-primary);
+}
+.step-number {
+  background: var(--sidebar-surface);
+  color: var(--text-muted);
+  border-color: var(--border-control);
+}
+.install-step.active .step-number {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+  box-shadow: none;
+}
+.install-step.done .step-number {
+  color: var(--success);
+  border-color: var(--success-border);
+  background: var(--success-soft);
+}
+.install-step:not(:last-child)::before {
+  border-color: var(--border-control);
+}
+.install-header .brand {
+  color: var(--text-primary);
+}
+.install-card {
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 48px var(--shadow-color);
+}
+.welcome-icon:has(img.product-logo) {
+  background: url('/logo.svg') center / 65% no-repeat;
+  border: 0;
+  box-shadow: none;
+}
+.welcome-icon img {
+  opacity: 0;
+}
+.dark .welcome-icon:has(img.product-logo) {
+  background: url('/logo-inverse.svg') center / 65% no-repeat;
+  mask: none;
+}
+.install-page {
+  padding-top: 0;
+}
+.install-form-footer {
+  background: var(--surface-subtle);
+}

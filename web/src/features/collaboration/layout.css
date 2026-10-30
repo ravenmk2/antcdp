@@ -1,0 +1,123 @@
+/* layout: shared presentation; keep states and responsive rules in this owner. */
+.collaboration-page {
+  min-width: 0;
+}
+.collaboration-page .el-button + .el-button {
+  margin-left: 0;
+}
+.collab-tabs button {
+  position: relative;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.collab-tabs button.active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+.collab-tabs button.active::after {
+  position: absolute;
+  content: "";
+  height: 2px;
+  background: var(--accent);
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+.collab-count {
+  display: inline-block;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  border-radius: 5px;
+  padding: 0 6px;
+  margin-left: 6px;
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+.collab-muted {
+  color: var(--text-muted);
+}
+.collab-nowrap {
+  white-space: nowrap;
+}
+.collab-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.collaboration-page code {
+  font:
+    13px/1.6 Consolas,
+    monospace;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.collaboration-page .icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+.collaboration-page .icon-btn.pinned {
+  color: var(--text-primary);
+  background: var(--surface-subtle);
+}
+.collab-role {
+  display: inline-block;
+  border: 1px solid var(--border);
+  padding: 1px 7px;
+  border-radius: 5px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.collab-tabs {
+  display: flex;
+  gap: 26px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 22px;
+}
+.collab-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 0;
+}
+.collab-tabs button.active::after {
+  bottom: -1px;
+}
+.collab-tabs .ui-icon {
+  width: 17px;
+  height: 17px;
+}
+.collab-tabs .collab-count {
+  margin-left: 0;
+}
+@media (max-width: 650px) {
+  .collaboration-page .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .collab-tabs {
+    gap: 24px;
+  }
+  .collab-tabs .ui-icon {
+    display: none;
+  }
+  .collab-tabs button {
+    font-size: 14px;
+    gap: 4px;
+  }
+}

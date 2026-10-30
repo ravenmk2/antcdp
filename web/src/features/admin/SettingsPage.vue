@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "./settings.css";
 import { onMounted, onUnmounted, reactive, ref, computed } from "vue";
 import {
   ElButton,

@@ -1,0 +1,299 @@
+/* details: shared presentation; keep states and responsive rules in this owner. */
+.collab-detail-dropdown {
+  width: max-content;
+  min-width: 0;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+  padding: 7px;
+  border-radius: 11px;
+  box-shadow: 0 12px 42px var(--shadow-color);
+}
+.collab-detail-dropdown.el-popper {
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  box-shadow: 0 12px 42px var(--shadow-color);
+}
+.collab-detail-dropdown .el-dropdown-menu__item {
+  min-height: 42px;
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  gap: 11px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+}
+.collab-detail-dropdown .el-popper__arrow {
+  display: none;
+}
+.collab-detail-dropdown .el-dropdown-menu__item .ui-icon {
+  width: 17px;
+  height: 17px;
+}
+.collab-members-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+.collab-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.collab-detail-actions .el-button .ui-icon,
+.collab-members-toolbar .el-button .ui-icon {
+  margin-right: 7px;
+}
+.collab-detail-actions .refresh-button .ui-icon {
+  margin-right: 0;
+}
+.collab-member-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.collab-member-count .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+.collab-summary-cell {
+  max-width: 400px;
+  min-width: 180px;
+  color: var(--text-muted);
+}
+.collab-summary-cell > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.collab-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 15px;
+  padding: 0 0 18px;
+}
+.collab-detail-heading > .resource-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.collab-detail-heading > .resource-icon:not(.has-image) {
+  border: 1px solid var(--border);
+}
+.collab-detail-heading > .resource-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.collab-detail-actions {
+  gap: 7px;
+  padding-top: 4px;
+  justify-content: flex-end;
+}
+.collab-readonly {
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  border-radius: 8px;
+  font-size: 14px;
+}
+.collab-members-toolbar {
+  margin-bottom: 16px;
+}
+.collab-members-toolbar > .collab-muted {
+  font-size: 14px;
+}
+.collab-danger {
+  color: var(--danger) !important;
+}
+@media (max-width: 1200px) {
+  .collab-detail-heading {
+    flex-wrap: wrap;
+  }
+  .collab-detail-actions {
+    margin-left: 74px;
+  }
+}
+@media (max-width: 650px) {
+  .collab-members-toolbar {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .collab-detail-heading {
+    gap: 14px;
+  }
+  .collab-detail-heading > .resource-icon {
+    width: 48px;
+    height: 48px;
+  }
+  .collab-detail-actions {
+    width: 100%;
+    margin: 0;
+    justify-content: flex-start;
+  }
+}
+.collab-identity {
+  flex: 1;
+  min-width: 0;
+}
+.collab-title-line { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.collab-identity h1 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.4;
+  font-weight: 600;
+  letter-spacing: normal;
+  overflow-wrap: anywhere;
+}
+.collab-identity-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+.collab-identity p {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-top: 9px;
+  max-width: 900px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.collab-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 24px;
+  align-items: start;
+}
+.collab-document {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.collab-document .collab-section-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0;
+  padding: 15px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.collab-info {
+  padding: 5px 0;
+}
+.collab-info h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+.collab-info dl {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 17px 0;
+  margin: 0;
+  font-size: 13px;
+}
+.collab-info dt {
+  color: var(--text-muted);
+}
+.collab-info dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.collab-info > p {
+  margin-top: 26px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.collab-help {
+  margin-top: 18px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.collab-sources {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 130px;
+}
+.source-tag {
+  display: inline-block;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.collab-source-more {
+  color: var(--text-muted);
+  font-size: 13px;
+  background: none;
+  border: 0;
+  padding: 4px;
+}
+@media (max-width: 1200px) {
+  .collab-overview-grid {
+    grid-template-columns: minmax(0, 1fr) 210px;
+  }
+}
+@media (max-width: 1200px) {
+  .collab-identity {
+    min-width: 220px;
+  }
+}
+@media (max-width: 1000px) {
+  .collab-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 1000px) {
+  .collab-info {
+    padding: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+}
+@media (max-width: 650px) {
+  .collab-identity {
+    min-width: 0;
+  }
+}
+@media (max-width: 650px) {
+  .collab-identity h1 {
+    font-size: 24px;
+  }
+}
+@media (max-width: 650px) {
+  .collab-document {
+    padding: 22px;
+    min-height: 0;
+  }
+}
+@media (max-width: 600px) {
+  .collab-document { padding: 0; }
+}
+@media (max-width: 600px) {
+  .collab-document .collab-section-label { padding: 14px 18px; }
+}

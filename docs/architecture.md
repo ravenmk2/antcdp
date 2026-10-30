@@ -100,10 +100,10 @@ internal/
 web/
   embed.go
   src/
-    app/                    # 入口、路由装配、全局初始化
-    layouts/                # 登录、安装、首页/控制台布局
-    features/               # setup、auth、account、users、settings、audit
-    shared/                 # api、基础组件、设计变量、通用类型
+    main.ts                 # 入口、路由装配、全局初始化与公共样式加载
+    app/                    # 根组件、工作区/控制台布局与账号菜单
+    features/               # admin、collaboration、home、identity、install、integrations、media、remote-hosts
+    shared/                 # API、基础组件、主题变量、按职责拆分的公共样式与通用类型
   dist/                     # 构建产物，不手工编辑
 scripts/
 docs/
@@ -114,6 +114,8 @@ docs/
 ## 6. 前端边界
 
 功能模块只通过明确的服务、DTO 和路由声明协作。应用层注册功能路由；页面不跨功能导入另一个功能的内部组件。Pinia 不复制整份服务端数据库；列表查询、筛选和分页归所属功能管理。
+
+样式按展示职责管理：`shared/app.css` 是有序的公共样式入口，主题变量、基础控件、Element Plus 适配、外壳和账号菜单分别维护。安装、个人设置和系统设置的专属样式随页面加载；协作模块按布局、列表、详情、表单及 Markdown 展示拆分。服务集成与远程主机共享 `connection-ui.css` 展示类和 `CopyableCode` 基础组件，保留独立业务组件与状态。样式复用不引入跨功能业务依赖；维护规则见 [UI 设计规范](ui-design.md#样式归属与维护)。
 
 - 布局使用正式蚂蚁头 SVG LOGO，提供底部账号菜单、折叠侧栏与移动端账号入口；品牌资源和交互要求见 UI 规范。
 - 视觉采用暖色中性设计与浅色/深色/系统外观，产品约束及可调整的视觉默认值见 [UI 规范](ui-design.md)。旧原型的布局与像素值不构成架构限制；交互原型及对照稿不纳入 Git 或正式构建依赖。

@@ -338,10 +338,10 @@ useUnsaved(
 </script>
 <template>
   <AppLayout :breadcrumbs="breadcrumbs"
-    ><main class="remote-hosts-page" :class="{ 'remote-host-list-page': !selected, 'remote-host-detail-page': !!selected }">
+    ><main class="connection-ui-page" :class="{ 'connection-ui-list-page': !selected, 'connection-ui-detail-page': !!selected }">
       <nav
         v-if="!admin && !projectID"
-        class="remote-host-tabs"
+        class="connection-ui-tabs"
         aria-label="个人设置分类"
       >
         <RouterLink to="/account">个人资料</RouterLink
@@ -355,61 +355,61 @@ useUnsaved(
       <p v-if="loading" role="status">正在加载{{scopeLabel}}…</p>
       <template v-else-if="!selected && !error">
         <p v-if="!admin">{{ projectID ? '维护本项目使用的SSH 凭证。' : '维护仅属于你自己的SSH 凭证。' }}</p>
-        <div class="remote-host-browser" style="grid-template-columns: minmax(0, 1fr)">
+        <div class="connection-ui-browser" style="grid-template-columns: minmax(0, 1fr)">
 
-          <section class="remote-host-results" aria-label="主机列表">
+          <section class="connection-ui-results" aria-label="主机列表">
 
 
-            <div class="host-connection-list-panel panel remote-host-list-panel">
-            <div class="remote-host-filters table-toolbar console-list-toolbar">
-              <ElInput class="host-connection-search" v-model="query" clearable :placeholder="`搜索${resourceLabel}名称、编码或说明`" :aria-label="`搜索${resourceLabel}`" />
+            <div class="connection-ui-list-panel panel remote-host-list-panel">
+            <div class="connection-ui-filters table-toolbar console-list-toolbar">
+              <ElInput class="connection-ui-search" v-model="query" clearable :placeholder="`搜索${resourceLabel}名称、编码或说明`" :aria-label="`搜索${resourceLabel}`" />
               <ElSelect v-model="statusFilter" placeholder="全部状态" aria-label="主机状态筛选">
                 <ElOption label="全部状态" value="" /><ElOption label="已启用" value="enabled" /><ElOption label="已停用" value="disabled" />
               </ElSelect>
-              <ElButton v-if="admin" class="host-connection-create" type="primary" :disabled="!types.length" @click="openCreate"><UiIcon name="plus" />添加{{ resourceLabel }}</ElButton>
+              <ElButton v-if="admin" class="connection-ui-create" type="primary" :disabled="!types.length" @click="openCreate"><UiIcon name="plus" />添加{{ resourceLabel }}</ElButton>
             </div>
-            <div v-if="!visible.length" class="remote-host-empty">
+            <div v-if="!visible.length" class="connection-ui-empty">
               <h3>{{ items.length ? `没有匹配的${resourceLabel}` : "添加第一台远程主机" }}</h3>
               <p>{{ items.length ? "尝试更换状态或搜索关键词。" : admin ? "添加 SSH 主机后，配置登录凭证和主机公钥。" : "请联系系统管理员添加远程主机。" }}</p>
               <ClearFiltersButton v-if="items.length" @click="resetFilters" />
               <ElButton v-else-if="admin" :disabled="!types.length" @click="openCreate">添加{{ resourceLabel }}</ElButton>
             </div>
-            <div v-if="visible.length" class="remote-host-table-wrap">
-              <table class="remote-host-table host-instances-table">
-                <thead><tr><th>{{resourceLabel}}名称</th><th>协议</th><th>说明</th><th>状态</th><th class="actions-column">操作</th></tr></thead>
+            <div v-if="visible.length" class="connection-ui-table-wrap">
+              <table class="connection-ui-table connection-ui-instances-table">
+                <thead><tr><th>{{resourceLabel}}名称</th><th>协议</th><th>说明</th><th>状态</th><th class="connection-ui-actions-column">操作</th></tr></thead>
                 <tbody><tr v-for="item in pagedConnections" :key="item.id">
-                  <td><div class="host-instance-identity"><ServiceIcon :type="item.service_type" /><div class="host-instance-text"><button class="host-instance-name" @click="choose(item)">{{ item.name }}</button><ConnectionCode :code="item.code" /></div></div></td>
+                  <td><div class="connection-ui-instance-identity"><ServiceIcon :type="item.service_type" /><div class="connection-ui-instance-text"><button class="connection-ui-instance-name" @click="choose(item)">{{ item.name }}</button><ConnectionCode :code="item.code" /></div></div></td>
                   <td data-label="服务类型">{{ filterTypes.find(t => t.service_type === item.service_type)?.name ?? item.service_type }}</td>
-                  <td data-label="说明"><span class="host-instance-description" :title="item.description">{{ item.description || '未填写说明' }}</span></td>
-                  <td data-label="状态"><span class="remote-host-status" :class="{ enabled: item.enabled }">{{ item.enabled ? '已启用' : '已停用' }}</span></td>
-                  <td class="actions-column"><button class="host-connection-open" :aria-label="`${admin ? `管理${resourceLabel}` : '管理凭证'}：${item.name}`" :title="admin ? `管理${resourceLabel}` : '管理凭证'" @click="choose(item)"><UiIcon name="chevron" /></button></td>
+                  <td data-label="说明"><span class="connection-ui-instance-description" :title="item.description">{{ item.description || '未填写说明' }}</span></td>
+                  <td data-label="状态"><span class="connection-ui-status" :class="{ enabled: item.enabled }">{{ item.enabled ? '已启用' : '已停用' }}</span></td>
+                  <td class="connection-ui-actions-column"><button class="connection-ui-open" :aria-label="`${admin ? `管理${resourceLabel}` : '管理凭证'}：${item.name}`" :title="admin ? `管理${resourceLabel}` : '管理凭证'" @click="choose(item)"><UiIcon name="chevron" /></button></td>
                 </tr></tbody>
               </table>
             </div>
-            <div class="table-footer host-connection-pagination"><div class="list-page-summary"><span>共 {{ visible.length }} 台主机</span><PageSizeSelect v-model="pageSize" /></div><div class="pagination"><button class="page-button" :disabled="page <= 1" aria-label="上一页" @click="page--"><UiIcon name="chevron-left" /></button><span>{{ page }} / {{ pageCount }}</span><button class="page-button" :disabled="page >= pageCount" aria-label="下一页" @click="page++"><UiIcon name="chevron" /></button></div></div>
+            <div class="table-footer connection-ui-pagination"><div class="list-page-summary"><span>共 {{ visible.length }} 台主机</span><PageSizeSelect v-model="pageSize" /></div><div class="pagination"><button class="page-button" :disabled="page <= 1" aria-label="上一页" @click="page--"><UiIcon name="chevron-left" /></button><span>{{ page }} / {{ pageCount }}</span><button class="page-button" :disabled="page >= pageCount" aria-label="下一页" @click="page++"><UiIcon name="chevron" /></button></div></div>
             </div>
           </section>
         </div>
       </template>
       <template v-else-if="selected && !loading">
-        <div class="remote-host-toolbar remote-host-detail-header">
-          <div class="remote-host-detail-identity"><ServiceIcon :type="selected.service_type" /><div>
+        <div class="connection-ui-toolbar connection-ui-detail-header">
+          <div class="connection-ui-detail-identity"><ServiceIcon :type="selected.service_type" /><div>
             <h1>
               {{ selected.name }}
-              <span class="remote-host-badge">{{
+              <span class="connection-ui-badge">{{
                 selected.enabled ? "已启用" : "已停用"
               }}</span>
             </h1>
             <ConnectionCode :code="selected.code" />
           </div></div>
-          <div v-if="admin" class="remote-host-actions">
+          <div v-if="admin" class="connection-ui-actions">
             <ElDropdown trigger="click" @command="detailAction">
               <button class="icon-btn" :disabled="busy" :aria-label="`${resourceLabel}更多操作`" title="更多操作"><UiIcon name="more" /></button>
-              <template #dropdown><ElDropdownMenu><ElDropdownItem command="toggle"><UiIcon name="power" />{{ selected.enabled ? '停用主机' : '启用主机' }}</ElDropdownItem><ElDropdownItem command="delete" class="host-connection-danger-action"><UiIcon name="delete" />删除{{ resourceLabel }}</ElDropdownItem></ElDropdownMenu></template>
+              <template #dropdown><ElDropdownMenu><ElDropdownItem command="toggle"><UiIcon name="power" />{{ selected.enabled ? '停用主机' : '启用主机' }}</ElDropdownItem><ElDropdownItem command="delete" class="connection-ui-danger-action"><UiIcon name="delete" />删除{{ resourceLabel }}</ElDropdownItem></ElDropdownMenu></template>
             </ElDropdown>
           </div>
         </div>
-        <nav v-if="admin" class="remote-host-tabs" aria-label="连接配置">
+        <nav v-if="admin" class="connection-ui-tabs" aria-label="连接配置">
           <button
             :aria-pressed="tab === 'connection'"
             :class="{ active: tab === 'connection' }"
@@ -426,7 +426,7 @@ useUnsaved(
           ><button :class="{ active: tab === 'hostkeys' }" :aria-pressed="tab === 'hostkeys'" @click="tab = 'hostkeys'">主机公钥</button>
         </nav>
 
-        <div class="remote-host-detail-body" :class="{ 'credentials-body': tab === 'credentials' }">
+        <div class="connection-ui-detail-body" :class="{ 'connection-ui-credentials-body': tab === 'credentials' }">
         <CredentialsPanel
           v-if="capability?.credentials"
           v-show="tab === 'credentials'"
@@ -451,28 +451,28 @@ useUnsaved(
 
         </div>
       </template>
-      <ElDialog v-model="dialog" title="添加远程主机" width="min(720px, 96vw)" class="remote-host-dialog" :close-on-click-modal="false" :before-close="closeCreate" :show-close="!busy" :close-on-press-escape="!busy" @closed="credentialValues = {}">
-        <ol class="host-connection-steps" aria-label="创建进度"><li v-for="(label, index) in ['主机信息', '首个凭证']" :key="label" :class="{ active: step === index + 2, complete: step > index + 2 }" :aria-current="step === index + 2 ? 'step' : undefined"><span>{{ index + 1 }}</span>{{ label }}</li></ol>
-        <form id="create-connection" class="remote-host-form host-wizard-body" @submit.prevent="step < 3 ? nextStep() : save()">
+      <ElDialog v-model="dialog" title="添加远程主机" width="min(720px, 96vw)" class="connection-ui-dialog" :close-on-click-modal="false" :before-close="closeCreate" :show-close="!busy" :close-on-press-escape="!busy" @closed="credentialValues = {}">
+        <ol class="connection-ui-steps" aria-label="创建进度"><li v-for="(label, index) in ['主机信息', '首个凭证']" :key="label" :class="{ active: step === index + 2, complete: step > index + 2 }" :aria-current="step === index + 2 ? 'step' : undefined"><span>{{ index + 1 }}</span>{{ label }}</li></ol>
+        <form id="create-connection" class="connection-ui-form connection-ui-wizard-body" @submit.prevent="step < 3 ? nextStep() : save()">
           <div v-if="formError" class="error-banner" role="alert">{{ formError }}</div>
 
           <template v-if="step === 2">
-            <div class="host-form-pair"><label>{{ resourceLabel }}名称<ElInput v-model="form.name" maxlength="100" /></label>
+            <div class="connection-ui-form-pair"><label>{{ resourceLabel }}名称<ElInput v-model="form.name" maxlength="100" /></label>
             <label>编码（可选）<ElInput v-model="form.code" maxlength="64" /></label></div>
             <ProviderFields :show-help="false" v-model="providerValues" :fields="serviceUI.ssh!.connectionFields" />
-            <details class="host-form-more"><summary>更多设置 · 说明</summary><label>说明<ElInput v-model="form.description" type="textarea" :rows="2" maxlength="1000" /></label></details>
+            <details class="connection-ui-form-more"><summary>更多设置 · 说明</summary><label>说明<ElInput v-model="form.description" type="textarea" :rows="2" maxlength="1000" /></label></details>
           </template>
           <template v-else>
-            <div class="host-wizard-summary"><ServiceIcon :type="form.service_type" /><div><strong>{{ form.name }}</strong><small>{{ `${providerValues.host}:${providerValues.port ?? 22}` }}</small></div><span v-if="createdConnection">已创建</span></div>
+            <div class="connection-ui-wizard-summary"><ServiceIcon :type="form.service_type" /><div><strong>{{ form.name }}</strong><small>{{ `${providerValues.host}:${providerValues.port ?? 22}` }}</small></div><span v-if="createdConnection">已创建</span></div>
 
-              <div class="host-form-pair"><label>凭证名称<ElInput v-model="credential.name" maxlength="100" :disabled="busy" /></label><label>编码（可选）<ElInput v-model="credential.code" maxlength="64" :disabled="busy" /></label></div>
+              <div class="connection-ui-form-pair"><label>凭证名称<ElInput v-model="credential.name" maxlength="100" :disabled="busy" /></label><label>编码（可选）<ElInput v-model="credential.code" maxlength="64" :disabled="busy" /></label></div>
               <label v-if="form.service_type === 'ssh'">认证方式<ElSelect v-model="authMethod" :disabled="busy"><ElOption value="ssh_password" label="密码" /><ElOption value="ssh_private_key" label="SSH 私钥" /><ElOption value="ssh_encrypted_key" label="带口令私钥" /></ElSelect></label>
 <ProviderFields :show-help="false" v-model="credentialValues" :fields="credentialAdapter.identityFields" :disabled="busy" />
               <ProviderFields :show-help="false" v-model="credentialValues" :fields="credentialAdapter.secretFields" :disabled="busy" />
               <label>到期时间（本地时间，可选）<input v-model="credential.expires_at" type="datetime-local" :disabled="busy" /></label>
           </template>
         </form>
-        <template #footer><div class="host-wizard-footer"><ElButton :disabled="busy" @click="closeCreate()">{{ createdConnection ? '进入主机详情' : '取消' }}</ElButton><div><ElButton v-if="step > 2 && !createdConnection" :disabled="busy" @click="step--; formError = ''">上一步</ElButton><ElButton v-if="step === 3" :disabled="busy" @click="save(true)">{{ createdConnection ? '跳过，进入详情' : `仅创建${resourceLabel}` }}</ElButton><ElButton type="primary" native-type="submit" form="create-connection" :loading="busy">{{ step < 3 ? '下一步' : createdConnection ? '重试添加凭证' : `创建${resourceLabel}和凭证` }}</ElButton></div></div></template>
+        <template #footer><div class="connection-ui-wizard-footer"><ElButton :disabled="busy" @click="closeCreate()">{{ createdConnection ? '进入主机详情' : '取消' }}</ElButton><div><ElButton v-if="step > 2 && !createdConnection" :disabled="busy" @click="step--; formError = ''">上一步</ElButton><ElButton v-if="step === 3" :disabled="busy" @click="save(true)">{{ createdConnection ? '跳过，进入详情' : `仅创建${resourceLabel}` }}</ElButton><ElButton type="primary" native-type="submit" form="create-connection" :loading="busy">{{ step < 3 ? '下一步' : createdConnection ? '重试添加凭证' : `创建${resourceLabel}和凭证` }}</ElButton></div></div></template>
       </ElDialog>
     </main></AppLayout
   >

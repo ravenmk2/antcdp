@@ -38,19 +38,6 @@
 .audit-row {
   cursor: pointer;
 }
-.activity-button {
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.activity-button:hover,
-.activity-button:focus-visible {
-  background: var(--accent-soft);
-}
 .audit-row:focus-within {
   background: var(--accent-soft);
 }

@@ -6,7 +6,7 @@ const icons: Record<string, string> = { gitlab: "gitlab", jenkins: "jenkins", my
 const icon = computed(() => icons[props.type]);
 </script>
 <template>
-  <span class="integration-service-icon" aria-hidden="true">
+  <span class="connection-ui-service-icon" aria-hidden="true">
     <img v-if="icon === 'openobserve' || icon === 'nacos'" :src="`/service-icons/${icon}.${icon === 'nacos' ? 'ico' : 'svg'}`" alt="" />
     <span v-else-if="icon" class="service-mark" :class="icon" :style="{ '--service-icon': `url('/service-icons/${icon}.svg')` }" />
     <UiIcon v-else name="service" />

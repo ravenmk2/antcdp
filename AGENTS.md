@@ -21,7 +21,7 @@ antcdp/
 - [docs/README.md](docs/README.md)：文档目录、产品规则与维护约定。
 - [docs/development.md](docs/development.md)：实现进度、验证边界与历史发布记录。
 - [docs/initial-delivery.md](docs/initial-delivery.md)：首次迁移与验收的历史记录。
-- [docs/ui-design.md](docs/ui-design.md)：UI 产品约束、视觉默认值与设计调整原则。
+- [docs/ui-design.md](docs/ui-design.md)：UI 产品约束、视觉默认值、样式归属、Element Plus 适配与设计调整原则。
 - [docs/architecture.md](docs/architecture.md)：技术选型、模块边界、前后端结构与视觉基线、实施顺序。
 - [docs/technology-decisions.md](docs/technology-decisions.md)：sqlx/sqlc、bcrypt/HMAC 与 MySQL 版本及命名的比较和建议。
 - [docs/extensibility.md](docs/extensibility.md)：受控设置 KV、独立凭据表、仓储/事务接口和未来模块的扩展边界。

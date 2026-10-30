@@ -67,8 +67,8 @@ useUnsaved(() => secretDialog.value || !!oneTime.value, () => busy.value);
 </script>
 
 <template>
-  <section class="integration-section">
-    <div class="integration-toolbar">
+  <section class="connection-ui-section">
+    <div class="connection-ui-toolbar">
       <div><h2>Webhook 接收设置</h2><p>此连接使用一个接收地址和一份验证秘密。事件筛选与项目关联在消费方配置。</p></div>
       <ElButton :disabled="busy || loading" @click="load">刷新</ElButton>
     </div>
@@ -76,7 +76,7 @@ useUnsaved(() => secretDialog.value || !!oneTime.value, () => busy.value);
     <p v-if="loading" role="status">正在加载接收设置…</p>
     <div v-else-if="settings" class="webhook-settings integration-card">
       <p>{{ settings.enabled ? '已启用接收' : '已停用接收' }} · {{ settings.has_secret ? '已配置秘密' : '未配置秘密' }}</p>
-      <label class="integration-form">接收地址<ElInput :model-value="receiver" readonly aria-label="Webhook 接收地址" /></label>
+      <label class="connection-ui-form">接收地址<ElInput :model-value="receiver" readonly aria-label="Webhook 接收地址" /></label>
       <ElButton link @click="copy(receiver)">复制接收地址</ElButton>
       <ol class="integration-steps">
         <li>导入或生成此连接的验证秘密。</li>
@@ -84,7 +84,7 @@ useUnsaved(() => secretDialog.value || !!oneTime.value, () => busy.value);
         <li>开启接收，再从 GitLab 发送测试事件。</li>
       </ol>
       <p>{{ settings.verification_method === 'signing_token' ? 'Signing Token · HMAC-SHA256' : 'Secret Token' }}</p>
-      <div class="integration-actions">
+      <div class="connection-ui-actions">
         <ElButton :disabled="busy" @click="openSecret">{{ settings.has_secret ? '替换验证秘密' : '配置验证秘密' }}</ElButton>
         <ElButton :disabled="busy || !settings.has_secret" @click="toggle">{{ settings.enabled ? '停用接收' : '启用接收' }}</ElButton>
       </div>
@@ -94,12 +94,12 @@ useUnsaved(() => secretDialog.value || !!oneTime.value, () => busy.value);
       <p v-else>尚无已认证事件。保存秘密后需显式启用接收。</p>
     </div>
     <ElDialog v-model="secretDialog" title="配置 Webhook 验证秘密" width="min(560px, 94vw)" :close-on-click-modal="false" :show-close="!busy" :close-on-press-escape="!busy" @closed="token = ''">
-      <form class="integration-form" @submit.prevent="replaceSecret(false)">
+      <form class="connection-ui-form" @submit.prevent="replaceSecret(false)">
         <div v-if="secretError" class="error-banner" role="alert">{{ secretError }} <ElButton link :disabled="busy" @click="load">重新加载版本</ElButton></div>
         <label>验证方式<ElSelect v-model="method" :disabled="busy"><ElOption label="Secret Token" value="secret_token" /><ElOption label="Signing Token（需要 GitLab 支持）" value="signing_token" /></ElSelect></label>
         <label>新秘密<ElInput v-model="token" type="password" show-password autocomplete="new-password" maxlength="8192" :disabled="busy" /></label>
         <p>保存后不可读取。替换立即生效，接收开关保持不变。</p>
-        <div class="integration-actions"><ElButton v-if="method === 'secret_token'" :disabled="busy" @click="replaceSecret(true)">生成并保存</ElButton><ElButton native-type="submit" type="primary" :disabled="!token || loading" :loading="busy">导入并替换</ElButton></div>
+        <div class="connection-ui-actions"><ElButton v-if="method === 'secret_token'" :disabled="busy" @click="replaceSecret(true)">生成并保存</ElButton><ElButton native-type="submit" type="primary" :disabled="!token || loading" :loading="busy">导入并替换</ElButton></div>
       </form>
     </ElDialog>
     <ElDialog :model-value="!!oneTime" title="请立即保存新秘密" width="min(560px, 94vw)" :close-on-click-modal="false" @update:model-value="oneTime = ''">

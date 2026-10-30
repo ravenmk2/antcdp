@@ -1,0 +1,83 @@
+/* buttons: shared presentation; keep states and responsive rules in this owner. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background 0.18s,
+    box-shadow 0.18s;
+}
+.btn:hover {
+  background: var(--accent-soft);
+  border-color: var(--border);
+}
+.btn.primary {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+.btn.primary:hover {
+  background: var(--blue-dark);
+}
+.btn.link {
+  border: 0;
+  background: none;
+  color: var(--blue);
+  padding: 5px 7px;
+  min-height: 28px;
+}
+.btn.subtle {
+  background: var(--surface-subtle);
+  border-color: transparent;
+}
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  border-radius: 5px;
+}
+.icon-btn:hover {
+  background: var(--accent-soft);
+  color: var(--text-secondary);
+}
+.btn {
+  font-size: 14px;
+  min-height: 40px;
+  padding: 8px 15px;
+  line-height: 1.45;
+  border-radius: 7px;
+}
+.btn svg {
+  width: 17px;
+  height: 17px;
+}
+.icon-btn {
+  min-width: 30px;
+  min-height: 30px;
+  padding: 6px;
+}
+.icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.icon-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.btn {
+  border-color: var(--soft-control);
+}
+.icon-btn {
+  color: var(--text-muted);
+}
+.btn.primary {
+  color: var(--on-accent);
+  box-shadow: none;
+}

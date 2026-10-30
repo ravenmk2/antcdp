@@ -1,0 +1,61 @@
+.collaboration-page .markdown-content,
+.collab-editor-dialog .markdown-content {
+  overflow-wrap: anywhere;
+  line-height: 1.9;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+:is(.collaboration-page, .collab-editor-dialog) .markdown-content h1 {
+  font-size: 24px;
+}
+:is(.collaboration-page, .collab-editor-dialog) .markdown-content h2 {
+  font-size: 20px;
+}
+:is(.collaboration-page, .collab-editor-dialog) .markdown-content h3 {
+  font-size: 16px;
+}
+:is(.collaboration-page, .collab-editor-dialog)
+  .markdown-content
+  :is(h1, h2, h3, h4) {
+  margin: 24px 0 12px;
+  color: var(--text-primary);
+  letter-spacing: normal;
+}
+:is(.collaboration-page, .collab-editor-dialog)
+  .markdown-content
+  > :first-child {
+  margin-top: 0;
+}
+:is(.collaboration-page, .collab-editor-dialog) .markdown-content p {
+  margin: 12px 0;
+}
+:is(.collaboration-page, .collab-editor-dialog) .markdown-content pre {
+  overflow-x: auto;
+  padding: 16px;
+  background: var(--surface-subtle);
+  border-radius: 6px;
+}
+:is(.collaboration-page, .collab-editor-dialog) .markdown-content blockquote {
+  margin: 22px 0;
+  border-left: 3px solid var(--border);
+  padding-left: 16px;
+  color: var(--text-muted);
+}
+:is(.collaboration-page, .collab-editor-dialog) .markdown-content table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+:is(.collaboration-page, .collab-editor-dialog) .markdown-content :is(td, th) {
+  border: 1px solid var(--border);
+  padding: 8px;
+}
+:is(.collaboration-page, .collab-editor-dialog) .markdown-content a {
+  text-decoration: underline;
+}
+
+.collab-document > .markdown-content { padding: 22px 24px; }
+@media (max-width: 600px) {
+  .collab-document > .markdown-content { padding: 18px; }
+}

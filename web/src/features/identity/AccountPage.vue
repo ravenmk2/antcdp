@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import "./account.css";
 import { computed, onUnmounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {

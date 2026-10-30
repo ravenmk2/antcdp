@@ -1,0 +1,5 @@
+/* Presentation only: business modules compute their own diagnostic text and tone. */
+.diagnostic-success { color: var(--success); }
+.diagnostic-danger { color: var(--danger); }
+.diagnostic-warning, .diagnostic-history { color: var(--warning); }
+.diagnostic-muted, .diagnostic-detail { color: var(--text-muted); }

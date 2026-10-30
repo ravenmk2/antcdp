@@ -4,9 +4,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import "element-plus/dist/index.css";
 import "element-plus/theme-chalk/dark/css-vars.css";
 import "./shared/tokens.css";
-import "./shared/theme.css";
 import "./shared/app.css";
-import "./shared/shell.css";
 import App from "./app/App.vue";
 const InstallationPage = () =>
   import("./features/install/InstallationPage.vue");

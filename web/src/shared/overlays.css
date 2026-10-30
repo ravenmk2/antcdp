@@ -1,0 +1,156 @@
+/* overlays: shared presentation; keep states and responsive rules in this owner. */
+.dropdown {
+  position: fixed;
+  z-index: 55;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: 0 8px 35px var(--shadow-color);
+}
+.dropdown button,
+.dropdown a {
+  border: 0;
+  background: none;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  padding: 10px 10px;
+  border-radius: 5px;
+  color: var(--text-secondary);
+}
+.dropdown button:hover,
+.dropdown a:hover {
+  background: var(--surface-subtle);
+}
+.dropdown button:disabled {
+  opacity: 0.4;
+}
+.dropdown hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 5px 0;
+}
+.dropdown small {
+  padding: 8px 10px;
+  display: block;
+}
+.confirm-icon {
+  display: grid;
+  place-items: center;
+  width: 45px;
+  height: 45px;
+  border-radius: 12px;
+  background: var(--danger-soft);
+  color: var(--red);
+  margin-bottom: 15px;
+}
+.confirm-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.dropdown {
+  min-width: 202px;
+  padding: 7px;
+}
+.dropdown button,
+.dropdown a {
+  font-size: 14px;
+  min-height: 39px;
+  padding: 9px 10px;
+}
+.dropdown small {
+  font-size: 13px;
+  line-height: 1.65;
+}
+.dropdown svg {
+  width: 17px;
+  height: 17px;
+}
+.dropdown small {
+  color: var(--text-muted);
+}
+.collab-detail-dropdown .el-dropdown-menu,
+.action-dropdown .el-dropdown-menu {
+  padding: 0;
+}
+.action-dropdown {
+  min-width: 202px;
+  padding: 7px;
+}
+.action-dropdown .el-dropdown-menu__item {
+  min-height: 39px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  border-radius: 6px;
+}
+.action-dropdown .el-dropdown-menu__item.danger {
+  color: var(--red);
+}
+.app-dialog {
+  max-width: calc(100vw - 26px);
+  border-radius: 14px;
+  padding: 0;
+  overflow: hidden;
+}
+.app-dialog .el-dialog__header {
+  padding: 24px 26px 20px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+.app-dialog .el-dialog__title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.app-dialog .el-dialog__body {
+  padding: 25px 26px;
+}
+.app-dialog .el-dialog__headerbtn {
+  top: 16px;
+  right: 14px;
+}
+.app-dialog .form-footer {
+  margin: 25px -26px -25px;
+  padding: 18px 26px;
+  background: var(--accent-soft);
+}
+.app-dialog .info-note {
+  padding: 13px 15px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: 7px;
+}
+@media (max-width: 600px) {
+  .app-dialog .el-dialog__body {
+    padding: 22px 21px;
+  }
+  .app-dialog .form-footer {
+    margin: 22px -21px -22px;
+    padding: 17px 21px;
+  }
+}
+.app-dialog .form-row .el-form-item {
+  margin-bottom: 0;
+  min-width: 0;
+}
+.app-dialog {
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+.app-dialog .el-dialog__body {
+  overflow-y: auto;
+}
+@media (max-width: 600px) {
+  .app-dialog {
+    max-height: calc(100dvh - 26px);
+  }
+}
+.dropdown {
+  background: var(--surface-overlay);
+}
+.app-dialog .form-footer {
+  background: var(--surface-subtle);
+}

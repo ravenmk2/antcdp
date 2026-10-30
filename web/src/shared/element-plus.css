@@ -1,0 +1,196 @@
+/* element: owned styles; keep responsive rules next to their source definitions. */
+.el-form-item {
+  margin-bottom: 22px;
+}
+.el-form-item__label {
+  height: auto !important;
+  line-height: 1.6 !important;
+  margin-bottom: 8px !important;
+  font-size: 14px !important;
+  color: var(--text-secondary) !important;
+}
+.el-form-item.is-required:not(.is-no-asterisk).asterisk-left
+  > .el-form-item__label::before {
+  display: none;
+}
+.el-form-item.is-required > .el-form-item__label::after {
+  content: "*";
+  color: var(--red);
+  margin-left: 4px;
+}
+.el-input__wrapper,
+.el-select__wrapper {
+  min-height: 44px !important;
+  border-radius: 7px !important;
+  padding-inline: 12px;
+}
+.el-input__inner,
+.el-select__selected-item {
+  font-size: 14px !important;
+  color: var(--text-secondary);
+}
+.el-input.is-disabled .el-input__wrapper,
+.el-input:has(input[readonly]) .el-input__wrapper {
+  background: var(--surface-disabled);
+}
+.el-input:has(input[readonly]) .el-input__inner {
+  color: var(--text-muted);
+}
+.el-input__inner {
+  --autofill-surface: var(--surface-input);
+  --autofill-text: var(--text-secondary);
+}
+.el-input__inner[readonly] {
+  --autofill-surface: var(--surface-disabled);
+  --autofill-text: var(--text-muted);
+}
+.el-input.is-disabled .el-input__inner {
+  --autofill-surface: var(--surface-disabled);
+  --autofill-text: var(--el-disabled-text-color);
+}
+.el-input-number {
+  width: 100%;
+}
+.el-input-number .el-input__inner {
+  text-align: left;
+}
+.el-select {
+  width: 100%;
+}
+.el-button {
+  min-height: 40px;
+  height: auto;
+  padding: 8px 15px;
+  gap: 7px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+.el-button > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.el-button + .el-button {
+  margin-left: 0;
+}
+.el-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.el-dialog__footer > div {
+  width: 100%;
+  min-width: 0;
+}
+.el-message-box__btns {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.el-overlay:has(.app-dialog) {
+  background: var(--overlay);
+  backdrop-filter: blur(3px);
+}
+.el-button--primary {
+  color: var(--on-accent);
+  box-shadow: none;
+}
+.el-button--danger {
+  color: var(--on-danger);
+}
+.el-button--primary.is-plain,
+.el-button--danger.is-plain {
+  color: var(--el-button-text-color);
+}
+.el-button--primary.is-disabled {
+  color: var(--on-accent);
+}
+.el-button--danger.is-disabled {
+  color: var(--on-danger);
+}
+.el-select__popper,
+.el-picker__popper,
+.el-message-box,
+.el-dropdown-menu,
+.el-dialog {
+  color: var(--text-primary);
+}
+.el-dialog {
+  --el-dialog-bg-color: var(--surface-input);
+}
+.el-message-box {
+  --el-messagebox-content-color: var(--text-secondary);
+}
+.el-table {
+  --el-table-header-bg-color: var(--surface-subtle);
+  --el-table-row-hover-bg-color: var(--surface-subtle);
+  --el-table-border-color: var(--border);
+}
+.el-popper.is-light,
+.el-popper.is-light > .el-popper__arrow::before {
+  background: var(--surface-overlay);
+  border-color: var(--border);
+}
+.el-input,
+.el-textarea {
+  --el-input-focus-border-color: var(--focus);
+}
+.el-select {
+  --el-select-input-focus-border-color: var(--focus);
+}
+@media (max-width: 600px) {
+  .el-picker__popper:has(.el-date-range-picker) {
+    position: fixed !important;
+    top: 12px !important;
+    left: 12px !important;
+    right: 12px !important;
+    transform: none !important;
+    max-width: calc(100vw - 24px);
+  }
+  .el-picker__popper:has(.el-date-range-picker) .el-popper__arrow {
+    display: none;
+  }
+  .el-date-range-picker {
+    width: 100%;
+    max-width: 100%;
+  }
+  .el-date-range-picker .el-picker-panel__body {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-height: calc(100dvh - 100px);
+    overflow-y: auto;
+  }
+  .el-date-range-picker .el-date-range-picker__content {
+    width: 100%;
+    float: none;
+    padding: 12px;
+  }
+  .el-date-range-picker .el-date-range-picker__time-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+  .el-date-range-picker__time-header .el-icon {
+    display: none;
+  }
+  .el-date-range-picker__time-header > .el-date-range-picker__time-picker-wrap {
+    padding: 0;
+  }
+}
+
+/* elementSurfaces: shared presentation; keep states and responsive rules in this owner. */
+:root.dark .el-message-box {
+  border: 1px solid var(--border-control);
+}
+:root.dark .el-popper.is-light {
+  border-color: var(--border-control);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 45%);
+}
+:root.dark .el-popper.is-light > .el-popper__arrow::before {
+  border-color: var(--border-control);
+}
