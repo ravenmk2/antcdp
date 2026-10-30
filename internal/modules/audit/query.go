@@ -41,6 +41,9 @@ var labels = map[string]string{
 	"ssh_credential.deleted":                           "删除SSH 凭证",
 	"ssh_credential.authentication_replaced":           "替换认证信息",
 	"ssh_credential.preferred_changed":                 "修改首选凭证",
+	"project_repository.linked":                        "关联项目仓库",
+	"project_repository.unlinked":                      "解除项目仓库关联",
+	"project_repository.refreshed":                     "同步项目仓库信息",
 	"service_connection.created":                       "创建服务连接",
 	"service_connection.updated":                       "更新服务连接",
 	"service_connection.deleted":                       "删除服务连接",
@@ -156,6 +159,14 @@ func PublicDetail(action string, raw json.RawMessage) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	result := map[string]any{}
+	if strings.HasPrefix(action, "project_repository.") {
+		for _, key := range []string{"project_id", "connection_id", "repo_id"} {
+			var value string
+			if json.Unmarshal(src[key], &value) == nil && utf8.RuneCountInString(value) <= 255 {
+				result[key] = value
+			}
+		}
+	}
 	if strings.HasPrefix(action, "project.") || strings.HasPrefix(action, "team.") {
 		for _, key := range []string{"code", "user_id", "team_id", "before", "after"} {
 			var value string

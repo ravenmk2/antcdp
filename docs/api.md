@@ -289,3 +289,9 @@ AuditEvent 字段：`id`、`actor:{type,user_id,username,display_name}`、`actio
 | 503 | `INSTANCE_NOT_READY`、`DATABASE_UNAVAILABLE` | 显示暂不可用；不打开安装或误清空系统 |
 
 HTTP 解析失败使用 400 `BAD_REQUEST`，不暴露解析器内部信息。权限检查、并发事务和状态码需要在正式实现中用集成测试验证，本稿不是自动生成的 OpenAPI 文件；待规则确认后从同一 DTO 契约补充 OpenAPI，避免同时维护两套草案。
+
+## 项目 Git 仓库关联（目标，未实现）
+
+完整路由、DTO、权限、条件请求、远端错误及批量原子语义见[项目 Git 仓库关联第 6 节](project-repositories.md#6-api-目标契约)。本轮只输出设计，不新增运行路由。
+
+2026-10-30 更新：项目 Git 仓库关联已交付首版，迁移 8 新增 project_repository 与 project.repositories_version，共 23 张业务表；当前接口及验证差异以[仓库关联设计第 9 节](project-repositories.md#9-首版实现与验证边界)为准，覆盖此前“目标、未实现”的阶段说明。

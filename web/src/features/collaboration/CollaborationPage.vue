@@ -35,6 +35,7 @@ import { api, request, ApiError } from "../../shared/api";
 import { useIdentity, errorMessage } from "../identity/store";
 import { useShortcuts } from "./sidebar";
 import ResourceIcon from "./ResourceIcon.vue";
+import ProjectRepositories from "./ProjectRepositories.vue";
 import AvatarEditor from "../media/AvatarEditor.vue";
 import {
   iconKeys,
@@ -81,6 +82,7 @@ const loading = ref(false),
     get: () => {
       const value = String(route.query.tab);
       if (kind.value === "teams" && value === "projects") return "teams";
+      if (kind.value === "projects" && value === "repositories") return value;
       return ["members", "teams"].includes(value) ? value : "overview";
     },
     set: (value) => {
@@ -934,6 +936,7 @@ async function removeTeam(t: Resource) {
               kind === "projects" ? "参与团队" : "加入项目"
             }}<span class="collab-count">{{ teams.length }}</span>
           </button>
+          <button v-if="kind === 'projects'" :class="{ active: tab === 'repositories' }" @click="tab = 'repositories'">Git 仓库</button>
           <RouterLink v-if="kind === 'projects' && (detail.direct_role === 'admin' || identity.isAdmin)" :to="`/projects/${detail.id}/integrations`" class="tab">集成凭证</RouterLink>
           <RouterLink v-if="kind === 'projects' && (detail.direct_role === 'admin' || identity.isAdmin)" :to="`/projects/${detail.id}/remote-hosts`" class="tab">SSH 凭证</RouterLink>
         </nav>
@@ -985,6 +988,7 @@ async function removeTeam(t: Resource) {
             </p>
           </aside>
         </div>
+        <ProjectRepositories v-else-if="tab === 'repositories' && kind === 'projects'" :project-id="detail.id" :can-manage="consoleMode && identity.isAdmin && detail.status === 'active'" />
         <section v-else-if="tab === 'members'" aria-label="成员">
           <div class="collab-members-toolbar">
             <label class="collab-search"

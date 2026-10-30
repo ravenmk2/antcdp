@@ -52,6 +52,7 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 		}
 		return st, nil
 	}}
+	registerProjectRepositories(api, o, s)
 	finish := func(c *gin.Context, r i.Result, a *identity.Auth, err error, status int) {
 		var apiErr *httpx.Error
 		if errors.As(err, &apiErr) && apiErr.Code == "RATE_LIMITED" && c.Writer.Header().Get("Retry-After") == "" {

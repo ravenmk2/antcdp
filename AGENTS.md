@@ -33,10 +33,12 @@ antcdp/
 - [docs/projects-and-teams.md](docs/projects-and-teams.md)：项目与团队规则、数据库设计与待确认项。
 - [docs/projects-and-teams-detail.md](docs/projects-and-teams-detail.md)：项目与团队的权限矩阵、API/DTO、选择器、图标、并发事务、工作区快捷入口与控制台交互、实施及验收详细设计，包含当前实现与目标契约差异。
 - [docs/projects-and-teams-schema.sql](docs/projects-and-teams-schema.sql)：九张项目、团队、图标及侧栏偏好表的 DDL 阅读副本，非运行迁移，迁移已通过 MySQL 8.0 验证。
-- [docs/schema.sql](docs/schema.sql)：完整 22 张目标业务表的 DDL 阅读副本（一期 7 张、协作 9 张、服务集成 3 张、远程主机 3 张）；实际执行使用嵌入式 goose 迁移，当前结构版本 7，验证范围见开发说明，全部业务表不设物理外键/CHECK。
+- [docs/schema.sql](docs/schema.sql)：完整 23 张业务表的 DDL 阅读副本（一期 7 张、协作 9 张、服务集成 3 张、远程主机 3 张、项目仓库关联 1 张）；实际执行使用嵌入式 goose 迁移，当前结构版本 8，验证范围见开发说明，全部业务表不设物理外键/CHECK。
 - [docs/deployment.md](docs/deployment.md)：容器目录、配置、主密钥、持久化安装锁、安装恢复、备份与升级设计。
 
 - [远程主机管理](docs/remote-hosts.md)：SSH 主机、系统/项目/个人凭证、主机公钥信任、独立 API 与本轮管理边界。
+
+- [docs/project-repositories.md](docs/project-repositories.md)：项目多仓库关联目标设计、多平台 repo_id、系统首选凭证、组浏览/搜索、API 与事务及首版交付范围。
 
 ## 开发完成验证
 

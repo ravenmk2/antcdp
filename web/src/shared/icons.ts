@@ -1,3 +1,4 @@
+import RepositoryIcon from "./RepositoryIcon.vue";
 import {
   Copy,
   Trash2,
@@ -51,6 +52,7 @@ import {
 
 // Keep application names independent of the icon library and persisted resource keys.
 export const icons = {
+  "repository": RepositoryIcon,
   "copy": Copy,
   "delete": Trash2,
   "archive": Archive,

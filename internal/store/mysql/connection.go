@@ -181,14 +181,21 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if v != 7 {
+	if v != 8 {
 		return errors.New("database migration version does not match this executable")
 	}
 	var tables int
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event','icon_file','project','team','project_member','team_member','project_team','user_sidebar_preference','user_project_shortcut','user_team_shortcut','service_connection','service_connection_gitlab','service_credential','remote_host','remote_host_key','remote_host_credential')"); err != nil {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event','icon_file','project','team','project_member','team_member','project_team','user_sidebar_preference','user_project_shortcut','user_team_shortcut','service_connection','service_connection_gitlab','service_credential','remote_host','remote_host_key','remote_host_credential','project_repository')"); err != nil {
 		return err
 	}
-	if tables != 22 {
+	if tables != 23 {
+		return install.ErrIncompleteSchema
+	}
+	var repoColumns int
+	if err = s.db.GetContext(ctx, &repoColumns, "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='project' AND COLUMN_NAME='repositories_version') OR (TABLE_NAME='project_repository' AND COLUMN_NAME IN ('repo_id','connection_id','last_synced_at')))"); err != nil {
+		return err
+	}
+	if repoColumns != 4 {
 		return install.ErrIncompleteSchema
 	}
 	// The task's intermediate version 5 used endpoint tables. A version number

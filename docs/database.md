@@ -2,7 +2,7 @@
 
 远程主机使用独立业务模块、前端组件、SSH 管理 API 和主机/公钥/凭证三表，迁移 7 保留既有 SSH 数据并从服务集成存储分离；范围和信任规则见[远程主机管理](remote-hosts.md)。
 
-项目、团队及图标表设计见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 现汇总 22 张目标业务表（一期 7 张 + 协作 9 张 + 服务集成 3 张 + 远程主机 3 张）。合并后的迁移 5 重建旧集成模块，最终迁移 6 将出站配置移入连接 config JSON，迁移 7 将 SSH 主机、公钥和凭证拆为独立三表，共 22 张业务表。实际交付边界见[开发说明](development.md)。
+项目、团队及图标表设计见 [项目与团队设计](projects-and-teams.md)。本文原有章节描述一期七张业务表；schema.sql 现汇总 23 张目标业务表（一期 7 张 + 协作 9 张 + 服务集成 3 张 + 远程主机 3 张 + 设计中的仓库关联 1 张）。合并后的迁移 5 重建旧集成模块，最终迁移 6 将出站配置移入连接 config JSON，迁移 7 将 SSH 主机、公钥和凭证拆为独立三表，共 22 张业务表。实际交付边界见[开发说明](development.md)。
 
 字段约束、关系查询、事务和版本详见 [详细设计](projects-and-teams-detail.md)，九张新增表有独立 [DDL 阅读副本](projects-and-teams-schema.sql)。该副本依赖一期 user 表，不能作为生产迁移直接导入；MySQL 8.0 验证范围见开发说明，8.4 仍待验证。
 
@@ -171,3 +171,9 @@ MySQL 语法约束参考：[MySQL 8.0 CHECK 支持起点](https://dev.mysql.com/
 ## 远程主机三表（迁移 7）
 
 `remote_host`、`remote_host_key`、`remote_host_credential` 独立于服务集成表。完整字段及索引见 [schema.sql](schema.sql)，归属、信任与迁移密文兼容规则见[远程主机管理](remote-hosts.md#独立存储)。迁移保留既有 SSH 数据身份与版本，不重置其他模块。历史公钥确认元数据缺失时为 NULL，新信任写入操作者与时间。
+
+## 项目仓库关联（目标设计）
+
+[项目 Git 仓库关联](project-repositories.md)新增 project_repository 与 project.repositories_version，schema.sql 因此包含 23 张目标业务表。运行迁移仍为 7、实际 22 张表；新 DDL 尚未实施和实库验证。repo_id 为区分大小写的字符串，唯一域为项目、连接、repo_id，不设物理外键/CHECK。
+
+2026-10-30 更新：项目 Git 仓库关联已交付首版，迁移 8 新增 project_repository 与 project.repositories_version，共 23 张业务表；当前接口及验证差异以[仓库关联设计第 9 节](project-repositories.md#9-首版实现与验证边界)为准，覆盖此前“目标、未实现”的阶段说明。

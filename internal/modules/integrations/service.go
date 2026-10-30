@@ -423,6 +423,17 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 					return httpx.Invalid("config.base_url", "required")
 				}
 				if cfg.BaseURL.Set {
+					if connectionURL(v.Type, cfg.BaseURL.Value) != v.Config.BaseURL {
+						if pr, ok := r.(ProjectRepoStore); ok {
+							n, e := pr.ConnectionRepoCount(v.ID)
+							if e != nil {
+								return e
+							}
+							if n > 0 {
+								return httpx.E(409, "CONNECTION_TARGET_LOCKED", "请先解除项目仓库关联，再修改连接地址")
+							}
+						}
+					}
 					v.Config.BaseURL = connectionURL(v.Type, cfg.BaseURL.Value)
 					if isDatabase(v.Type) && !cfg.Host.Set && !cfg.Port.Set && !cfg.Database.Set {
 						v.Config.Host = ""
@@ -469,6 +480,15 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 		case "delete":
 			if err := check(tag, s.connectionTag(v)); err != nil {
 				return err
+			}
+			if pr, ok := r.(ProjectRepoStore); ok {
+				n, e := pr.ConnectionRepoCount(id)
+				if e != nil {
+					return e
+				}
+				if n > 0 {
+					return httpx.E(409, "CONNECTION_REFERENCED", "请先解除项目仓库关联")
+				}
 			}
 			n, err := r.CredentialCount(id)
 			if err != nil {

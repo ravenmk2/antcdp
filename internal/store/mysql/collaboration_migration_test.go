@@ -128,6 +128,9 @@ func TestCollaborationMigrationUpgrade(t *testing.T) {
 		t.Fatal("JSON migration modified GitLab data", err)
 	}
 	verifyRemoteHostMigration(t, ctx, s, p)
+	if _, err = p.UpTo(ctx, 8); err != nil {
+		t.Fatal(err)
+	}
 	if err = s.SchemaReady(ctx); err != nil {
 		t.Fatal(err)
 	}

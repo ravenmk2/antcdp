@@ -202,3 +202,7 @@ CMD ["serve"]
 实施验收至少覆盖：全新安装、并发安装、每个持久化步骤强制中断后恢复、数据库断连、密钥/标记缺失、安装 ID 不匹配、非 root/只读根容器、头像持久化、备份恢复、显式升级和创始人密码恢复。目前仅完成部分自动化与本地验证，实库、容器和后续模块的验收见开发说明。
 
 安装锁和 DDL 行为参考 MySQL 官方文档：[命名锁](https://dev.mysql.com/doc/refman/8.4/en/locking-functions.html)、[隐式提交](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html)。容器例子的环境变量含义参考 [MySQL 官方容器文档](https://dev.mysql.com/doc/refman/8.4/en/docker-mysql-more-topics.html)。
+
+## 迁移版本 8：项目 Git 仓库关联
+
+当前结构版本为 8，共 23 张业务表。新增 project_repository 与 project.repositories_version；已有项目、服务连接和凭证数据保持不变。升级前停止业务写入并备份匹配的数据库及数据目录，执行显式 db migrate 后启动新版本。旧二进制不接受版本 8；回退须使用匹配备份，不能只恢复旧镜像或自动执行 Down。迁移 8 已通过隔离 MySQL 新装与历史升级测试。

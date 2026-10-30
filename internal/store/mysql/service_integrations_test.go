@@ -18,6 +18,7 @@ import (
 )
 
 func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Service, admin, member, other *apiClient, adminID, memberID string) {
+	t.Run("project_repositories", func(t *testing.T) { verifyProjectRepositories(t, db, admin, member, other, adminID, memberID) })
 	verifyJenkinsIntegrations(t, db, installer, admin, member, other, memberID)
 	t.Run("remote_hosts", func(t *testing.T) { verifyRemoteHosts(t, db, installer, admin, member, other) })
 	base := "/admin/service-connections/gitlab"
