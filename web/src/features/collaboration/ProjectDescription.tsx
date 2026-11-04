@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
-import { Pencil, RefreshCw } from "lucide-react";
+import { RefreshCw, Code2, Eye, Columns2, ArrowUp } from "lucide-react";
 import { useIdentity } from "@/app/identity";
 import type { Resource } from "@/shared/collaboration";
 import { request, errorMessage } from "@/lib/api";
 import { writeRequiresReview, writeReviewMessage } from "@/lib/write-error";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { MarkdownEditor } from "./MarkdownEditor";
 import { EmptyState, ErrorBox } from "@/components/platform/feedback";
 import { Field } from "@/components/platform/field";
 import { CopyButton } from "@/components/platform/copy-button";
@@ -50,13 +50,13 @@ function DescriptionReader({
   const { session } = useIdentity();
   const location = useLocation();
   const rendered = useMemo(
-    () => parseDescription(project.description, `project-${project.id}`),
+    () => parseDescription(project.description, `project-${project.id}`, true),
     [project.description, project.id],
   );
   const article = useRef<HTMLElement>(null);
   const [current, setCurrent] = useState("");
+  const [showTop, setShowTop] = useState(false);
   const storageKey = `antcdp.project-description:${session.user.id}:${project.id}`;
-  const remember = useRef<() => void>(() => {});
 
   useEffect(() => {
     const headings = rendered.headings
@@ -70,6 +70,7 @@ function DescriptionReader({
         else break;
       }
       setCurrent(active?.id || "");
+      setShowTop(window.scrollY > window.innerHeight);
       const position: ReadingPosition = { top: window.scrollY };
       if (active) {
         position.anchor = active.id;
@@ -81,7 +82,6 @@ function DescriptionReader({
         /* Optional reading preference. */
       }
     };
-    remember.current = update;
     const onScroll = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(update);
@@ -126,7 +126,6 @@ function DescriptionReader({
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
       window.removeEventListener("pagehide", update);
-      remember.current = () => {};
     };
   }, [rendered, storageKey]);
 
@@ -153,23 +152,17 @@ function DescriptionReader({
       {!rendered.headings.some((heading) => heading.level === 1) && (
         <h1 className="sr-only">项目介绍</h1>
       )}
-      {allowed && (
-        <div className="project-description-tools">
-          <Button asChild variant="outline">
-            <Link to={editLink} onClick={() => remember.current()}>
-              <Pencil />
-              编辑介绍
-            </Link>
-          </Button>
-        </div>
-      )}
       <div
-        className={`project-reading${rendered.headings.length ? "" : " project-reading-no-toc"}`}
+        className={`project-reading${rendered.headings.length > 1 ? "" : " project-reading-no-toc"}`}
       >
-        <article ref={article} aria-label={`${project.name}介绍正文`}>
-          <Markdown text={project.description} rendered={rendered} />
+        <article
+          ref={article}
+          tabIndex={-1}
+          aria-label={`${project.name}介绍正文`}
+        >
+          <Markdown enhanced text={project.description} rendered={rendered} />
         </article>
-        {!!rendered.headings.length && (
+        {rendered.headings.length > 1 && (
           <nav className="project-toc" aria-label="项目介绍目录">
             <h2 className="mb-3 text-sm font-medium">目录</h2>
             {rendered.headings.map((heading) => (
@@ -185,6 +178,29 @@ function DescriptionReader({
           </nav>
         )}
       </div>
+      {showTop && (
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="project-back-to-top"
+          aria-label="返回顶部"
+          title="返回顶部"
+          onClick={(event) => {
+            if (event.detail === 0)
+              article.current?.focus({ preventScroll: true });
+            window.scrollTo({
+              top: 0,
+              behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
+                .matches
+                ? "instant"
+                : "smooth",
+            });
+          }}
+        >
+          <ArrowUp aria-hidden="true" />
+        </Button>
+      )}
     </section>
   );
 }
@@ -210,6 +226,23 @@ function DescriptionEditor({
   const readURL = descriptionURL(location.pathname, location.search);
   const allowed = project.can_manage && project.status === "active";
   useNavigationProtection(pending ? "pending" : dirty ? "dirty" : undefined);
+
+  useEffect(() => {
+    const form = errors.formRef.current;
+    if (!form) return;
+    const measure = () => {
+      const top = form.getBoundingClientRect().top + window.scrollY;
+      form.style.setProperty("--editor-top", `${top}px`);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(document.body);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [errors.formRef]);
 
   function complete() {
     onSaved();
@@ -282,20 +315,20 @@ function DescriptionEditor({
         void save();
       }}
     >
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="project-description-toolbar">
         <h1 className="sr-only">编辑项目介绍</h1>
         <div
-          className="flex gap-1 rounded-lg bg-muted p-1"
+          className="project-description-modes"
           role="group"
           aria-label="介绍编辑模式"
         >
           {(
             [
-              ["edit", "编辑"],
-              ["preview", "预览"],
-              ["split", "分栏"],
+              ["edit", "编辑", Code2],
+              ["preview", "预览", Eye],
+              ["split", "分栏", Columns2],
             ] as const
-          ).map(([value, label]) => (
+          ).map(([value, label, Icon]) => (
             <Button
               key={value}
               type="button"
@@ -304,127 +337,152 @@ function DescriptionEditor({
               aria-pressed={mode === value}
               onClick={() => setMode(value)}
             >
+              <Icon aria-hidden="true" />
               {label}
             </Button>
           ))}
         </div>
-      </div>
-      <ErrorBox>{errors.error}</ErrorBox>
-      {!allowed && (
-        <div className="mb-5 space-y-3">
-          <ErrorBox tone="warning">
-            当前项目不允许编辑。已有草稿仍保留，可复制后返回阅读页。
-          </ErrorBox>
-          <CopyButton value={draft} label="复制当前草稿" />
-        </div>
-      )}
-      {blocked && (
-        <section
-          className="project-description-review"
-          aria-label="保存结果核对"
-        >
-          <ErrorBox tone="warning">{writeReviewMessage}</ErrorBox>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={checking}
-              onClick={() => void checkLatest()}
+        <div className="project-description-actions">
+          <span className={bytes > 102400 ? "text-destructive" : undefined}>
+            {(bytes / 1024).toFixed(1)} / 100 KiB
+          </span>
+          <span
+            role="status"
+            className={blocked ? "text-[var(--warning)]" : undefined}
+          >
+            {blocked
+              ? "需核对保存结果"
+              : pending
+                ? "正在保存…"
+                : errors.error
+                  ? "保存失败"
+                  : dirty
+                    ? "有未保存修改"
+                    : "已保存内容"}
+          </span>
+          <Button asChild variant="outline">
+            <Link
+              to={readURL}
+              aria-disabled={pending}
+              onClick={(event) => {
+                if (pending) event.preventDefault();
+              }}
             >
-              <RefreshCw className={checking ? "animate-spin" : ""} />
-              {checking ? "正在读取…" : "读取最新内容"}
-            </Button>
+              取消
+            </Link>
+          </Button>
+          <Button
+            type="submit"
+            disabled={pending || blocked || !dirty || !allowed}
+          >
+            {pending ? "正在保存…" : "保存"}
+          </Button>
+        </div>
+      </div>
+      <div className="project-description-feedback">
+        <ErrorBox>{errors.error}</ErrorBox>
+        {!allowed && (
+          <div className="mb-5 space-y-3">
+            <ErrorBox tone="warning">
+              当前项目不允许编辑。已有草稿仍保留，可复制后返回阅读页。
+            </ErrorBox>
             <CopyButton value={draft} label="复制当前草稿" />
           </div>
-          <ErrorBox>{reviewError}</ErrorBox>
-          {latest && (
-            <>
-              <details open>
-                <summary>当前已保存的介绍</summary>
-                <Markdown
-                  text={latest.description || "尚未填写项目介绍。"}
-                  anchorPrefix={`review-${project.id}`}
-                />
-              </details>
-              {latest.description === draft ? (
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <p className="text-sm text-muted-foreground">
-                    最新内容与当前草稿一致。
-                  </p>
-                  <Button type="button" onClick={complete}>
-                    完成并返回阅读
-                  </Button>
-                </div>
-              ) : (
-                <div className="mt-4 space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    先对照已保存内容调整草稿。继续后，再次保存将用当前草稿替换介绍。
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={
-                      !latest.etag ||
-                      !latest.can_manage ||
-                      latest.status !== "active"
-                    }
-                    onClick={continueWithLatest}
-                  >
-                    已核对，保留草稿并继续编辑
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </section>
-      )}
+        )}
+        {blocked && (
+          <section
+            className="project-description-review"
+            aria-label="保存结果核对"
+          >
+            <ErrorBox tone="warning">{writeReviewMessage}</ErrorBox>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={checking}
+                onClick={() => void checkLatest()}
+              >
+                <RefreshCw className={checking ? "animate-spin" : ""} />
+                {checking ? "正在读取…" : "读取最新内容"}
+              </Button>
+              <CopyButton value={draft} label="复制当前草稿" />
+            </div>
+            <ErrorBox>{reviewError}</ErrorBox>
+            {latest && (
+              <>
+                <details open>
+                  <summary>当前已保存的介绍</summary>
+                  <Markdown
+                    enhanced
+                    text={latest.description || "尚未填写项目介绍。"}
+                    anchorPrefix={`review-${project.id}`}
+                  />
+                </details>
+                {latest.description === draft ? (
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <p className="text-sm text-muted-foreground">
+                      最新内容与当前草稿一致。
+                    </p>
+                    <Button type="button" onClick={complete}>
+                      完成并返回阅读
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-4 space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      先对照已保存内容调整草稿。继续后，再次保存将用当前草稿替换介绍。
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={
+                        !latest.etag ||
+                        !latest.can_manage ||
+                        latest.status !== "active"
+                      }
+                      onClick={continueWithLatest}
+                    >
+                      已核对，保留草稿并继续编辑
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        )}
+      </div>
       <div className="project-document-editor" data-mode={mode}>
-        {mode !== "preview" && (
+        <div className="project-source-pane" hidden={mode === "preview"}>
           <Field
             label="Markdown 正文"
             error={errors.fields.description}
-            hint="支持 Markdown，不支持 HTML 或嵌入图片。"
+            hint="支持 Markdown、代码高亮与 Mermaid 图表。不支持 HTML 或嵌入图片。"
           >
             {(props) => (
-              <Textarea
+              <MarkdownEditor
                 {...props}
                 value={draft}
                 disabled={pending || !allowed}
-                spellCheck={false}
-                onChange={(event) => {
-                  setDraft(event.target.value);
+                onChange={(value) => {
+                  setDraft(value);
                   errors.setFields({});
                 }}
               />
             )}
           </Field>
-        )}
+        </div>
         {mode !== "edit" && (
           <section aria-label="介绍预览">
             <h3 className="mb-2 text-sm font-medium">预览</h3>
             <div className="project-description-preview">
               <Markdown
+                enhanced
                 text={draft || "尚未填写项目介绍。"}
                 anchorPrefix={`preview-${project.id}`}
               />
             </div>
           </section>
         )}
-      </div>
-      <div className="project-editor-actions">
-        <span className={bytes > 102400 ? "text-destructive" : undefined}>
-          {(bytes / 1024).toFixed(1)} / 100 KiB
-          {dirty ? " · 有未保存修改" : " · 已保存内容"}
-        </span>
-        <Button asChild variant="outline">
-          <Link to={readURL}>取消</Link>
-        </Button>
-        <Button
-          type="submit"
-          disabled={pending || blocked || !dirty || !allowed}
-        >
-          {pending ? "正在保存…" : "保存介绍"}
-        </Button>
       </div>
     </form>
   );

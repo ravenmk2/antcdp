@@ -221,7 +221,7 @@ function Rules({
                     <span className="text-muted-foreground">尚未配置</span>
                   )}
                 </div>
-                <StatusText tone="neutral">
+                <StatusText tone={row.enabled ? "success" : "neutral"}>
                   {row.enabled ? "已启用" : "未启用"}
                 </StatusText>
               </div>

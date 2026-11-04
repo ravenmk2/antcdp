@@ -132,24 +132,6 @@ export function Repositories({
   const loading = query.loading || term.trim() !== q;
   return (
     <section className="space-y-4" aria-label="项目 Git 仓库">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          查看关联仓库的快照、分支和克隆地址。
-        </p>
-        {canManage && (
-          <Button
-            disabled={
-              !data || loading || directory.loading || !!directory.error
-            }
-            onClick={() =>
-              setAction({ type: "picker", tag: data!.mutation_version })
-            }
-          >
-            <Plus />
-            关联仓库
-          </Button>
-        )}
-      </div>
       {directory.error && (
         <div>
           <ErrorBox>{directory.error}</ErrorBox>
@@ -205,6 +187,19 @@ export function Repositories({
               }}
             >
               {batch ? "退出批量操作" : "批量操作"}
+            </Button>
+          )}
+          {canManage && (
+            <Button
+              disabled={
+                !data || loading || directory.loading || !!directory.error
+              }
+              onClick={() =>
+                setAction({ type: "picker", tag: data!.mutation_version })
+              }
+            >
+              <Plus />
+              关联仓库
             </Button>
           )}
         </div>

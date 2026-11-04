@@ -79,7 +79,7 @@ beforeEach(() => {
   mocked.mockResolvedValue({ data: page, etag: "" });
 });
 afterEach(cleanup);
-function drawer({ archived = false, edit = false } = {}) {
+function drawer({ archived = false, edit = false, product = false } = {}) {
   const close = vi.fn(),
     saved = vi.fn();
   render(
@@ -88,8 +88,8 @@ function drawer({ archived = false, edit = false } = {}) {
       variant={{ ...variant, archived_at: archived ? "2026-01-01" : null }}
       model={model}
       target={{
-        kind: "environment",
-        value: environment,
+        kind: product ? "variant" : "environment",
+        value: product ? variant : environment,
         collectionTag: '"ec1"',
         edit,
       }}
@@ -169,25 +169,25 @@ it("keeps manual selection across pages and clears it only on an explicit mode c
 });
 it("returns from dirty editing to the original detail after explicit discard", async () => {
   const { user, close } = drawer();
-  await user.click(screen.getByRole("button", { name: "编辑环境" }));
+  await user.click(screen.getByRole("button", { name: "编辑" }));
   await user.clear(screen.getByLabelText("名称", { exact: false }));
   await user.type(
     screen.getByLabelText("名称", { exact: false }),
     "未保存名称",
   );
-  await user.click(screen.getByRole("button", { name: "取消编辑" }));
+  await user.click(screen.getByRole("button", { name: "取消" }));
   expect(close).not.toHaveBeenCalled();
   expect(document.activeElement?.getAttribute("aria-label")).toBe(
     "未保存修改确认",
   );
   await user.click(screen.getByRole("button", { name: "放弃修改" }));
-  expect(screen.getByRole("button", { name: "编辑环境" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "编辑" })).toBeTruthy();
   expect(screen.queryByDisplayValue("未保存名称")).toBeNull();
   expect(mocked.mock.calls.every(([, options]) => !options?.method)).toBe(true);
 });
 it("keeps archived environments read-only", () => {
   drawer({ archived: true });
-  expect(screen.queryByRole("button", { name: "编辑环境" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "编辑" })).toBeNull();
   expect(screen.getByText("当前配置只读。")).toBeTruthy();
 });
 it("saves environment configuration with its exact ETag and without changing its code", async () => {
@@ -216,7 +216,7 @@ it("saves environment configuration with its exact ETag and without changing its
     branch_type: "mainline",
     repository_scope: emptyScope(true),
   });
-  expect(screen.getByRole("button", { name: "编辑环境" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "编辑" })).toBeTruthy();
 });
 it("focuses a repository scope error and preserves the invalid draft", async () => {
   mocked.mockRejectedValue(
@@ -267,3 +267,32 @@ it("ignores a late read after switching resource identity", async () => {
   await act(async () => old({ data: { name: "旧对象" }, etag: "" }));
   expect(screen.queryByText("旧对象")).toBeNull();
 });
+
+it.each([false, true])(
+  "entering edit never submits configuration (product=%s)",
+  async (product) => {
+    const { user, saved } = drawer({ product });
+    const edit = screen.getByRole("button", { name: "编辑" });
+    await user.click(edit);
+    expect(screen.getByRole("button", { name: "保存" })).toBeTruthy();
+    expect(
+      screen.getByLabelText(
+        product ? "固定主干 Git 分支" : "固定绑定 Git 分支",
+        { exact: false },
+      ),
+    ).toBeTruthy();
+    expect(saved).not.toHaveBeenCalled();
+    expect(mocked.mock.calls.every(([, options]) => !options?.method)).toBe(
+      true,
+    );
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    const keyboardEdit = screen.getByRole("button", { name: "编辑" });
+    keyboardEdit.focus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByRole("button", { name: "保存" })).toBeTruthy();
+    expect(saved).not.toHaveBeenCalled();
+    expect(mocked.mock.calls.every(([, options]) => !options?.method)).toBe(
+      true,
+    );
+  },
+);

@@ -1,5 +1,14 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import MarkdownIt from "markdown-it";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
+import { MarkdownBlock, type RichBlock } from "./MarkdownBlock";
+import MarkdownIt, { type Env } from "markdown-it";
 import { copyText } from "@/components/platform/copy-button";
 import "./markdown.css";
 
@@ -11,18 +20,58 @@ renderer.validateLink = (url) =>
 
 const codeBlock = (content: string, language: string) =>
   `<div class="markdown-code-block"><div class="markdown-code-toolbar"><span>${renderer.utils.escapeHtml(language)}</span><button type="button" data-code-copy aria-label="复制代码">复制代码</button></div><pre tabindex="0" aria-label="代码内容"><code>${renderer.utils.escapeHtml(content)}</code></pre></div>`;
-renderer.renderer.rules.fence = (tokens, index) =>
-  codeBlock(
-    tokens[index]!.content,
-    tokens[index]!.info.trim().split(/\s+/)[0] || "代码",
-  );
-renderer.renderer.rules.code_block = (tokens, index) =>
-  codeBlock(tokens[index]!.content, "代码");
-renderer.renderer.rules.table_open = (tokens, index, options, _env, self) => {
+type RenderEnvironment = Env & {
+  enhanced?: boolean;
+  blocks?: RichBlock[];
+  source?: string;
+};
+function slot(env: RenderEnvironment, block: RichBlock) {
+  const index = env.blocks!.push(block) - 1;
+  const tag = block.kind === "code" ? "div" : "span";
+  return `<${tag} data-md-slot="${index}"></${tag}>`;
+}
+renderer.renderer.rules.fence = (
+  tokens,
+  index,
+  _options,
+  env: RenderEnvironment = {},
+) => {
+  const token = tokens[index]!;
+  const language = token.info.trim().split(/\s+/)[0] || "代码";
+  return env.enhanced
+    ? `<div class="markdown-rich-block">${slot(env, { kind: "code", source: token.content, language })}</div>`
+    : codeBlock(token.content, language);
+};
+renderer.renderer.rules.code_block = (
+  tokens,
+  index,
+  _options,
+  env: RenderEnvironment = {},
+) =>
+  env.enhanced
+    ? `<div class="markdown-rich-block">${slot(env, { kind: "code", source: tokens[index]!.content, language: "代码" })}</div>`
+    : codeBlock(tokens[index]!.content, "代码");
+renderer.renderer.rules.table_open = (
+  tokens,
+  index,
+  options,
+  env: RenderEnvironment = {},
+  self,
+) => {
   tokens[index]!.attrSet("tabindex", "0");
   tokens[index]!.attrSet("aria-label", "Markdown 表格");
-  return self.renderToken(tokens, index, options);
+  const table = self.renderToken(tokens, index, options);
+  if (!env.enhanced) return table;
+  const range = tokens[index]!.map!;
+  const source = env.source!.split("\n").slice(range[0], range[1]).join("\n");
+  return `<div class="markdown-table-block">${slot(env, { kind: "table", source })}<div class="markdown-table-scroll">${table}`;
 };
+renderer.renderer.rules.table_close = (
+  _tokens,
+  _index,
+  _options,
+  env: RenderEnvironment = {},
+) => (env.enhanced ? "</table></div></div>" : "</table>");
 
 export interface DescriptionHeading {
   id: string;
@@ -31,12 +80,14 @@ export interface DescriptionHeading {
 }
 export interface RenderedDescription {
   html: string;
+  blocks?: RichBlock[];
   headings: DescriptionHeading[];
 }
 
 export function parseDescription(
   text: string,
   anchorPrefix = "description",
+  enhanced = false,
 ): RenderedDescription {
   const tokens = renderer.parse(text, {});
   const headings: DescriptionHeading[] = [];
@@ -75,8 +126,14 @@ export function parseDescription(
     token.attrSet("tabindex", "-1");
     headings.push({ id, level: Number(token.tag.slice(1)), text: title });
   });
+  const blocks: RichBlock[] = [];
   return {
-    html: renderer.renderer.render(tokens, renderer.options, {}),
+    blocks,
+    html: renderer.renderer.render(tokens, renderer.options, {
+      enhanced,
+      blocks,
+      source: text,
+    }),
     headings,
   };
 }
@@ -87,16 +144,30 @@ export function Markdown({
   text,
   anchorPrefix,
   rendered,
+  enhanced = false,
 }: {
   text: string;
   anchorPrefix?: string;
   rendered?: RenderedDescription;
+  enhanced?: boolean;
 }) {
   const instance = useId();
   const prefix = anchorPrefix || `description-${instance}`;
   const parsed = useMemo(
-    () => rendered || parseDescription(text, prefix),
-    [text, prefix, rendered],
+    () => rendered || parseDescription(text, prefix, enhanced),
+    [text, prefix, rendered, enhanced],
+  );
+  const [targets, setTargets] = useState<HTMLElement[]>([]);
+  const attach = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (node)
+        setTargets(
+          Array.from(
+            node.querySelectorAll<HTMLElement>("[data-md-slot]"),
+          ).slice(0, parsed.blocks?.length || 0),
+        );
+    },
+    [parsed],
   );
   const [copyStatus, setCopyStatus] = useState("");
   const alive = useRef(true);
@@ -112,6 +183,7 @@ export function Markdown({
   return (
     <>
       <div
+        ref={attach}
         className="markdown-document"
         onClick={(event) => {
           const button = (event.target as Element).closest<HTMLButtonElement>(
@@ -147,6 +219,14 @@ export function Markdown({
         }}
         dangerouslySetInnerHTML={{ __html: parsed.html }}
       />
+      {parsed.blocks?.map(
+        (block, index) =>
+          targets[index] &&
+          createPortal(
+            <MarkdownBlock key={`${index}:${block.source}`} block={block} />,
+            targets[index]!,
+          ),
+      )}
       {copyStatus && (
         <span role="status" className="sr-only">
           {copyStatus}

@@ -216,12 +216,22 @@ export function ProjectDetail({
                       在独立阅读页维护完整 Markdown 文档。
                     </p>
                   </div>
-                  <Button asChild variant="outline">
-                    <Link to={root + "?tab=description"}>
-                      <BookOpen />
-                      阅读介绍
-                    </Link>
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button asChild variant="outline">
+                      <Link to={root + "?tab=description"}>
+                        <BookOpen />
+                        阅读介绍
+                      </Link>
+                    </Button>
+                    {writable && (
+                      <Button asChild variant="outline">
+                        <Link to={root + "?tab=description&edit=1"}>
+                          <Pencil />
+                          编辑介绍
+                        </Link>
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div>
                   <h3 className="font-medium">我的访问权限</h3>

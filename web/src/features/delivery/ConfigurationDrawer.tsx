@@ -174,6 +174,8 @@ export function ConfigurationDrawer({
         editing ? (
           <>
             <Button
+              key="cancel"
+              type="button"
               variant="outline"
               disabled={busy}
               onClick={() =>
@@ -187,9 +189,10 @@ export function ConfigurationDrawer({
                 )
               }
             >
-              取消编辑
+              取消
             </Button>
             <Button
+              key="save"
               form="delivery-configuration"
               type="submit"
               disabled={busy || !writable || blocked}
@@ -199,12 +202,25 @@ export function ConfigurationDrawer({
           </>
         ) : (
           <>
-            <Button variant="outline" onClick={() => close()}>
+            <Button
+              key="close"
+              type="button"
+              variant="outline"
+              onClick={() => close()}
+            >
               关闭
             </Button>
             {writable && (
-              <Button onClick={begin}>
-                {environment ? "编辑环境" : "编辑产品分支"}
+              <Button
+                key="edit"
+                type="button"
+                onClick={(event) => {
+                  // Cancel the original click before mounting the submit control.
+                  event.preventDefault();
+                  begin();
+                }}
+              >
+                编辑
               </Button>
             )}
           </>
