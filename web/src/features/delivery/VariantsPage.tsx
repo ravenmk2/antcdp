@@ -331,7 +331,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
   );
   if (v && view === "releases" && data.releases) {
     return (
-      <section className="variant-page space-y-5">
+      <section aria-label="产品变体" className="variant-page space-y-5">
         {archiveNotice}
         {!data.releases.release && (
           <VariantNavigation
@@ -357,11 +357,11 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
     );
   }
   return (
-    <section className="variant-page space-y-5">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="break-words text-2xl font-semibold">
-            {v ? (
+    <section aria-label="产品变体" className="variant-page space-y-5">
+      {v && (
+        <header className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="break-words text-2xl font-semibold">
               <button
                 className="variant-switch"
                 onClick={() => setSwitch(true)}
@@ -370,27 +370,25 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
                 <span className="min-w-0 break-words">{v.name}</span>
                 <ChevronDown aria-hidden="true" />
               </button>
-            ) : (
-              "产品变体"
+            </h1>
+            {v && (
+              <p className="mt-2 break-all text-[13px] text-muted-foreground">
+                {v.code} · 主干 {v.main_branch} · {v.repository_count} 个仓库
+              </p>
             )}
-          </h1>
-          {v && (
-            <p className="mt-2 break-all text-[13px] text-muted-foreground">
-              {v.code} · 主干 {v.main_branch} · {v.repository_count} 个仓库
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {v ? (
-            <>
-              <Button variant="outline" onClick={() => openVariant(v)}>
-                变体设置
-              </Button>
-              {canManage && v.can_manage && commands(v)}
-            </>
-          ) : null}
-        </div>
-      </header>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {v ? (
+              <>
+                <Button variant="outline" onClick={() => openVariant(v)}>
+                  变体设置
+                </Button>
+                {canManage && v.can_manage && commands(v)}
+              </>
+            ) : null}
+          </div>
+        </header>
+      )}
 
       {archiveNotice}
       {bindingNotice}

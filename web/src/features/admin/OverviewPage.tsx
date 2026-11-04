@@ -14,7 +14,7 @@ import { useIdentity } from "@/app/identity";
 import { useQuery } from "@/lib/use-query";
 import { useDate } from "@/lib/date";
 import { actionLabels, type AuditEvent } from "@/shared/audit";
-import { AsyncState, RefreshButton } from "@/components/platform/feedback";
+import { AsyncState } from "@/components/platform/feedback";
 import { AuditDetail } from "./AuditDetail";
 export const loader = adminLoader;
 interface Overview {
@@ -29,11 +29,10 @@ export function Component() {
     date = useDate();
   const data = query.data;
   return (
-    <section className="max-w-[var(--overview-max-width)] space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">系统概览</h1>
-        <RefreshButton loading={query.loading} onClick={query.refresh} />
-      </div>
+    <section
+      aria-label="系统概览"
+      className="max-w-[var(--overview-max-width)] space-y-6"
+    >
       <AsyncState
         loading={query.loading}
         error={query.error}

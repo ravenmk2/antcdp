@@ -116,20 +116,18 @@ export function ProjectOverview({
       .slice(0, 6) || [];
   const variants = data?.variants.items.slice(0, 4) || [];
   return (
-    <div className="project-overview">
-      <header className="project-overview-heading">
-        <div>
-          <h1 className="text-2xl font-semibold">
-            {archived ? "项目记录" : "当前工作"}
-          </h1>
-          {project.summary && (
-            <p className="mt-2 max-w-3xl break-words text-[13px] text-muted-foreground">
-              {project.summary}
-            </p>
-          )}
-        </div>
-        <RefreshButton loading={query.loading} onClick={query.refresh} />
-      </header>
+    <div
+      className="project-overview"
+      role="region"
+      aria-label={archived ? "项目记录" : "当前工作"}
+    >
+      {project.summary && (
+        <header className="project-overview-heading">
+          <p className="max-w-3xl break-words text-[13px] text-muted-foreground">
+            {project.summary}
+          </p>
+        </header>
+      )}
       <AsyncState
         loading={query.loading}
         error={query.error}
@@ -455,12 +453,9 @@ export function ProjectReleases({
     });
   }
   return (
-    <section className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">发布</h1>
-        </div>
-        {project.can_manage && project.status === "active" && (
+    <section aria-label="发布" className="space-y-5">
+      {project.can_manage && project.status === "active" && (
+        <div className="flex justify-end">
           <Button
             onClick={() =>
               setPicker({
@@ -472,8 +467,8 @@ export function ProjectReleases({
             <Plus />
             创建发布
           </Button>
-        )}
-      </div>
+        </div>
+      )}
       <div className="overflow-hidden rounded-xl border bg-card">
         <div className="list-toolbar">
           <form

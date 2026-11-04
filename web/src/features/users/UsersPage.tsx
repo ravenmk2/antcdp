@@ -194,7 +194,6 @@ export function Component() {
       : "尚无记录";
   return (
     <section aria-label="用户管理" className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">用户管理</h1>
       <ErrorBox>{error}</ErrorBox>
 
       <div className="min-w-0 overflow-hidden rounded-xl border bg-card">

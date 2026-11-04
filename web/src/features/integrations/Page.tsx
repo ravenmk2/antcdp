@@ -148,8 +148,7 @@ function Directory({ data }: { data: Data }) {
     });
   }
   return (
-    <section className="space-y-6">
-      <h1 className="text-2xl font-semibold">{title}</h1>
+    <section aria-label={title} className="space-y-6">
       {!data.admin && (
         <p className="text-sm text-muted-foreground">
           选择一个服务连接，管理

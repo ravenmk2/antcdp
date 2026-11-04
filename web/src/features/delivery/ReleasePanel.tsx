@@ -114,9 +114,11 @@ export function ReleasePanel({
       )}
       {list && (
         <>
-          <header className="release-index-head">
+          <header
+            className="release-index-head"
+            aria-label={`${variant.name}的发布`}
+          >
             <div>
-              <h1>{variant.name}的发布</h1>
               <p>
                 {variant.name} <span>·</span> <code>{variant.main_branch}</code>
               </p>

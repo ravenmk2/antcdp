@@ -34,10 +34,10 @@ export function Component() {
   const security = location.pathname.endsWith("/security");
   return (
     <AccountFrame>
-      <h1 className="text-2xl font-semibold">
-        {security ? "账号安全" : "个人资料"}
-      </h1>
-      <section className="max-w-3xl rounded-xl border bg-card p-5 sm:p-7">
+      <section
+        aria-label={security ? "账号安全" : "个人资料"}
+        className="max-w-3xl rounded-xl border bg-card p-5 sm:p-7"
+      >
         <div className="mb-6 flex items-center gap-4 border-b pb-6">
           {security && (
             <Avatar url={user.avatar?.url} name={user.display_name} large />

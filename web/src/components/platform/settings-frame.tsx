@@ -10,8 +10,7 @@ export function SettingsFrame({
   children: ReactNode;
 }) {
   return (
-    <section className="max-w-6xl space-y-7">
-      <h1 className="text-2xl font-semibold">{title}</h1>
+    <section aria-label={title} className="max-w-6xl space-y-7">
       <div className="grid items-start gap-6 lg:grid-cols-[172px_minmax(0,1fr)]">
         <nav
           aria-label={`${title}分类`}

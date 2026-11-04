@@ -128,86 +128,94 @@ function Content({ data }: { data: Data }) {
     void r.revalidate();
   }
   return (
-    <section className="space-y-5">
-      <div
-        className={
-          id
-            ? "flex flex-wrap items-center justify-between gap-3"
-            : "flex flex-wrap items-center justify-between gap-2 border-b pb-2"
-        }
-      >
-        <h1 className={id ? "break-words text-2xl font-semibold" : "sr-only"}>
-          {title}
-        </h1>
-        {!id && (
-          <nav className="flex flex-wrap gap-1" aria-label="短信功能">
-            {Object.entries(sections).map(([key, name]) => (
-              <Link
-                key={key}
-                to={base + "/" + key}
-                aria-current={section === key ? "page" : undefined}
-                className={
-                  "rounded-md px-3 py-2 text-sm " +
-                  (section === key
-                    ? "bg-accent font-medium"
-                    : "text-muted-foreground hover:bg-muted")
-                }
+    <section aria-label={title} className="space-y-5">
+      {id !== "new" && (
+        <div
+          className={
+            id
+              ? "flex flex-wrap items-center justify-between gap-3"
+              : "flex flex-wrap items-center justify-between gap-2 border-b pb-2"
+          }
+        >
+          <h1
+            className={
+              id && id !== "new"
+                ? "break-words text-2xl font-semibold"
+                : "sr-only"
+            }
+          >
+            {title}
+          </h1>
+          {!id && (
+            <nav className="flex flex-wrap gap-1" aria-label="短信功能">
+              {Object.entries(sections).map(([key, name]) => (
+                <Link
+                  key={key}
+                  to={base + "/" + key}
+                  aria-current={section === key ? "page" : undefined}
+                  className={
+                    "rounded-md px-3 py-2 text-sm " +
+                    (section === key
+                      ? "bg-accent font-medium"
+                      : "text-muted-foreground hover:bg-muted")
+                  }
+                >
+                  {name}
+                </Link>
+              ))}
+            </nav>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {(!id ||
+              profile?.enabled ||
+              (template?.enabled && template.mode === "remote")) && (
+              <Button
+                variant={id ? "default" : "outline"}
+                disabled={dirty}
+                onClick={() => {
+                  setTestProfile(profile?.id);
+                  setTest(true);
+                }}
               >
-                {name}
-              </Link>
-            ))}
-          </nav>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {(!id ||
-            profile?.enabled ||
-            (template?.enabled && template.mode === "remote")) && (
-            <Button
-              variant={id ? "default" : "outline"}
-              disabled={dirty}
-              onClick={() => {
-                setTestProfile(profile?.id);
-                setTest(true);
-              }}
-            >
-              <MessageSquare />
-              发送测试
-            </Button>
-          )}
-          {(profile || template) && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={dirty}
-                  aria-label="短信更多操作"
-                >
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {profile && (
-                  <>
-                    <DropdownMenuItem onSelect={() => setAction("toggle")}>
-                      <Power />
-                      {profile.enabled ? "停用配置" : "启用配置"}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </>
-                )}
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={() => setAction("delete")}
-                >
-                  <Trash2 />
-                  删除{profile ? "配置" : "模板"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
+                <MessageSquare />
+                发送测试
+              </Button>
+            )}
+            {(profile || template) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={dirty}
+                    aria-label="短信更多操作"
+                  >
+                    <MoreHorizontal />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {profile && (
+                    <>
+                      <DropdownMenuItem onSelect={() => setAction("toggle")}>
+                        <Power />
+                        {profile.enabled ? "停用配置" : "启用配置"}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onSelect={() => setAction("delete")}
+                  >
+                    <Trash2 />
+                    删除{profile ? "配置" : "模板"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
         </div>
-      </div>
+      )}
       {!id && (
         <List
           createAction={

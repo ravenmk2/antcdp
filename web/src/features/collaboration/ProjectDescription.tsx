@@ -133,8 +133,7 @@ function DescriptionReader({
   const editLink = descriptionURL(location.pathname, location.search, true);
   if (!project.description.trim()) {
     return (
-      <section>
-        <h1 className="mb-6 text-2xl font-semibold">项目介绍</h1>
+      <section aria-label="项目介绍">
         <EmptyState
           title="尚未填写项目介绍"
           description="在这里记录项目背景、使用方式和开发约定。"
@@ -284,7 +283,7 @@ function DescriptionEditor({
       }}
     >
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">编辑项目介绍</h1>
+        <h1 className="sr-only">编辑项目介绍</h1>
         <div
           className="flex gap-1 rounded-lg bg-muted p-1"
           role="group"

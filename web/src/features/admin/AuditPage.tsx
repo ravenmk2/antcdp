@@ -91,8 +91,7 @@ export function Component() {
     setParams(next);
   }
   return (
-    <section className="space-y-6">
-      <h1 className="text-2xl font-semibold">审计日志</h1>
+    <section aria-label="审计日志" className="space-y-6">
       <div className="min-w-0 overflow-hidden rounded-xl border bg-card">
         <form
           key={reset}

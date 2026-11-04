@@ -132,10 +132,10 @@ export function Repositories({
   const loading = query.loading || term.trim() !== q;
   return (
     <section className="space-y-4" aria-label="项目 Git 仓库">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
-        <div>
-          <h1 className="text-2xl font-semibold">关联仓库</h1>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          查看关联仓库的快照、分支和克隆地址。
+        </p>
         {canManage && (
           <Button
             disabled={
@@ -149,9 +149,6 @@ export function Repositories({
             关联仓库
           </Button>
         )}
-        <p className="col-span-2 text-sm text-muted-foreground">
-          查看关联仓库的快照、分支和克隆地址。
-        </p>
       </div>
       {directory.error && (
         <div>

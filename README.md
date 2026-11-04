@@ -4,8 +4,6 @@
 
 AI Native Team Collaboration & Development Platform
 
-[开发文档](docs/README.md)
-
 ## Quick Start
 
 Prepare an empty MySQL 8.x database (8.0.16 or later) and a database user, then run:

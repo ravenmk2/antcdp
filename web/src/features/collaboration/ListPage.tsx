@@ -103,24 +103,12 @@ function ListContent({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
     });
   }
   return (
-    <section className="space-y-6">
-      <h1 className="text-2xl font-semibold">
-        {data.admin ? `${label}管理` : `我的${label}`}
-      </h1>
-      <div
-        className={
-          data.kind === "projects" && !data.admin
-            ? "space-y-4"
-            : "overflow-hidden rounded-xl border bg-card"
-        }
-      >
-        <div
-          className={
-            data.kind === "projects" && !data.admin
-              ? "flex flex-wrap items-center gap-3"
-              : "list-toolbar"
-          }
-        >
+    <section
+      aria-label={data.admin ? `${label}管理` : `我的${label}`}
+      className="space-y-6"
+    >
+      <div className="overflow-hidden rounded-xl border bg-card">
+        <div className="list-toolbar">
           <form
             className="flex max-w-lg flex-1 gap-2"
             onSubmit={(e) => {
@@ -168,115 +156,73 @@ function ListContent({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
             </Button>
           )}{" "}
         </div>
-        {data.kind === "projects" && !data.admin ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {data.data.items.map((r) => (
-              <article
-                key={r.id}
-                className="group rounded-xl border bg-card p-5 transition-colors hover:border-input"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <ResourceIcon
-                    iconKey={r.icon_key}
-                    fileId={r.icon_file_id}
-                    large
-                  />
-                  <PinButton kind={data.kind} resource={r} />
-                </div>
-                <h2 className="mt-4 text-lg font-medium">
-                  <Link className="hover:underline" to={`${base}/${r.id}`}>
-                    {r.name}
-                  </Link>
-                </h2>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {r.code} ·{" "}
-                  {r.status === "active" ? (
-                    statusLabel(r.status)
-                  ) : (
-                    <StatusText tone="neutral">
-                      {statusLabel(r.status)}
-                    </StatusText>
-                  )}
-                </p>
-                <p className="mt-3 line-clamp-3 min-h-10 text-sm text-muted-foreground">
-                  {r.summary || "尚未填写摘要。"}
-                </p>
-                <div className="mt-6 flex justify-between text-xs text-muted-foreground">
-                  <span>{r.member_count} 位成员</span>
-                  <span>{r.direct_role === "admin" ? "管理员" : "成员"}</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div>
-            <Table aria-label={`${label}列表`}>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{label}</TableHead>
-                  <TableHead>成员</TableHead>
-                  <TableHead>状态</TableHead>
-                  <TableHead>我的身份</TableHead>
-                  <TableHead>操作</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.data.items.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <ResourceIcon
-                          iconKey={r.icon_key}
-                          fileId={r.icon_file_id}
-                          team={data.kind === "teams"}
-                        />
-                        <div>
-                          <Link
-                            to={`${base}/${r.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {r.name}
-                          </Link>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {r.code}
-                          </p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{r.member_count}</TableCell>
-                    <TableCell>
-                      {r.status === "active" ? (
-                        statusLabel(r.status)
-                      ) : (
-                        <StatusText tone="neutral">
-                          {statusLabel(r.status)}
-                        </StatusText>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {r.direct_role === "admin"
-                        ? "管理员"
-                        : r.is_member
-                          ? "成员"
-                          : "未加入"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
+        <div>
+          <Table aria-label={`${label}列表`}>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{label}</TableHead>
+                <TableHead>成员</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead>我的身份</TableHead>
+                <TableHead>操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.data.items.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <ResourceIcon
+                        iconKey={r.icon_key}
+                        fileId={r.icon_file_id}
+                        team={data.kind === "teams"}
+                      />
+                      <div>
                         <Link
                           to={`${base}/${r.id}`}
-                          className="text-sm hover:underline"
+                          className="font-medium hover:underline"
                         >
-                          查看
+                          {r.name}
                         </Link>
-                        <PinButton kind={data.kind} resource={r} />
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {r.code}
+                        </p>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
+                    </div>
+                  </TableCell>
+                  <TableCell>{r.member_count}</TableCell>
+                  <TableCell>
+                    {r.status === "active" ? (
+                      statusLabel(r.status)
+                    ) : (
+                      <StatusText tone="neutral">
+                        {statusLabel(r.status)}
+                      </StatusText>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {r.direct_role === "admin"
+                      ? "管理员"
+                      : r.is_member
+                        ? "成员"
+                        : "未加入"}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`${base}/${r.id}`}
+                        className="text-sm hover:underline"
+                      >
+                        查看
+                      </Link>
+                      <PinButton kind={data.kind} resource={r} />
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
         {!data.data.items.length && (
           <EmptyState
             title={

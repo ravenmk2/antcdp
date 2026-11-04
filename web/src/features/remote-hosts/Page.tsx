@@ -148,16 +148,12 @@ function Directory({ data }: { data: Data }) {
     });
   }
   return (
-    <section className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">
-          {data.admin
-            ? "远程主机"
-            : data.pid
-              ? "项目 SSH 凭证"
-              : "个人 SSH 凭证"}
-        </h1>
-      </div>
+    <section
+      aria-label={
+        data.admin ? "远程主机" : data.pid ? "项目 SSH 凭证" : "个人 SSH 凭证"
+      }
+      className="space-y-5"
+    >
       {!data.admin && (
         <p className="text-sm text-muted-foreground">
           选择主机，管理{data.pid ? `项目「${data.project?.name}」` : "你个人"}
