@@ -21,7 +21,7 @@ export function FormDrawer({
   pending = false,
   onClose,
 }: {
-  size?: "compact" | "wide";
+  size?: "compact" | "form" | "wide";
   title: string;
   description?: string;
   children: ReactNode;
@@ -63,7 +63,9 @@ export function FormDrawer({
           "flex w-full flex-col gap-0 " +
           (size === "compact"
             ? "sm:max-w-[var(--drawer-compact-width)]"
-            : "sm:max-w-[var(--drawer-max-width)]")
+            : size === "form"
+              ? "sm:max-w-[45rem]"
+              : "sm:max-w-[var(--drawer-max-width)]")
         }
         onOpenAutoFocus={() => {
           focus.captureFocus();

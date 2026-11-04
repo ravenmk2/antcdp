@@ -65,6 +65,12 @@ export function ResourceEditor({
     allowed = current
       ? current.can_manage && current.status === "active"
       : session.user.role === "admin";
+  const createProject = kind === "projects" && !resource;
+  const [iconExpanded, setIconExpanded] = useState(false);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const showIcon = !createProject || iconExpanded || !!errors.fields.icon;
+  const showDescription =
+    !createProject || descriptionExpanded || !!errors.fields.description;
   const includeDescription = descriptionOnly || !resource || kind === "teams";
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
   function update<K extends keyof typeof form>(
@@ -143,7 +149,7 @@ export function ResourceEditor({
       icon.current?.saved();
       onSaved(result.data);
     } catch (e) {
-      if (descriptionOnly) setPreview(false);
+      if (descriptionOnly || createProject) setPreview(false);
       errors.show(e, [
         "name",
         "code",
@@ -168,6 +174,7 @@ export function ResourceEditor({
   }
   return (
     <FormDrawer
+      size={createProject ? "form" : "wide"}
       title={
         descriptionOnly
           ? "编辑项目描述"
@@ -176,9 +183,11 @@ export function ResourceEditor({
       description={
         descriptionOnly
           ? `${resource?.name} · Markdown`
-          : includeDescription
-            ? "设置名称、摘要、图标与简介。"
-            : "设置项目名称、摘要与图标。"
+          : createProject
+            ? "填写项目信息并指定管理员。"
+            : includeDescription
+              ? "设置名称、摘要、图标与简介。"
+              : "设置项目名称、摘要与图标。"
       }
       dirty={dirty}
       pending={busy || processing}
@@ -197,7 +206,13 @@ export function ResourceEditor({
             form="resource-editor"
             disabled={busy || processing || blocked || !allowed}
           >
-            {busy ? "正在保存…" : "保存"}
+            {busy
+              ? createProject
+                ? "正在创建…"
+                : "正在保存…"
+              : createProject
+                ? "创建项目"
+                : "保存"}
           </Button>
         </>
       )}
@@ -222,7 +237,11 @@ export function ResourceEditor({
         <fieldset className="space-y-6" disabled={busy || !allowed}>
           {!descriptionOnly && (
             <>
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div
+                className={
+                  createProject ? "grid gap-5" : "grid gap-5 sm:grid-cols-2"
+                }
+              >
                 <Field label="名称" required error={errors.fields.name}>
                   {(props) => (
                     <Input
@@ -233,7 +252,16 @@ export function ResourceEditor({
                     />
                   )}
                 </Field>
-                <Field label="编码" required error={errors.fields.code}>
+                <Field
+                  label="编码"
+                  required
+                  error={errors.fields.code}
+                  hint={
+                    createProject
+                      ? "创建后不可修改。2–64 位字母、数字、_ 或 -，首尾为字母或数字，例如 antcdp-web。"
+                      : undefined
+                  }
+                >
                   {(props) => (
                     <Input
                       {...props}
@@ -244,7 +272,42 @@ export function ResourceEditor({
                   )}
                 </Field>
               </div>
-              <Field label="摘要" error={errors.fields.summary}>
+              {!resource && (
+                <Field
+                  label="初始管理员"
+                  required
+                  error={errors.fields.admin_user_ids}
+                  hint={
+                    createProject
+                      ? "至少选择 1 位管理员，最多 100 位；默认已选择你。"
+                      : undefined
+                  }
+                >
+                  {(props) => (
+                    <OptionPicker
+                      controlProps={props}
+                      path="/admin/collaboration/user-options"
+                      selected={form.admins}
+                      onChange={(v) => update("admins", v)}
+                      disclosureLabel={createProject ? "添加管理员" : undefined}
+                      searchPlaceholder={
+                        createProject ? "搜索姓名或用户名" : undefined
+                      }
+                      multiple
+                      disabled={busy}
+                    />
+                  )}
+                </Field>
+              )}
+              <Field
+                label={createProject ? "项目摘要（选填）" : "摘要"}
+                error={errors.fields.summary}
+                hint={
+                  createProject
+                    ? `一句话介绍项目 · ${Array.from(form.summary).length}/300`
+                    : undefined
+                }
+              >
                 {(props) => (
                   <Textarea
                     {...props}
@@ -255,134 +318,210 @@ export function ResourceEditor({
                 )}
               </Field>
               <section className="space-y-4" aria-label={`${label}图标`}>
-                <h3 className="text-sm font-medium">图标</h3>
-                <div className="flex flex-wrap gap-2">
-                  {["", ...iconKeys].map((key) => (
+                {createProject ? (
+                  <div className="flex items-center justify-between gap-4 border-t pt-5">
+                    <div className="flex items-center gap-3">
+                      <ResourceIcon
+                        iconKey={form.icon}
+                        fileId={form.file || undefined}
+                      />
+                      <h3 className="text-sm font-medium">
+                        项目图标
+                        <span className="ml-1 font-normal text-muted-foreground">
+                          （选填）
+                        </span>
+                      </h3>
+                    </div>
                     <Button
-                      key={key}
                       type="button"
-                      variant={form.icon === key ? "secondary" : "outline"}
+                      variant="outline"
                       size="sm"
-                      aria-pressed={form.icon === key}
-                      onClick={() => {
-                        setForm((f) => ({ ...f, icon: key, file: "" }));
-                        setAvatarKey((k) => k + 1);
-                      }}
+                      disabled={processing}
+                      aria-expanded={showIcon}
+                      aria-invalid={!!errors.fields.icon}
+                      aria-describedby={
+                        errors.fields.icon ? "project-icon-error" : undefined
+                      }
+                      aria-controls="project-icon-options"
+                      onClick={() => setIconExpanded(!showIcon)}
                     >
-                      <ResourceIcon iconKey={key} team={kind === "teams"} />
-                      {key ? iconLabels[key] : "默认"}
+                      {showIcon ? "收起选择" : "更换图标"}
                     </Button>
-                  ))}
-                </div>
-                <AvatarEditor
-                  key={avatarKey}
-                  label="图标"
-                  placeholder={
-                    <ResourceIcon
-                      large
-                      iconKey={form.icon}
-                      team={kind === "teams"}
+                  </div>
+                ) : (
+                  <h3 className="text-sm font-medium">图标</h3>
+                )}
+                <div
+                  id={createProject ? "project-icon-options" : undefined}
+                  hidden={!showIcon}
+                  className="space-y-4"
+                >
+                  <div
+                    className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+                    role="group"
+                    aria-label="内置图标"
+                  >
+                    {["", ...iconKeys].map((key) => (
+                      <Button
+                        key={key}
+                        type="button"
+                        variant={form.icon === key ? "secondary" : "outline"}
+                        className="h-11 justify-start gap-2 px-3"
+                        disabled={processing}
+                        aria-pressed={form.icon === key}
+                        onClick={() => {
+                          setForm((f) => ({ ...f, icon: key, file: "" }));
+                          setAvatarKey((k) => k + 1);
+                        }}
+                      >
+                        <ResourceIcon
+                          navigation
+                          iconKey={key}
+                          team={kind === "teams"}
+                        />
+                        {key ? iconLabels[key] : "默认"}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="border-t pt-4">
+                    <AvatarEditor
+                      compact={createProject}
+                      key={avatarKey}
+                      label="图标"
+                      placeholder={
+                        <ResourceIcon
+                          large
+                          iconKey={form.icon}
+                          team={kind === "teams"}
+                        />
+                      }
+                      uploadPath="/icon-uploads"
+                      value={
+                        form.file === initial.file
+                          ? undefined
+                          : form.file || null
+                      }
+                      ref={icon}
+                      avatar={
+                        form.icon === "upload" && form.file
+                          ? { url: `/api/v1/icons/${form.file}` }
+                          : null
+                      }
+                      disabled={busy || !allowed}
+                      onProcessing={setProcessing}
+                      onChange={(id) =>
+                        setForm((f) => ({
+                          ...f,
+                          icon: id ? "upload" : "",
+                          file: id || "",
+                        }))
+                      }
                     />
-                  }
-                  uploadPath="/icon-uploads"
-                  value={
-                    form.file === initial.file ? undefined : form.file || null
-                  }
-                  ref={icon}
-                  avatar={
-                    form.icon === "upload" && form.file
-                      ? { url: `/api/v1/icons/${form.file}` }
-                      : null
-                  }
-                  disabled={busy || !allowed}
-                  onProcessing={setProcessing}
-                  onChange={(id) =>
-                    setForm((f) => ({
-                      ...f,
-                      icon: id ? "upload" : "",
-                      file: id || "",
-                    }))
-                  }
-                />
-                <ErrorBox>{errors.fields.icon}</ErrorBox>
+                  </div>
+                  <div id={createProject ? "project-icon-error" : undefined}>
+                    <ErrorBox>{errors.fields.icon}</ErrorBox>
+                  </div>
+                </div>
               </section>
-              {!resource && (
+            </>
+          )}
+          {createProject && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="h-auto w-full justify-between border-t rounded-none px-0 py-4"
+              aria-expanded={showDescription}
+              aria-controls="project-description-options"
+              onClick={() => setDescriptionExpanded(!showDescription)}
+            >
+              <span>
+                项目描述
+                <span className="ml-1 font-normal text-muted-foreground">
+                  （选填）
+                </span>
+              </span>
+              <span className="text-[13px] font-normal text-muted-foreground">
+                {showDescription
+                  ? "收起描述"
+                  : form.description
+                    ? "已填写 · 展开"
+                    : "可创建后补充 · 展开"}
+              </span>
+            </Button>
+          )}
+          <div
+            id={createProject ? "project-description-options" : undefined}
+            hidden={!showDescription}
+            className="space-y-4"
+          >
+            {(descriptionOnly || createProject) && (
+              <div
+                className="flex gap-1"
+                role="group"
+                aria-label="描述编辑模式"
+              >
+                <Button
+                  size="sm"
+                  type="button"
+                  variant={preview ? "ghost" : "secondary"}
+                  aria-pressed={!preview}
+                  onClick={() => setPreview(false)}
+                >
+                  编辑
+                </Button>
+                <Button
+                  size="sm"
+                  type="button"
+                  variant={preview ? "secondary" : "ghost"}
+                  aria-pressed={preview}
+                  onClick={() => setPreview(true)}
+                >
+                  预览
+                </Button>
+              </div>
+            )}
+            {includeDescription &&
+              (!(descriptionOnly || createProject) || !preview) && (
                 <Field
-                  label="初始管理员"
-                  required
-                  error={errors.fields.admin_user_ids}
+                  label={descriptionOnly || createProject ? "项目描述" : "简介"}
+                  error={errors.fields.description}
+                  hint="支持 Markdown，不支持 HTML 或嵌入图片。"
                 >
                   {(props) => (
-                    <OptionPicker
-                      controlProps={props}
-                      path="/admin/collaboration/user-options"
-                      selected={form.admins}
-                      onChange={(v) => update("admins", v)}
-                      multiple
-                      disabled={busy}
+                    <Textarea
+                      {...props}
+                      rows={descriptionOnly ? 16 : 8}
+                      value={form.description}
+                      onChange={(e) => update("description", e.target.value)}
                     />
                   )}
                 </Field>
               )}
-            </>
-          )}
-          {descriptionOnly && (
-            <div className="flex gap-1" role="group" aria-label="描述编辑模式">
+            {includeDescription && !descriptionOnly && !createProject && (
               <Button
-                size="sm"
                 type="button"
-                variant={preview ? "ghost" : "secondary"}
-                aria-pressed={!preview}
-                onClick={() => setPreview(false)}
+                variant="outline"
+                aria-expanded={preview}
+                onClick={() => setPreview((v) => !v)}
               >
-                编辑
+                {preview ? "收起预览" : "预览简介"}
               </Button>
-              <Button
-                size="sm"
-                type="button"
-                variant={preview ? "secondary" : "ghost"}
-                aria-pressed={preview}
-                onClick={() => setPreview(true)}
-              >
-                预览
-              </Button>
-            </div>
-          )}
-          {includeDescription && (!descriptionOnly || !preview) && (
-            <Field
-              label={descriptionOnly ? "项目描述" : "简介"}
-              error={errors.fields.description}
-              hint="支持 Markdown，不支持 HTML 或嵌入图片。"
-            >
-              {(props) => (
-                <Textarea
-                  {...props}
-                  rows={descriptionOnly ? 16 : 8}
-                  value={form.description}
-                  onChange={(e) => update("description", e.target.value)}
+            )}
+            {preview && (
+              <div className="rounded-lg border p-5">
+                <Markdown
+                  text={
+                    form.description ||
+                    (descriptionOnly
+                      ? ""
+                      : createProject
+                        ? "尚未填写项目描述。"
+                        : "尚未填写简介。")
+                  }
                 />
-              )}
-            </Field>
-          )}
-          {includeDescription && !descriptionOnly && (
-            <Button
-              type="button"
-              variant="outline"
-              aria-expanded={preview}
-              onClick={() => setPreview((v) => !v)}
-            >
-              {preview ? "收起预览" : "预览简介"}
-            </Button>
-          )}
-          {preview && (
-            <div className="rounded-lg border p-5">
-              <Markdown
-                text={
-                  form.description || (descriptionOnly ? "" : "尚未填写简介。")
-                }
-              />
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </fieldset>
       </form>
     </FormDrawer>

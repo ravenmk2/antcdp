@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -25,6 +26,7 @@ export function AvatarEditor({
   uploadPath = "/avatar-uploads",
   label = "头像",
   placeholder,
+  compact = false,
 }: {
   avatar?: { url: string } | null;
   value?: string | null;
@@ -35,6 +37,7 @@ export function AvatarEditor({
   uploadPath?: string;
   label?: string;
   placeholder?: ReactNode;
+  compact?: boolean;
 }) {
   const [draft, setDraft] = useState<Draft>();
   const staged = useRef<Draft | undefined>(undefined);
@@ -76,40 +79,42 @@ export function AvatarEditor({
   useEffect(() => {
     onProcessing(busy || !!source);
   }, [busy, source, onProcessing]);
-  useEffect(() => {
-    if (!source || !canvas.current) return;
-    const sideways = crop.angle % 180 !== 0;
-    const w = sideways ? source.naturalHeight : source.naturalWidth;
-    const h = sideways ? source.naturalWidth : source.naturalHeight;
-    const scale = Math.max(320 / w, 320 / h) * crop.zoom;
-    const bx = Math.max(0, (w * scale - 320) / 2),
-      by = Math.max(0, (h * scale - 320) / 2);
-    const x = Math.max(-bx, Math.min(bx, crop.x)),
-      y = Math.max(-by, Math.min(by, crop.y));
-    position.current = { x, y };
-    const ctx = canvas.current.getContext("2d")!;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, 640, 640);
-    ctx.setTransform(2, 0, 0, 2, 0, 0);
-    ctx.translate(160 + x, 160 + y);
-    ctx.rotate((crop.angle * Math.PI) / 180);
-    ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(
-      source,
-      (-source.naturalWidth * scale) / 2,
-      (-source.naturalHeight * scale) / 2,
-      source.naturalWidth * scale,
-      source.naturalHeight * scale,
-    );
-  }, [source, crop]);
+  const drawCanvas = useCallback(
+    (element: HTMLCanvasElement | null) => {
+      canvas.current = element;
+      if (!source || !element) return;
+      const sideways = crop.angle % 180 !== 0;
+      const w = sideways ? source.naturalHeight : source.naturalWidth;
+      const h = sideways ? source.naturalWidth : source.naturalHeight;
+      const scale = Math.max(320 / w, 320 / h) * crop.zoom;
+      const bx = Math.max(0, (w * scale - 320) / 2),
+        by = Math.max(0, (h * scale - 320) / 2);
+      const x = Math.max(-bx, Math.min(bx, crop.x)),
+        y = Math.max(-by, Math.min(by, crop.y));
+      position.current = { x, y };
+      const ctx = element.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, 640, 640);
+      ctx.setTransform(2, 0, 0, 2, 0, 0);
+      ctx.translate(160 + x, 160 + y);
+      ctx.rotate((crop.angle * Math.PI) / 180);
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(
+        source,
+        (-source.naturalWidth * scale) / 2,
+        (-source.naturalHeight * scale) / 2,
+        source.naturalWidth * scale,
+        source.naturalHeight * scale,
+      );
+    },
+    [source, crop],
+  );
   async function choose(file?: File) {
     if (!file || disabled || locked.current) return;
     setError("");
-    if (
-      !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
-      file.size > 2 * 1024 * 1024
-    ) {
-      setError("请选择不超过 2 MB 的 JPG、PNG 或 WebP 图片。");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("请选择 JPG、PNG 或 WebP 图片。");
       return;
     }
     const token = ++generation.current;
@@ -120,13 +125,7 @@ export function AvatarEditor({
       const img = new Image();
       img.src = url;
       await img.decode();
-      if (
-        !img.naturalWidth ||
-        !img.naturalHeight ||
-        img.naturalWidth > 4096 ||
-        img.naturalHeight > 4096
-      )
-        throw Error("dimensions");
+      if (!img.naturalWidth || !img.naturalHeight) throw Error("dimensions");
       if (!mounted.current || token !== generation.current) {
         URL.revokeObjectURL(url);
         return;
@@ -138,7 +137,7 @@ export function AvatarEditor({
     } catch {
       URL.revokeObjectURL(url);
       if (mounted.current)
-        setError("图片无法读取或尺寸超过 4096 × 4096，请重新选择。");
+        setError("图片无法解码，请重新选择有效的 JPG、PNG 或 WebP 图片。");
     } finally {
       locked.current = false;
       if (mounted.current) setBusy(false);
@@ -166,6 +165,10 @@ export function AvatarEditor({
           "image/png",
         ),
       );
+      if (blob.size > 2 * 1024 * 1024) {
+        setError("裁剪后的图片超过 2 MiB，请重新裁剪或选择其他图片。");
+        return;
+      }
       const body = new FormData();
       body.append("file", blob, "avatar.png");
       const r = await request<Draft>(uploadPath, { method: "POST", body });
@@ -196,11 +199,12 @@ export function AvatarEditor({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-4">
-        {!preview && placeholder ? (
-          placeholder
-        ) : (
-          <Avatar large name={`${label}预览`} url={preview} />
-        )}
+        {!compact &&
+          (!preview && placeholder ? (
+            placeholder
+          ) : (
+            <Avatar large name={`${label}预览`} url={preview} />
+          ))}
         <div className="space-y-2">
           <div className="flex gap-2">
             <Button
@@ -210,24 +214,26 @@ export function AvatarEditor({
               onClick={() => fileInput.current?.click()}
             >
               <Upload />
-              选择{label}
+              {compact ? "上传图片" : `选择${label}`}
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={disabled || busy || !preview}
-              onClick={() => {
-                void discard(staged.current);
-                staged.current = undefined;
-                setDraft(undefined);
-                onChange(null);
-              }}
-            >
-              移除
-            </Button>
+            {(!compact || preview) && (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={disabled || busy || !preview}
+                onClick={() => {
+                  void discard(staged.current);
+                  staged.current = undefined;
+                  setDraft(undefined);
+                  onChange(null);
+                }}
+              >
+                移除
+              </Button>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground">
-            JPG、PNG 或 WebP，最大 2 MB；保存资料后生效。
+          <p className="text-[13px] text-muted-foreground">
+            JPG、PNG 或 WebP；原图在本地裁剪为 256 × 256，处理后最多 2 MiB。
           </p>
         </div>
       </div>
@@ -269,7 +275,7 @@ export function AvatarEditor({
       >
         <ErrorBox>{error}</ErrorBox>
         <canvas
-          ref={canvas}
+          ref={drawCanvas}
           width={640}
           height={640}
           tabIndex={0}

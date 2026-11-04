@@ -138,7 +138,7 @@ export function Shell() {
   const nav = (compact: boolean, mobile = false) => (
     <div className="flex h-full flex-col">
       <div
-        className={`mb-5 flex min-h-12 items-center gap-1 ${compact ? "justify-center" : "justify-between"}`}
+        className={`mb-4 flex min-h-12 items-center gap-1 ${compact ? "justify-center" : "justify-between"}`}
       >
         {!compact && (
           <Link
@@ -252,7 +252,7 @@ export function Shell() {
               },
             ]
         ).map((group, index) => (
-          <div key={group.label} className={index ? "mt-4 border-t pt-3" : ""}>
+          <div key={group.label} className={index ? "mt-3 border-t pt-2" : ""}>
             {consoleMode && index > 0 && (
               <p
                 className={
@@ -272,9 +272,11 @@ export function Shell() {
                 aria-label={label}
                 end={"end" in item && item.end}
                 onClick={() => setMenu(false)}
-                className={`sidebar-link flex min-h-12 items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${compact ? "justify-center" : ""}`}
+                className={`sidebar-link flex min-h-10 items-center gap-2 rounded-[6px] px-3 py-2 text-sm leading-5 ${compact ? "justify-center" : ""}`}
               >
-                <Icon className="size-[19px] shrink-0" />
+                <span className="flex size-5 shrink-0 items-center justify-center">
+                  <Icon className="size-[18px]" />
+                </span>
                 {!compact && label}
               </NavLink>
             ))}

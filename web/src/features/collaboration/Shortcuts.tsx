@@ -155,7 +155,7 @@ export function ShortcutGroups({
 }) {
   const store = useShortcuts();
   return (
-    <div className="my-6 max-h-[42dvh] space-y-5 overflow-y-auto">
+    <div className="my-3 max-h-[42dvh] space-y-3 overflow-y-auto">
       {kinds.map((kind) => (
         <section
           key={kind}
@@ -172,7 +172,7 @@ export function ShortcutGroups({
               className={
                 compact
                   ? "sr-only"
-                  : "text-sm font-medium text-muted-foreground"
+                  : "text-[13px] font-medium text-muted-foreground"
               }
             >
               {kind === "projects" ? "关注项目" : "固定团队"}
@@ -209,9 +209,10 @@ export function ShortcutGroups({
               aria-label={r.name}
               title={r.name}
               onClick={onNavigate}
-              className="sidebar-link flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm"
+              className={`sidebar-link flex min-h-10 items-center gap-2 rounded-[6px] px-3 py-2 text-sm leading-5 ${compact ? "justify-center" : ""}`}
             >
               <ResourceIcon
+                navigation
                 iconKey={r.icon_key}
                 fileId={r.icon_file_id}
                 team={kind === "teams"}

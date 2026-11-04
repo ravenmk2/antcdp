@@ -5,11 +5,13 @@ export function ResourceIcon({
   fileId,
   team = false,
   large = false,
+  navigation = false,
 }: {
   iconKey?: string | null;
   fileId?: string | null;
   team?: boolean;
   large?: boolean;
+  navigation?: boolean;
 }) {
   const icons: Record<string, typeof Folder> = {
     folder: Folder,
@@ -24,8 +26,12 @@ export function ResourceIcon({
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground",
-        large ? "size-12" : "size-8",
+        "inline-flex shrink-0 items-center justify-center overflow-hidden text-muted-foreground",
+        navigation
+          ? "size-5 rounded"
+          : large
+            ? "size-12 rounded-lg bg-muted"
+            : "size-8 rounded-lg bg-muted",
       )}
       aria-hidden="true"
     >
@@ -36,7 +42,9 @@ export function ResourceIcon({
           className="size-full object-cover"
         />
       ) : (
-        <Icon className={large ? "size-6" : "size-4"} />
+        <Icon
+          className={navigation ? "size-[18px]" : large ? "size-6" : "size-4"}
+        />
       )}
     </span>
   );
