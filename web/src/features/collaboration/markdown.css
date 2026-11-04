@@ -1,0 +1,225 @@
+.markdown-document {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  line-height: 1.8;
+}
+.markdown-document > :first-child {
+  margin-top: 0;
+}
+.markdown-document > :last-child {
+  margin-bottom: 0;
+}
+.markdown-document p,
+.markdown-document ul,
+.markdown-document ol,
+.markdown-document blockquote,
+.markdown-document table,
+.markdown-document .markdown-code-block {
+  margin-block: 1em;
+}
+.markdown-document :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 600;
+  line-height: 1.45;
+  margin-block: 1.75em 0.65em;
+  scroll-margin-top: 1.5rem;
+}
+.markdown-document h1 {
+  font-size: 1.875rem;
+}
+.markdown-document h2 {
+  font-size: 1.5rem;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--border);
+}
+.markdown-document h3 {
+  font-size: 1.25rem;
+}
+.markdown-document :is(h4, h5, h6) {
+  font-size: 1.0625rem;
+}
+.markdown-document :is(ul, ol) {
+  padding-left: 1.6em;
+}
+.markdown-document ul {
+  list-style: disc;
+}
+.markdown-document ol {
+  list-style: decimal;
+}
+.markdown-document li + li {
+  margin-top: 0.3em;
+}
+.markdown-document li :is(ul, ol) {
+  margin-block: 0.35em;
+}
+.markdown-document a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.markdown-document a:hover {
+  color: var(--muted-foreground);
+}
+.markdown-document blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1.2em;
+  color: var(--muted-foreground);
+}
+.markdown-document blockquote > :first-child {
+  margin-top: 0;
+}
+.markdown-document blockquote > :last-child {
+  margin-bottom: 0;
+}
+.markdown-document hr {
+  margin-block: 2em;
+  border-color: var(--border);
+}
+.markdown-document code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.875em;
+}
+.markdown-document :not(pre) > code {
+  background: var(--muted);
+  border-radius: 0.25rem;
+  padding: 0.15em 0.35em;
+}
+.markdown-code-block {
+  overflow: hidden;
+  border-radius: 0.625rem;
+  background: var(--muted);
+}
+.markdown-code-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+.markdown-code-toolbar button {
+  border-radius: 0.25rem;
+  padding: 0.25rem 0.4rem;
+}
+.markdown-code-toolbar button:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.markdown-document pre {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 0;
+  padding: 1rem;
+  font-size: 0.875rem;
+  line-height: 1.65;
+}
+.markdown-document pre code {
+  font-size: inherit;
+  white-space: pre;
+}
+.markdown-document :is(pre, table):focus-visible {
+  outline-offset: -2px;
+}
+.markdown-document table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.markdown-document :is(th, td) {
+  border: 1px solid var(--border);
+  padding: 0.65rem 0.9rem;
+  min-width: 7rem;
+  text-align: left;
+  vertical-align: top;
+}
+.markdown-document th {
+  background: var(--muted);
+  font-weight: 500;
+}
+.project-reading.project-reading-no-toc {
+  grid-template-columns: minmax(0, 54rem);
+  max-width: 54rem;
+}
+.project-description-reader {
+  max-width: 72rem;
+  min-width: 0;
+}
+.project-description-tools {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.project-description-editor {
+  --editor-pane-height: clamp(22rem, calc(100dvh - 23rem), 54rem);
+  min-width: 0;
+}
+.project-description-editor .project-document-editor textarea {
+  height: var(--editor-pane-height);
+  min-height: var(--editor-pane-height);
+  max-width: 100%;
+}
+.project-description-editor .project-document-editor > * {
+  min-width: 0;
+}
+.project-description-preview {
+  max-height: var(--editor-pane-height);
+  overflow-y: auto;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  background: var(--card);
+}
+.project-description-preview .markdown-document {
+  max-width: 54rem;
+}
+.project-description-editor
+  .project-document-editor[data-mode="preview"]
+  .project-description-preview {
+  max-height: none;
+  max-width: 54rem;
+  width: 100%;
+}
+.project-description-review {
+  margin-block: 1.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.625rem;
+  background: var(--card);
+}
+.project-description-review details {
+  margin-top: 1rem;
+}
+.project-description-review summary {
+  font-weight: 500;
+}
+.project-description-review .markdown-document {
+  margin-top: 1rem;
+  max-height: 24rem;
+  overflow-y: auto;
+}
+.project-description-editor .project-editor-actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.project-description-editor .project-editor-actions > span {
+  margin-right: auto;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+}
+@media (max-width: 800px) {
+  .project-description-editor {
+    --editor-pane-height: 26rem;
+  }
+  .markdown-document h1 {
+    font-size: 1.625rem;
+  }
+  .project-description-tools {
+    justify-content: flex-start;
+  }
+}

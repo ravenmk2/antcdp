@@ -1,0 +1,266 @@
+.release-changes-workspace {
+  container: release-changes / inline-size;
+  min-width: 0;
+}
+.release-baseline-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.15rem 0.65rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--muted);
+  font-size: 0.82rem;
+}
+.release-change-filters {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.5fr) minmax(9rem, 1fr) minmax(
+      9rem,
+      1fr
+    );
+  gap: 0.6rem;
+}
+.release-change-count {
+  color: var(--muted-foreground);
+  font-size: 0.76rem;
+  margin: 0.8rem 0 0.35rem;
+}
+.release-changes-list,
+.release-scope-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.release-change-item,
+.release-scope-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.8rem;
+  align-items: start;
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.release-change-main,
+.release-scope-repo {
+  min-width: 0;
+}
+.release-change-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.release-change-title strong {
+  font-weight: 560;
+}
+.release-change-kind {
+  font-size: 0.76rem;
+  color: var(--muted-foreground);
+  flex: none;
+}
+.release-change-context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.65rem;
+  font-size: 0.76rem;
+  color: var(--muted-foreground);
+  margin-top: 0.3rem;
+  overflow-wrap: anywhere;
+}
+.release-change-state {
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  padding: 0.2rem 0.5rem;
+  background: var(--muted);
+  border-radius: 0.3rem;
+  white-space: nowrap;
+}
+.release-change-state[data-state="revert_pending"] {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.release-change-item[data-history] .release-change-title {
+  color: var(--muted-foreground);
+}
+.release-change-detail {
+  margin-top: 0.5rem;
+  font-size: 0.76rem;
+  color: var(--muted-foreground);
+}
+.release-change-detail summary {
+  width: fit-content;
+  cursor: pointer;
+  padding: 0.2rem 0;
+}
+.release-change-detail :is(p, dl) {
+  margin-top: 0.45rem;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+.release-change-detail dl > div {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: 0.6rem;
+}
+.release-scope {
+  margin-top: 1.4rem;
+  border-top: 1px solid var(--border);
+  scroll-margin-top: 1rem;
+}
+.release-scope-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 1rem 0;
+  text-align: left;
+  font-size: 0.86rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+.release-scope-toggle > svg {
+  flex: none;
+  width: 0.95rem;
+  height: 0.95rem;
+  transform: rotate(-90deg);
+}
+.release-scope-toggle[aria-expanded="true"] > svg {
+  transform: none;
+}
+.release-scope-toggle small {
+  margin-left: auto;
+  color: var(--muted-foreground);
+  font-size: 0.74rem;
+  font-weight: normal;
+}
+.release-scope-content > .release-section-heading {
+  align-items: start;
+  margin-bottom: 0.7rem;
+}
+.release-scope-content > .release-section-heading p {
+  flex: 1 1 16rem;
+}
+.release-scope-repo > strong {
+  display: flex;
+  align-items: start;
+  gap: 0.4rem;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.release-scope-repo > strong svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: none;
+  margin-top: 0.2rem;
+  color: var(--muted-foreground);
+}
+.release-scope-repo > span {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+.release-scope-baseline {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  padding-top: 0.3rem;
+}
+.release-scope-baseline[data-missing] {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.release-mr-candidates {
+  display: grid;
+  gap: 0.5rem;
+}
+.release-mr-candidates h3 {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.release-mr-options {
+  display: grid;
+  gap: 0.5rem;
+  max-height: 23rem;
+  overflow-y: auto;
+  padding: 0.2rem;
+}
+.release-mr-option {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--card);
+  text-align: left;
+  font-size: 0.85rem;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.release-mr-option:hover,
+.release-mr-option[aria-pressed="true"] {
+  background: var(--muted);
+}
+.release-mr-option[aria-pressed="true"] {
+  border-color: var(--foreground);
+}
+.release-mr-option > span {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+}
+.release-mr-option b {
+  flex: none;
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+}
+.release-mr-option strong {
+  font-weight: 550;
+}
+.release-mr-option small,
+.release-mr-hint {
+  font-size: 0.77rem;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}
+.release-mr-option:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+@container release-changes (max-width: 42rem) {
+  .release-change-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .release-change-filters > input {
+    grid-column: 1 / -1;
+  }
+  .release-change-item,
+  .release-scope-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+  }
+  .release-change-item > .release-actions,
+  .release-scope-item > .release-actions {
+    grid-column: 1 / -1;
+  }
+  .release-change-item > .release-actions:empty,
+  .release-scope-item > .release-actions:empty {
+    display: none;
+  }
+}
+@container release-changes (max-width: 25rem) {
+  .release-change-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .release-scope-toggle {
+    flex-wrap: wrap;
+  }
+  .release-scope-toggle small {
+    margin-left: 1.55rem;
+  }
+}

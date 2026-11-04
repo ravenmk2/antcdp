@@ -1,0 +1,293 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-control-border: var(--control-border);
+  --color-field-focus: var(--field-focus);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  color-scheme: light;
+  --background: #faf9f6;
+  --foreground: #252420;
+  --card: #fff;
+  --popover: #fff;
+  --primary: #292823;
+  --primary-foreground: #faf9f6;
+  --secondary: #efeee9;
+  --muted: #f3f2ee;
+  --muted-foreground: #58574f;
+  --accent: #eeece6;
+  --destructive: #af3737;
+  --border: #e3e1d9;
+  --control-border: #cbc8bf;
+  --control-border-hover: #a6a193;
+  --input: var(--control-border);
+  --field-focus: #403d35;
+  --ring: #625c50;
+  --radius: 0.625rem;
+  --control-height: 2.5rem;
+  --dialog-max-width: 42rem;
+  --drawer-max-width: 60rem;
+  --drawer-compact-width: 38rem;
+  --content-max-width: 100rem;
+  --overview-max-width: 85rem;
+  --form-max-width: 70rem;
+  --sidebar: #f0eee7;
+  --brand: #d97757;
+  --success: #397056;
+  --warning: #82601c;
+  --info: #366389;
+}
+.dark {
+  color-scheme: dark;
+  --background: #171715;
+  --foreground: #efeee9;
+  --card: #1e1e1b;
+  --popover: #2a2a26;
+  --primary: #efeee9;
+  --primary-foreground: #20201d;
+  --secondary: #2b2b26;
+  --muted: #252521;
+  --muted-foreground: #aaa79c;
+  --accent: #30302b;
+  --destructive: #f09d97;
+  --border: #3c3b34;
+  --control-border: #56544d;
+  --control-border-hover: #79766b;
+  --input: var(--control-border);
+  --field-focus: #c4bfb2;
+  --ring: #c4bfb2;
+  --sidebar: #11110f;
+  --success: #9bc5a5;
+  --warning: #d9bc7f;
+  --info: #9bc2e5;
+}
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply m-0 bg-background text-foreground antialiased;
+    font-family: MiSans, "Segoe UI", "Microsoft YaHei UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+  button:not(:disabled),
+  a {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+  textarea:focus-visible,
+  select:focus-visible,
+  [data-slot="select-trigger"]:focus-visible {
+    outline: none;
+    border-color: var(--field-focus);
+    box-shadow: none;
+  }
+  :is(
+      input,
+      textarea,
+      select,
+      [data-slot="select-trigger"]
+    )[aria-invalid="true"]:focus-visible {
+    border-color: var(--destructive);
+  }
+  input,
+  textarea,
+  select {
+    min-width: 0;
+  }
+  a {
+    text-underline-offset: 4px;
+  }
+  @media (forced-colors: none) {
+    :is(input, textarea):is(:autofill, :-webkit-autofill) {
+      /* Clip the browser's autofill paint so transparent fields stay transparent. */
+      background-clip: text;
+      -webkit-text-fill-color: var(--foreground);
+      caret-color: var(--foreground);
+    }
+    input:is(:autofill, :-webkit-autofill) {
+      box-shadow: inset 0 0 0 100vmax var(--card);
+    }
+    input:is(:autofill, :-webkit-autofill):read-only {
+      box-shadow: inset 0 0 0 100vmax
+        color-mix(in srgb, var(--muted) 60%, transparent);
+      -webkit-text-fill-color: var(--muted-foreground);
+      caret-color: var(--muted-foreground);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  @media (forced-colors: active) {
+    :focus-visible,
+    input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+    textarea:focus-visible,
+    select:focus-visible,
+    [data-slot="select-trigger"]:focus-visible {
+      outline: 2px solid Highlight;
+      outline-offset: 2px;
+    }
+  }
+}
+
+/* Fields and outlined actions share a quiet default border. Interaction states
+   are defined together so hover cannot wash out focus or validation feedback. */
+:where(
+    [data-slot="input"],
+    [data-slot="textarea"],
+    [data-slot="native-select"],
+    [data-slot="select-trigger"],
+    [data-slot="button"][data-variant="outline"]
+  ):where(
+    :not(:disabled):not([aria-disabled="true"]):not([readonly]):not(
+        [aria-invalid="true"]
+      )
+  ):hover {
+  border-color: var(--control-border-hover);
+}
+:where(
+    [data-slot="input"],
+    [data-slot="textarea"],
+    [data-slot="native-select"],
+    [data-slot="select-trigger"]
+  ):where(
+    :not(:disabled):not([aria-disabled="true"]):not([aria-invalid="true"])
+  ):is(:focus, [data-state="open"]) {
+  border-color: var(--field-focus);
+}
+@media (forced-colors: active) {
+  :root,
+  .dark {
+    --control-border: ButtonBorder;
+    --control-border-hover: Highlight;
+    --field-focus: Highlight;
+  }
+  :where(
+    [data-slot="input"],
+    [data-slot="textarea"],
+    [data-slot="native-select"],
+    [data-slot="select-trigger"],
+    [data-slot="button"][data-variant="outline"]
+  ):is(:disabled, [aria-disabled="true"]) {
+    border-color: GrayText;
+  }
+}
+
+[data-feedback-tone="success"] {
+  background-color: light-dark(#e6f4ec, #213c30);
+  border-color: light-dark(#a3cdb5, #427157);
+  color: light-dark(#20553b, #b3e4c6);
+}
+[data-feedback-tone="info"] {
+  background-color: light-dark(#e5f1f9, #233746);
+  border-color: light-dark(#a4c6de, #44637b);
+  color: light-dark(#254d70, #b7d9f1);
+}
+[data-feedback-tone="warning"] {
+  background-color: light-dark(#faf0d9, #403521);
+  border-color: light-dark(#d9bc79, #78603a);
+  color: light-dark(#694b0b, #eed396);
+}
+[data-feedback-tone="danger"] {
+  background-color: light-dark(#faeae7, #462d2c);
+  border-color: light-dark(#ddaca5, #805755);
+  color: light-dark(#862f2b, #f4c0ba);
+}
+@media (forced-colors: active) {
+  [data-feedback-tone] {
+    border-color: CanvasText;
+  }
+}
+
+.account-popup [role="menuitem"] {
+  min-height: 2.75rem;
+  font-size: 0.875rem;
+  gap: 0.75rem;
+  padding-inline: 0.75rem;
+}
+
+.list-toolbar {
+  @apply flex min-w-0 flex-wrap items-center gap-2.5 border-b px-4 py-3;
+}
+
+.sidebar-link,
+.sidebar-account {
+  position: relative;
+  transition: background-color 120ms;
+}
+.sidebar-link:hover,
+.sidebar-account:hover,
+.sidebar-account[data-state="open"] {
+  background-color: color-mix(in srgb, var(--foreground) 5%, var(--sidebar));
+}
+.sidebar-link[aria-current="page"] {
+  background-color: color-mix(in srgb, var(--foreground) 9%, var(--sidebar));
+  font-weight: 500;
+}
+@media (forced-colors: active) {
+  .sidebar-link[aria-current="page"] {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+}
+select:not([multiple]):not([size]) {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236e706c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+  background-position: right 0.65rem center;
+  background-repeat: no-repeat;
+  padding-inline-end: 2rem;
+}
+.dark select:not([multiple]):not([size]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23adafa8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+}
+@media (forced-colors: active) {
+  select:not([multiple]):not([size]),
+  .dark select:not([multiple]):not([size]) {
+    appearance: auto;
+    background-image: none;
+    padding-inline-end: 0.5rem;
+  }
+}

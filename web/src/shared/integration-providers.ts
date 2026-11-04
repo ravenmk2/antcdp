@@ -1,0 +1,239 @@
+export interface ProviderField {
+  key: string;
+  label: string;
+  type?: "text" | "textarea" | "password";
+  limit?: number;
+  placeholder?: string;
+  help?: string;
+  options?: { value: string; label: string }[];
+}
+export interface ServiceUI {
+  authMethod: string;
+  authLabel: string;
+  connectionFields: ProviderField[];
+  identityFields: ProviderField[];
+  secretFields: ProviderField[];
+  connectionBody(values: Record<string, string>): Record<string, unknown>;
+  identityBody(values: Record<string, string>): Record<string, unknown>;
+  secretBody(values: Record<string, string>): Record<string, unknown>;
+  validateSecret(values: Record<string, string>): string;
+}
+// Register only implemented UI adapters. Backend capabilities further restrict availability.
+export const serviceUI: Record<string, ServiceUI> = {
+  jenkins: {
+    authMethod: "jenkins_api_token",
+    authLabel: "Jenkins API Token",
+    connectionFields: [
+      {
+        key: "base_url",
+        label: "Jenkins 实例地址",
+        placeholder: "https://jenkins.example.com/jenkins",
+        help: "支持 HTTP、HTTPS 和部署子路径。",
+        limit: 2048,
+      },
+      {
+        key: "custom_ca_pem",
+        label: "自定义 CA（可选）",
+        type: "textarea",
+        limit: 16384,
+      },
+    ],
+    identityFields: [
+      {
+        key: "username",
+        label: "Jenkins 用户名",
+        limit: 255,
+        help: "填写 API Token 所属用户的登录名。",
+      },
+    ],
+    secretFields: [
+      {
+        key: "token",
+        label: "API Token",
+        type: "password",
+        limit: 8192,
+        help: "填写用户 API Token，保存后无法查看。",
+      },
+    ],
+    connectionBody: (v) => ({
+      base_url: v.base_url ?? "",
+      custom_ca_pem: v.custom_ca_pem || null,
+    }),
+    identityBody: (v) => ({ username: v.username ?? "" }),
+    secretBody: (v) => ({ token: v.token ?? "" }),
+    validateSecret: (v) =>
+      !v.username?.trim()
+        ? "请输入 Jenkins 用户名"
+        : !v.token
+          ? "请输入 API Token"
+          : "",
+  },
+  gitlab: {
+    authMethod: "gitlab_access_token",
+    authLabel: "GitLab Access Token",
+    connectionFields: [
+      {
+        key: "base_url",
+        label: "GitLab 实例地址",
+        placeholder: "https://gitlab.example.com",
+        help: "支持 HTTP、HTTPS 和子路径。",
+        limit: 2048,
+      },
+      {
+        key: "custom_ca_pem",
+        label: "自定义 CA（可选）",
+        type: "textarea",
+        limit: 16384,
+      },
+    ],
+    identityFields: [],
+    secretFields: [
+      {
+        key: "token",
+        label: "API Token",
+        type: "password",
+        limit: 8192,
+        help: "保存后无法查看。替换保留首选和兜底设置。",
+      },
+    ],
+    connectionBody: (v) => ({
+      base_url: v.base_url ?? "",
+      custom_ca_pem: v.custom_ca_pem || null,
+    }),
+    identityBody: () => ({}),
+    secretBody: (v) => ({ token: v.token ?? "" }),
+    validateSecret: (v) => (v.token ? "" : "请输入 API Token"),
+  },
+};
+
+function observabilityUI(kind: string, label: string): ServiceUI {
+  return {
+    authMethod: kind + "_basic",
+    authLabel: "用户名与密码",
+    connectionFields: [
+      {
+        key: "base_url",
+        label: label + " API 地址",
+        placeholder: "https://" + kind + ".example.com",
+        limit: 2048,
+      },
+      ...(kind === "openobserve"
+        ? [
+            {
+              key: "default_organization",
+              label: "默认组织",
+              placeholder: "default",
+              limit: 128,
+              help: "省略时使用 default，未来操作可指定其他组织。",
+            },
+          ]
+        : []),
+      {
+        key: "custom_ca_pem",
+        label: "自定义 CA（可选）",
+        type: "textarea",
+        limit: 16384,
+      },
+    ],
+    identityFields: [
+      {
+        key: "username",
+        label: kind === "openobserve" ? "用户名 / 邮箱" : "用户名",
+        limit: 255,
+      },
+    ],
+    secretFields: [
+      {
+        key: "token",
+        label: kind === "openobserve" ? "密码 / 服务账号 Token" : "密码",
+        type: "password",
+        limit: 8192,
+      },
+    ],
+    connectionBody: (v) => ({
+      base_url: v.base_url ?? "",
+      custom_ca_pem: v.custom_ca_pem || null,
+      ...(kind === "openobserve"
+        ? { default_organization: v.default_organization ?? "default" }
+        : {}),
+    }),
+    identityBody: (v) => ({ username: v.username ?? "" }),
+    secretBody: (v) => ({ token: v.token ?? "" }),
+    validateSecret: (v) =>
+      !v.username ? "请输入用户名" : !v.token ? "请输入密码或 Token" : "",
+  };
+}
+serviceUI.openobserve = observabilityUI("openobserve", "OpenObserve");
+serviceUI.elasticsearch = observabilityUI("elasticsearch", "Elasticsearch");
+export function authenticationUI(kind: string, method?: string): ServiceUI {
+  const base = serviceUI[kind]!;
+  if (kind !== "elasticsearch" || method !== "elasticsearch_api_key")
+    return base;
+  return {
+    ...base,
+    authMethod: "elasticsearch_api_key",
+    authLabel: "API Key",
+    identityFields: [],
+    secretFields: [
+      {
+        key: "token",
+        label: "API Key（encoded）",
+        type: "password",
+        limit: 8192,
+        help: "填写完整 encoded 值，不包含 ApiKey 前缀。",
+      },
+    ],
+    identityBody: () => ({}),
+    validateSecret: (v) => (v.token ? "" : "请输入 API Key"),
+  };
+}
+
+function databaseUI(kind: string, label: string, port: number): ServiceUI {
+  return {
+    authMethod: kind + "_password",
+    authLabel: "用户名与密码",
+    connectionFields: [
+      { key: "host", label: "主机", placeholder: "db.example.com", limit: 253 },
+      { key: "port", label: "端口", placeholder: String(port), limit: 5 },
+      { key: "database", label: "默认数据库", limit: 255 },
+      {
+        key: "tls_mode",
+        label: "TLS 模式",
+        options: [
+          { value: "verify-full", label: "启用并校验证书" },
+          { value: "disable", label: "禁用 TLS（默认）" },
+        ],
+        help: "默认禁用 TLS；启用后校验证书和主机名。",
+      },
+      {
+        key: "custom_ca_pem",
+        label: "自定义 CA（可选）",
+        type: "textarea",
+        limit: 16384,
+      },
+    ],
+    identityFields: [{ key: "username", label: "数据库用户名", limit: 255 }],
+    secretFields: [
+      {
+        key: "token",
+        label: "密码",
+        type: "password",
+        limit: 8192,
+        help: "保存后无法查看。",
+      },
+    ],
+    connectionBody: (v) => ({
+      host: v.host ?? "",
+      port: Number(v.port ?? port),
+      database: v.database ?? "",
+      tls_mode: v.tls_mode ?? "disable",
+      custom_ca_pem: v.custom_ca_pem || null,
+    }),
+    identityBody: (v) => ({ username: v.username ?? "" }),
+    secretBody: (v) => ({ token: v.token ?? "" }),
+    validateSecret: (v) =>
+      !v.username?.trim() ? "请输入数据库用户名" : !v.token ? "请输入密码" : "",
+  };
+}
+serviceUI.mysql = databaseUI("mysql", "MySQL", 3306);
+serviceUI.postgresql = databaseUI("postgresql", "PostgreSQL", 5432);

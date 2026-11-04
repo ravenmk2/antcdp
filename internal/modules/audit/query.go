@@ -1,0 +1,303 @@
+package audit
+
+import (
+	"encoding/base64"
+	"encoding/json"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/ravenmk2/antcdp/internal/platform/httpx"
+)
+
+type Cursor struct {
+	Time time.Time
+	ID   uint64
+}
+type Filter struct {
+	Limit                                     int
+	Query, ActionPrefix, TargetType, TargetID string
+	ActorUserID                               uint64
+	From, To                                  *time.Time
+	Before                                    *Cursor
+}
+
+var prefixPattern = regexp.MustCompile(`^[a-z_]+(?:\.[a-z_]+)*\.?$`)
+var targetPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
+
+// Labels are search aliases for the same stable action codes used by clients.
+var labels = map[string]string{
+	"project_branch_model.updated": "更新项目分支模型",
+	"project_variant.created":      "创建产品变体", "project_variant.updated": "更新产品变体", "project_variant.archived": "归档产品变体", "project_variant.restored": "恢复产品变体", "project_variant.deleted": "删除产品变体",
+	"project_environment.created": "创建环境", "project_environment.updated": "更新环境", "project_environment.deleted": "删除环境",
+	"project_branch_creation.started": "开始创建主干分支", "project_branch_creation.item_finished": "主干分支逐项结果", "project_branch_creation.reconciled": "核实未知分支结果",
+
+	"email.profile.created":                  "创建邮件配置",
+	"email.profile.updated":                  "更新邮件配置",
+	"email.profile.deleted":                  "删除邮件配置",
+	"email.profile.authentication_replaced":  "替换认证：邮件配置",
+	"email.profile.test_started":             "开始发送测试：邮件配置",
+	"email.profile.test_completed":           "完成发送测试：邮件配置",
+	"email.template.created":                 "创建邮件模板",
+	"email.template.updated":                 "更新邮件模板",
+	"email.template.deleted":                 "删除邮件模板",
+	"sms.profile.created":                    "创建短信配置",
+	"sms.profile.updated":                    "更新短信配置",
+	"sms.profile.deleted":                    "删除短信配置",
+	"sms.profile.authentication_replaced":    "替换认证：短信配置",
+	"sms.profile.test_started":               "开始发送测试：短信配置",
+	"sms.profile.test_completed":             "完成发送测试：短信配置",
+	"sms.template.created":                   "创建短信模板",
+	"sms.template.updated":                   "更新短信模板",
+	"sms.template.deleted":                   "删除短信模板",
+	"dingtalk.robot.created":                 "创建钉钉机器人",
+	"dingtalk.robot.updated":                 "更新钉钉机器人",
+	"dingtalk.robot.deleted":                 "删除钉钉机器人",
+	"dingtalk.robot.authentication_replaced": "替换认证：钉钉机器人",
+	"dingtalk.robot.test_started":            "开始发送测试：钉钉机器人",
+	"dingtalk.robot.test_completed":          "完成发送测试：钉钉机器人",
+	"sms.template.simulated":                 "模拟短信模板",
+
+	"remote_host.verified":                             "测试远程主机",
+	"ssh_credential.verified":                          "验证 SSH 凭证",
+	"remote_host.created":                              "创建远程主机",
+	"remote_host.updated":                              "更新远程主机",
+	"remote_host.deleted":                              "删除远程主机",
+	"remote_host.fallback_changed":                     "修改兜底凭证",
+	"ssh_credential.created":                           "创建SSH 凭证",
+	"ssh_credential.updated":                           "更新SSH 凭证",
+	"ssh_credential.deleted":                           "删除SSH 凭证",
+	"ssh_credential.authentication_replaced":           "替换认证信息",
+	"ssh_credential.preferred_changed":                 "修改首选凭证",
+	"project_repository.linked":                        "关联项目仓库",
+	"project_repository.unlinked":                      "解除项目仓库关联",
+	"project_repository.refreshed":                     "同步项目仓库信息",
+	"service_connection.created":                       "创建服务连接",
+	"service_connection.updated":                       "更新服务连接",
+	"service_connection.deleted":                       "删除服务连接",
+	"service_connection.fallback_changed":              "修改兜底凭证",
+	"service_credential.created":                       "创建访问凭证",
+	"service_credential.updated":                       "更新访问凭证",
+	"service_credential.deleted":                       "删除访问凭证",
+	"service_credential.authentication_replaced":       "替换认证信息",
+	"service_credential.preferred_changed":             "修改首选凭证",
+	"service_connection.webhook_updated":               "更新 Webhook 接收设置",
+	"service_connection.webhook_verification_replaced": "替换 Webhook 验证秘密",
+	"webhook_endpoint.created":                         "创建 Webhook 接入点",
+	"webhook_endpoint.updated":                         "更新 Webhook 接入点",
+	"webhook_endpoint.deleted":                         "删除 Webhook 接入点",
+	"webhook_endpoint.verification_replaced":           "替换接入点验证秘密",
+	"integration.created":                              "创建服务集成",
+	"integration.update":                               "更新服务集成",
+	"integration.deleted":                              "删除服务集成",
+	"integration.set_default":                          "设置默认凭证",
+	"integration.clear_default":                        "清除默认凭证",
+	"integration.update_config":                        "更新服务配置",
+	"integration.webhook_secret":                       "替换 Webhook 秘密",
+	"integration.generate_webhook":                     "生成 Webhook 秘密",
+	"integration.credential.create":                    "创建集成凭证",
+	"integration.credential.update":                    "更新集成凭证",
+	"integration.credential.secret":                    "替换集成凭证秘密",
+	"integration.credential.delete":                    "删除集成凭证",
+	"integration.credential.preferred":                 "设置首选凭证",
+	"integration.credential.clear_preferred":           "取消首选凭证",
+
+	"project.created": "创建项目", "project.updated": "更新项目资料", "project.archived": "归档项目", "project.restored": "恢复项目",
+	"team.created": "创建团队", "team.updated": "更新团队资料", "team.dissolved": "解散团队",
+	"project.member_added": "添加项目成员", "project.member_removed": "移除项目成员", "project.member_role_changed": "调整项目成员角色", "project.member_left": "退出项目",
+	"team.member_added": "添加团队成员", "team.member_removed": "移除团队成员", "team.member_role_changed": "调整团队成员角色", "team.member_left": "退出团队",
+	"project.team_added": "添加项目团队", "project.team_removed": "移除项目团队",
+	"installation.completed": "完成系统安装", "auth.login_succeeded": "登录系统", "auth.logged_out": "退出登录",
+	"user.created": "创建用户", "user.registered": "自主注册", "user.profile_updated": "更新用户资料",
+	"user.avatar_changed": "更新用户头像", "user.password_changed": "修改密码", "user.password_reset": "重置密码",
+	"user.password_recovered": "恢复账号密码", "user.role_changed": "调整用户角色", "user.disabled": "禁用用户",
+	"user.enabled": "启用用户", "user.deleted": "删除用户", "settings.updated": "更新系统设置",
+}
+
+func SearchActions(query string) []string {
+	actions := []string{}
+	for code, label := range labels {
+		if strings.Contains(label, query) {
+			actions = append(actions, code)
+		}
+	}
+	sort.Strings(actions)
+	return actions
+}
+
+func ValidTime(t time.Time) bool { return t.UTC().Year() >= 1000 && t.UTC().Year() <= 9999 }
+func (f Filter) Validate() error {
+	if f.Limit < 1 || f.Limit > 100 {
+		return httpx.Invalid("limit", "invalid_value")
+	}
+	if !utf8.ValidString(f.Query) || utf8.RuneCountInString(f.Query) > 64 {
+		return httpx.Invalid("q", "invalid_length")
+	}
+	if len(f.ActionPrefix) > 80 || (f.ActionPrefix != "" && !prefixPattern.MatchString(f.ActionPrefix)) {
+		return httpx.Invalid("action_prefix", "invalid_format")
+	}
+	if f.TargetType != "" && !targetPattern.MatchString(f.TargetType) {
+		return httpx.Invalid("target_type", "invalid_format")
+	}
+	if !utf8.ValidString(f.TargetID) || utf8.RuneCountInString(f.TargetID) > 64 {
+		return httpx.Invalid("target_id", "invalid_length")
+	}
+	if f.From != nil && !ValidTime(*f.From) {
+		return httpx.Invalid("from", "invalid_time")
+	}
+	if f.To != nil && (!ValidTime(*f.To) || (f.From != nil && !f.From.Before(*f.To))) {
+		return httpx.Invalid("to", "invalid_time_range")
+	}
+	return nil
+}
+func EncodeCursor(t time.Time, id uint64) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(t.UTC().Format(time.RFC3339Nano) + "|" + strconv.FormatUint(id, 10)))
+}
+func DecodeCursor(raw string) (*Cursor, error) {
+	if raw == "" {
+		return nil, nil
+	}
+	invalid := func() (*Cursor, error) { return nil, httpx.Invalid("cursor", "invalid_cursor") }
+	if len(raw) > 160 {
+		return invalid()
+	}
+	b, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return invalid()
+	}
+	parts := strings.Split(string(b), "|")
+	if len(parts) != 2 {
+		return invalid()
+	}
+	t, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil || !ValidTime(t) || t.Nanosecond()%1000000 != 0 {
+		return invalid()
+	}
+	id, err := strconv.ParseUint(parts[1], 10, 64)
+	if err != nil || id == 0 || strconv.FormatUint(id, 10) != parts[1] {
+		return invalid()
+	}
+	return &Cursor{t.UTC(), id}, nil
+}
+
+// Read-side allowlists prevent accidental future payloads exposing credentials.
+func PublicDetail(action string, raw json.RawMessage) json.RawMessage {
+	var src map[string]json.RawMessage
+	if json.Unmarshal(raw, &src) != nil {
+		return json.RawMessage(`{}`)
+	}
+	result := map[string]any{}
+	if action == "project_release.created" || action == "project_release.updated" {
+		for key, limit := range map[string]int{"name": 120, "version_label": 96} {
+			var value string
+			if json.Unmarshal(src[key], &value) == nil && utf8.RuneCountInString(value) <= limit {
+				result[key] = value
+			}
+		}
+	}
+	if strings.HasPrefix(action, "project_variant.") || strings.HasPrefix(action, "project_environment.") || strings.HasPrefix(action, "project_branch_creation.") || strings.HasPrefix(action, "project_branch_model.") {
+		for _, key := range []string{"project_id", "variant_id", "main_branch", "branch_name", "item_id", "status", "reason"} {
+			var value string
+			if json.Unmarshal(src[key], &value) == nil && len(value) <= 1024 {
+				result[key] = value
+			}
+		}
+	}
+	if strings.HasPrefix(action, "project_repository.") {
+		for _, key := range []string{"project_id", "connection_id", "repo_id"} {
+			var value string
+			if json.Unmarshal(src[key], &value) == nil && utf8.RuneCountInString(value) <= 255 {
+				result[key] = value
+			}
+		}
+	}
+	if strings.HasPrefix(action, "project.") || strings.HasPrefix(action, "team.") {
+		for _, key := range []string{"code", "user_id", "team_id", "before", "after"} {
+			var value string
+			if json.Unmarshal(src[key], &value) == nil && utf8.RuneCountInString(value) <= 100 {
+				result[key] = value
+			}
+		}
+		for _, key := range []string{"description_changed", "icon_changed"} {
+			var value bool
+			if json.Unmarshal(src[key], &value) == nil {
+				result[key] = value
+			}
+		}
+	}
+	if strings.HasPrefix(action, "remote_host.") || strings.HasPrefix(action, "ssh_credential.") || strings.HasPrefix(action, "service_connection.") || strings.HasPrefix(action, "service_credential.") || strings.HasPrefix(action, "webhook_endpoint.") {
+		for _, key := range []string{"enabled", "enabled_before", "enabled_after", "config_changed"} {
+			var value bool
+			if json.Unmarshal(src[key], &value) == nil {
+				result[key] = value
+			}
+		}
+		var owner string
+		if json.Unmarshal(src["ownership_type"], &owner) == nil && (owner == "system" || owner == "project" || owner == "personal") {
+			result["ownership_type"] = owner
+		}
+	}
+	switch action {
+	case "installation.completed":
+		var value bool
+		if json.Unmarshal(src["master_key_initialized"], &value) == nil {
+			result["master_key_initialized"] = value
+		}
+	case "user.created":
+		var role string
+		if json.Unmarshal(src["role"], &role) == nil && (role == "admin" || role == "user") {
+			result["role"] = role
+		}
+	case "user.avatar_changed":
+		var op string
+		if json.Unmarshal(src["operation"], &op) == nil && (op == "removed" || op == "updated") {
+			result["operation"] = op
+		}
+	}
+	allowed := map[string]bool{}
+	switch action {
+	case "user.profile_updated":
+		allowed = map[string]bool{"username": true, "display_name": true}
+	case "user.role_changed":
+		allowed["role"] = true
+	case "user.disabled", "user.enabled":
+		allowed["status"] = true
+	case "settings.updated":
+		allowed = map[string]bool{"site.name": true, "site.timezone": true, "auth.registration_enabled": true, "auth.session_ttl_days": true}
+	}
+	var changes map[string]map[string]json.RawMessage
+	if len(allowed) > 0 && json.Unmarshal(src["changes"], &changes) == nil {
+		clean := map[string]any{}
+		for key, change := range changes {
+			if !allowed[key] {
+				continue
+			}
+			values := map[string]any{}
+			for _, side := range []string{"before", "after"} {
+				var v any
+				if json.Unmarshal(change[side], &v) != nil {
+					continue
+				}
+				switch item := v.(type) {
+				case string:
+					if utf8.RuneCountInString(item) <= 128 {
+						values[side] = item
+					}
+				case bool, float64:
+					values[side] = item
+				}
+			}
+			if len(values) == 2 {
+				clean[key] = values
+			}
+		}
+		if len(clean) > 0 {
+			result["changes"] = clean
+		}
+	}
+	b, _ := json.Marshal(result)
+	return b
+}
