@@ -26,19 +26,19 @@ export function ReleasePreparation({
         <>
           <p>
             {empty
-              ? "当前变体范围内没有仓库，可先保存草稿和准备材料。"
+              ? "当前产品分支范围内没有仓库，可先保存草稿和准备材料。"
               : "本次草稿尚未包含仓库，请先刷新发布范围并确认基线。"}
             {empty &&
               (manage
-                ? "请核对项目仓库关联及变体范围，再到发布中刷新范围。"
-                : "请项目管理员核对变体范围；项目仓库关联由系统管理员维护。")}
+                ? "请核对项目仓库关联及产品分支范围，再到发布中刷新范围。"
+                : "请项目管理员核对产品分支范围；项目仓库关联由系统管理员维护。")}
           </p>
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             <Link
               className="underline underline-offset-4"
               to={`${root}/variants?variant=${variant.id}&vview=repositories`}
             >
-              {manage ? "检查变体仓库范围" : "查看变体仓库范围"}
+              {manage ? "检查产品分支仓库范围" : "查看产品分支仓库范围"}
             </Link>
             {empty &&
               (systemAdmin ? (

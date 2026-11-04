@@ -45,7 +45,7 @@ func (s *Service) access(ctx context.Context, raw string, pid uint64, write bool
 		}
 		r, ok := tx.(Repository)
 		if !ok {
-			return httpx.E(503, "FEATURE_UNAVAILABLE", "产品变体暂不可用")
+			return httpx.E(503, "FEATURE_UNAVAILABLE", "产品分支暂不可用")
 		}
 		pr, ok := tx.(i.ProjectRepoStore)
 		if !ok {
@@ -100,7 +100,7 @@ func (x *access) variant(id uint64, write bool, allowArchived bool) (*Variant, e
 		return nil, notFound()
 	}
 	if write && !allowArchived && v.ArchivedAt != nil {
-		return nil, httpx.E(409, "VARIANT_ARCHIVED", "归档变体只读")
+		return nil, httpx.E(409, "VARIANT_ARCHIVED", "归档产品分支只读")
 	}
 	return v, nil
 }

@@ -110,7 +110,7 @@ export function ProjectDetail({
                 ["general", "基本资料"],
                 ["members", "成员"],
                 ["teams", "团队授权"],
-                ["branches", "分支规则"],
+                ["branches", "Git 分支规则"],
                 ["credentials", "访问凭证"],
               ] as const
             ).map(([key, label]) => (
@@ -138,7 +138,7 @@ export function ProjectDetail({
                 onCommand={setCommand}
               />
             ) : setting === "branches" ? (
-              <Suspense fallback={<p role="status">正在读取分支规则…</p>}>
+              <Suspense fallback={<p role="status">正在读取 Git 分支规则…</p>}>
                 <BranchModelPanel projectId={project.id} canManage={writable} />
               </Suspense>
             ) : setting === "credentials" ? (

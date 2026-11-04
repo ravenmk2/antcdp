@@ -28,7 +28,7 @@ const page = {
 const variant: Variant = {
   id: "1",
   code: "standard",
-  name: "标准变体",
+  name: "标准产品分支",
   summary: "",
   kind: "standard",
   main_branch: "main",
@@ -229,7 +229,7 @@ it("focuses a repository scope error and preserves the invalid draft", async () 
   );
   const { user } = drawer({ edit: true });
   await user.click(screen.getByRole("button", { name: "保存" }));
-  await screen.findByText("所选仓库已不在当前变体范围内，请重新选择");
+  await screen.findByText("所选仓库已不在当前产品分支范围内，请重新选择");
   expect(document.activeElement).toBe(
     screen.getByRole("combobox", { name: "仓库范围模式" }),
   );

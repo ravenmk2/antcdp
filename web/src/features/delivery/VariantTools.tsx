@@ -77,7 +77,7 @@ export function LifecycleDialog({
     <FormDialog
       compact
       open
-      title={verb + (t.environment ? "环境" : "变体")}
+      title={verb + (t.environment ? "环境" : "产品分支")}
       description={t.item.name}
       pending={save.pending}
       onClose={onClose}
@@ -103,7 +103,7 @@ export function LifecycleDialog({
           : remove
             ? "删除本地配置后无法恢复。"
             : "恢复后可继续管理配置。"}
-        远端分支保留。
+        远端 Git 分支保留。
       </p>
     </FormDialog>
   );
@@ -204,8 +204,8 @@ export function SwitchVariant({
   return (
     <FormDialog
       open
-      title="切换产品变体"
-      description="搜索全部状态的变体，按需加载更多结果。"
+      title="切换产品分支"
+      description="搜索全部状态的产品分支，按需加载更多结果。"
       onClose={onClose}
       footer={
         <Button variant="outline" onClick={onClose}>
@@ -215,7 +215,7 @@ export function SwitchVariant({
     >
       <Input
         type="search"
-        aria-label="搜索可切换变体"
+        aria-label="搜索可切换产品分支"
         value={q}
         placeholder="名称或编码"
         onChange={(e) => {
@@ -281,7 +281,7 @@ function SwitchPage({
       ))}
       {last && q.data && page * 20 < q.data.total && (
         <Button variant="ghost" onClick={onMore}>
-          加载更多变体
+          加载更多产品分支
         </Button>
       )}
     </AsyncState>

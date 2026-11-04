@@ -71,7 +71,7 @@ it("prioritizes uncertain operations and uses server totals with bounded preview
     "/projects/7/variants?variant=2&vview=releases&release=6&return_to=%2Fprojects%2F7",
   );
   expect(screen.getByRole("heading", { name: "进行中的发布 31" })).toBeTruthy();
-  expect(screen.getByRole("link", { name: "未归档变体 12" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "未归档产品分支 12" })).toBeTruthy();
 });
 it("offers read-only history for archived projects without a setup call to action", () => {
   vi.mocked(useQuery).mockReturnValue(
@@ -217,7 +217,7 @@ it("does not choose an arbitrary variant for repository navigation", () => {
       .getAttribute("href"),
   ).toBe("/projects/7/variants?variant=8&vview=repositories");
   expect(screen.queryByRole("link", { name: "查看仓库与分支" })).toBeNull();
-  expect(screen.getByRole("link", { name: "未归档变体 22" })).toBeTruthy();
+  expect(screen.getByRole("link", { name: "未归档产品分支 22" })).toBeTruthy();
 });
 
 it("lets an empty project prepare a materials-only release without requiring a repository", () => {

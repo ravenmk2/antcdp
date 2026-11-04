@@ -257,7 +257,7 @@ export function ReleaseEditor({
     "variant" in review &&
     review.variant.release_tag_prefix === prefix.trim();
   const title = {
-    settings: "变体 Tag 前缀",
+    settings: "产品分支 Tag 前缀",
     details: "编辑发布资料",
     create: "创建发布",
     description: "编辑发布说明",
@@ -487,7 +487,7 @@ export function ReleaseEditor({
             <section className="release-prefix-setup">
               {needsPrefix && (
                 <p className="mb-4 text-[13px] text-muted-foreground">
-                  此变体尚未设置 Tag
+                  此产品分支尚未设置 Tag
                   前缀。首次创建时一起保存，后续发布会继续使用。
                 </p>
               )}
@@ -495,7 +495,7 @@ export function ReleaseEditor({
                 label="Tag 前缀"
                 required
                 error={errors.fields.tag_prefix}
-                hint="属于当前变体，设置后会用于此变体后续新发布。"
+                hint="属于当前产品分支，设置后会用于此产品分支后续新发布。"
               >
                 {(props) => (
                   <Input

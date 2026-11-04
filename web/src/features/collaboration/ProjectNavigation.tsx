@@ -120,7 +120,7 @@ export function ProjectNavigation({
             [
               ["overview", "概览", root, LayoutDashboard],
               ["releases", "发布", root + "?tab=releases", Rocket],
-              ["variants", "变体", root + "/variants", GitBranch],
+              ["variants", "产品分支", root + "/variants", GitBranch],
               ["repositories", "仓库", root + "?tab=repositories", FolderGit2],
               ["description", "介绍", root + "?tab=description", FileText],
               ["settings", "设置", root + "?tab=settings", Settings2],

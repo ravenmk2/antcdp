@@ -88,7 +88,7 @@ it.each([
     const router = creation(root, origin);
     const user = userEvent.setup();
     await screen.findByRole("dialog", { name: "创建发布" });
-    expect(screen.getByText(/当前变体范围内没有仓库/)).toBeTruthy();
+    expect(screen.getByText(/当前产品分支范围内没有仓库/)).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "取消" }));
     await waitFor(() =>
       expect(
@@ -151,7 +151,9 @@ it.each([true, false])(
     ]);
     render(<RouterProvider router={router} />);
     expect(screen.getByText(/纯材料发布可以不包含 MR/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "检查变体仓库范围" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "检查产品分支仓库范围" }),
+    ).toBeTruthy();
     const consoleLink = screen.queryByRole("link", {
       name: "在控制台关联仓库",
     });

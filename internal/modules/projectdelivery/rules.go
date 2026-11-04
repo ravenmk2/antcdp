@@ -31,9 +31,9 @@ type BranchType struct {
 }
 
 var Types = []BranchType{
-	{"mainline", "主线", "标准版主要维护分支", true}, {"development", "开发", "持续承接日常开发", true},
+	{"mainline", "主线", "标准版的主干 Git 分支", true}, {"development", "开发", "持续承接日常开发", true},
 	{"integration", "集成", "汇集多个开发来源并联调", true}, {"release", "发布", "准备或维护具体发布", true},
-	{"feature", "功能", "实现具体功能", false}, {"hotfix", "修复", "问题修复", false}, {"custom", "定制", "定制变体主要维护分支", true},
+	{"feature", "功能", "实现具体功能", false}, {"hotfix", "修复", "问题修复", false}, {"custom", "定制", "客户定制版的主干 Git 分支", true},
 }
 
 func Defaults() []BranchRule {

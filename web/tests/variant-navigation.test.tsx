@@ -107,7 +107,7 @@ function show({
 }
 it("keeps task navigation compact and opens an environment from its name", async () => {
   show();
-  const nav = await screen.findByRole("navigation", { name: "变体功能" });
+  const nav = await screen.findByRole("navigation", { name: "产品分支功能" });
   expect(
     within(nav)
       .getAllByRole("link")
@@ -125,11 +125,11 @@ it.each(["list", "detail"])(
   async (release) => {
     show({ release, archived: true });
     expect(
-      await screen.findByText(/此变体已归档，配置、环境和发布只读/),
+      await screen.findByText(/此产品分支已归档，配置、环境和发布只读/),
     ).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "恢复变体" }));
+    await userEvent.click(screen.getByRole("button", { name: "恢复产品分支" }));
     expect(
-      await screen.findByRole("dialog", { name: "恢复变体" }),
+      await screen.findByRole("dialog", { name: "恢复产品分支" }),
     ).toBeTruthy();
   },
 );
@@ -142,27 +142,29 @@ it.each([
   async (options) => {
     show({ release: "detail", archived: true, ...options });
     expect(
-      await screen.findByText(/此变体已归档，配置、环境和发布只读/),
+      await screen.findByText(/此产品分支已归档，配置、环境和发布只读/),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "恢复变体" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "恢复产品分支" })).toBeNull();
   },
 );
 it("explains an invalid main branch binding before users attempt branch work", async () => {
   show({ invalid: true });
   expect(await screen.findByText("主干绑定需要核对")).toBeTruthy();
   expect(
-    screen.getByRole("link", { name: "查看分支规则" }).getAttribute("href"),
+    screen
+      .getByRole("link", { name: "查看 Git 分支规则" })
+      .getAttribute("href"),
   ).toBe("/projects/1?tab=branch-model");
   await userEvent
     .setup()
-    .click(screen.getByRole("button", { name: "检查变体设置" }));
+    .click(screen.getByRole("button", { name: "检查产品分支设置" }));
   expect(screen.getByRole("dialog", { name: "variant" })).toBeTruthy();
 });
 it.each([true, false])(
   "gives an empty environment list a permission-aware next action (%s)",
   async (manage) => {
     show({ empty: true, manage });
-    await screen.findByText("为需要长期跟踪的环境绑定分支");
+    await screen.findByText("为需要长期跟踪的环境绑定 Git 分支");
     if (manage)
       expect(screen.getByRole("button", { name: "添加首个环境" })).toBeTruthy();
     else {
@@ -178,9 +180,13 @@ it.each(["list", "detail"])(
     await screen.findByRole("region", { name: "发布工作区" });
     expect(screen.queryByRole("navigation", { name: "项目导航" })).toBeNull();
     if (release === "detail")
-      expect(screen.queryByRole("navigation", { name: "变体功能" })).toBeNull();
+      expect(
+        screen.queryByRole("navigation", { name: "产品分支功能" }),
+      ).toBeNull();
     else
-      expect(screen.getByRole("navigation", { name: "变体功能" })).toBeTruthy();
+      expect(
+        screen.getByRole("navigation", { name: "产品分支功能" }),
+      ).toBeTruthy();
   },
 );
 
@@ -189,7 +195,7 @@ it("opens repository work by default and keeps explicit environment bookmarks", 
   expect(
     await screen.findByRole("region", { name: "仓库与分支工作区" }),
   ).toBeTruthy();
-  const navigation = screen.getByRole("navigation", { name: "变体功能" });
+  const navigation = screen.getByRole("navigation", { name: "产品分支功能" });
   expect(
     within(navigation)
       .getByRole("link", { name: "仓库与分支" })

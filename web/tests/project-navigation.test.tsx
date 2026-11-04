@@ -139,7 +139,7 @@ it.each([
     within(navigation)
       .getAllByRole("link")
       .map((link) => link.textContent),
-  ).toEqual(["概览", "发布", "变体", "仓库", "介绍", "设置"]);
+  ).toEqual(["概览", "发布", "产品分支", "仓库", "介绍", "设置"]);
   expect(
     within(navigation)
       .getByRole("link", { name: active })

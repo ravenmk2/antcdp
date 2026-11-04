@@ -75,7 +75,7 @@ export async function loader(args: LoaderFunctionArgs) {
     throw new Response("项目不存在", { status: 404 });
   const selected = url.searchParams.get("variant") || "";
   if (selected && !/^\d+$/.test(selected))
-    throw new Response("变体不存在", { status: 404 });
+    throw new Response("产品分支不存在", { status: 404 });
   const page = Math.max(
     1,
     Math.floor(Number(url.searchParams.get(selected ? "epage" : "page")) || 1),
@@ -215,7 +215,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
             }
           >
             <ActionArchive />
-            {item.archived_at ? "恢复变体" : "归档变体"}
+            {item.archived_at ? "恢复产品分支" : "归档产品分支"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -229,7 +229,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
             }
           >
             <ActionTrash2 />
-            删除变体
+            删除产品分支
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -244,15 +244,15 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
         <div>
           <strong className="font-medium">主干绑定需要核对</strong>
           <p className="mt-1">
-            {reason(v.binding_reason)}。核对配置后才能校验或创建主干分支。
+            {reason(v.binding_reason)}。核对配置后才能校验或创建主干 Git 分支。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={() => openVariant(v)}>
-            检查变体设置
+            检查产品分支设置
           </Button>
           <Button size="sm" variant="ghost" asChild>
-            <Link to={`${root}?tab=branch-model`}>查看分支规则</Link>
+            <Link to={`${root}?tab=branch-model`}>查看 Git 分支规则</Link>
           </Button>
         </div>
       </div>
@@ -268,7 +268,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
       canManage={writable}
       onClose={() => setEditor(undefined)}
       onSaved={() => {
-        notify("配置已保存，远端分支未改变。");
+        notify("配置已保存，远端 Git 分支未改变。");
         changed();
       }}
     />
@@ -277,7 +277,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
     data.project.status !== "active"
       ? "所属项目已归档，本次发布只读。恢复项目后才能继续准备和推进发布。"
       : v?.archived_at
-        ? "所属变体已归档，本次发布只读。恢复变体后才能继续准备和推进发布。"
+        ? "所属产品分支已归档，本次发布只读。恢复产品分支后才能继续准备和推进发布。"
         : undefined;
   const archiveNotice = v?.archived_at && (
     <div
@@ -285,12 +285,12 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
       role="status"
     >
       <p className="text-[13px]">
-        此变体已归档，配置、环境和发布只读，已有材料与记录仍可查阅。
+        此产品分支已归档，配置、环境和发布只读，已有材料与记录仍可查阅。
         {data.project.status !== "active" && "所属项目也已归档，需先恢复项目。"}
       </p>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="outline" onClick={() => openVariant(v)}>
-          查看变体设置
+          查看产品分支设置
         </Button>
         {canManage && v.can_manage && v.kind !== "standard" && (
           <Button
@@ -298,7 +298,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
             variant="outline"
             onClick={() => setCommand({ action: "restore", item: v })}
           >
-            恢复变体
+            恢复产品分支
           </Button>
         )}
       </div>
@@ -316,7 +316,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
           !command.environment &&
           v?.id === command.item.id;
         setCommand(undefined);
-        notify("配置状态已更新，远端分支保留。");
+        notify("配置状态已更新，远端 Git 分支保留。");
         if (leaving) {
           const list = href({
             variant: "",
@@ -331,7 +331,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
   );
   if (v && view === "releases" && data.releases) {
     return (
-      <section aria-label="产品变体" className="variant-page space-y-5">
+      <section aria-label="产品分支" className="variant-page space-y-5">
         {archiveNotice}
         {!data.releases.release && (
           <VariantNavigation
@@ -357,7 +357,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
     );
   }
   return (
-    <section aria-label="产品变体" className="variant-page space-y-5">
+    <section aria-label="产品分支" className="variant-page space-y-5">
       {v && (
         <header className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -365,7 +365,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
               <button
                 className="variant-switch"
                 onClick={() => setSwitch(true)}
-                aria-label={`切换变体，当前 ${v.name}`}
+                aria-label={`切换产品分支，当前 ${v.name}`}
               >
                 <span className="min-w-0 break-words">{v.name}</span>
                 <ChevronDown aria-hidden="true" />
@@ -381,7 +381,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
             {v ? (
               <>
                 <Button variant="outline" onClick={() => openVariant(v)}>
-                  变体设置
+                  产品分支设置
                 </Button>
                 {canManage && v.can_manage && commands(v)}
               </>
@@ -448,11 +448,15 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
                 <Table aria-label="环境列表">
                   <TableHeader>
                     <TableRow>
-                      {["环境", "固定分支", "仓库范围", "配置状态", "操作"].map(
-                        (t) => (
-                          <TableHead key={t}>{t}</TableHead>
-                        ),
-                      )}
+                      {[
+                        "环境",
+                        "固定 Git 分支",
+                        "仓库范围",
+                        "配置状态",
+                        "操作",
+                      ].map((t) => (
+                        <TableHead key={t}>{t}</TableHead>
+                      ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -481,7 +485,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
                         <TableCell>
                           {e.repository_count} 个仓库 ·{" "}
                           {e.repository_scope.mode === "inherit"
-                            ? "继承变体"
+                            ? "继承产品分支"
                             : e.repository_scope.mode === "all"
                               ? "全部"
                               : "自定义"}
@@ -548,11 +552,11 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
                 </Table>
                 {!data.environments?.items.length && (
                   <EmptyState
-                    title="为需要长期跟踪的环境绑定分支"
+                    title="为需要长期跟踪的环境绑定 Git 分支"
                     description={
                       writable
-                        ? "环境用于记录固定分支与仓库范围，可按需添加测试、预发布或生产环境。无需创建环境也可以开始发布。"
-                        : "此变体尚未配置环境。项目管理员可按团队需要添加环境；你也可以查看仓库与分支或发布记录。"
+                        ? "环境用于记录固定 Git 分支与仓库范围，可按需添加测试、预发布或生产环境。无需创建环境也可以开始发布。"
+                        : "此产品分支尚未配置环境。项目管理员可按团队需要添加环境；你也可以查看仓库与分支或发布记录。"
                     }
                     action={
                       writable ? (
@@ -607,14 +611,14 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
                 key={data.q}
                 name="q"
                 defaultValue={data.q}
-                aria-label="搜索变体"
+                aria-label="搜索产品分支"
                 placeholder="名称或编码"
               />
               <Button variant="outline">搜索</Button>
             </form>
             <NativeSelect
               className="w-auto"
-              aria-label="变体状态"
+              aria-label="产品分支状态"
               value={data.status}
               onChange={(e) => query({ status: e.target.value, page: "" })}
             >
@@ -632,14 +636,14 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
                   })
                 }
               >
-                新建变体
+                新建产品分支
               </Button>
             )}{" "}
           </div>
-          <Table aria-label="产品变体列表">
+          <Table aria-label="产品分支列表">
             <TableHeader>
               <TableRow>
-                {["名称", "主干分支", "仓库", "环境", "状态", "操作"].map(
+                {["名称", "主干 Git 分支", "仓库", "环境", "状态", "操作"].map(
                   (t) => (
                     <TableHead key={t}>{t}</TableHead>
                   ),
@@ -685,7 +689,7 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
                         size="sm"
                         onClick={() => openVariant(item)}
                       >
-                        变体设置
+                        产品分支设置
                       </Button>
                       {canManage && item.can_manage && commands(item)}
                     </div>
@@ -696,8 +700,8 @@ function Screen({ data }: { data: Awaited<ReturnType<typeof loader>> }) {
           </Table>
           {!data.variants?.items.length && (
             <EmptyState
-              title="没有匹配的产品变体"
-              description="调整名称或状态筛选，查看项目中的其他变体。"
+              title="没有匹配的产品分支"
+              description="调整名称或状态筛选，查看项目中的其他产品分支。"
               action={
                 <Button
                   variant="outline"
@@ -744,7 +748,7 @@ function VariantNavigation({
 }) {
   const active = ["history", "create"].includes(view) ? "repositories" : view;
   return (
-    <nav className="variant-navigation" aria-label="变体功能">
+    <nav className="variant-navigation" aria-label="产品分支功能">
       {[
         ["repositories", "仓库与分支"],
         ["environments", "环境"],

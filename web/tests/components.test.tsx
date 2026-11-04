@@ -69,7 +69,7 @@ it("renders actionable empty content only after a successful empty response", as
   const emptyContent = (
     <EmptyState
       title="尚未关联仓库"
-      description="关联仓库后，可在产品变体中准备发布。"
+      description="关联仓库后，可在产品分支中准备发布。"
       action={<Button onClick={create}>关联仓库</Button>}
     />
   );

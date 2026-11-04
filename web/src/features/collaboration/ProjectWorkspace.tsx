@@ -214,7 +214,7 @@ export function ProjectOverview({
                   </h2>
                   <p className="mt-2 max-w-2xl text-[13px] text-muted-foreground">
                     {writable
-                      ? "从一个产品变体开始，组织代码变更和交付材料。也可以创建只包含材料的发布；开始发布仍需至少一个仓库及已确认的基线，环境按需配置。"
+                      ? "从一个产品分支开始，组织代码变更和交付材料。也可以创建只包含材料的发布；开始发布仍需至少一个仓库及已确认的基线，环境按需配置。"
                       : "当前没有进行中的发布。发布由项目管理员创建，已有交付记录仍可查看。"}
                   </p>
                   <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -246,7 +246,7 @@ export function ProjectOverview({
                   </div>
                   {writable && !systemAdmin && data.repository_count === 0 && (
                     <p className="mt-3 text-[13px] text-muted-foreground">
-                      当前项目未关联仓库，可先保存草稿和准备材料。请系统管理员在控制台关联仓库后，再核对变体范围与基线。
+                      当前项目未关联仓库，可先保存草稿和准备材料。请系统管理员在控制台关联仓库后，再核对产品分支范围与基线。
                     </p>
                   )}
                 </section>
@@ -330,11 +330,11 @@ export function ProjectOverview({
               <Link
                 className="project-resource-link"
                 to={root + "/variants"}
-                aria-label={`未归档变体 ${data.variants.total}`}
+                aria-label={`未归档产品分支 ${data.variants.total}`}
               >
                 <span>
                   <GitBranch />
-                  未归档变体
+                  未归档产品分支
                 </span>
                 <span>
                   {data.variants.total}
@@ -361,7 +361,7 @@ export function ProjectOverview({
                           主干绑定需核对：
                           {reasonLabels[variant.binding_reason] ||
                             variant.binding_reason ||
-                            "分支规则已变化"}
+                            "Git 分支规则已变化"}
                         </span>
                       )}
                     </Link>
@@ -371,7 +371,7 @@ export function ProjectOverview({
                       className="mt-3 inline-flex text-[13px] text-muted-foreground hover:underline"
                       to={root + "/variants"}
                     >
-                      查看全部变体
+                      查看全部产品分支
                       <ArrowRight className="ml-1 size-4" />
                     </Link>
                   )}
@@ -508,7 +508,9 @@ export function ProjectReleases({
             variant="outline"
             onClick={() => setPicker({ purpose: "filter" })}
           >
-            {variant ? params.get("variant_name") || "已选变体" : "全部变体"}
+            {variant
+              ? params.get("variant_name") || "已选产品分支"
+              : "全部产品分支"}
           </Button>
           {(q || variant || status !== "active") && (
             <Button
@@ -545,7 +547,7 @@ export function ProjectReleases({
                   : project.status !== "active"
                     ? "项目已归档，可查看已完成的交付记录。"
                     : project.can_manage
-                      ? "从产品变体创建首个发布，或查看已完成的交付记录。"
+                      ? "从产品分支创建首个发布，或查看已完成的交付记录。"
                       : "发布由项目管理员创建，可查看已有交付记录。"
               }
               action={
@@ -574,7 +576,7 @@ export function ProjectReleases({
               <TableRow>
                 {[
                   ["发布", "w-[30%]"],
-                  ["产品变体", "w-[18%]"],
+                  ["产品分支", "w-[18%]"],
                   ["目标 Tag", "w-[22%]"],
                   ["状态", "w-[14%]"],
                   ["最近更新", "w-[16%]"],
@@ -681,11 +683,11 @@ function ProjectVariantPicker({
   return (
     <FormDialog
       open
-      title={purpose === "create" ? "选择发布所属变体" : "按产品变体筛选"}
+      title={purpose === "create" ? "选择发布所属产品分支" : "按产品分支筛选"}
       description={
         purpose === "create"
-          ? "每次发布归属于一个产品变体。可先保存草稿；开始发布需至少一个范围仓库并确认基线，允许零 MR。"
-          : "每次发布归属于一个产品变体。"
+          ? "每次发布归属于一个产品分支。可先保存草稿；开始发布需至少一个范围仓库并确认基线，允许零 MR。"
+          : "每次发布归属于一个产品分支。"
       }
       onClose={close}
       footer={
@@ -696,7 +698,7 @@ function ProjectVariantPicker({
     >
       <Input
         value={q}
-        aria-label="搜索产品变体"
+        aria-label="搜索产品分支"
         placeholder="名称或编码"
         onChange={(e) => {
           setQ(e.target.value);
@@ -708,7 +710,7 @@ function ProjectVariantPicker({
         error={query.error}
         onRetry={query.refresh}
         empty={!query.data?.items.length}
-        emptyMessage="没有符合条件的变体。"
+        emptyMessage="没有符合条件的产品分支。"
       >
         <div className="divide-y">
           {query.data?.items.map((v) => (

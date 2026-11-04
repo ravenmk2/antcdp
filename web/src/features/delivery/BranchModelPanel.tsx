@@ -140,7 +140,7 @@ function Rules({
         setBaseline(r.data);
         setRules(r.data.rules);
         setEditing(false);
-        notify("分支模型已保存。");
+        notify("Git 分支模型已保存。");
       },
       (e) => setError(errorMessage(e)),
     );
@@ -149,11 +149,11 @@ function Rules({
     <section className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">分支规则</h2>
+          <h2 className="text-lg font-semibold">Git 分支规则</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {editing
               ? "修改后先检查匹配与影响，再保存规则。已有分支名称不会自动改变。"
-              : `已启用 ${baseline.rules.filter((row) => row.enabled).length} 类分支。规则决定变体主干和环境可以绑定的分支名称。`}
+              : `已启用 ${baseline.rules.filter((row) => row.enabled).length} 类分支。规则决定产品分支主干和环境可以绑定的分支名称。`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -317,7 +317,7 @@ function Rules({
       {editing && canManage && (
         <section className="space-y-4 rounded-xl border bg-card p-5">
           <AreaControl
-            label="测试分支名称"
+            label="测试 Git 分支名称"
             hint="每行一个分支名。检查结果包含会受到规则变更影响的已有绑定。"
             rows={3}
             value={samples}

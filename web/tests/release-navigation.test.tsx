@@ -462,9 +462,9 @@ it("explains parent archival instead of instructing the reader to start a draft"
     flow: { ...flow, can_manage: false },
     set: { ...materials, can_edit: false },
     readOnlyReason:
-      "所属变体已归档，本次发布只读。恢复变体后才能继续准备和推进发布。",
+      "所属产品分支已归档，本次发布只读。恢复产品分支后才能继续准备和推进发布。",
   });
-  expect(screen.getByText(/所属变体已归档，本次发布只读/)).toBeTruthy();
+  expect(screen.getByText(/所属产品分支已归档，本次发布只读/)).toBeTruthy();
   expect(screen.queryByText("确认仓库范围与基线后开始发布。")).toBeNull();
   expect(screen.queryByRole("button", { name: "确认范围并开始" })).toBeNull();
   expect(screen.queryByText("尚未确定发布范围")).toBeNull();

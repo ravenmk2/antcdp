@@ -30,10 +30,10 @@ var targetPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,39}$`)
 
 // Labels are search aliases for the same stable action codes used by clients.
 var labels = map[string]string{
-	"project_branch_model.updated": "更新项目分支模型",
-	"project_variant.created":      "创建产品变体", "project_variant.updated": "更新产品变体", "project_variant.archived": "归档产品变体", "project_variant.restored": "恢复产品变体", "project_variant.deleted": "删除产品变体",
+	"project_branch_model.updated": "更新项目 Git 分支模型",
+	"project_variant.created":      "创建产品分支", "project_variant.updated": "更新产品分支", "project_variant.archived": "归档产品分支", "project_variant.restored": "恢复产品分支", "project_variant.deleted": "删除产品分支",
 	"project_environment.created": "创建环境", "project_environment.updated": "更新环境", "project_environment.deleted": "删除环境",
-	"project_branch_creation.started": "开始创建主干分支", "project_branch_creation.item_finished": "主干分支逐项结果", "project_branch_creation.reconciled": "核实未知分支结果",
+	"project_branch_creation.started": "开始创建主干 Git 分支", "project_branch_creation.item_finished": "主干 Git 分支逐项结果", "project_branch_creation.reconciled": "核实未知分支结果",
 
 	"email.profile.created":                  "创建邮件配置",
 	"email.profile.updated":                  "更新邮件配置",

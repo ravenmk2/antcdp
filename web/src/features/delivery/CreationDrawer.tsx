@@ -165,7 +165,7 @@ export function CreationDrawer({
         writeRequiresReview(e) ||
         (e instanceof ApiError && e.code === "IDEMPOTENCY_CONFLICT")
       ) {
-        setError(errorMessage(e) + " 请关闭后重新读取变体和仓库范围。");
+        setError(errorMessage(e) + " 请关闭后重新读取产品分支和仓库范围。");
         setPreparationBlocked(true);
       }
     } finally {
@@ -398,7 +398,7 @@ export function CreationDrawer({
             error={
               query.error ||
               items.error ||
-              (query.data && !plan ? "记录不属于当前变体。" : "")
+              (query.data && !plan ? "记录不属于当前产品分支。" : "")
             }
             onRetry={refresh}
           >
@@ -558,7 +558,7 @@ export function CreationDrawer({
       {confirm && plan && (
         <FormDialog
           open
-          title="确认创建主干分支"
+          title="确认创建主干 Git 分支"
           description={plan.target_branch}
           onClose={() => setConfirm(false)}
           footer={
@@ -573,8 +573,8 @@ export function CreationDrawer({
           }
         >
           <p>
-            创建 {chosen.filter((i) => action(i) === "create").length}{" "}
-            个远端分支，采用{" "}
+            创建 {chosen.filter((i) => action(i) === "create").length} 个远端
+            Git 分支，采用{" "}
             {chosen.filter((i) => action(i) === "use_existing").length}{" "}
             个已有分支。远端创建无法在本页面撤销。
           </p>

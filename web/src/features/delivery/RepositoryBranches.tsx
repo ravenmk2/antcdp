@@ -182,14 +182,14 @@ export function RepositoryBranches({
                   setDraft({ items: [...selected.values()], scope: token })
                 }
               >
-                {creationMode ? "下一步：设置来源" : "创建主干分支"}
+                {creationMode ? "下一步：设置来源" : "创建主干 Git 分支"}
               </Button>
             )}
           </>
         )}
       </div>
       <p className="text-sm text-muted-foreground">
-        固定分支 <code>{branch}</code>
+        固定 Git 分支 <code>{branch}</code>
         {writable && " · 已选 " + selected.size + " / 100"}
         {selected.size > 0 && (
           <Button
@@ -204,7 +204,7 @@ export function RepositoryBranches({
       </p>
       {writable && rows.length > 0 && !selected.size && (
         <p className="text-sm text-muted-foreground">
-          先选择仓库，再校验远端分支{!environment && "或创建主干"}
+          先选择仓库，再校验远端 Git 分支{!environment && "或创建主干"}
           。刷新仅加载已保存的校验结果。
         </p>
       )}

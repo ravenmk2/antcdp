@@ -106,7 +106,7 @@ export function ConfigurationDrawer({
       invalid.name = "名称须为 1–100 个字符。";
     if (Array.from(form.summary).length > 300)
       invalid.summary = "说明不能超过 300 个字符。";
-    if (!form.branch.trim()) invalid.branch = "请填写固定分支名。";
+    if (!form.branch.trim()) invalid.branch = "请填写固定 Git 分支名。";
     if (!errors.validate(invalid)) return;
     const etag = value?.etag || target.collectionTag;
     if (!etag) {
@@ -157,15 +157,15 @@ export function ConfigurationDrawer({
     }
   }
   const title = editing
-    ? `${value ? "编辑" : "新建"}${environment ? "环境" : "变体"}`
+    ? `${value ? "编辑" : "新建"}${environment ? "环境" : "产品分支"}`
     : value?.name || "配置详情";
   return (
     <FormDrawer
       title={title}
       description={
         environment
-          ? "环境绑定固定分支，仓库范围受所属变体约束。"
-          : "变体定义固定主干与动态仓库范围。"
+          ? "环境绑定固定 Git 分支，仓库范围受所属产品分支约束。"
+          : "产品分支定义固定主干与动态仓库范围。"
       }
       dirty={dirty}
       pending={busy}
@@ -204,7 +204,7 @@ export function ConfigurationDrawer({
             </Button>
             {writable && (
               <Button onClick={begin}>
-                {environment ? "编辑环境" : "编辑变体"}
+                {environment ? "编辑环境" : "编辑产品分支"}
               </Button>
             )}
           </>
@@ -255,7 +255,7 @@ export function ConfigurationDrawer({
                 )}
               </Field>
               {environment && (
-                <Field label="分支类型" error={errors.fields.branch_type}>
+                <Field label="Git 分支类型" error={errors.fields.branch_type}>
                   {(props) => (
                     <select
                       {...props}
@@ -283,7 +283,7 @@ export function ConfigurationDrawer({
                 </Field>
               )}
               <Field
-                label={environment ? "固定绑定分支" : "固定主干分支"}
+                label={environment ? "固定绑定 Git 分支" : "固定主干 Git 分支"}
                 required
                 error={errors.fields.branch}
               >
@@ -299,7 +299,7 @@ export function ConfigurationDrawer({
             <p className="text-sm text-muted-foreground">
               {rule?.enabled && rule.rule
                 ? `当前项目规则：${model.types.find((t) => t.branch_type === form.branch_type)?.label || form.branch_type} · ${rule.rule.mode} · ${rule.rule.pattern}`
-                : "项目尚未启用当前分支类型，请先调整分支模型。"}
+                : "项目尚未启用当前 Git 分支类型，请先调整 Git 分支模型。"}
             </p>
             <Field label="说明" error={errors.fields.summary}>
               {(props) => (
@@ -312,7 +312,8 @@ export function ConfigurationDrawer({
               )}
             </Field>
             <p className="text-sm text-muted-foreground">
-              保存配置不会创建远端分支；修改变体主干也不会修改已有环境。
+              保存配置不会创建远端 Git
+              分支；修改产品分支主干也不会修改已有环境。
             </p>
             <Field label="仓库范围" error={errors.fields.repository_scope}>
               {(props) => (
@@ -344,7 +345,7 @@ export function ConfigurationDrawer({
               {[
                 ["编码", value.code],
                 [
-                  "固定分支",
+                  "固定 Git 分支",
                   environment
                     ? (value as Environment).branch_name
                     : (value as Variant).main_branch,
@@ -354,7 +355,7 @@ export function ConfigurationDrawer({
                   value.repository_scope.mode === "custom"
                     ? "自定义范围"
                     : environment
-                      ? "继承变体"
+                      ? "继承产品分支"
                       : "全部项目仓库",
                 ],
                 [

@@ -28,7 +28,7 @@ it("shows only local project hierarchy while the project shell owns identity and
       path,
       "?variant=8",
     ).map((row) => row.label),
-  ).toEqual(["产品变体", "标准版"]);
+  ).toEqual(["产品分支", "标准版"]);
   const credentials = "/projects/4/integrations/3";
   expect(
     projectBreadcrumbRows(
@@ -55,7 +55,7 @@ it("keeps administration and workspace project hierarchies separate", () => {
       prefix ? "控制台" : "工作区",
       prefix ? "项目管理" : "我的项目",
       "支付",
-      "产品变体",
+      "产品分支",
       "定制",
     ]);
     expect(rows.at(-2)?.to).toBe(prefix + "/projects/4/variants?q=client");
@@ -113,11 +113,11 @@ it.each([
   ["?tab=settings", "general", "基本资料"],
   ["?tab=settings&section=members", "members", "成员"],
   ["?tab=settings&section=teams", "teams", "团队授权"],
-  ["?tab=settings&section=branches", "branches", "分支规则"],
+  ["?tab=settings&section=branches", "branches", "Git 分支规则"],
   ["?tab=settings&section=credentials", "credentials", "访问凭证"],
   ["?tab=members", "members", "成员"],
   ["?tab=teams", "teams", "团队授权"],
-  ["?tab=branch-model", "branches", "分支规则"],
+  ["?tab=branch-model", "branches", "Git 分支规则"],
   ["?tab=settings&section=unknown", "general", "基本资料"],
 ])(
   "preserves settings hierarchy for %s and canonical parent links",
@@ -184,7 +184,7 @@ it.each(["", "/admin"])(
     expect(desktop.collapsed.at(-1)?.to).toBe(
       path + "?q=client&variant=8&vview=releases&rpage=2&rstatus=reviewing",
     );
-    expect(desktop.collapsed.map((c) => c.label)).toContain("产品变体");
+    expect(desktop.collapsed.map((c) => c.label)).toContain("产品分支");
 
     const narrow = breadcrumbLayout(rows, true);
     expect(narrow.visible.map((c) => c.label)).toEqual(["发布管理", "1.4.0"]);

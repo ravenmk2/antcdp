@@ -33,7 +33,7 @@ antcdp/
 - [docs/projects-and-teams.md](docs/projects-and-teams.md)：成员来源、业务角色、资料、生命周期与数据模型。
 - [docs/projects-and-teams-detail.md](docs/projects-and-teams-detail.md)：当前 DTO、API、版本控制、选择器、图标及快捷方式。
 - [docs/project-repositories.md](docs/project-repositories.md)：多仓库关联、系统首选凭证、远端浏览与同步。
-- [docs/project-variants.md](docs/project-variants.md)：分支规则、变体、环境、动态仓库范围与批量主干创建。
+- [docs/project-variants.md](docs/project-variants.md)：Git 分支规则、产品分支、环境、动态仓库范围与批量主干创建。
 - [docs/project-releases.md](docs/project-releases.md)：发布阶段、MR 与回退、材料、验收、Tag、归档与文件清理。
 - [docs/service-integrations.md](docs/service-integrations.md)：连接、凭证、首选/兜底、Webhook 与适配器边界。
 - [docs/service-integrations-api.md](docs/service-integrations-api.md)：类型目录、DTO、条件写入、诊断与入站接收。
@@ -61,3 +61,9 @@ antcdp/
 - 优先使用本地 `components/ui` 和 `components/platform`，按语义变量、变体、组合布局、页面局部布局的顺序定制。公共组件不请求业务 API 或推断权限。
 - 在上述桌面支持范围内复核真实计数、字段错误聚焦、未保存保护、pending 防重、键盘和焦点及浅深主题。保留版本冲突与副作用结果未知的处理。
 - 每阶段完成检查、部署验证与复核后再提交。提交消息描述具体内容，不使用 P* 阶段编号。开发镜像和正式发布必须依赖同提交的前后端检查。
+
+## Git 提交规范
+
+- Git commit 必须遵循 Conventional Commits：`<type>[optional scope]: <description>`，例如 `fix(delivery): clarify product variant terminology`。
+- 提交消息使用英文，包括标题及可选正文、页脚；描述具体改动，不使用阶段编号。
+- type 按改动语义选择，如 `feat`、`fix`、`refactor`、`docs`、`test`、`chore`；破坏性变更使用 `!` 或 `BREAKING CHANGE:` 标注。

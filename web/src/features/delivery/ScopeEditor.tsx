@@ -126,7 +126,7 @@ export function ScopeEditor({
         }
       >
         <option value={environment ? "inherit" : "all"}>
-          {environment ? "继承变体全部仓库" : "全部项目仓库"}
+          {environment ? "继承产品分支全部仓库" : "全部项目仓库"}
         </option>
         <option value="custom">自定义范围</option>
       </select>
@@ -135,7 +135,7 @@ export function ScopeEditor({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-muted-foreground">
               手动选择与规则匹配取并集
-              {environment ? "，并限制在变体范围内" : ""}。已选择{" "}
+              {environment ? "，并限制在产品分支范围内" : ""}。已选择{" "}
               {value.repository_ids.length} 个。
             </p>
             <Button
@@ -319,7 +319,7 @@ export function ScopeEditor({
         </>
       ) : (
         <p className="text-sm text-muted-foreground">
-          {environment ? "跟随变体范围" : "包含全部项目关联仓库"}
+          {environment ? "跟随产品分支范围" : "包含全部项目关联仓库"}
           ，仓库变化后自动更新。
         </p>
       )}

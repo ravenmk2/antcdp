@@ -2,7 +2,7 @@
 
 基础路径为 `/api/v1`，下方路径均相对此前缀，健康检查除外。本文维护公共协议以及安装、认证、用户、头像、系统设置和审计接口。
 
-业务接口分别见 [项目与团队](projects-and-teams-detail.md)、[项目仓库](project-repositories.md)、[变体与分支](project-variants.md)、[发布管理](project-releases.md)、[服务集成](service-integrations-api.md)、[远程主机](remote-hosts.md)、[邮件](email-management.md)、[短信](sms-management.md)和[钉钉](dingtalk-management.md)。各模块独立校验权限；项目管理员权限不等于系统管理员，凭证维护权不等于业务执行权。
+业务接口分别见 [项目与团队](projects-and-teams-detail.md)、[项目仓库](project-repositories.md)、[产品分支与 Git 分支](project-variants.md)、[发布管理](project-releases.md)、[服务集成](service-integrations-api.md)、[远程主机](remote-hosts.md)、[邮件](email-management.md)、[短信](sms-management.md)和[钉钉](dingtalk-management.md)。各模块独立校验权限；项目管理员权限不等于系统管理员，凭证维护权不等于业务执行权。
 
 账号没有邮箱身份、邮箱登录或邮件找回。邮件等模块的发送测试不改变身份接口。验证方法及限制见 [开发指南](development.md)。
 

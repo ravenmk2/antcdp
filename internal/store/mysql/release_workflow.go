@@ -45,7 +45,7 @@ func (t *identityTx) ActiveRelease(r *d.Release, acquire bool) error {
 	}
 	var me *driver.MySQLError
 	if errors.As(e, &me) && me.Number == 1062 {
-		return httpx.E(409, "RELEASE_BUSY", "该变体或共享仓库主干已被其他发布占用")
+		return httpx.E(409, "RELEASE_BUSY", "该产品分支或共享仓库主干已被其他发布占用")
 	}
 	return e
 }

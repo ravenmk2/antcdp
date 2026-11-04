@@ -205,7 +205,7 @@ export function ReleaseRepositories({
             defaultFilter
               ? set.repositories.length
                 ? "发布可以只包含材料，无需为每个仓库添加 MR。未登记变更不代表远端没有新增提交，送验前仍会核对全部范围仓库。"
-                : "当前发布范围没有仓库，可先准备材料。开始发布前需补充仓库范围并确认基线；检查变体仓库配置后刷新范围。"
+                : "当前发布范围没有仓库，可先准备材料。开始发布前需补充仓库范围并确认基线；检查产品分支仓库配置后刷新范围。"
               : "试试其他仓库、处理状态或搜索词。"
           }
           action={
@@ -365,7 +365,7 @@ export function ReleaseRepositories({
           <div id="release-scope-content" className="release-scope-content">
             <div className="release-section-heading">
               <p>
-                范围来自变体配置。即使未登记
+                范围来自产品分支配置。即使未登记
                 MR，仓库仍会参与基线核对、版本快照和归档 Tag。
               </p>
               {manage && draft && (
@@ -389,7 +389,7 @@ export function ReleaseRepositories({
             )}
             {!set.repositories.length && (
               <p className="release-empty-copy">
-                当前发布未包含仓库。可调整变体范围后刷新。
+                当前发布未包含仓库。可调整产品分支范围后刷新。
               </p>
             )}
             <ul className="release-scope-list" aria-label="发布范围仓库">

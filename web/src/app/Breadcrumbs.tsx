@@ -41,7 +41,7 @@ const labels: Record<string, string> = {
   dingtalk: "钉钉机器人",
   account: "个人设置",
   security: "账号安全",
-  variants: "产品变体",
+  variants: "产品分支",
   templates: "模板",
   "send-logs": "发送日志",
   components: "组件状态",
@@ -51,7 +51,7 @@ const tabs: Record<string, string> = {
   teams: "参与团队",
   projects: "加入项目",
   repositories: "Git 仓库",
-  "branch-model": "分支模型",
+  "branch-model": "Git 分支模型",
   access: "注册与会话",
   system: "运行信息",
   maintenance: "临时文件",
@@ -60,7 +60,7 @@ const projectSettings: Record<string, string> = {
   general: "基本资料",
   members: "成员",
   teams: "团队授权",
-  branches: "分支规则",
+  branches: "Git 分支规则",
   credentials: "访问凭证",
 };
 export function trail(

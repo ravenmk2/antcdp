@@ -55,7 +55,7 @@ func (x *access) modelCommand(cmd Command, out *i.Result) error {
 	}
 	for _, r := range cmd.Model.Rules {
 		if !r.Enabled && refs[r.Type] {
-			return httpx.E(409, "BRANCH_TYPE_REFERENCED", "仍有变体或环境引用该类型（含归档对象）")
+			return httpx.E(409, "BRANCH_TYPE_REFERENCED", "仍有产品分支或环境引用该类型（含归档对象）")
 		}
 	}
 	// Canonical ordering prevents request order from changing a confirmation token.

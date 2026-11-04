@@ -127,7 +127,7 @@ func (t *identityTx) DeleteVariant(pid, id uint64) error {
 		return e
 	}
 	if used {
-		return httpx.E(409, "VARIANT_HAS_RELEASES", "变体已有发布历史，不能删除")
+		return httpx.E(409, "VARIANT_HAS_RELEASES", "产品分支已有发布历史，不能删除")
 	}
 	if _, e := t.tx.ExecContext(t.ctx, "DELETE FROM project_branch_check WHERE project_id=? AND subject_kind='variant' AND subject_id=?", pid, id); e != nil {
 		return e

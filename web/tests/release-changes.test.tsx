@@ -129,7 +129,9 @@ it("explains that materials may be prepared before the empty draft scope is read
       /当前发布范围没有仓库，可先准备材料。开始发布前需补充仓库范围并确认基线/,
     ),
   ).toBeTruthy();
-  expect(screen.queryByText(/可以仅交付材料，或检查变体仓库配置/)).toBeNull();
+  expect(
+    screen.queryByText(/可以仅交付材料，或检查产品分支仓库配置/),
+  ).toBeNull();
   expect(api).not.toHaveBeenCalled();
 });
 it("filters registered MRs and direct commits without mixing reverted history into current work", async () => {

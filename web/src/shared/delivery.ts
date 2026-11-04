@@ -150,7 +150,7 @@ export const labels: Record<string, string> = {
 export const reasonLabels: Record<string, string> = {
   branch_name_invalid: "分支名不符合 Git 规则",
   branch_unclassified: "没有匹配的启用类型",
-  branch_ambiguous: "匹配多个分支类型",
+  branch_ambiguous: "匹配多个 Git 分支类型",
   branch_type_mismatch: "与指定类型不一致",
   environment_branch_type_forbidden: "该类型不可绑定环境",
   system_preferred_required: "缺少系统首选凭证",
@@ -180,7 +180,7 @@ export function matchSources(values?: string[]) {
   return (values || [])
     .map((v) => {
       if (v === "all") return "全部项目仓库";
-      if (v === "inherit") return "继承变体范围";
+      if (v === "inherit") return "继承产品分支范围";
       if (v === "manual") return "手动选择";
       return v.startsWith("rule:") ? `匹配规则 ${Number(v.slice(5)) + 1}` : v;
     })

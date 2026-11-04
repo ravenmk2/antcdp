@@ -31,7 +31,7 @@
 | [项目与团队](projects-and-teams.md) | 成员来源、业务角色、资料、生命周期与数据模型 |
 | [项目与团队接口](projects-and-teams-detail.md) | 当前 DTO、API、版本控制、选择器、图标及快捷方式 |
 | [项目仓库](project-repositories.md) | 多仓库关联、系统首选凭证、远端浏览与同步 |
-| [产品变体与分支](project-variants.md) | 分支规则、变体、环境、动态仓库范围与批量主干创建 |
+| [产品分支与 Git 分支](project-variants.md) | Git 分支规则、产品分支、环境、动态仓库范围与批量主干创建 |
 | [发布管理](project-releases.md) | 发布阶段、MR 与回退、材料、验收、Tag、归档与文件清理 |
 
 ## 外部连接与消息

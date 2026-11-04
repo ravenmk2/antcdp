@@ -4,7 +4,7 @@ GitLab、Jenkins、OpenObserve、Elasticsearch、MySQL 与 PostgreSQL 管理 API
 
 ## 1. 目标与范围
 
-服务集成管理外部连接、凭证、连接测试、认证验证与 GitLab Webhook 接收。项目仓库、变体和发布通过受控适配器消费 GitLab 能力。当前不提供通用 Agent 执行。
+服务集成管理外部连接、凭证、连接测试、认证验证与 GitLab Webhook 接收。项目仓库、产品分支和发布通过受控适配器消费 GitLab 能力。当前不提供通用 Agent 执行。
 
 不提供工作流节点、触发规则、执行图、运行记录、可靠分发和运行时凭证选择链。不开放任意 HTTP 代理、SQL 查询或 Agent 执行 API。GitLab、Jenkins、OpenObserve、Elasticsearch、MySQL、PostgreSQL 支持连接及凭证维护、连接测试和凭证验证；未实现的适配器不注册可创建类型，不预建空表。
 
@@ -250,4 +250,4 @@ OpenObserve 连接的 default_organization 默认 default、可编辑；未来�
 
 ## 项目仓库与发布消费方
 
-[项目仓库](project-repositories.md)使用当前系统首选凭证管理关联；连接被引用时禁止删除和更换实例地址，CA 可修改。[变体与分支](project-variants.md)与[发布管理](project-releases.md)按各自业务授权和凭证规则调用受控适配器。Webhook 不因存在消费方而成为可靠分发器。
+[项目仓库](project-repositories.md)使用当前系统首选凭证管理关联；连接被引用时禁止删除和更换实例地址，CA 可修改。[产品分支与分支](project-variants.md)与[发布管理](project-releases.md)按各自业务授权和凭证规则调用受控适配器。Webhook 不因存在消费方而成为可靠分发器。

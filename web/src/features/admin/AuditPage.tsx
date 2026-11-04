@@ -152,7 +152,7 @@ export function Component() {
                 ["auth.", "登录与退出"],
                 ["installation.", "系统安装"],
                 ["project.", "项目"],
-                ["project_", "仓库与产品变体"],
+                ["project_", "仓库与产品分支"],
                 ["team.", "团队"],
                 ["service_", "服务集成"],
                 ["remote_host.", "远程主机"],

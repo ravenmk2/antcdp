@@ -13,7 +13,7 @@ export function deliveryFieldErrors(error: unknown): Record<string, string> {
     invalid_mode: "请选择有效的匹配方式",
     too_large: "仓库选择或匹配规则超过数量限制",
     duplicate: "存在重复的匹配规则",
-    repository_out_of_scope: "所选仓库已不在当前变体范围内，请重新选择",
+    repository_out_of_scope: "所选仓库已不在当前产品分支范围内，请重新选择",
     connection_out_of_scope: "规则中的服务连接不属于当前项目仓库范围",
     ...reasonLabels,
   };
