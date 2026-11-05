@@ -1,112 +1,94 @@
-import { Breadcrumbs } from "./Breadcrumbs";
-import { RecentResources, RecentResourceTracker } from "./recent-resources";
+import { useState } from "react";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
+import { DropdownMenu } from "radix-ui";
 import {
-  ProjectNavigation,
-  projectRouteContext,
-  projectSection,
-} from "@/features/collaboration/ProjectNavigation";
-import type { Resource } from "@/shared/collaboration";
-import {
-  NavigationGuard,
-  useNavigateAfterSave,
-} from "@/components/platform/navigation-guard";
-import { useEffect, useRef, useState } from "react";
-import {
-  Link,
-  NavLink,
-  Outlet,
-  useLoaderData,
-  useLocation,
-  useMatches,
-  useRevalidator,
-} from "react-router";
-import {
-  ArrowRight,
-  Home,
-  Users,
-  Folder,
-  Menu,
-  Moon,
-  Sun,
-  Monitor,
-  LogOut,
+  Bell,
+  Bot,
+  Cable,
+  Check,
   ChevronDown,
+  FileClock,
+  Folder,
+  GitBranch,
+  GitCompare,
+  Home,
   LayoutDashboard,
-  Settings,
-  ScrollText,
+  LogOut,
+  Mail,
+  Menu,
+  MessageSquare,
+  Monitor,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
-  UserRound,
-  Palette,
-  Cable,
+  Plus,
+  Rocket,
+  ScrollText,
   Server,
-  Mail,
-  MessageSquare,
-  Bot,
+  Settings,
+  Shield,
+  Star,
+  Sun,
+  UserRound,
+  Users,
 } from "lucide-react";
-import {
-  PinnedResources,
-  ShortcutsProvider,
-  ShortcutGroups,
-  ShortcutFeedback,
-} from "@/features/collaboration/Shortcuts";
-import { IdentityContext, type Identity } from "./identity";
-import { useAppearance } from "./appearance";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
-} from "@/components/ui/dropdown-menu";
-import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetDescription,
-  SheetHeader,
-} from "@/components/ui/sheet";
-import { Avatar } from "@/components/platform/avatar";
-import { FormDialog } from "@/components/platform/form-dialog";
-import { ErrorBox } from "@/components/platform/feedback";
-import { api, errorMessage, resetCSRF } from "@/lib/api";
-import { appHref } from "@/lib/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { api, resetCSRF } from "@/api/client";
+import { useAuth, useSession } from "./auth";
+import { appearanceLabels, useTheme, type Appearance } from "./theme";
+import { Avatar, ResourceIcon } from "@/components/resource-icon";
+import { Button, IconButton } from "@/components/button";
+import { Breadcrumbs, type Crumb } from "@/components/layout";
+import { ConfirmDialog, Drawer, Modal } from "@/components/overlays";
+import { ErrorNotice, Notice, StatusBadge } from "@/components/feedback";
+import { useApiQuery } from "@/hooks/use-api";
+import { useSubmission } from "@/hooks/use-form";
+import { cn } from "@/lib/utils";
+import type { Page, Resource, Shortcuts } from "@/types/collaboration";
+import { ShortcutEditor } from "@/features/workspace/shortcuts";
+import { ProjectSwitcher } from "./project-switcher";
 
-export function Shell() {
-  const identity = useLoaderData() as Identity;
+const consoleGroups = [
+  {
+    label: "全局管理",
+    items: [
+      { to: "/admin", label: "系统概览", icon: LayoutDashboard, end: true },
+      { to: "/admin/users", label: "用户管理", icon: UserRound },
+      { to: "/admin/projects", label: "项目管理", icon: Folder },
+      { to: "/admin/teams", label: "团队管理", icon: Users },
+    ],
+  },
+  {
+    label: "连接与资源",
+    items: [
+      { to: "/admin/integrations", label: "服务集成", icon: Cable },
+      { to: "/admin/remote-hosts", label: "远程主机", icon: Server },
+    ],
+  },
+  {
+    label: "消息与系统",
+    items: [
+      { to: "/admin/email", label: "邮件管理", icon: Mail },
+      { to: "/admin/sms", label: "短信管理", icon: MessageSquare },
+      { to: "/admin/dingtalk", label: "钉钉机器人", icon: Bot },
+      { to: "/admin/audit", label: "审计日志", icon: ScrollText },
+      { to: "/admin/settings", label: "系统设置", icon: Settings },
+      { to: "/admin/maintenance", label: "临时文件", icon: FileClock },
+    ],
+  },
+];
+const workspaceItems = [
+  { to: "/home", label: "首页", icon: Home, end: true },
+  { to: "/projects", label: "我的项目", icon: Folder },
+  { to: "/teams", label: "我的团队", icon: Users },
+];
+
+export function AppShell() {
+  const session = useSession();
   const location = useLocation();
-  const matches = useMatches();
-  const projectContext = projectRouteContext(
-    location.pathname,
-    (matches.at(-1)?.loaderData || {}) as {
-      resource?: Resource;
-      project?: Resource;
-    },
-    identity.session.user.role === "admin",
-  );
-  const revalidator = useRevalidator();
-  const { appearance, setAppearance } = useAppearance();
-  const [menu, setMenu] = useState(false);
-  const [logoutOpen, setLogoutOpen] = useState(false);
-  const siteName = identity.settings.site_name;
-  const logoSize = siteName ? "size-10" : "size-8";
-  useEffect(() => {
-    const visible = () => {
-      if (
-        document.visibilityState === "visible" &&
-        revalidator.state === "idle"
-      )
-        void revalidator.revalidate();
-    };
-    document.addEventListener("visibilitychange", visible);
-    return () => document.removeEventListener("visibilitychange", visible);
-  }, [revalidator]);
-
-  const consoleMode = location.pathname.startsWith("/admin");
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { appearance, setAppearance, cycle, resolved } = useTheme();
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem("antcdp.sidebar-collapsed") === "true";
@@ -114,485 +96,607 @@ export function Shell() {
       return false;
     }
   });
-  function toggleSidebar() {
-    setCollapsed(!collapsed);
-    try {
-      localStorage.setItem("antcdp.sidebar-collapsed", String(!collapsed));
-    } catch {
-      /* Local preference is optional. */
-    }
+  const [mobile, setMobile] = useState(false);
+  const [messages, setMessages] = useState(false);
+  const [logout, setLogout] = useState(false);
+  const [shortcutKind, setShortcutKind] = useState<"projects" | "teams" | null>(
+    null,
+  );
+  const submission = useSubmission();
+  const consoleMode =
+    location.pathname.startsWith("/admin") && session.user.role === "admin";
+  const projectMatch = location.pathname.match(/^\/projects\/([1-9]\d*)/);
+  const projectId = projectMatch?.[1];
+  const project = useApiQuery<Resource>(
+    ["project", projectId],
+    `/projects/${projectId ?? ""}`,
+    { enabled: Boolean(projectId) },
+  );
+  const shortcuts = useApiQuery<Shortcuts>(
+    ["shortcuts", session.user.id],
+    "/me/sidebar-shortcuts",
+  );
+  const { settings } = useAuth();
+  const projectDirectory = useApiQuery<Page<Resource>>(
+    ["project-switcher", session.user.id],
+    "/projects?scope=mine&status=all&page=1&page_size=100",
+    { enabled: Boolean(projectId) },
+  );
+  const brand = settings.site_name || "AntCDP";
+  const documentTitle =
+    projectId && project.data
+      ? `${project.data.data.name} · ${brand}`
+      : consoleMode
+        ? `控制台 · ${brand}`
+        : brand;
+  document.title = documentTitle;
+
+  function toggleCollapsed() {
+    setCollapsed((current) => {
+      try {
+        localStorage.setItem("antcdp.sidebar-collapsed", String(!current));
+      } catch {}
+      return !current;
+    });
   }
-  const accountNavigation = useRef<"pointer" | "keyboard" | null>(null);
-  function followAccountLink(event: React.MouseEvent<HTMLAnchorElement>) {
-    if (
-      event.button !== 0 ||
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey
-    )
-      return;
-    accountNavigation.current = event.detail ? "pointer" : "keyboard";
-    setMenu(false);
+  async function confirmLogout() {
+    const ok = await submission.run(async () => {
+      await api("/auth/logout", {});
+      resetCSRF();
+      queryClient.clear();
+      window.location.replace("/login");
+    });
+    if (!ok) setLogout(true);
   }
-  const nav = (compact: boolean, mobile = false) => (
-    <div className="flex h-full flex-col">
+  const navigation = (compact: boolean, close?: () => void) => (
+    <>
       <div
-        className={`mb-4 flex min-h-12 items-center gap-1 ${compact ? "justify-center" : "justify-between"}`}
+        className={cn(
+          "flex h-16 shrink-0 items-center border-b px-4",
+          compact ? "justify-center" : "justify-between",
+        )}
       >
         {!compact && (
           <Link
             to="/home"
-            onClick={() => setMenu(false)}
-            aria-label="AntCDP 首页"
-            title="返回工作区"
-            className={
-              "flex min-h-12 min-w-0 items-center gap-2 px-2 " +
-              (mobile ? "pr-7" : "")
-            }
+            className="flex min-w-0 items-center gap-2"
+            onClick={close}
           >
-            <img
-              src="/logo.svg"
-              className={`${logoSize} shrink-0 dark:hidden`}
-              alt=""
-            />
+            <img src="/logo.svg" alt="" className="size-[30px] dark:hidden" />
             <img
               src="/logo-inverse.svg"
-              className={`hidden ${logoSize} shrink-0 dark:block`}
               alt=""
+              className="hidden size-[30px] dark:block"
             />
-            <span className={compact ? "sr-only" : "min-w-0"}>
-              <span
-                className={`block font-semibold tracking-tight ${siteName ? "text-lg" : "text-2xl"}`}
-              >
-                AntCDP
-              </span>
-              {siteName && siteName !== "AntCDP" && (
-                <span
-                  className="block truncate text-[13px] text-muted-foreground"
-                  title={siteName}
-                >
-                  {siteName}
-                </span>
+            <span className="min-w-0">
+              <strong className="block text-[17px]">AntCDP</strong>
+              {brand !== "AntCDP" && (
+                <small className="block truncate text-[11px] text-muted">
+                  {brand}
+                </small>
               )}
             </span>
+            <small className="rounded border px-1 py-0.5 text-[9px] font-medium text-faint">
+              {consoleMode ? "CONSOLE" : "TEAM"}
+            </small>
           </Link>
         )}
-        {!mobile && (
-          <Button
-            size="icon"
-            variant="ghost"
-            className="size-11 shrink-0 text-muted-foreground hover:text-foreground"
-            aria-expanded={!collapsed}
-            aria-controls="desktop-sidebar"
-            aria-label={collapsed ? "展开侧栏" : "收起侧栏"}
-            title={collapsed ? "展开侧栏" : "收起侧栏"}
-            onClick={toggleSidebar}
+        {!close && (
+          <IconButton
+            size="iconSm"
+            label={collapsed ? "展开侧栏" : "收起侧栏"}
+            onClick={toggleCollapsed}
           >
-            {collapsed ? (
-              <PanelLeftOpen className="size-[18px]" />
-            ) : (
-              <PanelLeftClose className="size-[18px]" />
-            )}
-          </Button>
+            {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+          </IconButton>
+        )}
+        {close && (
+          <IconButton label="关闭导航" onClick={close}>
+            <Menu />
+          </IconButton>
         )}
       </div>
-      <nav className="space-y-1" aria-label="主导航">
-        {(consoleMode
-          ? [
-              {
-                label: "概览",
-                items: [
-                  {
-                    to: "/admin",
-                    label: "系统概览",
-                    Icon: LayoutDashboard,
-                    end: true,
-                  },
-                ],
-              },
-              {
-                label: "组织与协作",
-                items: [
-                  { to: "/admin/projects", label: "项目管理", Icon: Folder },
-                  { to: "/admin/teams", label: "团队管理", Icon: Users },
-                  { to: "/admin/users", label: "用户管理", Icon: UserRound },
-                ],
-              },
-              {
-                label: "服务与连接",
-                items: [
-                  { to: "/admin/integrations", label: "服务集成", Icon: Cable },
-                  {
-                    to: "/admin/remote-hosts",
-                    label: "远程主机",
-                    Icon: Server,
-                  },
-                  { to: "/admin/email", label: "邮件", Icon: Mail },
-                  { to: "/admin/sms", label: "短信", Icon: MessageSquare },
-                  { to: "/admin/dingtalk", label: "钉钉机器人", Icon: Bot },
-                ],
-              },
-              {
-                label: "平台维护",
-                items: [
-                  { to: "/admin/settings", label: "系统设置", Icon: Settings },
-                  { to: "/admin/audit", label: "审计日志", Icon: ScrollText },
-                ],
-              },
-            ]
-          : [
-              {
-                label: "工作区",
-                items: [
-                  { to: "/home", label: "首页", Icon: Home, end: true },
-                  { to: "/projects", label: "我的项目", Icon: Folder },
-                  { to: "/teams", label: "我的团队", Icon: Users },
-                ],
-              },
-            ]
-        ).map((group, index) => (
-          <div key={group.label} className={index ? "mt-3 border-t pt-2" : ""}>
-            {consoleMode && index > 0 && (
-              <p
-                className={
-                  compact
-                    ? "sr-only"
-                    : "mb-1 px-3 text-[13px] font-medium text-muted-foreground"
-                }
-              >
-                {group.label}
-              </p>
+      <div className="sidebar-scroll">
+        {consoleMode && (
+          <div
+            className="console-context"
+            title="系统控制台 · 管理员专属工作空间"
+          >
+            <Shield />
+            {!compact && (
+              <div>
+                <strong>系统控制台</strong>
+                <small>管理员专属工作空间</small>
+              </div>
             )}
-            {group.items.map(({ to, label, Icon, ...item }) => (
-              <NavLink
-                key={to}
-                to={to}
-                title={label}
-                aria-label={label}
-                end={"end" in item && item.end}
-                onClick={() => setMenu(false)}
-                className={`sidebar-link flex min-h-10 items-center gap-2 rounded-[6px] px-3 py-2 text-sm leading-5 ${compact ? "justify-center" : ""}`}
-              >
-                <span className="flex size-5 shrink-0 items-center justify-center">
-                  <Icon className="size-[18px]" />
-                </span>
-                {!compact && label}
-              </NavLink>
-            ))}
           </div>
-        ))}
-      </nav>
-      {!consoleMode && (
-        <ShortcutGroups
-          kinds={["projects"]}
-          compact={compact}
-          onNavigate={() => setMenu(false)}
-        />
-      )}
-      <div className="mt-auto border-t pt-3">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              aria-label={`用户菜单，${identity.session.user.display_name}，@${identity.session.user.username}`}
-              title={`${identity.session.user.display_name} · @${identity.session.user.username}`}
-              className="sidebar-account h-auto w-full justify-center px-2 py-2.5"
+        )}
+        {!consoleMode && projectId && project.data && (
+          <ProjectSwitcher
+            project={project.data.data}
+            directory={projectDirectory.data?.data.items}
+            compact={compact}
+            close={close}
+          />
+        )}
+        <nav aria-label="主导航">
+          {(consoleMode
+            ? consoleGroups
+            : [{ label: "个人工作区", items: workspaceItems }]
+          ).map((group) => (
+            <div key={group.label}>
+              {!compact && <div className="nav-label">{group.label}</div>}
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={"end" in item && item.end}
+                  title={item.label}
+                  aria-label={item.label}
+                  className={cn("nav-link", compact && "justify-center px-0")}
+                  onClick={close}
+                >
+                  <item.icon className="size-[18px] shrink-0" />
+                  {!compact && item.label}
+                </NavLink>
+              ))}
+            </div>
+          ))}
+        </nav>
+        {!consoleMode && projectId && project.data && (
+          <div>
+            {!compact && <div className="nav-label">当前项目</div>}
+            {[
+              {
+                label: "项目总览",
+                to: `/projects/${projectId}`,
+                icon: LayoutDashboard,
+              },
+              {
+                label: "发布管理",
+                to: `/projects/${projectId}?tab=releases`,
+                icon: Rocket,
+              },
+              {
+                label: "产品分支",
+                to: `/projects/${projectId}/variants`,
+                icon: GitBranch,
+              },
+              {
+                label: "Git 仓库",
+                to: `/projects/${projectId}?tab=repositories`,
+                icon: GitCompare,
+              },
+              {
+                label: "成员与团队",
+                to: `/projects/${projectId}?tab=members`,
+                icon: Users,
+              },
+              {
+                label: "项目设置",
+                to: `/projects/${projectId}?tab=settings`,
+                icon: Settings,
+              },
+            ].map(({ label, to, icon: Icon }) => {
+              const active =
+                to === `/projects/${projectId}`
+                  ? location.pathname === `/projects/${projectId}` &&
+                    !new URLSearchParams(location.search).has("tab")
+                  : to.includes("?")
+                    ? new URLSearchParams(location.search).get("tab") ===
+                      new URLSearchParams(to.split("?")[1]).get("tab")
+                    : location.pathname.startsWith(to);
+              return (
+                <Link
+                  key={label}
+                  to={to}
+                  title={label}
+                  aria-label={label}
+                  aria-current={active ? "page" : undefined}
+                  className={cn("nav-link", compact && "justify-center px-0")}
+                  onClick={close}
+                >
+                  <Icon className="size-[18px]" />
+                  {!compact && label}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+        {!consoleMode && (
+          <div>
+            <div className="flex items-center justify-between">
+              {!compact && <span className="nav-label">关注项目</span>}
+              <IconButton
+                size="iconSm"
+                className="mr-3"
+                label="管理关注项目"
+                onClick={() => setShortcutKind("projects")}
+              >
+                <Star />
+              </IconButton>
+            </div>
+            {shortcuts.isError ? (
+              <div className="px-5 text-xs text-warning">
+                关注项目加载失败{" "}
+                <button
+                  className="underline"
+                  onClick={() => void shortcuts.refetch()}
+                >
+                  重试
+                </button>
+              </div>
+            ) : (
+              shortcuts.data?.data.projects.items.map((item) => (
+                <Link
+                  key={item.id}
+                  to={`/projects/${item.id}`}
+                  className={cn("nav-link", compact && "justify-center px-0")}
+                  title={item.name}
+                  onClick={close}
+                >
+                  <ResourceIcon
+                    resource={item}
+                    className="size-5 rounded-sm border-0 bg-transparent"
+                  />
+                  {!compact && (
+                    <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                  )}
+                  {!compact && item.status === "archived" && (
+                    <span className="text-[10px] text-muted">归档</span>
+                  )}
+                </Link>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+      <div className="border-t p-3">
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              className={cn(
+                "flex w-full items-center gap-2 rounded-lg p-2 text-left hover:bg-surface-hover",
+                compact && "justify-center",
+              )}
+              aria-label={`用户菜单，${session.user.display_name}`}
             >
               <Avatar
-                url={identity.session.user.avatar?.url}
-                name={identity.session.user.display_name}
+                url={session.user.avatar?.url}
+                name={session.user.display_name}
               />
-              <span
-                className={
-                  compact
-                    ? "sr-only"
-                    : "min-w-0 flex-1 truncate text-left text-sm"
-                }
-              >
-                {identity.session.user.display_name}
-                <span className="block text-[13px] font-normal text-muted-foreground">
-                  @{identity.session.user.username}
+              {!compact && (
+                <span className="min-w-0 flex-1">
+                  <strong className="block truncate text-xs">
+                    {session.user.display_name}
+                  </strong>
+                  <small className="block truncate text-[11px] text-muted">
+                    @{session.user.username}
+                  </small>
                 </span>
-              </span>
-              {!compact && <ChevronDown className="size-4" />}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            side="top"
-            sideOffset={8}
-            className="account-popup w-64 p-2"
-            onCloseAutoFocus={(event) => {
-              const source = accountNavigation.current;
-              accountNavigation.current = null;
-              if (!source) return;
-              event.preventDefault();
-              document.getElementById("main-content")?.focus({
-                preventScroll: true,
-                focusVisible: source === "keyboard",
-              });
-            }}
-          >
-            <DropdownMenuItem asChild>
-              <Link to="/account" onClick={followAccountLink}>
-                <UserRound />
-                个人设置
-              </Link>
-            </DropdownMenuItem>
-            {identity.session.user.role === "admin" && (
-              <DropdownMenuItem asChild>
-                <Link
-                  to={consoleMode ? "/home" : "/admin"}
-                  onClick={followAccountLink}
-                >
-                  {consoleMode ? <Home /> : <LayoutDashboard />}
-                  {consoleMode ? "返回工作区" : "打开控制台"}
-                </Link>
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>
-                <Palette />
-                外观
-                <span className="ml-auto text-[13px] text-muted-foreground">
-                  {
-                    { light: "浅色", dark: "深色", system: "跟随系统" }[
-                      appearance
-                    ]
-                  }
-                </span>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                {[
-                  ["light", "浅色", Sun],
-                  ["dark", "深色", Moon],
-                  ["system", "跟随系统", Monitor],
-                ].map(([value, label, Icon]) => {
-                  const AppearanceIcon = Icon as typeof Sun;
-                  return (
-                    <DropdownMenuItem
-                      key={value as string}
-                      onSelect={() => setAppearance(value as string)}
-                    >
-                      <AppearanceIcon className="size-4" />
-                      {label as string}
-                      {appearance === value && (
-                        <span className="ml-auto">✓</span>
-                      )}
-                    </DropdownMenuItem>
-                  );
-                })}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-            <DropdownMenuItem onSelect={() => setLogoutOpen(true)}>
-              <LogOut className="size-4" />
-              退出登录
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
-  );
-  return (
-    <IdentityContext value={identity}>
-      <NavigationGuard key={identity.session.user.id}>
-        <ShortcutsProvider>
-          <RecentResourceTracker user={identity.session.user.id} />
-          <div
-            className={
-              "min-h-dvh md:grid " +
-              (collapsed
-                ? "md:grid-cols-[68px_minmax(0,1fr)]"
-                : "md:grid-cols-[248px_minmax(0,1fr)]")
-            }
-          >
-            <a
-              href="#main-content"
-              onClick={(event) => {
-                event.preventDefault();
-                document.getElementById("main-content")?.focus();
-              }}
-              className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-card focus:p-3"
-            >
-              跳至正文
-            </a>
-            <aside
-              id="desktop-sidebar"
-              className={
-                "sticky top-0 hidden h-dvh overflow-y-auto border-r bg-[var(--sidebar)] py-4 md:block " +
-                (collapsed ? "px-2" : "px-4")
-              }
-            >
-              {nav(collapsed)}
-            </aside>
-            <div className="project-shell-container">
-              {projectContext ? (
-                <ProjectNavigation
-                  key={projectContext.project.id + ":" + projectContext.admin}
-                  project={projectContext.project}
-                  admin={projectContext.admin}
-                  active={projectSection(location.pathname, location.search)}
-                  mobileTrigger={
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-11 shrink-0 text-muted-foreground md:hidden"
-                      aria-label="打开导航"
-                      onClick={() => setMenu(true)}
-                    >
-                      <Menu className="size-[18px]" />
-                    </Button>
-                  }
-                />
-              ) : (
-                <header className="flex h-12 items-center gap-2 border-b border-border/70 bg-background px-5 md:px-8 2xl:px-10">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="size-11 text-muted-foreground hover:text-foreground md:hidden"
-                    aria-label="打开导航"
-                    onClick={() => setMenu(true)}
-                  >
-                    <Menu className="size-[18px]" />
-                  </Button>
-                  <Breadcrumbs
-                    user={identity.session.user.id}
-                    siteName={siteName}
-                  />
-                </header>
               )}
-              <main
-                id="main-content"
-                tabIndex={-1}
-                className="min-w-0 w-full p-5 md:p-8 2xl:px-10"
-              >
-                {projectContext && (
-                  <Breadcrumbs
-                    user={identity.session.user.id}
-                    siteName={siteName}
-                    mode="project"
-                  />
-                )}
-                <ShortcutFeedback />
-                <Outlet />
-              </main>
-            </div>
-          </div>
-          <Sheet open={menu} onOpenChange={setMenu}>
-            <SheetContent
-              side="left"
-              className="w-72 overflow-y-auto bg-[var(--sidebar)] p-5"
+              {!compact && <ChevronDown className="size-4 text-muted" />}
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              side="top"
+              align="start"
+              sideOffset={8}
+              className="z-50 w-72 rounded-xl border bg-popover p-2 text-popover-foreground shadow-xl"
             >
-              <SheetHeader className="sr-only">
-                <SheetTitle>主导航</SheetTitle>
-                <SheetDescription>页面导航与账号设置</SheetDescription>
-              </SheetHeader>
-              {nav(false, true)}
-            </SheetContent>
-          </Sheet>
-          {logoutOpen && <LogoutDialog onClose={() => setLogoutOpen(false)} />}
-        </ShortcutsProvider>
-      </NavigationGuard>
-    </IdentityContext>
-  );
-}
-
-function LogoutDialog({ onClose }: { onClose: () => void }) {
-  const [pending, setPending] = useState(false),
-    [error, setError] = useState("");
-  const locked = useRef(false),
-    afterSave = useNavigateAfterSave();
-  async function logout() {
-    if (locked.current) return;
-    locked.current = true;
-    setPending(true);
-    setError("");
-    try {
-      await api("/auth/logout", {});
-      resetCSRF();
-      afterSave(appHref("/login"));
-    } catch (e) {
-      setError(errorMessage(e));
-      locked.current = false;
-      setPending(false);
-    }
-  }
-  return (
-    <FormDialog
-      compact
-      open
-      title="退出登录"
-      description="退出后需要重新登录；未保存的修改不会保留。"
-      pending={pending}
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="outline" disabled={pending} onClick={onClose}>
-            取消
-          </Button>
-          <Button disabled={pending} onClick={() => void logout()}>
-            {pending ? "正在退出…" : "退出登录"}
-          </Button>
-        </>
-      }
-    >
-      <ErrorBox>{error}</ErrorBox>
-    </FormDialog>
-  );
-}
-
-export function HomePage() {
-  const identity = useLoaderData() as Identity;
-  return (
-    <div className="max-w-[var(--overview-max-width)]">
-      <div
-        className="mb-5 h-1 w-9 rounded-full bg-[var(--brand)]"
-        aria-hidden="true"
-      />
-      <h1 className="break-words text-2xl font-semibold tracking-tight">
-        欢迎回来，{identity.session.user.display_name}。
-      </h1>
-
-      <p className="mt-2 text-sm text-muted-foreground">
-        继续最近访问的项目，或从侧栏进入你的协作空间。
-      </p>
-      <div className="mt-8 grid items-start gap-8 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="min-w-0">
-          <RecentResources
-            key={identity.session.user.id}
-            user={identity.session.user.id}
-          />
-          <PinnedResources />
-        </div>
-        <aside className="space-y-4 border-t pt-6 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6">
-          <h2 className="font-semibold">开始协作</h2>
-          <p className="text-sm leading-6 text-muted-foreground">
-            项目承载仓库、环境与发布；团队用来组织成员和项目访问。
-          </p>
-          <Link
-            to="/teams"
-            className="flex items-center gap-2 text-sm hover:underline"
-          >
-            查看我的团队
-            <ArrowRight className="size-4" />
-          </Link>
-          {identity.session.user.role !== "admin" && (
-            <p className="border-t pt-4 text-sm leading-6 text-muted-foreground">
-              还没有参与的项目？请联系项目或团队管理员加入。
-            </p>
-          )}
-        </aside>
+              <div className="mb-2 flex items-center gap-3 rounded-lg bg-surface-subtle p-3">
+                <Avatar
+                  url={session.user.avatar?.url}
+                  name={session.user.display_name}
+                  className="size-11"
+                />
+                <div className="min-w-0">
+                  <strong className="block truncate">
+                    {session.user.display_name}
+                  </strong>
+                  <small className="text-muted">@{session.user.username}</small>
+                </div>
+                <StatusBadge tone="info" dot={false}>
+                  {session.user.is_founder
+                    ? "创始人"
+                    : session.user.role === "admin"
+                      ? "管理员"
+                      : "普通用户"}
+                </StatusBadge>
+              </div>
+              <MenuLink to="/account" icon={UserRound} label="个人设置" />
+              {session.user.role === "admin" && (
+                <MenuLink
+                  to={consoleMode ? "/home" : "/admin"}
+                  icon={consoleMode ? Home : Shield}
+                  label={consoleMode ? "返回工作区" : "控制台"}
+                />
+              )}
+              <DropdownMenu.Separator className="my-2 h-px bg-border" />
+              <div className="px-2 py-1 text-[11px] text-muted">外观</div>
+              <div className="grid grid-cols-3 gap-1 px-1 pb-2">
+                {(["light", "dark", "system"] as Appearance[]).map((value) => (
+                  <button
+                    key={value}
+                    className={cn(
+                      "flex min-h-9 items-center justify-center gap-1 rounded-md border text-[11px]",
+                      appearance === value
+                        ? "border-primary bg-accent-soft text-primary"
+                        : "text-muted",
+                    )}
+                    aria-pressed={appearance === value}
+                    onClick={() => setAppearance(value)}
+                  >
+                    {value === "light" ? (
+                      <Sun className="size-3" />
+                    ) : value === "dark" ? (
+                      <Moon className="size-3" />
+                    ) : (
+                      <Monitor className="size-3" />
+                    )}
+                    {appearanceLabels[value]}
+                    {appearance === value && <Check className="sr-only" />}
+                  </button>
+                ))}
+              </div>
+              <DropdownMenu.Separator className="my-2 h-px bg-border" />
+              <DropdownMenu.Item
+                className="flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm text-danger outline-none focus:bg-danger-soft"
+                onSelect={() => setLogout(true)}
+              >
+                <LogOut className="size-4" />
+                退出登录
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
       </div>
-      {import.meta.env.DEV && (
-        <Link to="/components" className="mt-8 inline-block text-sm underline">
-          组件状态展示
-        </Link>
-      )}
-      <a className="sr-only" href={appHref("/home")}>
-        当前首页
+    </>
+  );
+  const crumbs = breadcrumbs(
+    location.pathname,
+    project.data?.data,
+    consoleMode,
+  );
+  return (
+    <div className="app-layout" data-collapsed={collapsed}>
+      <a
+        href="#main-content"
+        className="sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:not-sr-only focus:rounded-lg focus:bg-surface focus:p-3"
+      >
+        跳至正文
       </a>
+      <aside className="sidebar">{navigation(collapsed)}</aside>
+      <div className="min-w-0">
+        <header className="topbar">
+          <div className="flex min-w-0 items-center gap-2">
+            <IconButton
+              className="min-[821px]:hidden"
+              label="打开导航"
+              onClick={() => setMobile(true)}
+            >
+              <Menu />
+            </IconButton>
+            <Breadcrumbs items={crumbs} />
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {consoleMode && (
+              <IconButton label="返回工作区" onClick={() => navigate("/home")}>
+                <Home />
+              </IconButton>
+            )}
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <IconButton label="快速创建">
+                  <Plus />
+                </IconButton>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  align="end"
+                  className="z-50 min-w-48 rounded-lg border bg-popover p-1 shadow-xl"
+                >
+                  {session.user.role === "admin" && (
+                    <>
+                      <MenuLink
+                        to="/admin/projects?create=1"
+                        icon={Folder}
+                        label="创建项目"
+                      />
+                      <MenuLink
+                        to="/admin/teams?create=1"
+                        icon={Users}
+                        label="创建团队"
+                      />
+                    </>
+                  )}
+                  {projectId && (
+                    <MenuLink
+                      to={`/projects/${projectId}?tab=releases&create=1`}
+                      icon={Rocket}
+                      label="创建发布"
+                    />
+                  )}
+                  {!projectId && session.user.role !== "admin" && (
+                    <div className="px-3 py-2 text-xs text-muted">
+                      进入项目后可创建发布
+                    </div>
+                  )}
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+            <IconButton
+              label={`外观：${appearanceLabels[appearance]}，点击切换`}
+              title={`外观：${appearanceLabels[appearance]}`}
+              onClick={cycle}
+            >
+              {resolved === "dark" ? (
+                <Moon />
+              ) : appearance === "system" ? (
+                <Monitor />
+              ) : (
+                <Sun />
+              )}
+            </IconButton>
+            <IconButton
+              label="消息（预留能力）"
+              onClick={() => setMessages(true)}
+            >
+              <Bell />
+            </IconButton>
+          </div>
+        </header>
+        <main id="main-content" tabIndex={-1}>
+          <Outlet />
+        </main>
+      </div>
+      <Drawer open={mobile} title="页面导航" onClose={() => setMobile(false)}>
+        {navigation(false, () => setMobile(false))}
+      </Drawer>
+      <Modal
+        open={messages}
+        title="消息"
+        description="此入口为后续能力预留。"
+        onClose={() => setMessages(false)}
+        footer={<Button onClick={() => setMessages(false)}>知道了</Button>}
+      >
+        <Notice>当前没有站内消息或未读通知。项目关注不会自动开启通知。</Notice>
+      </Modal>
+      {shortcutKind && shortcuts.data && (
+        <ShortcutEditor
+          kind={shortcutKind}
+          initial={shortcuts.data.data}
+          onClose={() => setShortcutKind(null)}
+        />
+      )}
+      <ConfirmDialog
+        open={logout}
+        title="确认退出登录"
+        description="退出后需要重新登录；未保存的修改不会保留。"
+        confirmLabel="退出登录"
+        pending={submission.pending}
+        onClose={() => setLogout(false)}
+        onConfirm={() => void confirmLogout()}
+      >
+        <ErrorNotice error={submission.error} />
+      </ConfirmDialog>
     </div>
   );
+}
+
+function MenuLink({
+  to,
+  icon: Icon,
+  label,
+  description,
+}: {
+  to: string;
+  icon: typeof Home;
+  label: string;
+  description?: string;
+}) {
+  return (
+    <DropdownMenu.Item
+      asChild
+      className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-3 text-sm outline-none focus:bg-surface-hover"
+    >
+      <Link to={to}>
+        <Icon className="size-4 shrink-0 text-muted" />
+        <span className="min-w-0 flex-1">
+          <strong className="block text-[13px] font-medium">{label}</strong>
+          {description && (
+            <small className="mt-0.5 block text-[11px] text-muted">
+              {description}
+            </small>
+          )}
+        </span>
+      </Link>
+    </DropdownMenu.Item>
+  );
+}
+
+function breadcrumbs(
+  path: string,
+  project: Resource | undefined,
+  consoleMode: boolean,
+): Crumb[] {
+  if (path === "/home") return [{ label: "工作区" }, { label: "首页" }];
+  if (path.startsWith("/account"))
+    return [{ label: "工作区", to: "/home" }, { label: "个人设置" }];
+  if (path.startsWith("/teams/"))
+    return [{ label: "我的团队", to: "/teams" }, { label: "团队详情" }];
+  if (project) {
+    const tab = new URLSearchParams(location.search).get("tab");
+    const labels: Record<string, string> = {
+      releases: "发布管理",
+      repositories: "Git 仓库",
+      members: "成员与团队",
+      settings: "项目设置",
+      description: "项目介绍",
+    };
+    const items: Crumb[] = [
+      { label: "我的项目", to: "/projects" },
+      { label: project.name, to: `/projects/${project.id}` },
+    ];
+    if (path.includes("/variants/"))
+      items.push(
+        { label: "产品分支", to: `/projects/${project.id}/variants` },
+        { label: "产品分支详情" },
+      );
+    else if (path.endsWith("/variants")) items.push({ label: "产品分支" });
+    else if (tab && labels[tab]) items.push({ label: labels[tab] });
+    return items;
+  }
+  const names: Record<string, string> = {
+    "/projects": "我的项目",
+    "/teams": "我的团队",
+    "/admin": "系统概览",
+    "/admin/users": "用户管理",
+    "/admin/projects": "项目管理",
+    "/admin/teams": "团队管理",
+    "/admin/integrations": "服务集成",
+    "/admin/remote-hosts": "远程主机",
+    "/admin/email": "邮件管理",
+    "/admin/sms": "短信管理",
+    "/admin/dingtalk": "钉钉机器人",
+    "/admin/audit": "审计日志",
+    "/admin/settings": "系统设置",
+    "/admin/maintenance": "临时文件",
+  };
+  if (path.startsWith("/admin/projects/"))
+    return [
+      { label: "控制台", to: "/admin" },
+      { label: "项目管理", to: "/admin/projects" },
+      { label: "项目详情" },
+    ];
+  if (path.startsWith("/admin/teams/"))
+    return [
+      { label: "控制台", to: "/admin" },
+      { label: "团队管理", to: "/admin/teams" },
+      { label: "团队详情" },
+    ];
+  if (path.includes("/integrations/"))
+    return [
+      {
+        label: "服务集成",
+        to: consoleMode ? "/admin/integrations" : "/account/integrations",
+      },
+      { label: "连接详情" },
+    ];
+  if (path.includes("/remote-hosts/"))
+    return [
+      {
+        label: "远程主机",
+        to: consoleMode ? "/admin/remote-hosts" : "/account/remote-hosts",
+      },
+      { label: "主机详情" },
+    ];
+  return [
+    {
+      label: consoleMode ? "控制台" : "工作区",
+      to: consoleMode ? "/admin" : "/home",
+    },
+    { label: names[path] ?? "页面" },
+  ];
 }

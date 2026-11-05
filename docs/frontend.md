@@ -1,67 +1,130 @@
-# 前端设计与发布
+# 前端实现与维护
 
-工作区、控制台、安装和认证由同一个 React SPA 提供，正式入口为站点根路径。浏览器通过同源 `/api/v1` 访问 Go 服务，共用服务端会话、CSRF 和权限检查。
+AntCDP 的前端是嵌入 Go 二进制的 React SPA。浏览器从根路径加载应用，通过同源 `/api/v1` 使用现有 Cookie 会话、CSRF 与权限接口。本文描述当前代码和维护契约；视觉与操作规范见 [UI 设计规范](ui-design.md)，字段和业务规则仍以所属领域文档为准。
 
-## 源码与路由
+## 1. 技术栈与目录
 
-`web/src/main.tsx` 装配 React Router 路由。应用外壳和身份上下文位于 `app/`，按功能加载的页面位于 `features/`。请求客户端、DTO 和纯校验函数归入 `shared/`，认证返回目标、加载器与展示辅助函数归入 `lib/`。所有 npm 依赖由 `web/package-lock.json` 锁定。
+当前技术栈为 React 19、TypeScript 7、Vite、Tailwind CSS 4、React Router、TanStack Query、TanStack Table、Radix/shadcn 风格本地组件、Lucide 与 Zod。
 
-页面直接生成根路径链接。Go 对登记过的 `/next/` 页面书签返回 307 并保留查询参数，浏览器继承片段。登录及强制改密统一校验并归一化同源业务返回地址。已移除的脚本、字体及未知前缀路径返回 404。升级时若已打开的标签页需要过期脚本，刷新页面即可载入当前版本。
+TypeScript 7 的原生编译器通过 `@typescript/native` 提供 `tsc`。由于 TypeScript 7.0 不提供旧编译器 API，`typescript` 别名使用 `@typescript/typescript6`，供 typescript-eslint 调用；业务源码始终通过 TS 7 strict 检查。两个编译器的版本均锁定在 `web/package-lock.json`。
 
-项目介绍、跨产品分支发布与设置采用既有项目详情路由的 `tab=description|releases|settings`，设置分类保存在 `section`；旧 members/teams/branch-model 查询继续映射。产品分支发布仍使用原深链接。首页最近访问按账号保存于 sessionStorage，仅包含名称、类型与路由；项目关注与团队固定继续使用既有侧栏快捷方式 API、服务端 ETag 和跨设备保存；项目关注不隐式开启通知。项目范围导航由应用外壳统一承载，凭证页保持项目上下文。发布详情的 return_to 仅接受当前项目的概览或发布列表，恢复筛选和分页并拒绝外部或跨项目返回地址。
+```text
+web/src/
+├── api/                 # 同源请求、CSRF、响应和结构化错误
+├── app/                 # 安装/身份入口、主题、应用壳和路由边界
+├── components/          # 无业务权限判断的基础与平台组件
+├── domain/              # 共享校验、状态文案、纯业务判断和服务目录
+├── features/            # 访问、工作区、交付、控制台和各消息模块
+├── hooks/               # 查询、写入、表单、筛选和未保存保护
+├── lib/                 # 路由、时间、最近访问和通用辅助函数
+├── styles/              # 语义令牌与全局样式
+└── types/               # 与服务端 DTO 对应的前端类型
+```
 
-## 组件与定制
+组件不读取 `.agents` 或其他本地原型文件。Logo 和服务品牌资源位于 `web/public`；通用操作图标只使用 Lucide。
 
-### 三层职责
+## 2. 路由与访问边界
 
-| 层次 | 职责与示例 | 不承担的内容 |
-| --- | --- | --- |
-| 基础组件 `components/ui` | Button、Input、Select、Dialog、Sheet、Menu 等；语义状态、焦点、键盘和视觉变体 | API 请求、资源权限、业务字段 |
-| 平台组合 `components/platform` | Field、FormDialog、FormSheet、ConfirmAction、ListPanel、ListToolbar、Pagination、AsyncState、CopyableCode、StatusBadge | 自动推断业务行为、通用 CRUD 引擎、跨领域数据管理 |
-| 业务组件 `features/*` | 用户表单、仓库选择、凭证替换、环境范围等；组合组件并处理请求和领域状态 | 复制整套按钮、表单和浮层皮肤 |
+使用 History Router 和真实字符串 ID。登录、注册和强制改密校验同源 `return_to`；只允许已登记的业务路径，不接受外部地址、反斜杠或控制字符。Go 继续通过既有 `/next/` 兼容入口跳转，浏览器保留查询参数和片段。
 
-基础组件本身即可成为产品统一入口，不为每个 shadcn 组件机械再包一层。按钮等由业务直接使用本地 `ui` 入口；需要统一生命周期和产品交互的弹窗、字段、列表使用平台组合。不要通过包含几十个布尔参数的万能组件承载所有页面。
-
-### 组件契约
-
-| 能力 | 必须统一的契约 |
+| 页面或流程 | 正式路由 |
 | --- | --- |
-| 按钮与图标按钮 | `variant`、`size`、pending、disabled；图标按钮有可访问名称；pending 保留稳定尺寸并阻止重复提交 |
-| 字段 | 稳定 id、label、说明、必填、错误、disabled/readOnly；关联 `aria-describedby`/`aria-invalid`；标签不因占位符消失 |
-| 表单错误 | 字段 key/别名映射、未知错误摘要、首个可操作错误聚焦；保存失败保留草稿；错误信息可被辅助技术读取 |
-| 表单 Dialog/Sheet | controlled open、标题与描述、固定操作区、内容滚动、关闭请求原因、dirty/pending 状态；关闭按钮、遮罩、Escape、路由离开统一经过策略 |
-| 确认操作 | 明确目标、影响、危险级别、pending、失败信息；异步确认不因点击就提前关闭；具体权限和后端请求由业务决定 |
-| 列表与分页 | loading/error/empty/ready 互斥；加载/错误不伪报 0；提供真实总数、分页状态和回调，不在组件内请求数据 |
-| 菜单/选择器 | 键盘导航、焦点恢复、禁用状态、Portal 和滚动边界；远程搜索/跨页选择由业务维护 |
-| 状态与反馈 | 成功、失败、警告、未知、历史结果的语义外观；字段和页面错误优先原位呈现，Toast 不替代关键结果 |
-| 复制/刷新 | 成功和失败真实反馈、计时清理、可访问名称、执行中状态；复制支持现有 HTTP 部署能力边界 |
+| 登录、注册、强制改密 | `/login`、`/register`、`/required-password` |
+| 安装与连接异常 | `/setup`、`/connection-error` |
+| 工作区 | `/home`、`/projects`、`/teams` |
+| 个人设置 | `/account`、`/account/security`、`/account/integrations/{id?}`、`/account/remote-hosts/{id?}` |
+| 项目与团队详情 | `/projects/{id}`、`/teams/{id}`；项目页签在查询参数中 |
+| 产品分支 | `/projects/{id}/variants`、`/projects/{id}/variants/{variantId}` |
+| 项目归属凭证 | `/projects/{id}/integrations/{id?}`、`/projects/{id}/remote-hosts/{id?}` |
+| 控制台 | `/admin`、`/admin/users`、`/admin/projects`、`/admin/teams` |
+| 控制台对象详情 | `/admin/projects/{id}`、`/admin/teams/{id}` |
+| 服务与主机 | `/admin/integrations/{id?}`、`/admin/remote-hosts/{id?}` |
+| 消息模块 | `/admin/email/{section?}/{id?}`、`/admin/sms/{section?}/{id?}`、`/admin/dingtalk/{id?}` |
+| 系统维护 | `/admin/settings`、`/admin/audit`、`/admin/maintenance` |
 
-未保存保护拆成可复用策略与展示：应用内导航使用 Router blocker；刷新/关闭标签页使用浏览器 `beforeunload` 能力。不承诺浏览器会显示自定义提示文字，不把阻止页面离开等同于取消服务端任务。已确认放弃后避免重复弹出两次提示。
+项目查询参数保留当前任务和返回上下文：`tab`、`section`、`vview`、`release`、`creation`、筛选和分页。发布链接同时包含项目、产品分支和发布 ID；从列表进入时保留 `return_to`。新增或更换路由必须同步 `lib/routes.ts` 中的 `businessRoute` 和 Vite 的 `ui-build.json` 契约。
 
-### 样式定制入口
+前端隐藏入口只改善体验。普通用户、项目管理员和系统管理员的实际权限始终由服务端重新校验；工作区查询 `scope=mine`，控制台查询 `scope=all`，系统管理员也不能在个人工作区借此看到未参与对象。
 
-定制顺序：产品 token → 组件 variant/size → 平台组合布局 → 页面局部布局。相同控件的外观变化优先修改组件；页面允许使用布局工具类，不应重复定义控件底色、圆角、阴影和状态。
+## 3. 请求与缓存
 
-React 语义 token 至少覆盖画布/表面/浮层、文字层级、边框/控件边框、主操作及反色、危险/成功/警告、焦点、间距、圆角、阴影和密度。用明确映射接入 shadcn 的 `background`、`foreground`、`primary`、`destructive`、`ring` 等变量。调整主题后同步 UI 规范。
+`api/client.ts` 统一处理：
 
-基础组件集中使用变体定义和 class 合并工具；`className` 保留给组合和局部布局，但不得成为页面逐处重做皮肤的入口。Portal 内容同样继承根主题。复杂布局 CSS 归所属组件/功能，公共入口只管理加载次序；不通过连续覆盖、库内部 DOM 选择器或普遍 `!important` 维持外观。
+- 同源 `fetch`、`cache: no-store`、JSON 和 multipart 请求体。
+- 写操作先取得 `/auth/csrf`，发送 `X-CSRF-Token`；登录、退出、安装和改密后重新生成客户端令牌状态。
+- `ETag`、`X-Collection-ETag` 和分页外壳；按接口要求发送 `If-Match`、`X-Collection-If-Match`、`Idempotency-Key` 和专用确认头。
+- `error.code/message/details`、`request_id`、HTTP 状态和 `Retry-After`。
+- 401 与强制改密跳转；503、数据库异常和安装状态不混为空数据。
+- 网络中断、无有效响应外壳等写入不确定性使用 `uncertain=true`，不能显示为已确认失败。
 
-### 维护方式
+TanStack Query 管理查询、取消、缓存失效、窗口聚焦刷新和加载/错误状态。Query Key 包含资源归属、ID、筛选和分页。GET 只允许有限重试；Mutation 一律不自动重试。创建、远端写入或本地落盘结果未知时，先读取相应列表、对象、操作或日志核实。
 
-生成的 shadcn 组件按项目源码审查和测试。增加组件前查找已有实现；调整全站组件时同步状态展示和行为测试。上游升级先比较差异，再合并必要修复，禁止批量覆盖已有定制。组件可以开放组合点，但必须保留可访问语义和受控状态。
+## 4. 版本与恢复语义
 
-统一只发生在 UI 和明确共享的基础设施层。邮件、短信、钉钉仍是三个独立业务模块；远程主机与服务集成仍保留独立页面、请求和领域组件。视觉相似不构成合并业务的理由。
+不同令牌不得混用：
 
-## 开发与验证
+- 用户、资料、连接和发布对象使用自己的强 ETag。
+- 成员、仓库、凭证和产品分支集合使用各自的集合版本。
+- 首选与兜底资源使用独立版本，删除凭证还可能同时需要对象和集合版本。
+- 产品分支范围使用 `scope_token`，分支创建计划使用批次 ETag。
+- 发布验收和归档同时绑定当前 `manifest_id` 与清单摘要。
+- 规则影响确认、冻结预览和临时文件候选使用各自专用令牌。
 
-使用 CI 对应的 Node.js 24。首次执行 `node scripts/build-web.mjs`，脚本在 `web/` 执行 npm ci、按摘要准备 MiSans、检查 TypeScript，再用 Vite 生成 `web/dist/` 并验证入口、图标和字体引用。Go 通过 embed 直接嵌入此目录。
+412/428 保留草稿并提示重新读取；409 按占用、生命周期、名称或状态原因呈现；422 将字段错误关联到控件并聚焦首个错误；429 展示等待时间。弹窗和抽屉关闭、应用内导航、刷新或关闭标签页分别保护未保存内容。关闭页面不代表后台任务仍在执行。
 
-开发时将 Go 的公开来源设为 `http://127.0.0.1:5173`，后端监听 8080，再运行 `node scripts/dev-web.mjs`。Vite 将 API 和健康检查代理给 Go，后端地址可用 `ANTCDP_DEV_BACKEND` 调整。
+## 5. 页面与领域组件
 
-## 发布检查
+### 工作区与协作
 
-- UI 与审美验收优先面向 1920×1080 桌面显示环境，记录系统/浏览器缩放及实际可用 CSS 视口；更大桌面及缩放作为补充复核。手机、小尺寸平板和明显小于目标的窗口不属于当前支持或专项适配范围，不作为发布门槛；既有响应式降级可以保留。支持范围与键盘、焦点、浅深主题及桌面缩放要求见 [UI 规范](ui-design.md#桌面与操作验收)。
-- 构建后运行 `node scripts/check-web.mjs`，验证 ESLint、Prettier、字体工具、组件行为和根路径产物。Go 侧运行测试、vet 和仓库指定版本的 golangci-lint。
-- 开发镜像和正式发布均依赖同提交的可复用 Test workflow。跨平台 Go 测试和 MySQL 矩阵先构建前端。发布任务从同一锁文件重新生成资源，再编译各目标架构的二进制。
-- Dockerfile 打包已嵌入静态资源的 Linux 二进制，使用非 root 用户运行。开发镜像和 GoReleaser 的多架构镜像使用同一 Dockerfile。
-- 部署验证覆盖健康、安装状态、身份和卷、静态资源摘要、深链接刷新、匿名登录及登录后的返回目标。保留上一发布的镜像和匹配备份直到实际浏览器复核完成。
+首页以关注项目卡片和固定团队为双栏工作台，并根据最近访问或关注顺序选择一个当前项目，展示真实发布与待核实操作。项目和团队使用各自独立的 ID 映射，避免相同数字 ID 混淆。我的项目、我的团队、团队详情、项目总览、发布列表、只读仓库、成员与团队、介绍和项目设置均使用真实 API。项目创建使用分步抽屉，支持多初始管理员、图标裁剪和 Markdown 简介；成员来源、直接角色、团队授权和生命周期操作分开呈现。
+
+项目总览依次呈现当前发布、六阶段进度、仓库/产品分支/发布/待核实摘要、活动产品分支和进行中发布；发布详情共享同一阶段卡。项目页签导航位于左侧，项目资料编辑和退出入口保留在总览与项目设置中，不在每个子页面重复项目标题。
+
+关注项目与固定团队通过 `/me/sidebar-shortcuts` 整组保存并排序，使用分组 ETag 处理多设备冲突。最近访问仅在本标签页 sessionStorage 保存名称、类型和同源路由，不作为实时业务数据。
+
+### 仓库与交付
+
+仓库选择器支持连接、分组、搜索、游标和跨页选择；批量同步逐仓显示成功、失败与未知。产品分支模块实现七类 Git 分支规则、影响预览、环境、动态范围、远端校验和分支创建批次。创建计划冻结来源提交，执行前逐项确认创建、采用或跳过，未知项先只读核实。
+
+发布工作区分为本次变更、交付材料、送验清单和操作记录。覆盖范围/基线、MR、直接提交、回退、冻结、验收、退回、终止、Tag、归档、ZIP 和材料历史。材料支持 SQL、对象、配置和附件，保留修订、SQL 排序、下载与冲突恢复。
+
+### 服务、主机与消息
+
+服务目录只展示后端声明且前端已适配的 GitLab、Jenkins、OpenObserve、Elasticsearch、MySQL 和 PostgreSQL。连接创建采用独立分步页面，连接与凭证分别记录创建结果。GitLab Webhook 只验证接收，不宣称触发工作流。
+
+SSH 主机使用独立页面与请求路径，支持公钥探测、指纹核对、显式信任、归属凭证和诊断，不提供终端、命令执行或文件传输。
+
+邮件、短信和钉钉保持独立业务组件：邮件包含 SMTP、发件名称、模板、隔离预览、附件和日志；短信区分远端模板与本地模拟；钉钉只提供文本/Markdown 测试。`accepted` 只表示服务端或供应商受理，不表示送达或已读。
+
+## 6. 表单、Markdown 与文件
+
+Zod 用于共享字段规则、表单 Schema 和认证响应边界。密码按 Unicode 码点与 UTF-8 字节分别校验；ID 始终是字符串。秘密只保留在当前编辑状态中，不进入 localStorage、URL、日志或普通详情响应。
+
+头像和图标在本地裁剪为 256×256 PNG 后上传，支持拖动、缩放、旋转、重置和键盘微调；保存所属资料后才绑定。项目介绍使用 CodeMirror 编辑、预览和分栏，Markdown 禁用原始 HTML 与远程图片；代码使用按需 Shiki 高亮，Mermaid 在 strict 模式下清理 SVG，并提供复制、缩放和平移。
+
+## 7. 开发、检查与发布
+
+使用仓库支持的 Node.js 版本，CI 使用 Node.js 24。开发命令：
+
+```sh
+node scripts/build-web.mjs
+go run ./cmd/antcdp serve --listen 127.0.0.1:8080 --public-url http://localhost:8080
+```
+
+需要 Vite 热更新时，将后端公开来源设为 `http://127.0.0.1:5173`，再运行 `node scripts/dev-web.mjs`。代理目标可由 `ANTCDP_DEV_BACKEND` 调整。
+
+标准检查：
+
+```sh
+node scripts/build-web.mjs
+node scripts/check-web.mjs
+node --test scripts/*.test.mjs
+go test ./...
+go vet ./...
+golangci-lint config verify
+golangci-lint run
+```
+
+前端测试位于现有 `web/tests` 和 Vitest 配置中，覆盖协议、注册、安装、路由、主题、恢复规则和组件行为。浏览器验收还需覆盖真实会话、深浅主题、键盘、长内容、版本冲突及复杂流程。受控模拟不能代替真实 MySQL、GitLab、SMTP、短信供应商、SSH 或钉钉联调；未完成项必须明确报告。
+
+构建从锁文件安装依赖，检查 TypeScript 并生成 `web/dist`。`scripts/verify-web.mjs` 验证根入口、路由清单、静态资源和图标。Go 通过 embed 嵌入产物，运行容器不需要 Node 或前端源码。

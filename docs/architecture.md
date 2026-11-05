@@ -10,8 +10,8 @@ AntCDP 采用模块化单体：一个 Go 进程、一个 MySQL 数据库、一�
 | 存储 | MySQL 8.x、InnoDB、utf8mb4 | 支持 8.0.16 起的 8.x；不承诺 MariaDB 或其他数据库兼容 |
 | 数据访问 | database/sql、go-sql-driver/mysql、sqlx | 手写 SQL、显式事务；驱动句柄不进入模块接口 |
 | 迁移 | Goose、go:embed | 单一初始基线及后续增量迁移；无 ORM 自动改表 |
-| 前端 | React、TypeScript、Vite、React Router | 按功能装配页面，通过同源 `/api/v1` 访问服务 |
-| UI | 本地 shadcn/ui、Radix UI、Tailwind CSS | 基础组件和平台组合共享，业务组件归各模块 |
+| 前端 | React 19、TypeScript 7、Vite、React Router、TanStack Query | 按功能装配页面，通过同源 `/api/v1` 访问服务；查询与 Mutation 分开管理重试 |
+| UI | 本地 shadcn/ui 风格组件、Radix UI、Tailwind CSS 4、TanStack Table、Lucide、Zod | 基础组件和平台组合共享，业务组件归各模块；表格逻辑、图标与校验各司其职 |
 | 身份 | bcrypt、数据库会话、HttpOnly Cookie、CSRF | 不使用 JWT 或 Redis；权限由服务端校验 |
 | 文件 | 本地目录与小范围存储接口 | 头像、业务图标、发布文件及临时文件；无对象存储适配 |
 | 日志 | log/slog | 结构化运行日志与业务审计分离，不记录秘密 |
@@ -60,10 +60,13 @@ internal/modules/          # 上述业务模块
 internal/store/mysql/      # sqlx 仓储、事务适配器与私有行结构
 internal/store/migrations/ # 嵌入式 SQL
 internal/platform/         # 配置、加密、文件、密码、HTTP 基础设施
-web/src/app/               # 外壳、身份上下文、全局导航
-web/src/features/          # 业务页面
+web/src/app/               # 外壳、身份、主题、导航与路由边界
+web/src/features/          # 业务页面与流程
 web/src/components/        # 基础组件与平台组合
-web/src/shared/            # API、DTO、纯函数
+web/src/api/               # 同源请求、CSRF、错误与条件写入
+web/src/domain/            # 共享校验与纯业务规则
+web/src/hooks/             # 查询、表单、筛选与未保存保护
+web/src/types/             # DTO 类型
 web/src/styles/            # 语义变量与全局样式入口
 scripts/                   # 构建与验证
 ```

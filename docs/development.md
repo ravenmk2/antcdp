@@ -39,9 +39,9 @@ node scripts/dev-web.mjs
 
 Vite 将 API 与健康检查代理给 Go，后端地址可用 `ANTCDP_DEV_BACKEND` 调整。组件与路由规则见 [前端文档](frontend.md)。
 
-## 字体与构建产物
+## 前端构建产物
 
-构建脚本按锁文件安装依赖、校验 TypeScript、准备 MiSans 并生成 `web/dist/`。字体来源、许可和 SHA-256 锁定在 `web/fonts.lock.json`，下载结果缓存在 `web/.cache/fonts/`。缓存缺失或损坏时重新下载，不能校验时构建失败；不自动接受上游变化。生成字体随 SPA 嵌入二进制，运行时只从本站加载。缓存与生成目录不进入 Git，不手工修改 `web/dist/`。
+构建脚本按锁文件安装依赖、使用 TypeScript 7 strict 校验并生成 `web/dist/`。界面使用 Microsoft YaHei UI 优先的系统字体栈，不下载或打包额外字体。TypeScript 7 原生编译器与 typescript-eslint 所需的 TypeScript 6 API 通过锁定别名并存，具体职责见[前端文档](frontend.md)。生成产物随 SPA 嵌入 Go 二进制；`web/dist` 不进入 Git，也不手工修改。
 
 ## 检查命令
 
@@ -57,7 +57,7 @@ golangci-lint run
 
 golangci-lint 使用 `.github/workflows/test.yml` 固定的版本及仓库 `.golangci.yml`；当前为 2.13.2。支持 CGO 的工具链可运行 `go test -race`，不能把未运行的竞态检查标为通过。
 
-前端检查覆盖 ESLint、Prettier、组件测试、字体和产物引用。Go 检查覆盖领域、协议、安装恢复、文件及加密等行为；模拟存储不能证明 MySQL DDL 和事务正确性。
+前端检查覆盖 ESLint、Prettier、协议/组件测试和产物引用。Go 检查覆盖领域、协议、安装恢复、文件及加密等行为；模拟存储不能证明 MySQL DDL 和事务正确性。
 
 ## MySQL 集成测试
 

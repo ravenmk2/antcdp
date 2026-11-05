@@ -1,153 +1,119 @@
-import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Field } from "@/components/platform/field";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { FormDialog } from "@/components/platform/form-dialog";
-import { AsyncState, EmptyState } from "@/components/platform/feedback";
-afterEach(cleanup);
-it("associates field errors with the input", () => {
-  render(
-    <Field label="用户名" error="用户名已存在" required>
-      {(props) => <Input {...props} />}
-    </Field>,
-  );
-  const input = screen.getByRole("textbox", { name: "用户名" });
-  expect(input.getAttribute("aria-invalid")).toBe("true");
-  expect(
-    document.getElementById(input.getAttribute("aria-describedby")!)!
-      .textContent,
-  ).toBe("用户名已存在");
-});
-it("requires explicit discard for a dirty dialog", async () => {
-  const close = vi.fn();
-  const user = userEvent.setup();
-  render(
-    <FormDialog
-      open
-      title="编辑资料"
-      dirty
-      onClose={close}
-      footer={(requestClose) => <Button onClick={requestClose}>取消</Button>}
-    >
-      <Input aria-label="名称" />
-    </FormDialog>,
-  );
-  await user.click(screen.getByRole("button", { name: "取消" }));
-  expect(close).not.toHaveBeenCalled();
-  expect(screen.getByRole("alert").textContent).toContain("未保存");
-  await user.click(screen.getByRole("button", { name: "继续编辑" }));
-  expect(close).not.toHaveBeenCalled();
-  await user.keyboard("{Escape}");
-  await user.click(screen.getByRole("button", { name: "放弃修改" }));
-  expect(close).toHaveBeenCalledOnce();
-});
-it("cannot dismiss a pending operation with Escape or close", async () => {
-  const close = vi.fn();
-  const user = userEvent.setup();
-  render(
-    <FormDialog
-      open
-      title="保存中"
-      pending
-      onClose={close}
-      footer={<Button disabled>保存中</Button>}
-    >
-      <p>正在保存</p>
-    </FormDialog>,
-  );
-  await user.keyboard("{Escape}");
-  await user.click(screen.getByRole("button", { name: "关闭" }));
-  expect(close).not.toHaveBeenCalled();
-});
+import { describe, expect, it, vi } from "vitest";
+import { Button } from "@/components/button";
+import { Pagination } from "@/components/pagination";
+import { DataTable, type DataColumn } from "@/components/table";
+import { Modal } from "@/components/overlays";
+import { NavigationGuardProvider } from "@/components/navigation-guard";
+import { StageFlow } from "@/components/stage-flow";
+import { useUnsaved } from "@/hooks/use-unsaved";
+import { createMemoryRouter, RouterProvider, useNavigate } from "react-router";
 
-it("renders actionable empty content only after a successful empty response", async () => {
-  const create = vi.fn();
-  const user = userEvent.setup();
-  const emptyContent = (
-    <EmptyState
-      title="尚未关联仓库"
-      description="关联仓库后，可在产品分支中准备发布。"
-      action={<Button onClick={create}>关联仓库</Button>}
-    />
-  );
-  const { rerender } = render(
-    <AsyncState loading empty emptyContent={emptyContent}>
-      <p>已关联的仓库</p>
-    </AsyncState>,
-  );
-  expect(screen.queryByRole("button", { name: "关联仓库" })).toBeNull();
-  rerender(
-    <AsyncState
-      loading={false}
-      error="读取失败"
-      empty
-      emptyContent={emptyContent}
-    >
-      <p>已关联的仓库</p>
-    </AsyncState>,
-  );
-  expect(screen.getByRole("alert").textContent).toBe("读取失败");
-  expect(screen.queryByRole("button", { name: "关联仓库" })).toBeNull();
-  rerender(
-    <AsyncState loading={false} empty emptyContent={emptyContent}>
-      <p>已关联的仓库</p>
-    </AsyncState>,
-  );
-  expect(screen.getByRole("status").textContent).toContain("尚未关联仓库");
-  await user.click(screen.getByRole("button", { name: "关联仓库" }));
-  expect(create).toHaveBeenCalledOnce();
-  expect(screen.queryByText("已关联的仓库")).toBeNull();
-});
-
-function FocusDialog() {
-  const [open, setOpen] = useState(false);
+function SavedNavigation() {
+  const navigate = useNavigate();
+  const markSaved = useUnsaved(true);
   return (
-    <>
-      <Button onClick={() => setOpen(true)}>编辑</Button>
-      <FormDialog
-        open={open}
-        title="编辑资料"
-        onClose={() => setOpen(false)}
-        footer={<Button onClick={() => setOpen(false)}>取消</Button>}
-      >
-        <Input aria-label="名称" />
-      </FormDialog>
-    </>
+    <Button
+      onClick={() => {
+        markSaved();
+        navigate("/saved");
+      }}
+    >
+      保存并离开
+    </Button>
   );
 }
 
-it("restores pointer-closed dialogs without forcing a keyboard focus outline", async () => {
-  const user = userEvent.setup();
-  render(<FocusDialog />);
-  const opener = screen.getByRole("button", { name: "编辑" });
-  const focus = vi.spyOn(opener, "focus");
-  await user.click(opener);
-  await user.click(screen.getByRole("textbox", { name: "名称" }));
-  await user.click(screen.getByRole("button", { name: "关闭" }));
-  await waitFor(() =>
-    expect(focus).toHaveBeenCalledWith({
-      preventScroll: true,
-      focusVisible: false,
-    }),
-  );
-  expect(document.activeElement).toBe(opener);
-});
-
-it("preserves a visible focus target after closing a dialog with Escape", async () => {
-  const user = userEvent.setup();
-  render(<FocusDialog />);
-  const opener = screen.getByRole("button", { name: "编辑" });
-  const focus = vi.spyOn(opener, "focus");
-  await user.click(opener);
-  await user.keyboard("{Escape}");
-  await waitFor(() =>
-    expect(focus).toHaveBeenCalledWith({
-      preventScroll: true,
-      focusVisible: true,
-    }),
-  );
-  expect(document.activeElement).toBe(opener);
+describe("platform components", () => {
+  it("prevents duplicate pending submissions", async () => {
+    const onClick = vi.fn();
+    render(
+      <Button pending onClick={onClick}>
+        保存
+      </Button>,
+    );
+    const button = screen.getByRole("button", { name: "保存" });
+    expect(button).toBeDisabled();
+    await userEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+  it("composes link children without rendering an idle slot", () => {
+    render(
+      <Button asChild>
+        <a href="/projects">我的项目</a>
+      </Button>,
+    );
+    expect(screen.getByRole("link", { name: "我的项目" })).toHaveAttribute(
+      "href",
+      "/projects",
+    );
+  });
+  it("uses real totals and page callbacks", async () => {
+    const onChange = vi.fn();
+    render(<Pagination page={2} size={10} total={35} onChange={onChange} />);
+    expect(screen.getByText("共 35 条")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "下一页" }));
+    expect(onChange).toHaveBeenCalledWith(3, 10);
+    await userEvent.selectOptions(screen.getByLabelText("每页条数"), "50");
+    expect(onChange).toHaveBeenCalledWith(1, 50);
+  });
+  it("mounts overlays on demand and supports keyboard dismissal", async () => {
+    const onClose = vi.fn();
+    const overlay = (open: boolean) => (
+      <Modal open={open} title="消息" onClose={onClose}>
+        当前没有站内消息。
+      </Modal>
+    );
+    const { rerender } = render(overlay(false));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    rerender(overlay(true));
+    expect(await screen.findByRole("dialog")).toBeVisible();
+    expect(screen.getByRole("button", { name: "关闭" })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+  it("releases the navigation guard after a confirmed save", async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: "/",
+          element: (
+            <NavigationGuardProvider>
+              <SavedNavigation />
+            </NavigationGuardProvider>
+          ),
+        },
+        { path: "/saved", element: <p>保存后的页面</p> },
+      ],
+      { initialEntries: ["/"] },
+    );
+    render(<RouterProvider router={router} />);
+    await userEvent.click(screen.getByRole("button", { name: "保存并离开" }));
+    expect(await screen.findByText("保存后的页面")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+  it("shows all release stages and the current status", () => {
+    render(<StageFlow status="reviewing" />);
+    const flow = screen.getByRole("list", { name: "发布阶段" });
+    expect(flow).toHaveTextContent("草稿合并与备料验收中待归档归档中已归档");
+    expect(flow.querySelector('[data-state="current"]')).toHaveTextContent(
+      "验收中",
+    );
+  });
+  it("keeps complex tables in a horizontal container", () => {
+    const columns: DataColumn<{ id: string; name: string }>[] = [
+      { id: "name", header: "名称", cell: ({ row }) => row.original.name },
+    ];
+    const { container } = render(
+      <DataTable
+        data={[{ id: "1", name: "项目" }]}
+        columns={columns}
+        label="项目"
+        rowKey={(row) => row.id}
+      />,
+    );
+    expect(screen.getByRole("table", { name: "项目" })).toBeInTheDocument();
+    expect(container.querySelector(".table-scroll")).not.toBeNull();
+  });
 });

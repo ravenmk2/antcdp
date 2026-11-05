@@ -1,212 +1,184 @@
-import { OperationToastProvider } from "./components/platform/operation-toast";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createBrowserRouter,
-  redirect,
+  Link,
+  Navigate,
   RouterProvider,
-  useRouteError,
-  isRouteErrorResponse,
 } from "react-router";
-import { identityLoader } from "./lib/loaders";
-import { Shell, HomePage } from "./app/Shell";
-import { authHref, appHref, businessRoute } from "./lib/navigation";
-import { ApiError, errorMessage, onAuthFailure } from "./lib/api";
-import { ErrorBox } from "./components/platform/feedback";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AppRoot, RequireAdmin, RequireAuth } from "./app/auth";
+import { AppShell } from "./app/Shell";
+import { NotFound } from "./app/not-found";
+import { ThemeProvider } from "./app/theme";
+import { ToastProvider } from "./components/toast";
+import { NavigationGuardProvider } from "./components/navigation-guard";
+import { Button } from "./components/button";
+import { AuthPage } from "./features/access/auth-page";
+import { SetupPage } from "./features/access/setup-page";
+import { AccountPage } from "./features/account/account-page";
+import { OverviewPage } from "./features/admin/overview-page";
+import { UsersPage } from "./features/admin/users-page";
+import { SettingsPage } from "./features/admin/settings-page";
+import { AuditPage } from "./features/admin/audit-page";
+import { MaintenancePage } from "./features/admin/maintenance-page";
+import { HomePage } from "./features/workspace/home-page";
+import { ResourceList } from "./features/workspace/resource-list";
+import { ResourceDetail } from "./features/workspace/resource-detail";
+import { VariantsPage, VariantDetailPage } from "./features/delivery/variants";
+import { IntegrationsPage } from "./features/integrations/integrations-page";
+import { RemoteHostsPage } from "./features/remote-hosts/hosts-page";
+import { EmailPage } from "./features/email/email-page";
+import { SmsPage } from "./features/sms/sms-page";
+import { DingTalkPage } from "./features/dingtalk/dingtalk-page";
 import "./styles/app.css";
 
-function Failure() {
-  const error = useRouteError();
-  const routeError = isRouteErrorResponse(error);
-  const missing = routeError
-    ? error.status === 404
-    : error instanceof ApiError &&
-      (error.code === "NOT_FOUND" || error.code.endsWith("_NOT_FOUND"));
-  const forbidden = routeError
-    ? error.status === 403
-    : error instanceof ApiError && error.code === "FORBIDDEN";
-  const message =
-    routeError && typeof error.data === "string"
-      ? error.data
-      : errorMessage(error);
-  const path = location.pathname.replace(/\/$/, "");
-  const parent = path.slice(0, path.lastIndexOf("/"));
-  const list =
-    businessRoute.test(parent) && parent && parent !== "/admin" ? parent : "";
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { refetchOnWindowFocus: true, refetchOnReconnect: true },
+    mutations: { retry: false },
+  },
+});
+
+function ConnectionErrorPage() {
   return (
-    <main className="mx-auto max-w-lg space-y-5 p-8">
-      <h1 className="text-2xl font-semibold">
-        {missing
-          ? "页面或资源不存在"
-          : forbidden
-            ? "无权访问"
-            : "暂时无法打开页面"}
-      </h1>
-      <ErrorBox>{message}</ErrorBox>
-      {missing && list && (
-        <a className="underline" href={appHref(list)}>
-          返回上一级
-        </a>
-      )}
-      {!missing && !forbidden && (
-        <button className="underline" onClick={() => window.location.reload()}>
-          重新加载
-        </button>
-      )}
-      <a className="ml-5 underline" href={appHref("/home")}>
-        返回工作区
-      </a>
+    <main className="auth-page">
+      <section className="panel max-w-lg p-8 text-center">
+        <img src="/logo.svg" alt="AntCDP" className="mx-auto mb-5 size-12" />
+        <h1 className="text-2xl font-semibold">连接异常</h1>
+        <p className="my-4 text-sm leading-6 text-muted">
+          无法确认服务状态。请检查网络或联系维护者；不要进入安装流程。
+        </p>
+        <Button onClick={() => window.location.reload()}>重新加载</Button>
+        <Button asChild variant="link" className="ml-4">
+          <Link to="/home">返回工作区</Link>
+        </Button>
+      </section>
     </main>
   );
 }
+
 const router = createBrowserRouter([
-  ...["login", "register", "required-password"].map((path) => ({
-    path,
-    lazy: () => import("./features/access/CredentialsPage"),
-    ErrorBoundary: Failure,
-  })),
-  {
-    path: "setup",
-    lazy: () => import("./features/access/SetupPage"),
-    ErrorBoundary: Failure,
-  },
-  {
-    path: "connection-error",
-    lazy: () => import("./features/access/ConnectionPage"),
-  },
   {
     path: "/",
-    loader: identityLoader,
-    shouldRevalidate: () => true,
-    element: (
-      <OperationToastProvider>
-        <Shell />
-      </OperationToastProvider>
-    ),
-    ErrorBoundary: Failure,
+    element: <AppRoot />,
     children: [
-      { index: true, loader: () => redirect("/home") },
-      { path: "home", loader: identityLoader, Component: HomePage },
+      { path: "setup", element: <SetupPage /> },
+      { path: "login", element: <AuthPage mode="login" /> },
+      { path: "register", element: <AuthPage mode="register" /> },
+      { path: "connection-error", element: <ConnectionErrorPage /> },
       {
-        path: "account",
-        lazy: () => import("./features/account/AccountPage"),
-      },
-      {
-        path: "account/security",
-        lazy: () => import("./features/account/AccountPage"),
-      },
-      { path: "admin", lazy: () => import("./features/admin/OverviewPage") },
-      {
-        path: "admin/settings",
-        lazy: () => import("./features/admin/SettingsPage"),
-      },
-      {
-        path: "admin/audit",
-        lazy: () => import("./features/admin/AuditPage"),
-      },
-      {
-        path: "admin/users",
-        lazy: () => import("./features/users/UsersPage"),
-      },
-      {
-        path: "projects",
-        lazy: () => import("./features/collaboration/ListPage"),
-      },
-      {
-        path: "admin/projects",
-        lazy: () => import("./features/collaboration/ListPage"),
-      },
-      {
-        path: "teams",
-        lazy: () => import("./features/collaboration/ListPage"),
-      },
-      {
-        path: "admin/teams",
-        lazy: () => import("./features/collaboration/ListPage"),
-      },
-      {
-        path: "projects/:id",
-        lazy: () => import("./features/collaboration/DetailPage"),
-      },
-      {
-        path: "admin/projects/:id",
-        lazy: () => import("./features/collaboration/DetailPage"),
-      },
-      {
-        path: "teams/:id",
-        lazy: () => import("./features/collaboration/DetailPage"),
-      },
-      {
-        path: "admin/teams/:id",
-        lazy: () => import("./features/collaboration/DetailPage"),
-      },
-      {
-        path: "projects/:projectId/variants",
-        lazy: () => import("./features/delivery/VariantsPage"),
-      },
-      {
-        path: "admin/projects/:projectId/variants",
-        lazy: () => import("./features/delivery/VariantsPage"),
-      },
-      ...[
-        "admin/integrations/:connectionId?",
-        "account/integrations/:connectionId?",
-        "projects/:projectId/integrations/:connectionId?",
-      ].map((path) => ({
-        path,
-        lazy: () => import("./features/integrations/Page"),
-      })),
-      ...[
-        "admin/remote-hosts/:hostId?",
-        "account/remote-hosts/:hostId?",
-        "projects/:projectId/remote-hosts/:hostId?",
-      ].map((path) => ({
-        path,
-        lazy: () => import("./features/remote-hosts/Page"),
-      })),
-      {
-        path: "admin/email/:section?/:id?",
-        lazy: () => import("./features/email/Page"),
-      },
-      {
-        path: "admin/sms/:section?/:id?",
-        lazy: () => import("./features/sms/Page"),
-      },
-      {
-        path: "admin/dingtalk/:id?",
-        lazy: () => import("./features/dingtalk/Page"),
-      },
-      ...(import.meta.env.DEV
-        ? [
-            {
-              path: "components",
-              lazy: () => import("./app/ComponentStates"),
-            },
-          ]
-        : []),
-      {
-        path: "*",
-        element: (
-          <div className="py-16">
-            <h1 className="text-2xl font-semibold">页面未找到</h1>
-            <p className="mt-3 text-muted-foreground">
-              请检查访问地址，或从导航重新进入。
-            </p>
-          </div>
-        ),
+        element: <RequireAuth />,
+        children: [
+          {
+            path: "required-password",
+            element: <AuthPage mode="required-password" />,
+          },
+          {
+            path: "/",
+            element: (
+              <NavigationGuardProvider>
+                <AppShell />
+              </NavigationGuardProvider>
+            ),
+            children: [
+              { index: true, element: <Navigate to="/home" replace /> },
+              { path: "home", element: <HomePage /> },
+              { path: "account", element: <AccountPage /> },
+              { path: "account/security", element: <AccountPage /> },
+              {
+                path: "account/integrations/:connectionId?",
+                element: <IntegrationsPage />,
+              },
+              {
+                path: "account/remote-hosts/:hostId?",
+                element: <RemoteHostsPage />,
+              },
+              { path: "projects", element: <ResourceList kind="projects" /> },
+              { path: "teams", element: <ResourceList kind="teams" /> },
+              {
+                path: "projects/:projectId",
+                element: <ResourceDetail kind="projects" />,
+              },
+              {
+                path: "teams/:teamId",
+                element: <ResourceDetail kind="teams" />,
+              },
+              {
+                path: "projects/:projectId/variants",
+                element: <VariantsPage />,
+              },
+              {
+                path: "projects/:projectId/variants/:variantId",
+                element: <VariantDetailPage />,
+              },
+              {
+                path: "projects/:projectId/integrations/:connectionId?",
+                element: <IntegrationsPage />,
+              },
+              {
+                path: "projects/:projectId/remote-hosts/:hostId?",
+                element: <RemoteHostsPage />,
+              },
+              {
+                element: <RequireAdmin />,
+                children: [
+                  { path: "admin", element: <OverviewPage /> },
+                  { path: "admin/users", element: <UsersPage /> },
+                  {
+                    path: "admin/projects",
+                    element: <ResourceList kind="projects" />,
+                  },
+                  {
+                    path: "admin/teams",
+                    element: <ResourceList kind="teams" />,
+                  },
+                  {
+                    path: "admin/projects/:projectId",
+                    element: <ResourceDetail kind="projects" />,
+                  },
+                  {
+                    path: "admin/teams/:teamId",
+                    element: <ResourceDetail kind="teams" />,
+                  },
+                  { path: "admin/settings", element: <SettingsPage /> },
+                  { path: "admin/audit", element: <AuditPage /> },
+                  { path: "admin/maintenance", element: <MaintenancePage /> },
+                  {
+                    path: "admin/integrations/:connectionId?",
+                    element: <IntegrationsPage />,
+                  },
+                  {
+                    path: "admin/remote-hosts/:hostId?",
+                    element: <RemoteHostsPage />,
+                  },
+                  {
+                    path: "admin/email/:section?/:id?",
+                    element: <EmailPage />,
+                  },
+                  { path: "admin/sms/:section?/:id?", element: <SmsPage /> },
+                  { path: "admin/dingtalk/:id?", element: <DingTalkPage /> },
+                ],
+              },
+              { path: "*", element: <NotFound /> },
+            ],
+          },
+        ],
       },
     ],
   },
 ]);
-onAuthFailure((code) =>
-  window.location.replace(
-    authHref(
-      code === "PASSWORD_CHANGE_REQUIRED" ? "/required-password" : "/login",
-    ),
-  ),
-);
-createRoot(document.getElementById("root")!).render(
+
+const root = document.getElementById("root");
+if (!root) throw new Error("Missing application root");
+createRoot(root).render(
   <StrictMode>
-    <RouterProvider router={router} />
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <ToastProvider>
+          <RouterProvider router={router} />
+        </ToastProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   </StrictMode>,
 );

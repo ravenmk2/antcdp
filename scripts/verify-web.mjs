@@ -30,9 +30,6 @@ export function verify(directory, base) {
       existsSync(resolve(dir, "service-icons", icon + ".svg")),
       "Missing service icon: " + icon,
     );
-  const fonts = readFileSync(resolve(dir, "fonts/misans/fonts.css"), "utf8");
-  for (const match of fonts.matchAll(/url\("\.\/([^"/]+)"\)/g))
-    assert(existsSync(resolve(dir, "fonts/misans", match[1])));
   console.log(`Verified ${directory} at ${base}`);
 }
 verify("web/dist", "/");

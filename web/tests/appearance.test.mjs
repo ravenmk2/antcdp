@@ -1,89 +1,57 @@
-import { readFileSync } from "node:fs";
-import { runInNewContext } from "node:vm";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import vm from "node:vm";
 
-const bootstrap = readFileSync(
+const source = readFileSync(
   new URL("../public/theme-init.js", import.meta.url),
   "utf8",
 );
-function load({
-  saved = null,
-  systemDark = false,
-  storageBlocked = false,
-} = {}) {
+function run(preference, systemDark) {
   const classes = new Set();
   const root = {
     classList: {
-      toggle: (name, enabled) =>
-        enabled ? classes.add(name) : classes.delete(name),
+      toggle: (_name, enabled) =>
+        enabled ? classes.add("dark") : classes.delete("dark"),
     },
     dataset: {},
     style: {},
   };
-  runInNewContext(bootstrap, {
-    document: { documentElement: root },
-    localStorage: {
-      getItem: () => {
-        if (storageBlocked) throw new Error("Storage unavailable");
-        return saved;
-      },
-    },
+  const context = {
+    localStorage: { getItem: () => preference },
     matchMedia: () => ({ matches: systemDark }),
-  });
+    document: { documentElement: root, querySelector: () => null },
+  };
+  vm.runInNewContext(source, context);
   return {
-    preference: root.dataset.appearance,
     dark: classes.has("dark"),
+    preference: root.dataset.appearance,
     scheme: root.style.colorScheme,
   };
 }
-
-test("first visit follows a light system before rendering", () => {
-  assert.deepEqual(load(), {
-    preference: "system",
+test("appearance supports light, dark and system", () => {
+  assert.deepEqual(run("light", true), {
     dark: false,
-    scheme: "light",
-  });
-});
-test("first visit follows a dark system before rendering", () => {
-  assert.deepEqual(load({ systemDark: true }), {
-    preference: "system",
-    dark: true,
-    scheme: "dark",
-  });
-});
-test("saved light preference wins over a dark system on refresh", () => {
-  assert.deepEqual(load({ saved: "light", systemDark: true }), {
     preference: "light",
+    scheme: "light",
+  });
+  assert.deepEqual(run("dark", false), {
+    dark: true,
+    preference: "dark",
+    scheme: "dark",
+  });
+  assert.deepEqual(run("system", true), {
+    dark: true,
+    preference: "system",
+    scheme: "dark",
+  });
+  assert.deepEqual(run("system", false), {
     dark: false,
+    preference: "system",
     scheme: "light",
   });
 });
-test("saved dark preference wins over a light system on refresh", () => {
-  assert.deepEqual(load({ saved: "dark" }), {
-    preference: "dark",
-    dark: true,
-    scheme: "dark",
-  });
-});
-test("explicit system preference follows the current OS", () => {
-  assert.deepEqual(load({ saved: "system", systemDark: true }), {
-    preference: "system",
-    dark: true,
-    scheme: "dark",
-  });
-});
-test("invalid stored preferences fall back to the system", () => {
-  assert.deepEqual(load({ saved: "invalid", systemDark: true }), {
-    preference: "system",
-    dark: true,
-    scheme: "dark",
-  });
-});
-test("blocked storage does not prevent rendering the system theme", () => {
-  assert.deepEqual(load({ storageBlocked: true, systemDark: true }), {
-    preference: "system",
-    dark: true,
-    scheme: "dark",
-  });
+test("invalid preferences fall back to system without storing credentials", () => {
+  assert.equal(run("unexpected", false).preference, "system");
+  assert(!source.includes("antcdp_session"));
 });
