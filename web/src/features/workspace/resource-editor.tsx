@@ -9,6 +9,7 @@ import { ErrorNotice, Notice } from "@/components/feedback";
 import { Field, Input, StandaloneInput, Textarea } from "@/components/fields";
 import { ImageEditor, type ImageValue } from "@/components/image-editor";
 import { Drawer } from "@/components/overlays";
+import { SheetClose } from "@/components/ui/sheet";
 import { iconLabels, ResourceIcon } from "@/components/resource-icon";
 import { WizardSteps } from "@/components/wizard";
 import { useApiQuery } from "@/hooks/use-api";
@@ -184,7 +185,12 @@ export function ResourceEditor({
       }
       dirty={dirty}
       pending={submission.pending}
-      onClose={onClose}
+      onClose={() => {
+        // Closing has already passed the panel's pending/dirty checks. Release
+        // this form's guard before the parent removes its create URL parameter.
+        markSaved();
+        onClose();
+      }}
       footer={
         <>
           {create && step > 0 && (
@@ -192,13 +198,11 @@ export function ResourceEditor({
               上一步
             </Button>
           )}
-          <Button
-            variant="outline"
-            disabled={submission.pending}
-            onClick={onClose}
-          >
-            取消
-          </Button>
+          <SheetClose asChild>
+            <Button variant="outline" disabled={submission.pending}>
+              取消
+            </Button>
+          </SheetClose>
           {create && step === 0 ? (
             <Button
               onClick={() => {

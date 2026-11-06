@@ -4,6 +4,13 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button, IconButton } from "./button";
 import { useOverlayPresence } from "./overlay-presence";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "./ui/sheet";
 
 interface OverlayProps {
   open: boolean;
@@ -112,6 +119,7 @@ export function Modal({
   );
 }
 
+// Keep the business-facing API while Sheet owns the panel and its animations.
 export function Drawer({
   open,
   title,
@@ -134,64 +142,63 @@ export function Drawer({
   };
   return (
     <>
-      <Primitive.Root
+      <Sheet
         open={visible}
         onOpenChange={(next) => {
           if (!next) requestClose();
         }}
       >
-        <Primitive.Portal>
-          <Primitive.Overlay className="drawer-overlay fixed inset-0 z-50 bg-[#09101a]/50 backdrop-blur-[2px]" />
-          <Primitive.Content
-            className={cn(
-              "drawer-content fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l bg-surface shadow-2xl outline-none",
-              wide ? "max-w-[720px]" : "max-w-[540px]",
-            )}
-            onOpenAutoFocus={() => {
-              returnFocus.current =
-                document.activeElement instanceof HTMLElement
-                  ? document.activeElement
-                  : null;
-            }}
-            onCloseAutoFocus={(event) => {
-              presence?.onExitComplete();
-              if (returnFocus.current?.isConnected) {
-                event.preventDefault();
-                returnFocus.current.focus();
-              }
-            }}
-            onEscapeKeyDown={(event) => {
-              if (pending) event.preventDefault();
-            }}
-          >
-            <header className="flex items-start justify-between gap-4 border-b px-6 py-5">
-              <div>
-                <Primitive.Title className="text-lg font-semibold">
-                  {title}
-                </Primitive.Title>
-                {description && (
-                  <Primitive.Description className="mt-1 text-xs leading-5 text-muted">
-                    {description}
-                  </Primitive.Description>
-                )}
-              </div>
-              <Primitive.Close asChild>
-                <IconButton size="iconSm" label="关闭" disabled={pending}>
-                  <X />
-                </IconButton>
-              </Primitive.Close>
-            </header>
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-              {children}
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className={cn(
+            "w-full gap-0 bg-surface shadow-2xl outline-none data-[state=closed]:pointer-events-none",
+            wide
+              ? "max-w-[720px] sm:max-w-[720px]"
+              : "max-w-[540px] sm:max-w-[540px]",
+          )}
+          onOpenAutoFocus={() => {
+            returnFocus.current =
+              document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+          }}
+          onCloseAutoFocus={(event) => {
+            presence?.onExitComplete();
+            if (returnFocus.current?.isConnected) {
+              event.preventDefault();
+              returnFocus.current.focus();
+            }
+          }}
+          onEscapeKeyDown={(event) => {
+            if (pending) event.preventDefault();
+          }}
+        >
+          <header className="flex items-start justify-between gap-4 border-b px-6 py-5">
+            <div>
+              <SheetTitle className="text-lg font-semibold">{title}</SheetTitle>
+              {description && (
+                <SheetDescription className="mt-1 text-xs leading-5 text-muted">
+                  {description}
+                </SheetDescription>
+              )}
             </div>
-            {footer && (
-              <footer className="flex flex-wrap items-center justify-end gap-2 border-t bg-surface-subtle px-6 py-4">
-                {footer}
-              </footer>
-            )}
-          </Primitive.Content>
-        </Primitive.Portal>
-      </Primitive.Root>
+            <SheetClose asChild>
+              <IconButton size="iconSm" label="关闭" disabled={pending}>
+                <X />
+              </IconButton>
+            </SheetClose>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            {children}
+          </div>
+          {footer && (
+            <footer className="flex flex-wrap items-center justify-end gap-2 border-t bg-surface-subtle px-6 py-4">
+              {footer}
+            </footer>
+          )}
+        </SheetContent>
+      </Sheet>
       {discard && (
         <ConfirmDialog
           open={discard}

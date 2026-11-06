@@ -7,8 +7,19 @@ import { RowActions, RowAction } from "@/components/row-actions";
 import { Drawer, Modal } from "@/components/overlays";
 import { OverlayPresence } from "@/components/overlay-presence";
 
-function MenuDialog() {
+function MenuDialog({ sheet = false }: { sheet?: boolean }) {
   const [open, setOpen] = useState(false);
+  const Overlay = sheet ? Drawer : Modal;
+  const content = open && (
+    <Overlay
+      open
+      title="编辑用户"
+      description="维护资料"
+      onClose={() => setOpen(false)}
+    >
+      <input aria-label="显示名称" />
+    </Overlay>
+  );
   return (
     <>
       <RowActions label="示例用户">
@@ -16,16 +27,7 @@ function MenuDialog() {
           编辑
         </RowAction>
       </RowActions>
-      {open && (
-        <Modal
-          open
-          title="编辑用户"
-          description="维护资料"
-          onClose={() => setOpen(false)}
-        >
-          <input aria-label="显示名称" />
-        </Modal>
-      )}
+      {sheet ? <OverlayPresence>{content}</OverlayPresence> : content}
     </>
   );
 }
@@ -40,7 +42,7 @@ function ConditionalDrawer({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <style>{`.drawer-content[data-state="open"] { animation-name: drawer-enter; animation-duration: 200ms; } .drawer-content[data-state="closed"] { animation-name: drawer-exit; animation-duration: 160ms; }`}</style>
+      <style>{`[data-slot="sheet-content"][data-state="open"] { animation-name: enter; animation-duration: 500ms; } [data-slot="sheet-content"][data-state="closed"] { animation-name: exit; animation-duration: 300ms; }`}</style>
       <button onClick={() => setOpen(true)}>打开抽屉</button>
       <OverlayPresence>
         {open && (
@@ -104,6 +106,22 @@ describe("row action and drawer interactions", () => {
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
+  it("hands focus from the menu to the Sheet and returns it on close", async () => {
+    const user = userEvent.setup();
+    render(<MenuDialog sheet />);
+    const trigger = screen.getByRole("button", { name: "示例用户的操作" });
+    await user.click(trigger);
+    await user.click(await screen.findByRole("menuitem", { name: "编辑" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveAttribute("data-slot", "sheet-content");
+    await waitFor(() =>
+      expect(dialog.contains(document.activeElement)).toBe(true),
+    );
+    await user.click(screen.getByRole("button", { name: "关闭" }));
+    await waitFor(() => expect(dialog).not.toBeInTheDocument());
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
   it("retains the conditional drawer and draft until its exit animation completes", async () => {
     // Browsers return live computed styles; jsdom returns a snapshot. Radix
     // reads that same object again to decide whether to retain exit content.
@@ -114,11 +132,11 @@ describe("row action and drawer interactions", () => {
         get(target, property) {
           if (
             property === "animationName" &&
-            element.classList.contains("drawer-content")
+            element.getAttribute("data-slot") === "sheet-content"
           )
             return element.getAttribute("data-state") === "closed"
-              ? "drawer-exit"
-              : "drawer-enter";
+              ? "exit"
+              : "enter";
           const value = Reflect.get(target, property);
           return typeof value === "function" ? value.bind(target) : value;
         },
@@ -129,14 +147,14 @@ describe("row action and drawer interactions", () => {
     const trigger = screen.getByRole("button", { name: "打开抽屉" });
     await user.click(trigger);
     const dialog = await screen.findByRole("dialog");
-    fireEvent.animationEnd(dialog, { animationName: "drawer-enter" });
+    fireEvent.animationEnd(dialog, { animationName: "enter" });
     await user.type(screen.getByLabelText("材料名称"), "内容");
     await user.keyboard("{Escape}");
     expect(dialog).toHaveAttribute("data-state", "closed");
     expect(dialog).toBeInTheDocument();
     expect(screen.getByLabelText("材料名称")).toHaveValue("草稿内容");
     const exitEvent = new Event("animationend", { bubbles: true });
-    Object.defineProperty(exitEvent, "animationName", { value: "drawer-exit" });
+    Object.defineProperty(exitEvent, "animationName", { value: "exit" });
     fireEvent(dialog, exitEvent);
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());
@@ -156,6 +174,14 @@ describe("row action and drawer interactions", () => {
     expect(screen.getByRole("dialog", { name: "维护材料" })).toHaveAttribute(
       "data-state",
       "open",
+    );
+    await user.keyboard("{Escape}");
+    await user.click(await screen.findByRole("button", { name: "放弃修改" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "打开抽屉" })).toHaveFocus(),
     );
     view.unmount();
     render(<ConditionalDrawer pending />);
