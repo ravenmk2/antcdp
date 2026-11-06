@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -147,26 +148,30 @@ export function ReleaseCenter({
       <PageHeader
         title="发布管理"
         description="管理发布草稿、变更与材料、冻结验收、Tag 和归档记录。"
-        actions={
-          <Button
-            disabled={variant ? !variant.can_manage : !project.can_manage}
-            onClick={() =>
-              setParams((current) => {
-                const next = new URLSearchParams(current);
-                next.set("create", "1");
-                return next;
-              })
-            }
-          >
-            <Plus />
-            创建发布
-          </Button>
-        }
       />
       <section className="panel">
-        <div className="toolbar">
+        <TableToolbar
+          onReset={() => filter({ rq: "", rstatus: "active", variant: "" })}
+          onRefresh={() => void list.refetch()}
+          refreshing={list.isFetching}
+          actions={
+            <Button
+              disabled={variant ? !variant.can_manage : !project.can_manage}
+              onClick={() =>
+                setParams((current) => {
+                  const next = new URLSearchParams(current);
+                  next.set("create", "1");
+                  return next;
+                })
+              }
+            >
+              <Plus />
+              创建发布
+            </Button>
+          }
+        >
           <form
-            className="flex min-w-52 flex-1 gap-2 sm:max-w-sm"
+            className="flex shrink-0 items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               filter({
@@ -175,20 +180,22 @@ export function ReleaseCenter({
             }}
           >
             <StandaloneInput
+              className="w-70"
               name="q"
               aria-label="搜索发布"
               defaultValue={q}
               placeholder="搜索名称、版本号或 Tag"
             />
-            <Button type="submit" variant="outline">
+            <Button aria-label="搜索" type="submit" variant="outline">
               搜索
             </Button>
           </form>
           {!variant && (
             <StandaloneSelect
+              className="w-50"
               aria-label="产品分支筛选"
               value={selectedVariant}
-              onChange={(event) => filter({ variant: event.target.value })}
+              onValueChange={(value) => filter({ variant: value })}
             >
               <option value="">全部产品分支</option>
               {variants.data?.data.items.map((item) => (
@@ -201,7 +208,7 @@ export function ReleaseCenter({
           <StandaloneSelect
             aria-label="发布阶段筛选"
             value={status}
-            onChange={(event) => filter({ rstatus: event.target.value })}
+            onValueChange={(value) => filter({ rstatus: value })}
           >
             {[
               "active",
@@ -226,13 +233,7 @@ export function ReleaseCenter({
               </option>
             ))}
           </StandaloneSelect>
-          <Button
-            variant="ghost"
-            onClick={() => filter({ rq: "", rstatus: "active", variant: "" })}
-          >
-            清除筛选
-          </Button>
-        </div>
+        </TableToolbar>
         <AsyncBoundary
           loading={list.isPending}
           error={list.error}
@@ -353,7 +354,7 @@ function CreateRelease({
           发布必须属于一个产品分支；归档产品分支不可创建新发布。
         </p>
         <Field label="产品分支" required>
-          <Select onChange={(event) => onSelect(event.target.value)} value="">
+          <Select onValueChange={(value) => onSelect(value)} value="">
             <option value="">请选择</option>
             {variants
               .filter((item) => !item.archived_at)

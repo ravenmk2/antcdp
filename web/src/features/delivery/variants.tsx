@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -119,30 +120,34 @@ function VariantsContent({ project }: { project: Resource }) {
       <PageHeader
         title="产品分支"
         description="管理标准版与定制版的主干 Git 分支、动态仓库范围、环境和发布。"
-        actions={
-          <>
-            <Button asChild variant="outline">
-              <Link
-                to={`/projects/${project.id}?tab=settings&section=branch-model`}
-              >
-                <Settings />
-                Git 分支规则
-              </Link>
-            </Button>
-            <Button
-              disabled={!project.can_manage}
-              onClick={() => setCreate(true)}
-            >
-              <Plus />
-              新建产品分支
-            </Button>
-          </>
-        }
       />
       <section className="panel">
-        <div className="toolbar">
+        <TableToolbar
+          onReset={() => filter({ q: "", archived: "active" })}
+          onRefresh={() => void list.refetch()}
+          refreshing={list.isFetching}
+          actions={
+            <>
+              <Button asChild variant="outline">
+                <Link
+                  to={`/projects/${project.id}?tab=settings&section=branch-model`}
+                >
+                  <Settings />
+                  Git 分支规则
+                </Link>
+              </Button>
+              <Button
+                disabled={!project.can_manage}
+                onClick={() => setCreate(true)}
+              >
+                <Plus />
+                新建产品分支
+              </Button>
+            </>
+          }
+        >
           <form
-            className="flex min-w-52 gap-2"
+            className="flex shrink-0 items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               filter({
@@ -156,23 +161,23 @@ function VariantsContent({ project }: { project: Resource }) {
               defaultValue={q}
               placeholder="搜索名称或编码"
             />
-            <Button type="submit" variant="outline">
+            <Button aria-label="搜索" type="submit" variant="outline">
               搜索
             </Button>
           </form>
           <StandaloneSelect
             aria-label="产品分支状态"
             value={status}
-            onChange={(event) => filter({ archived: event.target.value })}
+            onValueChange={(value) => filter({ archived: value })}
           >
             <option value="active">正常</option>
             <option value="archived">已归档</option>
             <option value="all">全部</option>
           </StandaloneSelect>
-          <span className="toolbar-spacer text-xs text-muted">
-            标准版始终保留且不可归档
-          </span>
-        </div>
+        </TableToolbar>
+        <p className="border-b px-4 py-2 text-xs text-muted">
+          标准版始终保留且不可归档
+        </p>
         <AsyncBoundary
           loading={list.isPending}
           error={list.error}
@@ -707,15 +712,18 @@ function EnvironmentsPanel({
     });
   }
   return (
-    <Panel
-      title="环境"
-      action={
-        <Button disabled={!variant.can_manage} onClick={() => onCreate(true)}>
-          <Plus />
-          新建环境
-        </Button>
-      }
-    >
+    <Panel title="环境">
+      <TableToolbar
+        onRefresh={() => list.refetch()}
+        refreshing={list.isFetching}
+        actions={
+          <Button disabled={!variant.can_manage} onClick={() => onCreate(true)}>
+            <Plus />
+            新建环境
+          </Button>
+        }
+      />
+
       <Notice className="mb-4">
         环境只绑定 Git 分支与仓库范围，不表示已部署，也不决定执行顺序。
       </Notice>
@@ -942,8 +950,8 @@ function EnvironmentEditor({
               <Select
                 name="branch_type"
                 value={form.branch_type}
-                onChange={(event) =>
-                  setForm({ ...form, branch_type: event.target.value })
+                onValueChange={(value) =>
+                  setForm({ ...form, branch_type: value })
                 }
               >
                 {model.data?.data.types

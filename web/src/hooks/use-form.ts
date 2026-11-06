@@ -65,7 +65,12 @@ export function useFormErrors() {
   }
   function focus(field: string) {
     requestAnimationFrame(() => {
-      const element = formRef.current?.elements.namedItem(field);
+      const element =
+        Array.from(
+          formRef.current?.querySelectorAll<HTMLElement>("[data-field-name]") ??
+            [],
+        ).find((control) => control.dataset.fieldName === field) ??
+        formRef.current?.elements.namedItem(field);
       if (element instanceof HTMLElement) element.focus();
     });
   }

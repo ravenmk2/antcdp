@@ -1,9 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { TableToolbar } from "@/components/table-toolbar";
+import { DateRangePicker } from "@/components/date-time-picker";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import { ChevronRight, FunnelX } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { useAuth } from "@/app/auth";
 import { Button, IconButton } from "@/components/button";
-import { AsyncBoundary, ErrorNotice } from "@/components/feedback";
+import { AsyncBoundary } from "@/components/feedback";
 import { StandaloneInput, StandaloneSelect } from "@/components/fields";
 import { DescriptionList, PageHeader, Panel } from "@/components/layout";
 import { Drawer } from "@/components/overlays";
@@ -28,8 +30,6 @@ export function AuditPage() {
       : 1;
   const requestedSize = Number(params.get("page_size") ?? params.get("limit"));
   const [selected, setSelected] = useState("");
-  const [dates, setDates] = useState(params.has("from") || params.has("to"));
-  const [filterError, setFilterError] = useState("");
   const size = [10, 20, 50, 100].includes(requestedSize)
     ? requestedSize
     : preferredSize;
@@ -43,30 +43,21 @@ export function AuditPage() {
     `/admin/audit-events?${filters}`,
   );
   const auth = useAuth();
-  const formRef = useRef<HTMLFormElement>(null);
-  const search = useDebouncedSearch(params.get("q") ?? "", () => {
-    if (formRef.current) apply(formRef.current);
-  });
-  function apply(form: HTMLFormElement) {
-    const data = new FormData(form);
-    const from = String(data.get("from") ?? "");
-    const to = String(data.get("to") ?? "");
-    if (
-      (from && !Number.isFinite(Date.parse(from))) ||
-      (to && !Number.isFinite(Date.parse(to))) ||
-      (from && to && Date.parse(from) >= Date.parse(to))
-    ) {
-      setFilterError("请输入有效时间，结束时间必须晚于开始时间。");
-      return;
-    }
-    setFilterError("");
-    const next = new URLSearchParams({ page_size: String(size), page: "1" });
-    for (const key of ["q", "action_prefix"])
-      if (data.get(key)) next.set(key, String(data.get(key)).trim());
-    if (from) next.set("from", new Date(from).toISOString());
-    if (to) next.set("to", new Date(to).toISOString());
-    setParams(next);
+  function filter(values: Record<string, string>) {
+    setParams((current) => {
+      const next = new URLSearchParams(current);
+      next.set("page", "1");
+      next.set("page_size", String(size));
+      for (const [key, value] of Object.entries(values)) {
+        if (value) next.set(key, value);
+        else next.delete(key);
+      }
+      return next;
+    });
   }
+  const search = useDebouncedSearch(params.get("q") ?? "", (q) =>
+    filter({ q }),
+  );
   const total = query.data?.pagination?.total;
   useEffect(() => {
     if (total === undefined) return;
@@ -88,30 +79,40 @@ export function AuditPage() {
         description="查询系统与业务操作的白名单记录；审计只读。"
       />
       <Panel bodyClassName="p-0">
-        <form
-          ref={formRef}
-          className="toolbar"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (!search.composing.current) apply(event.currentTarget);
+        <TableToolbar
+          onReset={() => {
+            search.setValue("");
+            setParams({ page_size: String(size), page: "1" });
           }}
+          onRefresh={() => void query.refetch()}
+          refreshing={query.isFetching}
         >
-          <StandaloneInput
-            name="q"
-            aria-label="搜索审计"
-            value={search.value}
-            onChange={(event) => search.setValue(event.target.value)}
-            onCompositionStart={() => {
-              search.composing.current = true;
+          <form
+            className="flex shrink-0 items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!search.composing.current) search.submit();
             }}
-            onCompositionEnd={search.compositionEnd}
-            maxLength={64}
-            placeholder="搜索事件、操作者或对象"
-          />
+          >
+            <StandaloneInput
+              name="q"
+              aria-label="搜索审计"
+              value={search.value}
+              onChange={(event) => search.setValue(event.target.value)}
+              onCompositionStart={() => {
+                search.composing.current = true;
+              }}
+              onCompositionEnd={search.compositionEnd}
+              maxLength={64}
+              placeholder="搜索事件、操作者或对象"
+            />
+          </form>
           <StandaloneSelect
+            className="w-50"
             name="action_prefix"
             aria-label="事件类型"
-            defaultValue={params.get("action_prefix") ?? ""}
+            value={params.get("action_prefix") ?? ""}
+            onValueChange={(action_prefix) => filter({ action_prefix })}
           >
             {[
               ["", "全部事件"],
@@ -134,49 +135,15 @@ export function AuditPage() {
               </option>
             ))}
           </StandaloneSelect>
-          <Button
-            variant="outline"
-            aria-expanded={dates}
-            onClick={() => setDates(!dates)}
-          >
-            时间范围
-          </Button>
-          <IconButton
-            label="清除筛选"
-            onClick={() => {
-              search.setValue("");
-              setFilterError("");
-              setParams({ page_size: String(size), page: "1" });
+          <DateRangePicker
+            timezone={auth.settings.timezone}
+            value={{
+              from: params.get("from") ?? "",
+              to: params.get("to") ?? "",
             }}
-          >
-            <FunnelX />
-          </IconButton>
-          {dates && (
-            <div className="grid gap-3 border-b p-4 sm:grid-cols-2">
-              <label className="grid gap-1 text-xs">
-                开始时间（本地）
-                <StandaloneInput
-                  name="from"
-                  type="datetime-local"
-                  defaultValue={localDate(params.get("from"))}
-                />
-              </label>
-              <label className="grid gap-1 text-xs">
-                结束时间（本地）
-                <StandaloneInput
-                  name="to"
-                  type="datetime-local"
-                  defaultValue={localDate(params.get("to"))}
-                />
-              </label>
-            </div>
-          )}
-        </form>
-        {filterError && (
-          <div className="p-4">
-            <ErrorNotice error={filterError} />
-          </div>
-        )}
+            onApply={(range) => filter({ from: range.from, to: range.to })}
+          />
+        </TableToolbar>
         <AsyncBoundary
           loading={query.isPending}
           error={query.error}
@@ -254,14 +221,6 @@ export function AuditPage() {
   );
 }
 
-function localDate(value: string | null) {
-  if (!value || !Number.isFinite(Date.parse(value))) return "";
-  const date = new Date(value);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
-}
-
 export function AuditDetail({
   id,
   onClose,
@@ -269,6 +228,7 @@ export function AuditDetail({
   id: string;
   onClose: () => void;
 }) {
+  const auth = useAuth();
   const query = useApiQuery<AuditEvent>(
     ["audit-event", id],
     `/admin/audit-events/${id}`,
@@ -307,7 +267,10 @@ export function AuditDetail({
                 },
                 {
                   label: "发生时间",
-                  value: formatDate(query.data.data.occurred_at),
+                  value: formatDate(
+                    query.data.data.occurred_at,
+                    auth.settings.timezone,
+                  ),
                 },
                 {
                   label: "对象",

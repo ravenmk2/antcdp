@@ -1,3 +1,6 @@
+import { DateTimePicker } from "@/components/date-time-picker";
+import { useAuth } from "@/app/auth";
+import { TableToolbar } from "@/components/table-toolbar";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Pencil, Plus, Star, Trash2 } from "lucide-react";
@@ -50,6 +53,7 @@ export function CredentialPanel({
   } | null>(null);
   const [remove, setRemove] = useState<Credential | null>(null);
   const [diagnostic, setDiagnostic] = useState<Credential | null>(null);
+  const { settings } = useAuth();
   const queryClient = useQueryClient();
   const list = useApiQuery<CredentialSet>(["credentials", base], base);
   const fallback = useApiQuery<Selection>(
@@ -117,7 +121,24 @@ export function CredentialPanel({
   }
   return (
     <section className="panel">
-      <div className="toolbar">
+      <TableToolbar
+        onReset={() => {
+          setQ("");
+          setStatus("");
+        }}
+        onRefresh={() => void refresh()}
+        refreshing={list.isFetching}
+        actions={
+          <Button
+            className="flex items-center gap-2"
+            disabled={readonly}
+            onClick={() => setEditor({ mode: "create" })}
+          >
+            <Plus />
+            添加凭证
+          </Button>
+        }
+      >
         <StandaloneInput
           aria-label="搜索凭证"
           placeholder="搜索名称、编码或说明"
@@ -127,7 +148,7 @@ export function CredentialPanel({
         <StandaloneSelect
           aria-label="凭证状态"
           value={status}
-          onChange={(event) => setStatus(event.target.value)}
+          onValueChange={(value) => setStatus(value)}
         >
           <option value="">全部状态</option>
           <option value="available">可用</option>
@@ -136,15 +157,7 @@ export function CredentialPanel({
           <option value="disabled">已停用</option>
           <option value="missing">未配置秘密</option>
         </StandaloneSelect>
-        <Button
-          className="toolbar-spacer"
-          disabled={readonly}
-          onClick={() => setEditor({ mode: "create" })}
-        >
-          <Plus />
-          添加凭证
-        </Button>
-      </div>
+      </TableToolbar>
       <ErrorNotice error={submission.error} />
       <AsyncBoundary
         loading={list.isPending}
@@ -206,7 +219,7 @@ export function CredentialPanel({
                 </td>
                 <td className="text-xs text-muted">
                   {credential.expires_at
-                    ? formatDate(credential.expires_at)
+                    ? formatDate(credential.expires_at, settings.timezone)
                     : "无固定期限"}
                 </td>
                 <td>
@@ -355,13 +368,14 @@ function CredentialEditor({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const { settings } = useAuth();
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     name: credential?.name ?? "",
     code: credential?.code ?? "",
     description: credential?.description ?? "",
     enabled: credential?.enabled ?? true,
-    expires: localInput(credential?.expires_at),
+    expires: credential?.expires_at ?? "",
   });
   const [method, setMethod] = useState(
     credential?.auth_method ?? provider.methods[0]?.value ?? "",
@@ -562,13 +576,11 @@ function CredentialEditor({
               />
             </Field>
             <Field label="到期时间（可选）" error={errors.fields.expires_at}>
-              <Input
+              <DateTimePicker
                 name="expires_at"
-                type="datetime-local"
                 value={form.expires}
-                onChange={(event) =>
-                  setForm({ ...form, expires: event.target.value })
-                }
+                timezone={settings.timezone}
+                onChange={(expires) => setForm({ ...form, expires })}
               />
             </Field>
             {mode === "edit" && (
@@ -592,7 +604,7 @@ function CredentialEditor({
               <Field label="认证方式">
                 <Select
                   value={method}
-                  onChange={(event) => changeMethod(event.target.value)}
+                  onValueChange={(value) => changeMethod(value)}
                 >
                   {provider.methods.map((item) => (
                     <option key={item.value} value={item.value}>
@@ -725,12 +737,4 @@ function CredentialDiagnostic({
       </AsyncBoundary>
     </Drawer>
   );
-}
-
-function localInput(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
-    .toISOString()
-    .slice(0, 16);
 }

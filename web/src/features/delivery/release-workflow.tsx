@@ -1,3 +1,4 @@
+import { StandaloneSelect } from "@/components/fields";
 import { useState } from "react";
 import {
   Archive,
@@ -522,14 +523,15 @@ function SelectDecision({
   onChange: (value: "pass" | "return") => void;
 }) {
   return (
-    <select
+    <StandaloneSelect
+      aria-label="验收结论"
       className="min-h-10 w-full rounded-lg border bg-surface px-3"
       value={value}
-      onChange={(event) => onChange(event.target.value as "pass" | "return")}
+      onValueChange={(value) => onChange(value as "pass" | "return")}
     >
       <option value="pass">验收通过</option>
       <option value="return">退回备料</option>
-    </select>
+    </StandaloneSelect>
   );
 }
 

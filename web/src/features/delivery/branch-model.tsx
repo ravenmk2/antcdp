@@ -198,11 +198,10 @@ function Editor({
                     <Select
                       disabled={!initial.can_manage}
                       value={rule.rule?.mode ?? "exact"}
-                      onChange={(event) =>
+                      onValueChange={(value) =>
                         update(type.branch_type, {
                           rule: {
-                            mode: event.target.value as
-                              "exact" | "glob" | "regex",
+                            mode: value as "exact" | "glob" | "regex",
                             pattern: rule.rule?.pattern ?? "",
                           },
                         })

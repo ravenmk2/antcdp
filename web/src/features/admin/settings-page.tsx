@@ -189,9 +189,7 @@ function SettingsForm({
               <Select
                 name="timezone"
                 value={form.timezone}
-                onChange={(event) =>
-                  setForm({ ...form, timezone: event.target.value })
-                }
+                onValueChange={(value) => setForm({ ...form, timezone: value })}
               >
                 {[
                   ...new Set([

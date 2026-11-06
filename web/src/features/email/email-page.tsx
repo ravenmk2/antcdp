@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -137,8 +138,30 @@ function ProfileList() {
   return (
     <>
       <Panel bodyClassName="p-0">
-        <div className="toolbar">
+        <TableToolbar
+          onReset={() =>
+            setParams((current) => {
+              const next = new URLSearchParams(current);
+              next.delete("q");
+              next.delete("status");
+              next.set("page", "1");
+              return next;
+            })
+          }
+          onRefresh={() => void query.refetch()}
+          refreshing={query.isFetching}
+          actions={
+            <Button
+              className="flex items-center gap-2"
+              onClick={() => setCreate(true)}
+            >
+              <Plus />
+              新增 SMTP
+            </Button>
+          }
+        >
           <form
+            className="flex shrink-0 items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               setParams((current) => {
@@ -162,10 +185,10 @@ function ProfileList() {
           <StandaloneSelect
             aria-label="SMTP 状态"
             value={status}
-            onChange={(event) =>
+            onValueChange={(value) =>
               setParams((current) => {
                 const next = new URLSearchParams(current);
-                next.set("status", event.target.value);
+                next.set("status", value);
                 next.set("page", "1");
                 return next;
               })
@@ -175,11 +198,7 @@ function ProfileList() {
             <option value="enabled">已启用</option>
             <option value="disabled">已停用</option>
           </StandaloneSelect>
-          <Button className="toolbar-spacer" onClick={() => setCreate(true)}>
-            <Plus />
-            新增 SMTP
-          </Button>
-        </div>
+        </TableToolbar>
         <AsyncBoundary
           loading={query.isPending}
           error={query.error}
@@ -617,8 +636,8 @@ function ProfileEditor({
               <Field label="安全模式">
                 <Select
                   value={form.tls_mode}
-                  onChange={(event) =>
-                    setForm({ ...form, tls_mode: event.target.value })
+                  onValueChange={(value) =>
+                    setForm({ ...form, tls_mode: value })
                   }
                 >
                   <option value="implicit_tls">TLS 直连</option>
@@ -769,8 +788,29 @@ function TemplateList() {
   );
   return (
     <Panel bodyClassName="p-0">
-      <div className="toolbar">
+      <TableToolbar
+        onReset={() =>
+          setParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete("q");
+            next.delete("status");
+            next.set("page", "1");
+            return next;
+          })
+        }
+        onRefresh={() => void query.refetch()}
+        refreshing={query.isFetching}
+        actions={
+          <Button asChild className="flex items-center gap-2">
+            <Link to={`${base}/templates/new`}>
+              <Plus />
+              创建模板
+            </Link>
+          </Button>
+        }
+      >
         <form
+          className="flex shrink-0 items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             setParams((current) => {
@@ -794,10 +834,10 @@ function TemplateList() {
         <StandaloneSelect
           aria-label="邮件模板状态"
           value={status}
-          onChange={(event) =>
+          onValueChange={(value) =>
             setParams((current) => {
               const next = new URLSearchParams(current);
-              next.set("status", event.target.value);
+              next.set("status", value);
               next.set("page", "1");
               return next;
             })
@@ -807,13 +847,7 @@ function TemplateList() {
           <option value="enabled">已启用</option>
           <option value="disabled">已停用</option>
         </StandaloneSelect>
-        <Button asChild className="toolbar-spacer">
-          <Link to={`${base}/templates/new`}>
-            <Plus />
-            创建模板
-          </Link>
-        </Button>
-      </div>
+      </TableToolbar>
       <AsyncBoundary
         loading={query.isPending}
         error={query.error}
@@ -1086,7 +1120,7 @@ function TemplateForm({
             <Field label="正文格式">
               <Select
                 value={form.body_format}
-                onChange={(event) => update("body_format", event.target.value)}
+                onValueChange={(value) => update("body_format", value)}
               >
                 <option value="html">HTML</option>
                 <option value="text">纯文本</option>
@@ -1326,8 +1360,8 @@ function EmailTest({ onClose }: { onClose: () => void }) {
           <Field label="SMTP 配置" required error={errors.fields.profile_id}>
             <Select
               value={profileId}
-              onChange={(event) => {
-                setProfileId(event.target.value);
+              onValueChange={(value) => {
+                setProfileId(value);
                 setSender("");
               }}
             >
@@ -1351,7 +1385,7 @@ function EmailTest({ onClose }: { onClose: () => void }) {
             <Field label="发件名称">
               <Select
                 value={sender}
-                onChange={(event) => setSender(event.target.value)}
+                onValueChange={(value) => setSender(value)}
               >
                 <option value="">默认名称</option>
                 {profile.sender_names.map((item) => (
@@ -1365,7 +1399,7 @@ function EmailTest({ onClose }: { onClose: () => void }) {
           <Field label="已保存模板（可选）">
             <Select
               value={templateId}
-              onChange={(event) => setTemplateId(event.target.value)}
+              onValueChange={(value) => setTemplateId(value)}
             >
               <option value="">直接输入内容</option>
               {templates.data?.data.items.map((item) => (
@@ -1397,8 +1431,8 @@ function EmailTest({ onClose }: { onClose: () => void }) {
             <Field label="格式">
               <Select
                 value={content.body_format}
-                onChange={(event) =>
-                  setContent({ ...content, body_format: event.target.value })
+                onValueChange={(value) =>
+                  setContent({ ...content, body_format: value })
                 }
               >
                 <option value="text">纯文本</option>

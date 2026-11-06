@@ -1,3 +1,6 @@
+import { useAuth } from "@/app/auth";
+import { TableToolbar } from "@/components/table-toolbar";
+import { DateRangePicker } from "@/components/date-time-picker";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { ChevronRight } from "lucide-react";
@@ -23,6 +26,7 @@ interface Page {
   page_size: number;
 }
 export function MessageLogList({ module }: { module: "email" | "sms" }) {
+  const { settings } = useAuth();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const status = params.get("status") ?? "";
@@ -40,8 +44,11 @@ export function MessageLogList({ module }: { module: "email" | "sms" }) {
     status,
     page: String(page),
     page_size: String(size),
-    from: new Date(now - Number(days) * 86400000).toISOString(),
+    from:
+      params.get("from") ||
+      new Date(now - Number(days) * 86400000).toISOString(),
   });
+  if (params.get("to")) filters.set("to", params.get("to")!);
   if (profile) filters.set("profile_id", profile);
   const query = useApiQuery<Page>(
     ["message-logs", module, filters.toString()],
@@ -60,8 +67,38 @@ export function MessageLogList({ module }: { module: "email" | "sms" }) {
   }
   return (
     <Panel bodyClassName="p-0">
-      <div className="toolbar">
+      <TableToolbar
+        onReset={() => {
+          setNow(Date.now());
+          filter({
+            q: "",
+            status: "",
+            days: "30",
+            profile_id: "",
+            from: "",
+            to: "",
+          });
+        }}
+        refreshing={query.isFetching}
+        onRefresh={() => {
+          if (params.get("from") || params.get("to")) void query.refetch();
+          else setNow(Date.now());
+        }}
+        advancedCount={profile ? 1 : 0}
+        advanced={
+          <label className="grid gap-1.5 text-xs text-muted">
+            配置 ID
+            <StandaloneInput
+              aria-label="配置 ID"
+              placeholder="输入配置 ID"
+              value={profile}
+              onChange={(event) => filter({ profile_id: event.target.value })}
+            />
+          </label>
+        }
+      >
         <form
+          className="flex shrink-0 items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             filter({
@@ -79,7 +116,7 @@ export function MessageLogList({ module }: { module: "email" | "sms" }) {
         <StandaloneSelect
           aria-label="发送结果"
           value={status}
-          onChange={(event) => filter({ status: event.target.value })}
+          onValueChange={(value) => filter({ status: value })}
         >
           <option value="">全部状态</option>
           {Object.entries(messageStatusLabels).map(([value, label]) => (
@@ -88,41 +125,22 @@ export function MessageLogList({ module }: { module: "email" | "sms" }) {
             </option>
           ))}
         </StandaloneSelect>
-        <StandaloneSelect
-          aria-label="日志时间"
-          value={days}
-          onChange={(event) => filter({ days: event.target.value })}
-        >
-          {[30, 7, 1].map((value) => (
-            <option key={value} value={value}>
-              近 {value} 天
-            </option>
-          ))}
-        </StandaloneSelect>
-        <StandaloneInput
-          aria-label="配置 ID"
-          placeholder="配置 ID（可选）"
-          value={profile}
-          onChange={(event) => filter({ profile_id: event.target.value })}
-        />
-        <Button
-          variant="ghost"
-          onClick={() =>
-            filter({ q: "", status: "", days: "30", profile_id: "" })
-          }
-        >
-          清除筛选
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => {
-            setNow(Date.now());
-            void query.refetch();
+        <DateRangePicker
+          timezone={settings.timezone}
+          retentionDays={30}
+          value={{
+            from: filters.get("from") ?? "",
+            to: filters.get("to") ?? "",
+            preset: params.get("from") || params.get("to") ? "custom" : days,
           }}
-        >
-          刷新
-        </Button>
-      </div>
+          onApply={(range) => {
+            setNow(Date.now());
+            if (["1", "7", "30"].includes(range.preset ?? ""))
+              filter({ days: range.preset!, from: "", to: "" });
+            else filter({ from: range.from, to: range.to, days: "30" });
+          }}
+        />
+      </TableToolbar>
       <AsyncBoundary
         loading={query.isPending}
         error={query.error}
@@ -166,7 +184,7 @@ export function MessageLogList({ module }: { module: "email" | "sms" }) {
                   </small>
                 </td>
                 <td className="text-xs text-muted">
-                  {formatDate(log.started_at)}
+                  {formatDate(log.started_at, settings.timezone)}
                   <small className="block">{log.actor_name}</small>
                 </td>
                 <td>
@@ -212,6 +230,7 @@ export function MessageLogDetail({
   id: string;
   onClose: () => void;
 }) {
+  const { settings } = useAuth();
   const query = useApiQuery<MessageLog>(
     ["message-log", module, id],
     `/admin/${module}/send-logs/${id}`,
@@ -259,11 +278,17 @@ export function MessageLogDetail({
                   { label: "操作者", value: query.data.data.actor_name },
                   {
                     label: "开始时间",
-                    value: formatDate(query.data.data.started_at),
+                    value: formatDate(
+                      query.data.data.started_at,
+                      settings.timezone,
+                    ),
                   },
                   {
                     label: "完成时间",
-                    value: formatDate(query.data.data.finished_at),
+                    value: formatDate(
+                      query.data.data.finished_at,
+                      settings.timezone,
+                    ),
                   },
                   { label: "阶段", value: query.data.data.stage },
                   {

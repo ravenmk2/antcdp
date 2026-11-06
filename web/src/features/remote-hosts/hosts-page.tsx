@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import {
   Link,
@@ -103,6 +104,9 @@ export function RemoteHostsPage() {
             ? "维护 SSH 主机、公钥信任、归属凭证与连接诊断。"
             : "选择主机并维护当前归属凭证；主机地址和公钥信任由系统管理员管理。"
         }
+      />
+      <HostDirectory
+        refreshing={directory.isFetching}
         actions={
           admin && (
             <Button
@@ -122,8 +126,6 @@ export function RemoteHostsPage() {
             </Button>
           )
         }
-      />
-      <HostDirectory
         items={directory.data?.data.items ?? []}
         loading={directory.isPending}
         error={directory.error}
@@ -134,11 +136,15 @@ export function RemoteHostsPage() {
 }
 
 function HostDirectory({
+  actions,
+  refreshing,
   items,
   loading,
   error,
   retry,
 }: {
+  actions?: React.ReactNode;
+  refreshing: boolean;
   items: ServiceConnection[];
   loading: boolean;
   error: unknown;
@@ -158,8 +164,14 @@ function HostDirectory({
   );
   return (
     <Panel bodyClassName="p-0">
-      <div className="toolbar">
+      <TableToolbar
+        onReset={() => setParams({})}
+        onRefresh={retry}
+        refreshing={refreshing}
+        actions={actions}
+      >
         <form
+          className="flex shrink-0 items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             const value = String(
@@ -183,10 +195,10 @@ function HostDirectory({
         <StandaloneSelect
           aria-label="主机状态"
           value={status}
-          onChange={(event) =>
+          onValueChange={(value) =>
             setParams((current) => {
               const next = new URLSearchParams(current);
-              if (event.target.value) next.set("status", event.target.value);
+              if (value) next.set("status", value);
               else next.delete("status");
               return next;
             })
@@ -196,10 +208,7 @@ function HostDirectory({
           <option value="enabled">已启用</option>
           <option value="disabled">已停用</option>
         </StandaloneSelect>
-        <Button variant="ghost" onClick={() => setParams({})}>
-          清除筛选
-        </Button>
-      </div>
+      </TableToolbar>
       <AsyncBoundary
         loading={loading}
         error={error}
@@ -462,10 +471,10 @@ function HostCreate() {
                 <Field label="认证方式" className="form-full">
                   <Select
                     value={credential.method}
-                    onChange={(event) => {
+                    onValueChange={(value) => {
                       setCredential({
                         ...credential,
-                        method: event.target.value,
+                        method: value,
                       });
                       setValues({});
                     }}

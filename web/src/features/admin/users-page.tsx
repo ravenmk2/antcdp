@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -193,17 +194,24 @@ export function UsersPage() {
       <PageHeader
         title="用户管理"
         description="创建账号、维护资料与身份，执行状态、密码和逻辑删除操作。"
-        actions={
-          <Button onClick={() => setAction({ type: "create" })}>
-            <Plus />
-            添加用户
-          </Button>
-        }
       />
       <section className="panel">
-        <div className="toolbar">
+        <TableToolbar
+          onReset={() => {
+            search.setValue("");
+            filter({ q: "", status: "", identity: "" });
+          }}
+          onRefresh={() => void list.refetch()}
+          refreshing={list.isFetching}
+          actions={
+            <Button onClick={() => setAction({ type: "create" })}>
+              <Plus />
+              添加用户
+            </Button>
+          }
+        >
           <form
-            className="min-w-52 flex-1 sm:max-w-sm"
+            className="flex shrink-0 items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               if (!search.composing.current) search.submit();
@@ -224,7 +232,7 @@ export function UsersPage() {
           <StandaloneSelect
             aria-label="用户状态"
             value={status}
-            onChange={(event) => filter({ status: event.target.value })}
+            onValueChange={(value) => filter({ status: value })}
           >
             <option value="">
               全部 · {counts.data?.data.users_total ?? "—"}
@@ -239,23 +247,14 @@ export function UsersPage() {
           <StandaloneSelect
             aria-label="用户身份"
             value={identity}
-            onChange={(event) => filter({ identity: event.target.value })}
+            onValueChange={(value) => filter({ identity: value })}
           >
             <option value="">全部身份</option>
             <option value="founder">创始人</option>
             <option value="admin">管理员</option>
             <option value="user">普通用户</option>
           </StandaloneSelect>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              search.setValue("");
-              filter({ q: "", status: "", identity: "" });
-            }}
-          >
-            清除筛选
-          </Button>
-        </div>
+        </TableToolbar>
         <AsyncBoundary
           loading={list.isPending}
           error={list.error}
@@ -460,10 +459,10 @@ function UserEditor({
           <Field label="系统身份" required>
             <Select
               value={form.role}
-              onChange={(event) =>
+              onValueChange={(value) =>
                 setForm({
                   ...form,
-                  role: event.target.value as "user" | "admin",
+                  role: value as "user" | "admin",
                 })
               }
             >

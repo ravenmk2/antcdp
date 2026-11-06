@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import {
   Link,
@@ -109,6 +110,9 @@ export function IntegrationsPage() {
             ? "维护服务连接、归属凭证、首选/兜底、Webhook 与诊断。"
             : "选择服务连接，只维护当前归属的访问凭证；连接内部配置不会展示。"
         }
+      />
+      <Directory
+        refreshing={directory.isFetching || types.isFetching}
         actions={
           admin && (
             <Button
@@ -123,8 +127,6 @@ export function IntegrationsPage() {
             </Button>
           )
         }
-      />
-      <Directory
         items={directory.data?.data.items ?? []}
         types={types.data?.data.items ?? []}
         loading={directory.isPending || types.isPending}
@@ -144,12 +146,16 @@ function navigateWithQuery(query: URLSearchParams) {
 }
 
 function Directory({
+  actions,
+  refreshing,
   items,
   types,
   loading,
   error,
   retry,
 }: {
+  actions?: React.ReactNode;
+  refreshing: boolean;
   items: ServiceConnection[];
   types: ServiceType[];
   loading: boolean;
@@ -180,8 +186,14 @@ function Directory({
   }
   return (
     <Panel bodyClassName="p-0">
-      <div className="toolbar">
+      <TableToolbar
+        onReset={() => setParams({})}
+        onRefresh={retry}
+        refreshing={refreshing}
+        actions={actions}
+      >
         <form
+          className="flex shrink-0 items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             filter(
@@ -200,7 +212,7 @@ function Directory({
         <StandaloneSelect
           aria-label="服务类型"
           value={type}
-          onChange={(event) => filter("type", event.target.value)}
+          onValueChange={(value) => filter("type", value)}
         >
           <option value="">全部服务</option>
           {[
@@ -218,16 +230,13 @@ function Directory({
         <StandaloneSelect
           aria-label="连接状态"
           value={status}
-          onChange={(event) => filter("status", event.target.value)}
+          onValueChange={(value) => filter("status", value)}
         >
           <option value="">全部状态</option>
           <option value="enabled">已启用</option>
           <option value="disabled">已停用</option>
         </StandaloneSelect>
-        <Button variant="ghost" onClick={() => setParams({})}>
-          清除筛选
-        </Button>
-      </div>
+      </TableToolbar>
       <AsyncBoundary
         loading={loading}
         error={error}
@@ -573,10 +582,10 @@ function ConnectionCreate({ capabilities }: { capabilities: ServiceType[] }) {
                 <Field label="认证方式" className="form-full">
                   <Select
                     value={credential.method}
-                    onChange={(event) => {
+                    onValueChange={(value) => {
                       setCredential({
                         ...credential,
-                        method: event.target.value,
+                        method: value,
                       });
                       setSecrets({});
                     }}
@@ -661,8 +670,8 @@ function ProviderConfigFields({
           {field.options ? (
             <Select
               value={values[field.key] ?? ""}
-              onChange={(event) =>
-                onChange({ ...values, [field.key]: event.target.value })
+              onValueChange={(value) =>
+                onChange({ ...values, [field.key]: value })
               }
             >
               {field.options.map((option) => (

@@ -101,12 +101,10 @@ export function ScopeEditor({
         <Select
           disabled={disabled}
           value={value.mode}
-          onChange={(event) =>
+          onValueChange={(value) =>
             update({
-              mode: event.target.value as Scope["mode"],
-              ...(event.target.value !== "custom"
-                ? { repository_ids: [], rules: [] }
-                : {}),
+              mode: value as Scope["mode"],
+              ...(value !== "custom" ? { repository_ids: [], rules: [] } : {}),
             })
           }
         >
@@ -203,9 +201,9 @@ export function ScopeEditor({
                     aria-label={`规则 ${index + 1} 连接`}
                     disabled={disabled}
                     value={rule.connection_id ?? ""}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       updateRule(index, {
-                        connection_id: event.target.value || null,
+                        connection_id: value || null,
                       })
                     }
                   >
@@ -220,9 +218,9 @@ export function ScopeEditor({
                     aria-label={`规则 ${index + 1} 模式`}
                     disabled={disabled}
                     value={rule.mode}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       updateRule(index, {
-                        mode: event.target.value as ScopeRule["mode"],
+                        mode: value as ScopeRule["mode"],
                       })
                     }
                   >

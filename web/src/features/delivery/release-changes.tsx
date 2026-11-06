@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Pagination } from "@/components/pagination";
 import {
@@ -74,28 +75,30 @@ export function ReleaseChanges(props: ReleaseViewProps) {
   }
   return (
     <div className="grid gap-5">
-      <Panel
-        title="范围与基线"
-        action={
-          release.status === "draft" &&
-          flow.can_manage && (
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void previewScope()}
-              >
-                预览范围变化
-              </Button>
-              {scope && (
-                <Button size="sm" onClick={() => void refreshScope()}>
-                  确认刷新范围
+      <Panel title="范围与基线">
+        <TableToolbar
+          onRefresh={props.onChanged}
+          actions={
+            release.status === "draft" &&
+            flow.can_manage && (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void previewScope()}
+                >
+                  预览范围变化
                 </Button>
-              )}
-            </div>
-          )
-        }
-      >
+                {scope && (
+                  <Button size="sm" onClick={() => void refreshScope()}>
+                    确认刷新范围
+                  </Button>
+                )}
+              </div>
+            )
+          }
+        />
+
         <ErrorNotice error={submission.error} />
         {scope && (
           <Notice
@@ -145,37 +148,43 @@ export function ReleaseChanges(props: ReleaseViewProps) {
           </Notice>
         )}
       </Panel>
-      <Panel
-        title="MR 与直接提交"
-        action={
-          editing && (
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => setAdd("mr")}>
-                <GitPullRequest />
-                选择 MR
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setAdd("commit")}
-              >
-                <Plus />
-                补录直接提交
-              </Button>
-              {flow.can_manage && (
+      <Panel title="MR 与直接提交">
+        <TableToolbar
+          onRefresh={props.onChanged}
+          actions={
+            editing && (
+              <div className="flex flex-wrap gap-2">
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setAdd("revert")}
+                  onClick={() => setAdd("mr")}
                 >
-                  <RotateCcw />
-                  关联回退 MR
+                  <GitPullRequest />
+                  选择 MR
                 </Button>
-              )}
-            </div>
-          )
-        }
-      >
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setAdd("commit")}
+                >
+                  <Plus />
+                  补录直接提交
+                </Button>
+                {flow.can_manage && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAdd("revert")}
+                  >
+                    <RotateCcw />
+                    关联回退 MR
+                  </Button>
+                )}
+              </div>
+            )
+          }
+        />
+
         <Notice className="mb-4">
           候选 MR 按仓库加载；没有登记 MR
           的仓库仍属于完整发布范围，不表示“无变化”。
@@ -495,8 +504,8 @@ function ChangeEditor(
             name="repo_id"
             disabled={submission.pending}
             value={repoId}
-            onChange={(event) => {
-              setRepoId(event.target.value);
+            onValueChange={(value) => {
+              setRepoId(value);
               setOptions([]);
               setPage(1);
               setLoaded(false);
@@ -602,7 +611,7 @@ function ChangeEditor(
               <Select
                 name="original_id"
                 value={original}
-                onChange={(event) => setOriginal(event.target.value)}
+                onValueChange={(value) => setOriginal(value)}
               >
                 <option value="">请选择同仓库原始变更</option>
                 {props.flow.changes

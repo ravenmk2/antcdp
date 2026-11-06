@@ -97,7 +97,7 @@ export function WebhookPanel({
                 <Field label="验证方式">
                   <Select
                     value={method || settings.data.data.verification_method}
-                    onChange={(event) => setMethod(event.target.value)}
+                    onValueChange={(value) => setMethod(value)}
                   >
                     {methods.map((value) => (
                       <option key={value} value={value}>

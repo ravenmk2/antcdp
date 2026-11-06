@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -144,8 +145,30 @@ function ProfileList() {
   return (
     <>
       <Panel bodyClassName="p-0">
-        <div className="toolbar">
+        <TableToolbar
+          onReset={() =>
+            setParams((current) => {
+              const next = new URLSearchParams(current);
+              next.delete("q");
+              next.delete("status");
+              next.set("page", "1");
+              return next;
+            })
+          }
+          onRefresh={() => void query.refetch()}
+          refreshing={query.isFetching}
+          actions={
+            <Button
+              className="flex items-center gap-2"
+              onClick={() => setCreate(true)}
+            >
+              <Plus />
+              新增配置
+            </Button>
+          }
+        >
           <form
+            className="flex shrink-0 items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               setParams((current) => {
@@ -169,10 +192,10 @@ function ProfileList() {
           <StandaloneSelect
             aria-label="短信配置状态"
             value={status}
-            onChange={(event) =>
+            onValueChange={(value) =>
               setParams((current) => {
                 const next = new URLSearchParams(current);
-                next.set("status", event.target.value);
+                next.set("status", value);
                 next.set("page", "1");
                 return next;
               })
@@ -182,11 +205,7 @@ function ProfileList() {
             <option value="enabled">已启用</option>
             <option value="disabled">已停用</option>
           </StandaloneSelect>
-          <Button className="toolbar-spacer" onClick={() => setCreate(true)}>
-            <Plus />
-            新增配置
-          </Button>
-        </div>
+        </TableToolbar>
         <AsyncBoundary
           loading={query.isPending}
           error={query.error}
@@ -591,8 +610,29 @@ function TemplateList() {
   );
   return (
     <Panel bodyClassName="p-0">
-      <div className="toolbar">
+      <TableToolbar
+        onReset={() =>
+          setParams((current) => {
+            const next = new URLSearchParams(current);
+            next.delete("q");
+            next.delete("status");
+            next.set("page", "1");
+            return next;
+          })
+        }
+        onRefresh={() => void query.refetch()}
+        refreshing={query.isFetching}
+        actions={
+          <Button asChild className="flex items-center gap-2">
+            <Link to={`${base}/templates/new`}>
+              <Plus />
+              创建模板
+            </Link>
+          </Button>
+        }
+      >
         <form
+          className="flex shrink-0 items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             setParams((current) => {
@@ -616,10 +656,10 @@ function TemplateList() {
         <StandaloneSelect
           aria-label="短信模板状态"
           value={status}
-          onChange={(event) =>
+          onValueChange={(value) =>
             setParams((current) => {
               const next = new URLSearchParams(current);
-              next.set("status", event.target.value);
+              next.set("status", value);
               next.set("page", "1");
               return next;
             })
@@ -629,13 +669,7 @@ function TemplateList() {
           <option value="enabled">已启用</option>
           <option value="disabled">已停用</option>
         </StandaloneSelect>
-        <Button asChild className="toolbar-spacer">
-          <Link to={`${base}/templates/new`}>
-            <Plus />
-            创建模板
-          </Link>
-        </Button>
-      </div>
+      </TableToolbar>
       <AsyncBoundary
         loading={query.isPending}
         error={query.error}
@@ -921,8 +955,8 @@ function TemplateForm({
               <Select
                 disabled={!create}
                 value={form.mode}
-                onChange={(event) =>
-                  update("mode", event.target.value as "remote" | "local")
+                onValueChange={(value) =>
+                  update("mode", value as "remote" | "local")
                 }
               >
                 <option value="remote">远端模板</option>
@@ -949,9 +983,7 @@ function TemplateForm({
                   <Select
                     disabled={!create}
                     value={form.profile_id}
-                    onChange={(event) =>
-                      update("profile_id", event.target.value)
-                    }
+                    onValueChange={(value) => update("profile_id", value)}
                   >
                     <option value="">请选择</option>
                     {profiles.map((profile) => (
@@ -1217,8 +1249,8 @@ function SmsTest({ onClose }: { onClose: () => void }) {
         <Field label="短信配置" required error={errors.fields.profile_id}>
           <Select
             value={profileId}
-            onChange={(event) => {
-              setProfileId(event.target.value);
+            onValueChange={(value) => {
+              setProfileId(value);
               setTemplateId("");
             }}
           >
@@ -1233,11 +1265,11 @@ function SmsTest({ onClose }: { onClose: () => void }) {
         <Field label="远端模板" required error={errors.fields.template_id}>
           <Select
             value={templateId}
-            onChange={(event) => {
+            onValueChange={(value) => {
               const next = templates.data?.data.items.find(
-                (item) => item.id === event.target.value,
+                (item) => item.id === value,
               );
-              setTemplateId(event.target.value);
+              setTemplateId(value);
               setParameters(JSON.stringify(next?.sample_data ?? {}, null, 2));
             }}
           >

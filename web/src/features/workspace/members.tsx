@@ -1,3 +1,5 @@
+import { TableToolbar } from "@/components/table-toolbar";
+import { StandaloneSelect } from "@/components/fields";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, Users } from "lucide-react";
@@ -49,9 +51,28 @@ export function MembersPanel({
   }
   return (
     <section className="panel">
-      <div className="toolbar">
+      <TableToolbar
+        onReset={() => {
+          setInput("");
+          setQ("");
+          setPage(1);
+        }}
+        onRefresh={() => void list.refetch()}
+        refreshing={list.isFetching}
+        actions={
+          resource.can_manage && (
+            <Button
+              className="flex items-center gap-2"
+              onClick={() => setAdd(true)}
+            >
+              <Plus />
+              添加直接成员
+            </Button>
+          )
+        }
+      >
         <form
-          className="flex min-w-52 flex-1 gap-2 sm:max-w-sm"
+          className="flex shrink-0 items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             setQ(input.trim());
@@ -64,17 +85,11 @@ export function MembersPanel({
             value={input}
             onChange={(event) => setInput(event.target.value)}
           />
-          <Button type="submit" variant="outline">
+          <Button aria-label="搜索" type="submit" variant="outline">
             搜索
           </Button>
         </form>
-        {resource.can_manage && (
-          <Button className="toolbar-spacer" onClick={() => setAdd(true)}>
-            <Plus />
-            添加直接成员
-          </Button>
-        )}
-      </div>
+      </TableToolbar>
       <AsyncBoundary
         loading={list.isPending}
         error={list.error}
@@ -222,17 +237,17 @@ function RoleSelect({
     return member.direct_role === "admin" ? "管理员" : "成员";
   return (
     <>
-      <select
+      <StandaloneSelect
         aria-label={`调整 ${member.display_name} 的直接角色`}
-        className="rounded-md border bg-surface px-2 py-1 text-xs"
+        className="min-h-8 w-28 rounded-md border bg-surface px-2 py-1 text-xs data-[size=default]:h-8"
         value={member.direct_role}
         disabled={submission.pending}
-        onChange={(event) =>
+        onValueChange={(value) =>
           void submission.run(async () => {
             await request(`/${kind}/${resource.id}/members/${member.user_id}`, {
               method: "PATCH",
               etag,
-              body: { role: event.target.value },
+              body: { role: value },
             });
             await onSaved();
           })
@@ -240,7 +255,7 @@ function RoleSelect({
       >
         <option value="member">成员</option>
         <option value="admin">管理员</option>
-      </select>
+      </StandaloneSelect>
       <ErrorNotice error={submission.error} />
     </>
   );
@@ -359,7 +374,7 @@ function AddMember({
           <Select
             name="role"
             value={role}
-            onChange={(event) => setRole(event.target.value)}
+            onValueChange={(value) => setRole(value)}
           >
             <option value="member">成员</option>
             <option value="admin">管理员</option>

@@ -213,19 +213,6 @@
   ::-webkit-scrollbar-track {
     background: transparent;
   }
-  @media (prefers-reduced-motion: reduce) {
-    *:not(
-      .setup-select-content,
-      .combobox-content,
-      [data-slot="select-content"]
-    ),
-    *::before,
-    *::after {
-      scroll-behavior: auto !important;
-      animation-duration: 0.01ms !important;
-      transition-duration: 0.01ms !important;
-    }
-  }
 }
 
 @layer components {
@@ -358,11 +345,69 @@
   }
   .toolbar {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 10px;
     padding: 14px 16px;
+    min-width: 0;
+  }
+  .table-toolbar {
     border-bottom: 1px solid var(--border);
+  }
+  .panel-body:not(.p-0) > .table-toolbar {
+    margin: -18px -18px 18px;
+  }
+  .toolbar-filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+  .toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .toolbar-filters > form {
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    flex: 0 0 auto;
+  }
+  .toolbar-filters > input,
+  .toolbar-filters > form input {
+    width: 240px;
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+  .toolbar-filters .search-wide {
+    width: 280px;
+  }
+  .toolbar button {
+    height: 40px;
+  }
+  .toolbar [data-slot="select-trigger"] {
+    width: 160px;
+  }
+  .toolbar [data-slot="select-trigger"][aria-label="连接筛选"],
+  .toolbar [data-slot="select-trigger"][aria-label="产品分支筛选"],
+  .toolbar [data-slot="select-trigger"][aria-label="事件类型"] {
+    width: 200px;
+  }
+  .toolbar [data-slot="select-value"] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .toolbar-advanced {
+    animation-duration: 160ms;
+  }
+  @media (max-width: 1100px) {
+    .toolbar,
+    .toolbar-filters {
+      flex-wrap: wrap;
+    }
   }
   .toolbar-spacer {
     margin-left: auto;

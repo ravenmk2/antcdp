@@ -107,4 +107,35 @@ describe("audit numbered pagination", () => {
       expect(router.state.location.search).toContain("page=3"),
     );
   });
+  it("keeps bookmarked dates during search and resets both controls and the query", async () => {
+    const user = userEvent.setup();
+    const router = mount(
+      "/admin/audit?action_prefix=user.&from=2026-11-06T00%3A00%3A00Z&to=2026-11-07T00%3A00%3A00Z",
+    );
+    expect(await screen.findByText("对象 27")).toBeVisible();
+    await user.type(
+      screen.getByRole("textbox", { name: "搜索审计" }),
+      "tester{Enter}",
+    );
+    await waitFor(() =>
+      expect(router.state.location.search).toContain("q=tester"),
+    );
+    expect(new URLSearchParams(router.state.location.search).get("from")).toBe(
+      "2026-11-06T00:00:00Z",
+    );
+    await user.click(screen.getByRole("button", { name: "重置筛选" }));
+    await waitFor(() =>
+      expect(router.state.location.search).not.toContain("from="),
+    );
+    expect(screen.getByRole("textbox", { name: "搜索审计" })).toHaveValue("");
+    expect(
+      screen.getByRole("combobox", { name: "事件类型" }),
+    ).toHaveTextContent("全部事件");
+    expect(screen.getByRole("button", { name: "时间范围" })).toHaveTextContent(
+      "全部时间",
+    );
+    await user.click(screen.getByRole("button", { name: "时间范围" }));
+    expect(screen.getByLabelText("开始时间")).toHaveValue("");
+    expect(screen.getByLabelText("结束时间")).toHaveValue("");
+  });
 });

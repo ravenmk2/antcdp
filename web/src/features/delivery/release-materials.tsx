@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import {
   ArrowDown,
@@ -59,25 +60,31 @@ export function ReleaseMaterials(props: ReleaseViewProps) {
   }
   return (
     <div className="grid gap-5">
-      <Panel
-        title="交付材料"
-        action={
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setRemoved(true)}>
-              <FileClock />
-              已移出材料
-            </Button>
-            <Button
-              size="sm"
-              disabled={!editable}
-              onClick={() => setEditor("new")}
-            >
-              <Plus />
-              添加材料
-            </Button>
-          </div>
-        }
-      >
+      <Panel title="交付材料">
+        <TableToolbar
+          onRefresh={props.onChanged}
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setRemoved(true)}
+              >
+                <FileClock />
+                已移出材料
+              </Button>
+              <Button
+                size="sm"
+                disabled={!editable}
+                onClick={() => setEditor("new")}
+              >
+                <Plus />
+                添加材料
+              </Button>
+            </div>
+          }
+        />
+
         {(["sql", "object", "config", "attachment"] as MaterialKind[]).map(
           (kind) => {
             const items = props.materials.items.filter(
@@ -399,7 +406,7 @@ function MaterialEditor(
             <Select
               disabled={Boolean(material)}
               value={form.kind}
-              onChange={(event) => update("kind", event.target.value)}
+              onValueChange={(value) => update("kind", value)}
             >
               {Object.entries(groups).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -418,7 +425,7 @@ function MaterialEditor(
           <Field label="关联仓库（可选）" className="form-full">
             <Select
               value={form.repository_id}
-              onChange={(event) => update("repository_id", event.target.value)}
+              onValueChange={(value) => update("repository_id", value)}
             >
               <option value="">不关联仓库</option>
               {props.materials.repositories.map((repo) => (
@@ -475,9 +482,7 @@ function MaterialEditor(
               <Field label="配置格式" required>
                 <Select
                   value={form.config_format}
-                  onChange={(event) =>
-                    update("config_format", event.target.value)
-                  }
+                  onValueChange={(value) => update("config_format", value)}
                 >
                   {["yaml", "toml", "json", "ini", "properties"].map(
                     (value) => (
@@ -489,9 +494,7 @@ function MaterialEditor(
               <Field label="内容模式" required>
                 <Select
                   value={form.config_mode}
-                  onChange={(event) =>
-                    update("config_mode", event.target.value)
-                  }
+                  onValueChange={(value) => update("config_mode", value)}
                 >
                   <option value="delta">增量</option>
                   <option value="full">完整文件</option>

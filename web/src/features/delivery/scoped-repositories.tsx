@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, ChevronRight, Plus } from "lucide-react";
@@ -79,36 +80,39 @@ export function ScopedRepositories({
     });
   }
   return (
-    <Panel
-      title="仓库与分支"
-      action={
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            disabled={!selected.length || !list.data?.data.can_manage}
-            pending={submission.pending}
-            onClick={() => void check()}
-          >
-            <Check />
-            校验所选分支
-          </Button>
-          <Button
-            disabled={!variant.can_manage || Boolean(environment)}
-            onClick={() =>
-              setParams((current) => {
-                const next = new URLSearchParams(current);
-                next.set("vview", "creations");
-                next.set("create", "1");
-                return next;
-              })
-            }
-          >
-            <Plus />
-            创建主干 Git 分支
-          </Button>
-        </div>
-      }
-    >
+    <Panel title="仓库与分支">
+      <TableToolbar
+        onRefresh={() => list.refetch()}
+        refreshing={list.isFetching}
+        actions={
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              disabled={!selected.length || !list.data?.data.can_manage}
+              pending={submission.pending}
+              onClick={() => void check()}
+            >
+              <Check />
+              校验所选分支
+            </Button>
+            <Button
+              disabled={!variant.can_manage || Boolean(environment)}
+              onClick={() =>
+                setParams((current) => {
+                  const next = new URLSearchParams(current);
+                  next.set("vview", "creations");
+                  next.set("create", "1");
+                  return next;
+                })
+              }
+            >
+              <Plus />
+              创建主干 Git 分支
+            </Button>
+          </div>
+        }
+      />
+
       <Notice className="mb-4">
         当前目标：<code className="mono">{target}</code>
         。读取列表不会访问远端；只有显式校验才查询

@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -90,9 +91,35 @@ export function ProjectRepositories({
   }
   return (
     <section className="panel">
-      <div className="toolbar">
+      <TableToolbar
+        onReset={() => filter({ q: "", connection: "" })}
+        onRefresh={() => void list.refetch()}
+        refreshing={list.isFetching}
+        actions={
+          admin && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSelecting(!selecting);
+                  setSelected([]);
+                }}
+              >
+                {selecting ? "退出批量操作" : "批量操作"}
+              </Button>
+              <Button
+                disabled={project.status !== "active"}
+                onClick={() => setPicker(true)}
+              >
+                <Plus />
+                关联仓库
+              </Button>
+            </div>
+          )
+        }
+      >
         <form
-          className="flex min-w-52 flex-1 gap-2 sm:max-w-sm"
+          className="flex shrink-0 items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
@@ -100,20 +127,22 @@ export function ProjectRepositories({
           }}
         >
           <StandaloneInput
+            className="w-70"
             key={params.q}
             name="q"
             aria-label="搜索仓库"
             defaultValue={params.q}
             placeholder="搜索名称或完整路径"
           />
-          <Button type="submit" variant="outline">
+          <Button aria-label="搜索" type="submit" variant="outline">
             <Search />
           </Button>
         </form>
         <StandaloneSelect
+          className="w-50"
           aria-label="连接筛选"
           value={params.connection}
-          onChange={(event) => filter({ connection: event.target.value })}
+          onValueChange={(value) => filter({ connection: value })}
         >
           <option value="">全部连接</option>
           {connectionItems.map((connection) => (
@@ -122,42 +151,7 @@ export function ProjectRepositories({
             </option>
           ))}
         </StandaloneSelect>
-        <Button
-          variant="ghost"
-          disabled={!params.q && !params.connection}
-          onClick={() => filter({ q: "", connection: "" })}
-        >
-          清除筛选
-        </Button>
-        <Button
-          variant="ghost"
-          disabled={list.isFetching}
-          onClick={() => void list.refetch()}
-        >
-          <RefreshCw className={list.isFetching ? "animate-spin" : ""} />
-          刷新
-        </Button>
-        {admin && (
-          <div className="toolbar-spacer flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setSelecting(!selecting);
-                setSelected([]);
-              }}
-            >
-              {selecting ? "退出批量操作" : "批量操作"}
-            </Button>
-            <Button
-              disabled={project.status !== "active"}
-              onClick={() => setPicker(true)}
-            >
-              <Plus />
-              关联仓库
-            </Button>
-          </div>
-        )}
-      </div>
+      </TableToolbar>
       {selecting && (
         <div className="flex flex-wrap items-center gap-2 border-b bg-surface-subtle px-4 py-2 text-xs">
           <span>已选择 {selected.length} 项</span>
@@ -811,7 +805,7 @@ function RepositoryPicker({
       >
         <Select
           value={connection}
-          onChange={(event) => selectConnection(event.target.value)}
+          onValueChange={(value) => selectConnection(value)}
         >
           <option value="">请选择连接</option>
           {connectionItems.map((item) => (

@@ -158,7 +158,14 @@ export function RefreshButton({
   onClick: () => void;
 }) {
   return (
-    <IconButton label="刷新" disabled={loading} onClick={onClick}>
+    <IconButton
+      label="刷新"
+      variant="outline"
+      className="size-10"
+      aria-busy={loading || undefined}
+      disabled={loading}
+      onClick={onClick}
+    >
       <RotateCw className={loading ? "animate-spin" : undefined} aria-hidden />
     </IconButton>
   );

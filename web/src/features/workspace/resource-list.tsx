@@ -1,15 +1,12 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DataColumn } from "@/components/table";
-import { FunnelX, Plus, Star } from "lucide-react";
+import { Plus, Star } from "lucide-react";
 import { request } from "@/api/client";
 import { useSession } from "@/app/auth";
-import { Button, IconButton } from "@/components/button";
-import {
-  AsyncBoundary,
-  RefreshButton,
-  StatusBadge,
-} from "@/components/feedback";
+import { Button } from "@/components/button";
+import { AsyncBoundary, StatusBadge } from "@/components/feedback";
 import { IconButton as ActionButton } from "@/components/button";
 import { StandaloneInput, StandaloneSelect } from "@/components/fields";
 import { PageHeader } from "@/components/layout";
@@ -234,19 +231,29 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
             ? `管理全部${kind === "projects" ? "项目，包括你未参与的对象" : "团队及直接成员"}。`
             : `仅展示你通过直接成员或团队关系参与的${kind === "projects" ? "项目" : "团队"}。`
         }
-        actions={
-          admin && (
-            <Button onClick={() => setCreate(true)}>
-              <Plus />
-              创建{kind === "projects" ? "项目" : "团队"}
-            </Button>
-          )
-        }
       />
       <section className="panel">
-        <div className="toolbar">
+        <TableToolbar
+          onReset={() => {
+            search.setValue("");
+            update({ q: "", status: "active" });
+          }}
+          onRefresh={() => void list.refetch()}
+          refreshing={list.isFetching}
+          actions={
+            admin && (
+              <Button
+                className="flex items-center gap-2"
+                onClick={() => setCreate(true)}
+              >
+                <Plus />
+                创建{kind === "projects" ? "项目" : "团队"}
+              </Button>
+            )
+          }
+        >
           <form
-            className="relative min-w-60 flex-1 sm:max-w-sm"
+            className="flex shrink-0 items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               search.submit();
@@ -266,7 +273,7 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
           <StandaloneSelect
             aria-label="状态筛选"
             value={status}
-            onChange={(event) => update({ status: event.target.value })}
+            onValueChange={(value) => update({ status: value })}
           >
             <option value="active">
               正常 · {activeCount.data?.data.total ?? "—"}
@@ -277,27 +284,7 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
             </option>
             <option value="all">全部</option>
           </StandaloneSelect>
-          <IconButton
-            label="清除筛选"
-            disabled={!q && status === "active"}
-            onClick={() => {
-              search.setValue("");
-              update({ q: "", status: "active" });
-            }}
-          >
-            <FunnelX />
-          </IconButton>
-          <RefreshButton
-            loading={list.isFetching}
-            onClick={() => void list.refetch()}
-          />
-          {admin && (
-            <Button className="toolbar-spacer" onClick={() => setCreate(true)}>
-              <Plus />
-              创建{kind === "projects" ? "项目" : "团队"}
-            </Button>
-          )}
-        </div>
+        </TableToolbar>
         <AsyncBoundary
           loading={list.isPending}
           error={list.error}

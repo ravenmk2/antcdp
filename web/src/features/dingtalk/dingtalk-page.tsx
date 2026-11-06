@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -78,20 +79,25 @@ function RobotList() {
       <PageHeader
         title="钉钉机器人"
         description="独立维护群机器人 Access Token、加签、关键词与文本 / Markdown 测试。"
-        actions={
-          <Button onClick={() => setCreate(true)}>
-            <Plus />
-            新建机器人
-          </Button>
-        }
       />
       <Notice className="mb-5">
         只输入 Access Token，不输入完整 Webhook
         URL。测试会真实发往机器人群；不支持 @ 提醒。
       </Notice>
       <Panel bodyClassName="p-0">
-        <div className="toolbar">
+        <TableToolbar
+          onReset={() => filter({ q: "", status: "" })}
+          onRefresh={() => void query.refetch()}
+          refreshing={query.isFetching}
+          actions={
+            <Button onClick={() => setCreate(true)}>
+              <Plus />
+              新建机器人
+            </Button>
+          }
+        >
           <form
+            className="flex shrink-0 items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
               filter({
@@ -109,16 +115,13 @@ function RobotList() {
           <StandaloneSelect
             aria-label="机器人状态"
             value={status}
-            onChange={(event) => filter({ status: event.target.value })}
+            onValueChange={(value) => filter({ status: value })}
           >
             <option value="">全部状态</option>
             <option value="enabled">已启用</option>
             <option value="disabled">已停用</option>
           </StandaloneSelect>
-          <Button variant="ghost" onClick={() => filter({ q: "", status: "" })}>
-            清除筛选
-          </Button>
-        </div>
+        </TableToolbar>
         <AsyncBoundary
           loading={query.isPending}
           error={query.error}
@@ -608,9 +611,7 @@ function RobotTest({
         <Field label="消息格式">
           <Select
             value={form.format}
-            onChange={(event) =>
-              setForm({ ...form, format: event.target.value })
-            }
+            onValueChange={(value) => setForm({ ...form, format: value })}
           >
             <option value="text">文本</option>
             <option value="markdown">Markdown</option>

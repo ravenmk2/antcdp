@@ -1,3 +1,4 @@
+import { TableToolbar } from "@/components/table-toolbar";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -69,29 +70,34 @@ function CreationHistory({
     `/projects/${project.id}/branch-creations?${new URLSearchParams({ variant_id: variant.id, page: String(page), page_size: String(size), status })}`,
   );
   return (
-    <Panel
-      title="主干 Git 分支创建记录"
-      action={
-        <Button
-          disabled={!variant.can_manage}
-          onClick={() =>
-            setParams((current) => {
-              const next = new URLSearchParams(current);
-              next.set("create", "1");
-              return next;
-            })
-          }
-        >
-          新建创建计划
-        </Button>
-      }
-    >
-      <div className="mb-4 flex justify-end">
+    <Panel title="主干 Git 分支创建记录">
+      <TableToolbar
+        onRefresh={() => list.refetch()}
+        refreshing={list.isFetching}
+        onReset={() => {
+          setStatus("all");
+          setPage(1);
+        }}
+        actions={
+          <Button
+            disabled={!variant.can_manage}
+            onClick={() =>
+              setParams((current) => {
+                const next = new URLSearchParams(current);
+                next.set("create", "1");
+                return next;
+              })
+            }
+          >
+            新建创建计划
+          </Button>
+        }
+      >
         <StandaloneSelect
           aria-label="创建批次状态"
           value={status}
-          onChange={(event) => {
-            setStatus(event.target.value);
+          onValueChange={(value) => {
+            setStatus(value);
             setPage(1);
           }}
         >
@@ -109,7 +115,8 @@ function CreationHistory({
             </option>
           ))}
         </StandaloneSelect>
-      </div>
+      </TableToolbar>
+
       <AsyncBoundary
         loading={list.isPending}
         error={list.error}
@@ -489,10 +496,10 @@ function CreationWizard({
                                   ? "use_existing"
                                   : "skip")
                             }
-                            onChange={(event) =>
+                            onValueChange={(value) =>
                               setActions({
                                 ...actions,
-                                [item.id]: event.target.value,
+                                [item.id]: value,
                               })
                             }
                           >

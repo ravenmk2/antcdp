@@ -1,17 +1,28 @@
 import {
   createContext,
+  Children,
+  isValidElement,
+  useEffect,
   useContext,
   useId,
   useState,
   type InputHTMLAttributes,
   type ReactNode,
-  type SelectHTMLAttributes,
+  type ComponentProps,
   type TextareaHTMLAttributes,
 } from "react";
 import { Select as SelectPrimitive } from "radix-ui";
 import { NumberField } from "@base-ui/react/number-field";
 import { Check, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useFilterReset } from "./table-toolbar";
+import {
+  Select as SelectRoot,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import {
   Combobox,
   ComboboxContent,
@@ -77,7 +88,7 @@ export function Field({
   );
 }
 
-function useFieldProps() {
+export function useFieldProps() {
   const field = useContext(FieldContext);
   if (!field) throw new Error("Field is required");
   return {
@@ -350,50 +361,131 @@ export function Textarea({
   );
 }
 
-export function Select({
-  className,
-  children,
-  ...props
-}: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      className={cn(controlClass, "pr-8", className)}
-      {...useFieldProps()}
-      {...props}
-    >
-      {children}
-    </select>
-  );
+export function Select({ ...props }: ChoiceProps) {
+  return <Choice {...useFieldProps()} {...props} />;
 }
 
 export function StandaloneInput({
   className,
+  defaultValue,
   ...props
 }: InputHTMLAttributes<HTMLInputElement>) {
+  const [draft, setDraft] = useState(defaultValue ?? "");
+  const reset = useFilterReset();
+  useEffect(() => setDraft(defaultValue ?? ""), [defaultValue, reset]);
   if (props.type === "password")
     return (
       <PasswordControl
         {...props}
+        defaultValue={defaultValue}
         label={props["aria-label"] ?? "密码"}
         className={cn(controlClass, className)}
       />
     );
-  return <input className={cn(controlClass, className)} {...props} />;
+  return (
+    <input
+      className={cn(controlClass, reset !== null && "w-60 shrink-0", className)}
+      {...props}
+      {...(defaultValue !== undefined && props.value === undefined
+        ? {
+            value: draft,
+            onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+              setDraft(event.target.value);
+              props.onChange?.(event);
+            },
+          }
+        : {})}
+    />
+  );
 }
 
-export function StandaloneSelect({
+type ChoiceProps = Omit<
+  ComponentProps<typeof SelectTrigger>,
+  "onChange" | "defaultValue" | "value" | "name"
+> & {
+  value?: string | number;
+  defaultValue?: string | number;
+  onValueChange?: (value: string) => void;
+  name?: string;
+  required?: boolean;
+};
+
+// Keep declarative option content while rendering every visible choice through shadcn/ui.
+function Choice({
   className,
   children,
+  value,
+  defaultValue,
+  onValueChange,
+  name,
+  required,
+  disabled,
   ...props
-}: SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      className={cn(controlClass, "w-auto min-w-32 pr-8", className)}
-      {...props}
-    >
-      {children}
-    </select>
+}: ChoiceProps) {
+  const [internal, setInternal] = useState(String(defaultValue ?? ""));
+  useEffect(() => setInternal(String(defaultValue ?? "")), [defaultValue]);
+  const options = Children.toArray(children).filter(
+    isValidElement<{
+      value?: string | number;
+      children?: ReactNode;
+      disabled?: boolean;
+    }>,
   );
+  const empty = "__antcdp_empty_choice__";
+  const selected = String(value ?? internal);
+  return (
+    <SelectRoot
+      value={selected || empty}
+      disabled={disabled}
+      onValueChange={(next) => {
+        const result = next === empty ? "" : next;
+        setInternal(result);
+        onValueChange?.(result);
+      }}
+    >
+      {name && (
+        <input type="hidden" name={name} value={selected} disabled={disabled} />
+      )}
+      <SelectTrigger
+        {...props}
+        data-field-name={name}
+        aria-required={required || undefined}
+        disabled={disabled}
+        className={cn(
+          controlClass,
+          "h-10 w-full min-w-0 shadow-none data-[size=default]:h-10",
+          className,
+        )}
+      >
+        <SelectValue placeholder="请选择" />
+      </SelectTrigger>
+      <SelectContent
+        position="popper"
+        align="start"
+        className="z-[80] max-h-72 max-w-[min(36rem,calc(100vw-32px))]"
+      >
+        {options.map((option, index) => {
+          const optionValue = String(
+            option.props.value ?? option.props.children ?? "",
+          );
+          return (
+            <SelectItem
+              key={`${optionValue}-${index}`}
+              value={optionValue || empty}
+              disabled={option.props.disabled}
+              className="min-h-9 whitespace-normal break-words"
+            >
+              {option.props.children}
+            </SelectItem>
+          );
+        })}
+      </SelectContent>
+    </SelectRoot>
+  );
+}
+
+export function StandaloneSelect({ className, ...props }: ChoiceProps) {
+  return <Choice className={cn("w-40 shrink-0", className)} {...props} />;
 }
 
 export function StandaloneTextarea({
