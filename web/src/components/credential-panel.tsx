@@ -8,10 +8,10 @@ import {
 import { DateTimePicker } from "@/components/date-time-picker";
 import { useAuth } from "@/app/auth";
 import { TableToolbar } from "@/components/table-toolbar";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { KeyRound, Pencil, Plus, Star, Trash2 } from "lucide-react";
-import { request } from "@/api/client";
+import { ApiError, isVersionConflict, request } from "@/api/client";
 import { Button } from "./button";
 import { AsyncBoundary, ErrorNotice, Notice, StatusBadge } from "./feedback";
 import {
@@ -24,6 +24,8 @@ import {
 } from "./fields";
 import { ConfirmDialog, Drawer } from "./overlays";
 import { SimpleTable } from "./table";
+import { DescriptionList } from "./layout";
+import { SheetClose } from "./ui/sheet";
 import { WizardSteps } from "./wizard";
 import { useApiQuery } from "@/hooks/use-api";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
@@ -138,7 +140,13 @@ export function CredentialPanel({
         actions={
           <Button
             className="flex items-center gap-2"
-            disabled={readonly}
+            disabled={
+              readonly ||
+              list.isPending ||
+              list.isFetching ||
+              Boolean(list.error) ||
+              !list.data?.etag
+            }
             onClick={() => setEditor({ mode: "create" })}
           >
             <Plus />
@@ -309,7 +317,7 @@ export function CredentialPanel({
             provider={provider}
             mode={editor.mode}
             credential={editor.credential}
-            collectionEtag={list.data?.collectionEtag ?? ""}
+            collectionEtag={list.data?.etag ?? ""}
             onClose={() => setEditor(null)}
             onSaved={refresh}
           />
@@ -332,13 +340,14 @@ export function CredentialPanel({
           description={`${remove.name} · ${remove.code}`}
           confirmLabel="删除凭证"
           pending={submission.pending}
+          confirmDisabled={submission.uncertain || !list.data?.etag}
           onClose={() => setRemove(null)}
           onConfirm={() =>
             void submission.run(async () => {
               await request(`${base}/${remove.id}`, {
                 method: "DELETE",
                 etag: `"${remove.version}"`,
-                collectionEtag: list.data?.collectionEtag,
+                collectionEtag: list.data?.etag,
               });
               await refresh();
               setRemove(null);
@@ -373,6 +382,12 @@ function CredentialEditor({
   onSaved: () => Promise<void>;
 }) {
   const { settings } = useAuth();
+  const queryClient = useQueryClient();
+  const saving = useRef(false);
+  const [writeEtag, setWriteEtag] = useState(collectionEtag);
+  const [needsReload, setNeedsReload] = useState(
+    mode === "create" && !collectionEtag,
+  );
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     name: credential?.name ?? "",
@@ -392,7 +407,36 @@ function CredentialEditor({
   const currentMethod =
     provider.methods.find((item) => item.value === method) ??
     provider.methods[0];
-  useUnsaved(true, submission.pending);
+  const dirty =
+    form.name !== (credential?.name ?? "") ||
+    form.code !== (credential?.code ?? "") ||
+    form.description !== (credential?.description ?? "") ||
+    form.enabled !== (credential?.enabled ?? true) ||
+    form.expires !== (credential?.expires_at ?? "") ||
+    method !== (credential?.auth_method ?? provider.methods[0]?.value ?? "") ||
+    JSON.stringify(values) !==
+      JSON.stringify(credential?.identity_config ?? {});
+  const markSaved = useUnsaved(dirty, submission.pending);
+  function close() {
+    markSaved();
+    onClose();
+  }
+  async function reloadCollection() {
+    if (submission.pending || submission.uncertain) return;
+    await submission.run(async () => {
+      const response = await request<CredentialSet>(base);
+      if (!response.etag)
+        throw new ApiError(
+          "PRECONDITION_REQUIRED",
+          "未能加载凭证列表信息，请重试。",
+          428,
+        );
+      queryClient.setQueryData(["credentials", base], response);
+      setWriteEtag(response.etag);
+      setNeedsReload(false);
+      errors.clear();
+    });
+  }
   function changeMethod(value: string) {
     setMethod(value);
     setValues({});
@@ -417,61 +461,133 @@ function CredentialEditor({
     return errors.validate(fields);
   }
   async function save() {
-    if (!validate(mode === "create" ? 1 : 1)) return;
-    await submission.run(
-      async () => {
-        if (mode === "create") {
-          await request(base, {
-            method: "POST",
-            etag: collectionEtag,
-            body: {
-              code: form.code.trim(),
-              name: form.name.trim(),
-              description: form.description,
-              expires_at: form.expires
-                ? new Date(form.expires).toISOString()
-                : null,
-              authentication: currentMethod
-                ? authenticationBody(currentMethod, values)
-                : undefined,
-            },
+    if (
+      saving.current ||
+      submission.pending ||
+      submission.uncertain ||
+      needsReload
+    )
+      return;
+    if (!validate(1)) return;
+    saving.current = true;
+    try {
+      await submission.run(
+        async () => {
+          if (mode === "create") {
+            await request(base, {
+              method: "POST",
+              etag: writeEtag,
+              body: {
+                code: form.code.trim(),
+                name: form.name.trim(),
+                description: form.description,
+                expires_at: form.expires
+                  ? new Date(form.expires).toISOString()
+                  : null,
+                authentication: currentMethod
+                  ? authenticationBody(currentMethod, values)
+                  : undefined,
+              },
+            });
+          } else if (mode === "edit" && credential) {
+            await request(`${base}/${credential.id}`, {
+              method: "PATCH",
+              etag: `"${credential.version}"`,
+              body: {
+                name: form.name.trim(),
+                description: form.description,
+                enabled: form.enabled,
+                expires_at: form.expires
+                  ? new Date(form.expires).toISOString()
+                  : null,
+              },
+            });
+          } else if (credential && currentMethod) {
+            await request(`${base}/${credential.id}/authentication`, {
+              method: "PUT",
+              etag: `"${credential.version}"`,
+              body: authenticationBody(currentMethod, values),
+            });
+          }
+          await onSaved();
+          close();
+        },
+        (error) => {
+          if (mode === "create" && isVersionConflict(error))
+            setNeedsReload(true);
+          const aliases = Object.fromEntries([
+            ...(currentMethod?.identity ?? []).map((field) => [
+              `authentication.identity_config.${field.key}`,
+              field.key,
+            ]),
+            ...(currentMethod?.secret ?? []).map((field) => [
+              `authentication.secret.${field.key}`,
+              field.key,
+            ]),
+          ]);
+          const failedField = error.details.find(
+            (detail) => detail.field,
+          )?.field;
+          if (mode === "create") {
+            if (
+              failedField?.startsWith("authentication") ||
+              failedField === "auth_method" ||
+              [
+                ...(currentMethod?.identity ?? []),
+                ...(currentMethod?.secret ?? []),
+              ].some((field) => field.key === failedField)
+            )
+              setStep(1);
+            else if (
+              failedField ||
+              [
+                "CODE_CONFLICT",
+                "CREDENTIAL_CODE_CONFLICT",
+                "NAME_CONFLICT",
+              ].includes(error.code)
+            )
+              setStep(0);
+          }
+          errors.show(
+            error,
+            [
+              "name",
+              "code",
+              "description",
+              "enabled",
+              "expires_at",
+              "username",
+              "token",
+              "private_key",
+              "passphrase",
+              "auth_method",
+            ],
+            aliases,
+          );
+          const authFields = [
+            ...(currentMethod?.identity ?? []),
+            ...(currentMethod?.secret ?? []),
+          ];
+          errors.setFields((current) => {
+            const next = { ...current };
+            for (const detail of error.details) {
+              const key = aliases[detail.field ?? ""] ?? detail.field;
+              const field = authFields.find((field) => field.key === key);
+              if (field)
+                next[field.key] =
+                  detail.code === "required"
+                    ? `请输入${field.label}`
+                    : detail.code === "invalid_key_or_passphrase"
+                      ? "无法读取私钥，请检查私钥内容和口令是否匹配。"
+                      : `请检查${field.label}的格式或内容。`;
+            }
+            return next;
           });
-        } else if (mode === "edit" && credential) {
-          await request(`${base}/${credential.id}`, {
-            method: "PATCH",
-            etag: `"${credential.version}"`,
-            body: {
-              name: form.name.trim(),
-              description: form.description,
-              enabled: form.enabled,
-              expires_at: form.expires
-                ? new Date(form.expires).toISOString()
-                : null,
-            },
-          });
-        } else if (credential && currentMethod) {
-          await request(`${base}/${credential.id}/authentication`, {
-            method: "PUT",
-            etag: `"${credential.version}"`,
-            body: authenticationBody(currentMethod, values),
-          });
-        }
-        await onSaved();
-        onClose();
-      },
-      (error) =>
-        errors.show(error, [
-          "name",
-          "code",
-          "description",
-          "enabled",
-          "expires_at",
-          "username",
-          "token",
-          "private_key",
-          "passphrase",
-        ]),
-    );
+        },
+      );
+    } finally {
+      saving.current = false;
+    }
   }
   const title =
     mode === "create"
@@ -487,23 +603,30 @@ function CredentialEditor({
       description={
         credential
           ? `${credential.name} · ${credential.code}`
-          : `${provider.name} · 秘密只在本次写入中可见`
+          : `${provider.name} 访问凭证`
       }
-      dirty
+      dirty={dirty}
       pending={submission.pending}
-      onClose={onClose}
+      onClose={close}
       footer={
         <>
           {mode === "create" && step > 0 && (
-            <Button variant="outline" onClick={() => setStep(step - 1)}>
+            <Button
+              variant="outline"
+              disabled={submission.pending || submission.uncertain}
+              onClick={() => setStep(step - 1)}
+            >
               上一步
             </Button>
           )}
-          <Button variant="outline" onClick={onClose}>
-            取消
-          </Button>
+          <SheetClose asChild>
+            <Button variant="outline" disabled={submission.pending}>
+              取消
+            </Button>
+          </SheetClose>
           {mode === "create" && step < 2 ? (
             <Button
+              disabled={submission.pending || submission.uncertain}
               onClick={() => {
                 if (validate(step)) setStep(step + 1);
               }}
@@ -513,7 +636,7 @@ function CredentialEditor({
           ) : (
             <Button
               pending={submission.pending}
-              disabled={submission.uncertain}
+              disabled={submission.uncertain || needsReload}
               onClick={() => void save()}
             >
               {mode === "auth" ? "替换完整认证" : "保存"}
@@ -529,6 +652,7 @@ function CredentialEditor({
         ref={errors.formRef}
         className="mt-5 grid gap-4"
         noValidate
+        onChange={() => errors.clear()}
         onSubmit={(event) => {
           event.preventDefault();
           if (mode === "create" && step < 2) {
@@ -536,129 +660,240 @@ function CredentialEditor({
           } else void save();
         }}
       >
-        <ErrorNotice error={errors.error} />
-        <ErrorNotice error={submission.error} />
-        {mode === "create" && step === 2 && (
-          <Notice>
-            凭证：{form.name} · {currentMethod?.label}
-            。创建后不会自动设为首选或兜底，秘密不可再次读取。
-          </Notice>
-        )}
-        {(mode !== "create" || step === 0 || step === 2) && mode !== "auth" && (
-          <div className="form-grid">
-            <Field label="名称" required error={errors.fields.name}>
-              <Input
-                name="name"
-                value={form.name}
-                onChange={(event) =>
-                  setForm({ ...form, name: event.target.value })
-                }
-              />
-            </Field>
-            <Field
-              label="编码（可选）"
-              hint={credential ? "创建后不可修改" : "留空自动生成"}
-              error={errors.fields.code}
+        <CredentialSaveError
+          error={submission.error}
+          creating={mode === "create"}
+        />
+        {needsReload && !submission.uncertain && (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              variant="outline"
+              pending={submission.pending}
+              onClick={() => void reloadCollection()}
             >
-              <Input
-                name="code"
-                className="mono"
-                readOnly={Boolean(credential)}
-                value={form.code}
-                onChange={(event) =>
-                  setForm({ ...form, code: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="说明" className="form-full">
-              <Textarea
-                name="description"
-                value={form.description}
-                onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="到期时间（可选）" error={errors.fields.expires_at}>
-              <DateTimePicker
-                name="expires_at"
-                value={form.expires}
-                timezone={settings.timezone}
-                onChange={(expires) => setForm({ ...form, expires })}
-              />
-            </Field>
-            {mode === "edit" && (
-              <label className="flex items-center gap-2 self-end pb-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.enabled}
-                  onChange={(event) =>
-                    setForm({ ...form, enabled: event.target.checked })
-                  }
-                />
-                启用凭证
-              </label>
-            )}
+              重新加载凭证列表
+            </Button>
+            <span className="text-xs text-muted">
+              保留已填写内容，加载后请再次确认保存。
+            </span>
           </div>
         )}
-        {mode !== "edit" &&
-          (mode !== "create" || step === 1) &&
-          currentMethod && (
-            <>
-              <Field label="认证方式">
-                <Select
-                  value={method}
-                  onValueChange={(value) => changeMethod(value)}
-                >
-                  {provider.methods.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              {[...currentMethod.identity, ...currentMethod.secret].map(
-                (field) => (
-                  <Field
-                    key={field.key}
-                    label={field.label}
-                    required
-                    error={errors.fields[field.key]}
-                  >
-                    {field.type === "textarea" ? (
-                      <Textarea
-                        name={field.key}
-                        className="font-mono"
-                        autoComplete="off"
-                        value={values[field.key] ?? ""}
-                        onChange={(event) =>
-                          setValues({
-                            ...values,
-                            [field.key]: event.target.value,
-                          })
-                        }
-                      />
-                    ) : (
-                      <Input
-                        name={field.key}
-                        type={field.type ?? "text"}
-                        autoComplete="off"
-                        value={values[field.key] ?? ""}
-                        onChange={(event) =>
-                          setValues({
-                            ...values,
-                            [field.key]: event.target.value,
-                          })
-                        }
-                      />
-                    )}
-                  </Field>
-                ),
-              )}
-            </>
+        <fieldset
+          disabled={submission.pending || submission.uncertain}
+          className="grid min-w-0 gap-4"
+        >
+          {mode === "create" && step === 2 && (
+            <DescriptionList
+              items={[
+                {
+                  label: "名称",
+                  value: <span className="break-all">{form.name}</span>,
+                },
+                {
+                  label: "编码",
+                  value: (
+                    <span className="mono break-all">
+                      {form.code || "自动生成"}
+                    </span>
+                  ),
+                },
+                { label: "认证方式", value: currentMethod?.label ?? "—" },
+                {
+                  label: "到期时间",
+                  value: form.expires
+                    ? formatDate(form.expires, settings.timezone)
+                    : "永不过期",
+                },
+                ...(currentMethod?.identity ?? []).map((field) => ({
+                  label: field.label,
+                  value: (
+                    <span className="break-all">
+                      {values[field.key] || "—"}
+                    </span>
+                  ),
+                })),
+                {
+                  label: "说明",
+                  full: true,
+                  value: (
+                    <span className="whitespace-pre-wrap break-all">
+                      {form.description || "—"}
+                    </span>
+                  ),
+                },
+              ]}
+            />
           )}
+          {(mode !== "create" || step === 0) && mode !== "auth" && (
+            <div className="form-grid">
+              <Field label="名称" required error={errors.fields.name}>
+                <Input
+                  name="name"
+                  value={form.name}
+                  onChange={(event) =>
+                    setForm({ ...form, name: event.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="编码（可选）"
+                hint={credential ? "创建后不可修改" : "留空自动生成"}
+                error={errors.fields.code}
+              >
+                <Input
+                  name="code"
+                  className="mono"
+                  readOnly={Boolean(credential)}
+                  value={form.code}
+                  onChange={(event) =>
+                    setForm({ ...form, code: event.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="说明"
+                className="form-full"
+                error={errors.fields.description}
+              >
+                <Textarea
+                  name="description"
+                  value={form.description}
+                  onChange={(event) =>
+                    setForm({ ...form, description: event.target.value })
+                  }
+                />
+              </Field>
+              <Field label="到期时间（可选）" error={errors.fields.expires_at}>
+                <DateTimePicker
+                  name="expires_at"
+                  value={form.expires}
+                  timezone={settings.timezone}
+                  onChange={(expires) => setForm({ ...form, expires })}
+                />
+              </Field>
+              {mode === "edit" && (
+                <label className="flex items-center gap-2 self-end pb-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.enabled}
+                    onChange={(event) =>
+                      setForm({ ...form, enabled: event.target.checked })
+                    }
+                  />
+                  启用凭证
+                </label>
+              )}
+            </div>
+          )}
+          {mode !== "edit" &&
+            (mode !== "create" || step === 1) &&
+            currentMethod && (
+              <>
+                <p className="m-0 text-xs text-muted">
+                  密码、私钥或 Token 保存后不可查看，请妥善保管。
+                </p>
+                <Field label="认证方式" error={errors.fields.auth_method}>
+                  <Select
+                    value={method}
+                    onValueChange={(value) => changeMethod(value)}
+                  >
+                    {provider.methods.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {[...currentMethod.identity, ...currentMethod.secret].map(
+                  (field) => (
+                    <Field
+                      key={field.key}
+                      label={field.label}
+                      required
+                      error={errors.fields[field.key]}
+                    >
+                      {field.type === "textarea" ? (
+                        <Textarea
+                          name={field.key}
+                          className="font-mono"
+                          autoComplete="off"
+                          value={values[field.key] ?? ""}
+                          onChange={(event) =>
+                            setValues({
+                              ...values,
+                              [field.key]: event.target.value,
+                            })
+                          }
+                        />
+                      ) : (
+                        <Input
+                          name={field.key}
+                          type={field.type ?? "text"}
+                          autoComplete="off"
+                          value={values[field.key] ?? ""}
+                          onChange={(event) =>
+                            setValues({
+                              ...values,
+                              [field.key]: event.target.value,
+                            })
+                          }
+                        />
+                      )}
+                    </Field>
+                  ),
+                )}
+              </>
+            )}
+          {mode === "create" && step === 2 && (
+            <p className="m-0 text-xs text-muted">
+              保存后可在列表中设为首选凭证。
+            </p>
+          )}
+        </fieldset>
       </form>
     </Drawer>
+  );
+}
+
+function CredentialSaveError({
+  error,
+  creating,
+}: {
+  error: unknown;
+  creating: boolean;
+}) {
+  if (!error) return null;
+  const apiError = error instanceof ApiError ? error : null;
+  const conflict = isVersionConflict(error);
+  const message = apiError?.uncertain
+    ? "保存结果尚未确认。请先查看凭证列表核实，避免重复提交。"
+    : conflict
+      ? creating
+        ? "凭证列表信息已失效，请重新加载后再保存。"
+        : "凭证已被更新，请保留需要的修改内容，关闭后重新打开核对。"
+      : apiError?.status === 422 || apiError?.status === 409
+        ? "凭证未保存，请检查标出的字段后重试。"
+        : apiError?.message || "保存失败，请检查连接后重试。";
+  return (
+    <Notice tone="danger">
+      <p className="m-0">
+        {message}
+        {apiError?.retryAfter && apiError.retryAfter > 0
+          ? ` 请等待 ${apiError.retryAfter} 秒后重试。`
+          : ""}
+      </p>
+      {apiError && (
+        <details className="mt-2 text-xs">
+          <summary className="cursor-pointer">技术详情</summary>
+          <div className="mt-2 space-y-1 break-all">
+            <p className="m-0">错误代码：{apiError.code}</p>
+            {apiError.requestId && (
+              <p className="m-0">请求编号：{apiError.requestId}</p>
+            )}
+          </div>
+        </details>
+      )}
+    </Notice>
   );
 }
 

@@ -54,6 +54,7 @@ import type { Resource } from "@/types/collaboration";
 import type { Diagnostic, ServiceConnection } from "@/types/integrations";
 
 import { HostCreateDrawer } from "./host-create-drawer";
+import { HostDescription } from "./host-description";
 
 export function RemoteHostsPage() {
   const { hostId, projectId } = useParams();
@@ -228,28 +229,40 @@ function HostDirectory({
         <SimpleTable
           actions
           label="远程主机"
-          headers={["主机", "说明", "协议", "状态", "操作"]}
+          className="host-directory"
+          headers={["主机", "协议", "状态", "操作"]}
         >
           {filtered.map((host) => (
             <tr key={host.id}>
               <td>
-                <div className="flex items-center gap-3">
-                  <span className="resource-icon">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="resource-icon shrink-0">
                     <Server className="size-5" />
                   </span>
-                  <div>
-                    <Link
-                      className="font-medium text-foreground hover:text-primary"
-                      to={`${basePath}/${host.id}?${linkParams}`}
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-1">
+                      <Link
+                        className="truncate font-medium text-foreground hover:text-primary"
+                        title={host.name}
+                        to={`${basePath}/${host.id}?${linkParams}`}
+                      >
+                        {host.name}
+                      </Link>
+                      {host.description.trim() && (
+                        <HostDescription
+                          name={host.name}
+                          description={host.description}
+                        />
+                      )}
+                    </div>
+                    <small
+                      className="mono block truncate text-muted"
+                      title={host.code}
                     >
-                      {host.name}
-                    </Link>
-                    <small className="mono block text-muted">{host.code}</small>
+                      {host.code}
+                    </small>
                   </div>
                 </div>
-              </td>
-              <td className="max-w-md whitespace-normal text-xs">
-                {host.description || "—"}
               </td>
               <td>SSH</td>
               <td>
@@ -582,6 +595,9 @@ function HostConfig({
                     }
                   />
                 </Field>
+                <Field label="主机编码" hint="创建后不可修改">
+                  <Input readOnly value={host.code} className="mono" />
+                </Field>
                 <Field label="主机名 / IP" required error={errors.fields.host}>
                   <Input
                     name="host"
@@ -601,8 +617,10 @@ function HostConfig({
                     }
                   />
                 </Field>
-                <Field label="说明">
-                  <Input
+                <Field label="说明" className="form-full">
+                  <Textarea
+                    name="description"
+                    rows={5}
                     value={form.description}
                     onChange={(event) =>
                       setForm({ ...form, description: event.target.value })

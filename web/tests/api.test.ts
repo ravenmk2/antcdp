@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, vi, expect } from "vitest";
-import { ApiError, request, resetCSRF } from "@/api/client";
+import { ApiError, errorMessage, request, resetCSRF } from "@/api/client";
 
 function response(
   body: unknown,
@@ -17,6 +17,31 @@ beforeEach(() => {
 });
 
 describe("API protocol", () => {
+  it.each([undefined, "", "invalid", "-1", "0"])(
+    "does not invent a wait instruction for Retry-After=%s",
+    async (header) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        response(
+          {
+            error: {
+              code: "PRECONDITION_REQUIRED",
+              message: "请先加载当前资料",
+            },
+          },
+          {
+            status: 428,
+            headers: header === undefined ? {} : { "Retry-After": header },
+          },
+        ),
+      );
+      await request("/credentials").catch((error: unknown) => {
+        expect(error).toBeInstanceOf(ApiError);
+        expect(errorMessage(error)).toBe("请先加载当前资料");
+        if (header !== "0")
+          expect((error as ApiError).retryAfter).toBeUndefined();
+      });
+    },
+  );
   it("reads data and keeps identifiers as strings", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

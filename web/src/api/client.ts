@@ -96,7 +96,9 @@ async function readCSRF(signal?: AbortSignal) {
 }
 
 function retryAfter(response: Response) {
-  const value = Number(response.headers.get("Retry-After"));
+  const header = response.headers.get("Retry-After");
+  if (!header?.trim()) return undefined;
+  const value = Number(header);
   return Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
@@ -246,7 +248,7 @@ export function errorMessage(error: unknown) {
       : "操作未完成，请稍后重试。";
   }
   const retry =
-    error.retryAfter !== undefined
+    error.retryAfter !== undefined && error.retryAfter > 0
       ? ` 请等待 ${error.retryAfter} 秒后重试。`
       : "";
   const requestId = error.requestId ? `（请求编号：${error.requestId}）` : "";

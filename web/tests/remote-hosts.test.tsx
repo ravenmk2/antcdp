@@ -132,7 +132,8 @@ it("opens a Sheet over the filtered list, validates/focuses fields, and confirms
   await user.click(trigger);
   const dialog = await screen.findByRole("dialog", { name: "添加 SSH 主机" });
   expect(dialog).toHaveAttribute("data-slot", "sheet-content");
-  expect(screen.getByText("测试说明")).toBeInTheDocument();
+  expect(screen.getByText("测试主机")).toBeInTheDocument();
+  expect(screen.queryByText("测试说明")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "下一步" }));
   await waitFor(() => expect(screen.getByLabelText(/^主机名称/)).toHaveFocus());
   await user.type(screen.getByLabelText(/^主机名称/), "未保存");
@@ -364,4 +365,55 @@ it("does not repeat a deletion whose result is unknown", async () => {
       ([, options]) => options?.method === "DELETE",
     ),
   ).toHaveLength(1);
+});
+
+it("keeps long descriptions out of table cells and exposes the full text in a keyboard-accessible popover", async () => {
+  hosts[0]!.description = "第一行说明\n" + "长说明内容".repeat(150);
+  const { user } = setup();
+  const trigger = await screen.findByRole("button", {
+    name: "查看 测试主机 的说明",
+  });
+  const table = screen.getByRole("table", { name: "远程主机" });
+  expect(
+    within(table)
+      .getAllByRole("columnheader")
+      .map((cell) => cell.textContent),
+  ).toEqual(["主机", "协议", "状态", "操作"]);
+  expect(table.textContent).not.toContain("第一行说明");
+  await user.hover(trigger);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("第一行说明");
+  await user.click(trigger);
+  const dialog = await screen.findByRole("dialog", {
+    name: "测试主机 · 主机说明",
+  });
+  expect(within(dialog).getByLabelText("说明全文").textContent).toBe(
+    hosts[0]!.description,
+  );
+  expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+  expect(
+    within(dialog).getByRole("button", { name: "复制主机说明" }),
+  ).toBeVisible();
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(trigger).toHaveFocus());
+  await user.keyboard("{Enter}");
+  expect(
+    await screen.findByRole("dialog", { name: "测试主机 · 主机说明" }),
+  ).toBeVisible();
+});
+
+it("edits multiline host descriptions and keeps the code readonly and out of the update payload", async () => {
+  const { user } = setup("/admin/remote-hosts/h1");
+  await user.click(await screen.findByRole("button", { name: "编辑配置" }));
+  expect(screen.getByLabelText("主机编码")).toHaveAttribute("readonly");
+  const description = screen.getByLabelText("说明");
+  expect(description.tagName).toBe("TEXTAREA");
+  await user.clear(description);
+  await user.type(description, "第一行{Enter}第二行");
+  await user.click(screen.getByRole("button", { name: "保存配置" }));
+  await screen.findByRole("button", { name: "编辑配置" });
+  const update = mockedRequest.mock.calls.find(
+    ([, options]) => options?.method === "PATCH",
+  )?.[1]?.body;
+  expect(update).toMatchObject({ description: "第一行\n第二行" });
+  expect(update).not.toHaveProperty("code");
 });
