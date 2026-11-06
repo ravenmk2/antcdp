@@ -211,7 +211,7 @@ function VariantsContent({ project }: { project: Resource }) {
                   )}
                 </td>
                 <td>
-                  <StatusBadge tone="info" dot={false}>
+                  <StatusBadge tone="info">
                     {variant.kind === "standard" ? "标准版" : "定制版"}
                   </StatusBadge>
                 </td>

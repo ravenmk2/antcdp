@@ -366,11 +366,7 @@ function EmailProfileDetail({ id }: { id: string }) {
             {profile.sender_names.map((sender) => (
               <li key={sender.id} className="flex justify-between py-2 text-sm">
                 <span>{sender.name}</span>
-                {sender.default && (
-                  <StatusBadge tone="info" dot={false}>
-                    默认
-                  </StatusBadge>
-                )}
+                {sender.default && <StatusBadge tone="info">默认</StatusBadge>}
               </li>
             ))}
           </ul>

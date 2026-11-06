@@ -121,7 +121,7 @@ export function Drawer({
         }}
       >
         <Primitive.Portal>
-          <Primitive.Overlay className="fixed inset-0 z-50 bg-[#09101a]/50 data-[state=open]:animate-in data-[state=open]:fade-in" />
+          <Primitive.Overlay className="fixed inset-0 z-50 bg-[#09101a]/50 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in" />
           <Primitive.Content
             className={cn(
               "fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l bg-surface shadow-2xl outline-none data-[state=open]:animate-in data-[state=open]:slide-in-from-right",

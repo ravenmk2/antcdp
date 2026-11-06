@@ -122,7 +122,6 @@ export function UsersPage() {
                   ? "info"
                   : "neutral"
             }
-            dot={false}
           >
             {row.original.is_founder
               ? "创始人"

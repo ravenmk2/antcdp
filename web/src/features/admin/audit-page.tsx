@@ -13,6 +13,7 @@ import { useApiQuery } from "@/hooks/use-api";
 import { usePageSize } from "@/hooks/use-page-size";
 import { useDebouncedSearch } from "@/hooks/use-search";
 import { formatDate, jsonText } from "@/lib/utils";
+import { CodeBlock } from "@/components/code-block";
 import { auditActionLabels, type AuditEvent } from "@/types/audit";
 
 export function AuditPage() {
@@ -325,9 +326,12 @@ export function AuditDetail({
             />
             <section>
               <h3 className="mb-2 text-sm font-medium">白名单变更详情</h3>
-              <pre className="max-h-96 overflow-auto rounded-lg bg-surface-subtle p-4 text-xs break-all whitespace-pre-wrap">
-                {jsonText(query.data.data.detail)}
-              </pre>
+              <CodeBlock
+                source={jsonText(query.data.data.detail)}
+                language="json"
+                className="my-0"
+                contentClassName="max-h-96 [&_pre]:break-all [&_pre]:whitespace-pre-wrap"
+              />
             </section>
           </div>
         )}

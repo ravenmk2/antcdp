@@ -7,6 +7,7 @@ import {
   Cable,
   Check,
   ChevronDown,
+  ChevronRight,
   FileClock,
   Folder,
   GitBranch,
@@ -397,7 +398,7 @@ export function AppShell() {
                   </strong>
                   <small className="text-muted">@{session.user.username}</small>
                 </div>
-                <StatusBadge tone="info" dot={false}>
+                <StatusBadge tone="info">
                   {session.user.is_founder
                     ? "创始人"
                     : session.user.role === "admin"
@@ -413,36 +414,64 @@ export function AppShell() {
                   label={consoleMode ? "返回工作区" : "控制台"}
                 />
               )}
-              <DropdownMenu.Separator className="my-2 h-px bg-border" />
-              <div className="px-2 py-1 text-[11px] text-muted">外观</div>
-              <div className="grid grid-cols-3 gap-1 px-1 pb-2">
-                {(["light", "dark", "system"] as Appearance[]).map((value) => (
-                  <button
-                    key={value}
-                    className={cn(
-                      "flex min-h-9 items-center justify-center gap-1 rounded-md border text-[11px]",
-                      appearance === value
-                        ? "border-primary bg-accent-soft text-primary"
-                        : "text-muted",
-                    )}
-                    aria-pressed={appearance === value}
-                    onClick={() => setAppearance(value)}
+              <DropdownMenu.Sub>
+                <DropdownMenu.SubTrigger className="flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm outline-none focus:bg-surface-hover data-[state=open]:bg-surface-hover">
+                  {appearance === "light" ? (
+                    <Sun className="size-4" aria-hidden />
+                  ) : appearance === "dark" ? (
+                    <Moon className="size-4" aria-hidden />
+                  ) : (
+                    <Monitor className="size-4" aria-hidden />
+                  )}
+                  <span>外观</span>
+                  <span className="ml-auto text-xs text-muted">
+                    {appearanceLabels[appearance]}
+                  </span>
+                  <ChevronRight className="size-4 text-muted" aria-hidden />
+                </DropdownMenu.SubTrigger>
+                <DropdownMenu.Portal>
+                  <DropdownMenu.SubContent
+                    sideOffset={6}
+                    collisionPadding={8}
+                    className="z-50 min-w-40 rounded-xl border bg-popover p-1 text-popover-foreground shadow-xl"
                   >
-                    {value === "light" ? (
-                      <Sun className="size-3" />
-                    ) : value === "dark" ? (
-                      <Moon className="size-3" />
-                    ) : (
-                      <Monitor className="size-3" />
-                    )}
-                    {appearanceLabels[value]}
-                    {appearance === value && <Check className="sr-only" />}
-                  </button>
-                ))}
-              </div>
+                    <DropdownMenu.RadioGroup
+                      value={appearance}
+                      onValueChange={(value) =>
+                        setAppearance(value as Appearance)
+                      }
+                      aria-label="外观"
+                    >
+                      {(["light", "dark", "system"] as Appearance[]).map(
+                        (value) => (
+                          <DropdownMenu.RadioItem
+                            key={value}
+                            value={value}
+                            className="flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm outline-none focus:bg-surface-hover"
+                          >
+                            {value === "light" ? (
+                              <Sun className="size-4" aria-hidden />
+                            ) : value === "dark" ? (
+                              <Moon className="size-4" aria-hidden />
+                            ) : (
+                              <Monitor className="size-4" aria-hidden />
+                            )}
+                            {appearanceLabels[value]}
+                            <span className="ml-auto size-4">
+                              <DropdownMenu.ItemIndicator>
+                                <Check className="size-4" aria-hidden />
+                              </DropdownMenu.ItemIndicator>
+                            </span>
+                          </DropdownMenu.RadioItem>
+                        ),
+                      )}
+                    </DropdownMenu.RadioGroup>
+                  </DropdownMenu.SubContent>
+                </DropdownMenu.Portal>
+              </DropdownMenu.Sub>
               <DropdownMenu.Separator className="my-2 h-px bg-border" />
               <DropdownMenu.Item
-                className="flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm text-danger outline-none focus:bg-danger-soft"
+                className="flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm outline-none focus:bg-surface-hover"
                 onSelect={() => setLogout(true)}
               >
                 <LogOut className="size-4" />

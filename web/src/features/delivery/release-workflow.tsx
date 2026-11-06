@@ -702,9 +702,7 @@ function Manifests(props: StageProps) {
             <td>
               <strong>Manifest #{manifest.sequence_no}</strong>
               {manifest.id === currentId && (
-                <StatusBadge tone="info" dot={false}>
-                  当前
-                </StatusBadge>
+                <StatusBadge tone="info">当前</StatusBadge>
               )}
             </td>
             <td className="mono break-all text-xs">{manifest.digest}</td>

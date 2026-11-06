@@ -212,14 +212,10 @@ export function CredentialPanel({
                 <td>
                   <div className="flex flex-wrap gap-1">
                     {credential.is_preferred && (
-                      <StatusBadge tone="info" dot={false}>
-                        首选
-                      </StatusBadge>
+                      <StatusBadge tone="info">首选</StatusBadge>
                     )}
                     {fallbackSelected && (
-                      <StatusBadge tone="info" dot={false}>
-                        兜底
-                      </StatusBadge>
+                      <StatusBadge tone="info">兜底</StatusBadge>
                     )}
                   </div>
                 </td>

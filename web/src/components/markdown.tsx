@@ -18,7 +18,7 @@ import { Check, Code2, Copy, Download, ZoomIn, ZoomOut } from "lucide-react";
 import { Button, IconButton } from "./button";
 import { ErrorNotice } from "./feedback";
 import { Modal } from "./overlays";
-import { CopyButton } from "./copy-button";
+import { CodeBlock } from "./code-block";
 import { useTheme } from "@/app/theme";
 
 const renderer = new MarkdownIt({
@@ -85,48 +85,6 @@ function splitBlocks(source: string): Block[] {
   if (offset < source.length)
     parts.push({ kind: "markdown", value: source.slice(offset) });
   return parts;
-}
-
-function CodeBlock({ source, language }: { source: string; language: string }) {
-  const { resolved } = useTheme();
-  const [html, setHtml] = useState("");
-  useEffect(() => {
-    let active = true;
-    void import("shiki")
-      .then(({ codeToHtml }) =>
-        codeToHtml(source, {
-          lang: language || "text",
-          theme: resolved === "dark" ? "github-dark" : "github-light",
-        }),
-      )
-      .then((value) => {
-        if (active) setHtml(DOMPurify.sanitize(value));
-      })
-      .catch(() => {
-        if (active) setHtml("");
-      });
-    return () => {
-      active = false;
-    };
-  }, [source, language, resolved]);
-  return (
-    <figure className="my-4 overflow-hidden rounded-lg border">
-      <figcaption className="flex items-center justify-between border-b bg-surface-subtle px-3 py-1 text-xs text-muted">
-        <span>{language || "text"}</span>
-        <CopyButton value={source} label="复制代码" />
-      </figcaption>
-      {html ? (
-        <div
-          className="overflow-auto text-xs [&_pre]:p-4"
-          dangerouslySetInnerHTML={{ __html: html }}
-        />
-      ) : (
-        <pre className="overflow-auto p-4 text-xs">
-          <code>{source}</code>
-        </pre>
-      )}
-    </figure>
-  );
 }
 
 function MermaidBlock({ source }: { source: string }) {

@@ -310,11 +310,7 @@ function RepositoryChoice({
           {repo.full_path}
         </small>
       </div>
-      {selected && (
-        <StatusBadge tone="info" dot={false}>
-          已选择
-        </StatusBadge>
-      )}
+      {selected && <StatusBadge tone="info">已选择</StatusBadge>}
     </label>
   );
 }

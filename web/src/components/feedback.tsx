@@ -57,11 +57,9 @@ export function Notice({
 export function StatusBadge({
   tone = "neutral",
   children,
-  dot = true,
 }: {
   tone?: Tone;
   children: ReactNode;
-  dot?: boolean;
 }) {
   return (
     <span
@@ -70,7 +68,6 @@ export function StatusBadge({
         toneClass[tone],
       )}
     >
-      {dot && <span className="size-1.5 rounded-full bg-current" aria-hidden />}
       {children}
     </span>
   );

@@ -130,7 +130,6 @@ export function MembersPanel({
                     {member.sources.map((source, index) => (
                       <StatusBadge
                         key={`${source.type}-${source.team_id ?? index}`}
-                        dot={false}
                       >
                         {source.type === "direct"
                           ? "直接成员"
