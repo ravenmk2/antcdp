@@ -14,11 +14,12 @@ import {
   syntaxHighlighting,
   defaultHighlightStyle,
 } from "@codemirror/language";
-import { Check, Code2, Copy, Download, ZoomIn, ZoomOut } from "lucide-react";
+import { Code2, Download, ZoomIn, ZoomOut } from "lucide-react";
 import { Button, IconButton } from "./button";
 import { ErrorNotice } from "./feedback";
 import { Modal } from "./overlays";
 import { CodeBlock } from "./code-block";
+import { CopyButton } from "./copy-button";
 import { useTheme } from "@/app/theme";
 
 const renderer = new MarkdownIt({
@@ -148,13 +149,7 @@ function MermaidBlock({ source }: { source: string }) {
           <Code2 />
           {code ? "查看图表" : "查看源码"}
         </Button>
-        <IconButton
-          size="iconSm"
-          label="复制 Mermaid 源码"
-          onClick={() => void navigator.clipboard.writeText(source)}
-        >
-          <Copy />
-        </IconButton>
+        <CopyButton label="复制 Mermaid 源码" value={source} />
         {!code && (
           <IconButton
             size="iconSm"
@@ -375,20 +370,7 @@ export function MarkdownEditor({
 }
 
 export function MarkdownActions({ source }: { source: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      size="sm"
-      variant="ghost"
-      onClick={async () => {
-        await navigator.clipboard.writeText(source);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      }}
-    >
-      {copied ? <Check className="text-success" /> : <Copy />}复制 Markdown
-    </Button>
-  );
+  return <CopyButton value={source} label="复制 Markdown" text />;
 }
 
 export function DownloadLink({

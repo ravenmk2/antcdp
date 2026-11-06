@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { z } from "zod";
 import { api, isUncertain, resetCSRF, type ApiError } from "@/api/client";
 import { Button } from "@/components/button";
@@ -72,6 +72,12 @@ export function SetupPage({
   const setupStatus = useApiQuery<SetupStatus>(["setup"], "/setup/status");
   const resolvedPublicUrl = setupStatus.data?.data.public_url ?? publicUrl;
   const [step, setStep] = useState(0);
+  const title = useRef<HTMLHeadingElement>(null);
+  const previousStep = useRef(step);
+  useLayoutEffect(() => {
+    if (previousStep.current !== step) title.current?.focus();
+    previousStep.current = step;
+  }, [step]);
   const [database, setDatabase] = useState<DatabaseDraft>({
     host: "",
     port: "3306",
@@ -119,9 +125,6 @@ export function SetupPage({
     errors.clear();
     setStatus("");
     setStep(nextStep);
-    requestAnimationFrame(() =>
-      document.getElementById("setup-title")?.focus(),
-    );
   }
   function validateCurrent() {
     if (step === 0) {
@@ -285,6 +288,7 @@ export function SetupPage({
           </header>
           <div className="setup-panel-body">
             <h1
+              ref={title}
               id="setup-title"
               tabIndex={-1}
               className="mb-2 text-[25px] font-semibold"

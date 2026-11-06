@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
-import { IconButton } from "./button";
+import { Button } from "./button";
+import { copyText } from "@/lib/clipboard";
 
 export function CopyButton({
   value,
   label = "复制",
+  text = false,
 }: {
   value: string;
   label?: string;
+  text?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -15,14 +18,15 @@ export function CopyButton({
   useEffect(() => () => clearTimeout(timer.current), []);
   return (
     <span className="inline-flex items-center gap-1">
-      <IconButton
-        size="iconSm"
-        label={copied ? "已复制" : label}
+      <Button
+        size={text ? "sm" : "iconSm"}
+        variant="ghost"
+        aria-label={copied ? "已复制" : label}
         title={failed ? "复制失败，请手动复制" : copied ? "已复制" : label}
-        onClick={async () => {
+        onClick={async (event) => {
           clearTimeout(timer.current);
           try {
-            await navigator.clipboard.writeText(value);
+            await copyText(value, event.currentTarget);
             setFailed(false);
             setCopied(true);
             timer.current = setTimeout(() => setCopied(false), 2000);
@@ -33,7 +37,8 @@ export function CopyButton({
         }}
       >
         {copied ? <Check className="text-success" /> : <Copy />}
-      </IconButton>
+        {text && (copied ? "已复制" : label)}
+      </Button>
       {failed && (
         <span className="text-xs text-danger" role="alert">
           复制失败

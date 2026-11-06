@@ -271,7 +271,7 @@ describe("installation wizard", () => {
     expect(select).toHaveFocus();
   });
 
-  it("blocks progress before a successful database check and preserves drafts on return", async () => {
+  it("preserves drafts and field focus even when a frame runs after typing starts", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const path = String(input);
       if (path.endsWith("/setup/status"))
@@ -296,6 +296,13 @@ describe("installation wizard", () => {
     expect(
       await screen.findByText("数据库连接、版本与空库检查已通过。"),
     ).toBeInTheDocument();
+    const frames: FrameRequestCallback[] = [];
+    const frameSpy = vi
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        frames.push(callback);
+        return frames.length;
+      });
     await user.click(screen.getByRole("button", { name: "下一步" }));
     expect(
       await screen.findByRole("heading", { name: "系统信息" }),
@@ -304,7 +311,13 @@ describe("installation wizard", () => {
       screen.getByDisplayValue("https://setup.example.com"),
     ).toBeInTheDocument();
     const siteName = screen.getByLabelText("系统名称");
-    await user.type(siteName, "a".repeat(41));
+    await user.type(siteName, "a");
+    await act(async () => {
+      for (const frame of frames) frame(performance.now());
+    });
+    frameSpy.mockRestore();
+    expect(siteName).toHaveFocus();
+    await user.keyboard("a".repeat(40));
     await user.click(screen.getByRole("button", { name: "下一步" }));
     expect(
       await screen.findByText("系统名称最多 40 个字符"),
