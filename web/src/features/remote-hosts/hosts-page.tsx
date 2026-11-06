@@ -217,6 +217,7 @@ function HostDirectory({
         emptyTitle={q || status ? "没有匹配的主机" : "还没有远程主机"}
       >
         <SimpleTable
+          actions
           label="远程主机"
           headers={["主机", "说明", "协议", "状态", "操作"]}
         >
@@ -249,7 +250,8 @@ function HostDirectory({
               </td>
               <td>
                 <Link
-                  className="link"
+                  className="link inline-flex"
+                  aria-label={`查看 ${host.name}`}
                   to={`${location.pathname.replace(/\/$/, "")}/${host.id}?${params}`}
                 >
                   <ArrowRight className="size-4" />

@@ -22,24 +22,25 @@ export function ProjectSwitcher({
         <button
           className={cn(
             "project-switcher flex items-center gap-2 rounded-lg bg-surface-subtle text-left hover:border-border-strong hover:bg-surface-hover",
-            compact ? "justify-center" : "w-[calc(100%-24px)]",
+            "w-[calc(100%-24px)]",
           )}
           aria-label={`切换项目，当前 ${project.name}`}
         >
           <ResourceIcon resource={project} className="size-8" />
-          {!compact && (
-            <>
-              <span className="min-w-0 flex-1">
-                <strong className="block truncate text-xs" title={project.name}>
-                  {project.name}
-                </strong>
-                <small className="mt-0.5 block truncate text-[11px] text-muted">
-                  {project.code}
-                </small>
-              </span>
-              <ChevronDown className="size-4 text-muted" />
-            </>
-          )}
+          <>
+            <span
+              className="sidebar-label min-w-0 flex-1"
+              aria-hidden={compact}
+            >
+              <strong className="block truncate text-xs" title={project.name}>
+                {project.name}
+              </strong>
+              <small className="mt-0.5 block truncate text-[11px] text-muted">
+                {project.code}
+              </small>
+            </span>
+            <ChevronDown className="sidebar-label size-4 text-muted" />
+          </>
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>

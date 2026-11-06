@@ -218,6 +218,7 @@ export function ReleaseRows({
     return <p className="p-6 text-sm text-muted">暂无需要展示的发布。</p>;
   return (
     <SimpleTable
+      actions
       label="项目发布"
       headers={["发布", "产品分支", "阶段", "更新时间", ""]}
     >

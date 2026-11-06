@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Dialog as Primitive } from "radix-ui";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button, IconButton } from "./button";
+import { useOverlayPresence } from "./overlay-presence";
 
 interface OverlayProps {
   open: boolean;
@@ -14,6 +15,7 @@ interface OverlayProps {
   pending?: boolean;
   dirty?: boolean;
   wide?: boolean;
+  restoreFocusTo?: HTMLElement | null;
 }
 
 export function Modal({
@@ -26,8 +28,10 @@ export function Modal({
   pending,
   dirty,
   wide,
+  restoreFocusTo,
 }: OverlayProps) {
   const [discard, setDiscard] = useState(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
   const requestClose = () => {
     if (pending) return;
     if (dirty) setDiscard(true);
@@ -48,6 +52,19 @@ export function Modal({
               "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-48px)] w-[calc(100%-32px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border bg-surface shadow-2xl outline-none data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:zoom-in-95",
               wide ? "max-w-[680px]" : "max-w-[510px]",
             )}
+            onOpenAutoFocus={() => {
+              returnFocus.current =
+                restoreFocusTo ??
+                (document.activeElement instanceof HTMLElement
+                  ? document.activeElement
+                  : null);
+            }}
+            onCloseAutoFocus={(event) => {
+              if (returnFocus.current?.isConnected) {
+                event.preventDefault();
+                returnFocus.current.focus();
+              }
+            }}
             onEscapeKeyDown={(event) => {
               if (pending) event.preventDefault();
             }}
@@ -107,6 +124,9 @@ export function Drawer({
   wide,
 }: OverlayProps) {
   const [discard, setDiscard] = useState(false);
+  const presence = useOverlayPresence();
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const visible = open && (presence?.open ?? true);
   const requestClose = () => {
     if (pending) return;
     if (dirty) setDiscard(true);
@@ -115,18 +135,31 @@ export function Drawer({
   return (
     <>
       <Primitive.Root
-        open={open}
+        open={visible}
         onOpenChange={(next) => {
           if (!next) requestClose();
         }}
       >
         <Primitive.Portal>
-          <Primitive.Overlay className="fixed inset-0 z-50 bg-[#09101a]/50 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in" />
+          <Primitive.Overlay className="drawer-overlay fixed inset-0 z-50 bg-[#09101a]/50 backdrop-blur-[2px]" />
           <Primitive.Content
             className={cn(
-              "fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l bg-surface shadow-2xl outline-none data-[state=open]:animate-in data-[state=open]:slide-in-from-right",
+              "drawer-content fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l bg-surface shadow-2xl outline-none",
               wide ? "max-w-[720px]" : "max-w-[540px]",
             )}
+            onOpenAutoFocus={() => {
+              returnFocus.current =
+                document.activeElement instanceof HTMLElement
+                  ? document.activeElement
+                  : null;
+            }}
+            onCloseAutoFocus={(event) => {
+              presence?.onExitComplete();
+              if (returnFocus.current?.isConnected) {
+                event.preventDefault();
+                returnFocus.current.focus();
+              }
+            }}
             onEscapeKeyDown={(event) => {
               if (pending) event.preventDefault();
             }}
@@ -167,7 +200,10 @@ export function Drawer({
           confirmLabel="放弃修改"
           danger
           onClose={() => setDiscard(false)}
-          onConfirm={onClose}
+          onConfirm={() => {
+            setDiscard(false);
+            onClose();
+          }}
         />
       )}
     </>

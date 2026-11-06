@@ -219,6 +219,7 @@
   .app-layout {
     display: grid;
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    transition: grid-template-columns 200ms cubic-bezier(0.2, 0, 0, 1);
     min-height: 100dvh;
   }
   .app-layout[data-collapsed="true"] {
@@ -234,6 +235,88 @@
     flex-direction: column;
     border-right: 1px solid var(--border);
     background: var(--sidebar);
+  }
+  .sidebar-navigation {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-brand {
+    max-width: 190px;
+    overflow: hidden;
+    white-space: nowrap;
+    transition:
+      max-width 200ms ease,
+      opacity 140ms ease,
+      visibility 200ms;
+  }
+  .sidebar-navigation .resource-icon {
+    flex-shrink: 0;
+  }
+  .sidebar-brand > img {
+    flex-shrink: 0;
+  }
+  .sidebar-label {
+    overflow: hidden;
+    white-space: nowrap;
+    transition:
+      opacity 140ms ease,
+      visibility 200ms;
+  }
+  .sidebar-navigation[data-compact="true"] .sidebar-label {
+    opacity: 0;
+    visibility: hidden;
+  }
+  .sidebar-navigation[data-compact="true"] .sidebar-brand {
+    max-width: 0;
+    opacity: 0;
+    visibility: hidden;
+  }
+  .sidebar-navigation .nav-link {
+    overflow: hidden;
+    transition:
+      padding 200ms ease,
+      background 140ms,
+      color 140ms;
+  }
+  .sidebar-navigation[data-compact="true"] .nav-link {
+    padding-inline: 16px;
+    gap: 10px;
+  }
+  .sidebar-navigation .nav-label {
+    max-height: 38px;
+    overflow: hidden;
+    white-space: nowrap;
+    transition:
+      max-height 200ms ease,
+      padding 200ms ease,
+      opacity 140ms ease;
+  }
+  .sidebar-navigation[data-compact="true"] .nav-label {
+    max-height: 12px;
+    padding-block: 6px 0;
+    opacity: 0;
+  }
+  .sidebar-user {
+    overflow: hidden;
+    transition: padding 200ms ease;
+  }
+  .sidebar-navigation[data-compact="true"] .sidebar-user {
+    padding-inline: 6px;
+  }
+  .sidebar-navigation[data-compact="true"] .shortcut-manage {
+    margin-right: 20px;
+  }
+  .sidebar-navigation .project-switcher {
+    overflow: hidden;
+    min-height: 52px;
+    transition: padding 200ms ease;
+  }
+  .sidebar-navigation[data-compact="true"] .project-switcher {
+    padding-inline: 7px;
   }
   .sidebar-scroll {
     min-height: 0;
@@ -472,7 +555,6 @@
   .table-scroll {
     max-width: 100%;
     overflow-x: auto;
-    border-radius: inherit;
   }
   .data-table {
     width: 100%;
@@ -501,6 +583,19 @@
   }
   .data-table tbody tr:hover {
     background: var(--surface-hover);
+  }
+  .data-table th[data-align="right"],
+  .data-table.has-action-column th:last-child {
+    width: 1%;
+  }
+  .data-table [data-align="right"],
+  .data-table.has-action-column th:last-child,
+  .data-table.has-action-column td:last-child {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .data-table.has-action-column td:last-child > .flex {
+    justify-content: flex-end;
   }
   .data-table .primary-cell {
     color: var(--text);
@@ -567,6 +662,15 @@
     color: var(--muted);
     text-align: left;
   }
+  .settings-nav svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+  .settings-nav a,
+  .settings-nav button {
+    font-weight: 500;
+  }
   .settings-nav a:hover,
   .settings-nav button:hover {
     background: var(--surface-hover);
@@ -576,7 +680,6 @@
   .settings-nav [aria-pressed="true"] {
     background: var(--accent-soft);
     color: var(--accent);
-    font-weight: 650;
   }
   .split-workspace {
     display: grid;
@@ -1257,32 +1360,6 @@
   font-size: 12px;
   line-height: 1.5;
 }
-.console-context {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 12px;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--surface-subtle);
-}
-.console-context > svg {
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  color: var(--accent);
-}
-.console-context strong {
-  display: block;
-  font-size: 13px;
-}
-.console-context small {
-  display: block;
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 11px;
-}
 .project-switcher {
   margin: 12px 12px 4px;
   padding: 9px;
@@ -1361,4 +1438,52 @@
   .notice {
     border-color: CanvasText;
   }
+}
+
+/* Animate only the composited drawer layer; keep blur strength constant. */
+@keyframes drawer-enter {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes drawer-exit {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+@keyframes drawer-backdrop-enter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes drawer-backdrop-exit {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.drawer-content {
+  will-change: transform;
+  animation: drawer-enter 200ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+.drawer-content[data-state="closed"] {
+  animation: drawer-exit 160ms cubic-bezier(0.4, 0, 1, 1) both;
+  pointer-events: none;
+}
+.drawer-overlay {
+  animation: drawer-backdrop-enter 200ms ease-out both;
+}
+.drawer-overlay[data-state="closed"] {
+  animation: drawer-backdrop-exit 160ms ease-in both;
 }

@@ -1,3 +1,10 @@
+import { OverlayPresence } from "@/components/overlay-presence";
+import { FileClock, ShieldCheck } from "lucide-react";
+import {
+  RowActions,
+  RowAction,
+  RowActionSeparator,
+} from "@/components/row-actions";
 import { DateTimePicker } from "@/components/date-time-picker";
 import { useAuth } from "@/app/auth";
 import { TableToolbar } from "@/components/table-toolbar";
@@ -168,6 +175,7 @@ export function CredentialPanel({
         emptyDescription="凭证验证成功不代表具备所有业务权限；秘密保存后不可读取。"
       >
         <SimpleTable
+          actions
           label={`${provider.name} 凭证`}
           headers={["凭证", "认证方式", "状态", "有效期", "标记", "操作"]}
         >
@@ -233,93 +241,89 @@ export function CredentialPanel({
                   </div>
                 </td>
                 <td>
-                  <div className="flex flex-wrap justify-end gap-1">
-                    <Button
-                      size="sm"
-                      variant="ghost"
+                  <RowActions label={credential.name}>
+                    <RowAction
+                      icon={<Pencil />}
                       disabled={readonly}
-                      onClick={() => setEditor({ mode: "edit", credential })}
+                      onSelect={() => setEditor({ mode: "edit", credential })}
                     >
-                      <Pencil />
                       编辑
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setDiagnostic(credential)}
+                    </RowAction>
+                    <RowAction
+                      icon={<FileClock />}
+                      onSelect={() => setDiagnostic(credential)}
                     >
-                      记录
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
+                      验证记录
+                    </RowAction>
+                    <RowAction
+                      icon={<KeyRound />}
                       disabled={readonly}
-                      onClick={() => setEditor({ mode: "auth", credential })}
+                      onSelect={() => setEditor({ mode: "auth", credential })}
                     >
-                      <KeyRound />
                       替换认证
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
+                    </RowAction>
+                    <RowAction
+                      icon={<Star />}
                       disabled={readonly}
-                      onClick={() =>
+                      onSelect={() =>
                         void selectPreferred(
                           credential,
                           credential.is_preferred,
                         )
                       }
                     >
-                      <Star />
                       {credential.is_preferred ? "取消首选" : "设为首选"}
-                    </Button>
+                    </RowAction>
                     {fallbackPath && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
+                      <RowAction
+                        icon={<ShieldCheck />}
                         disabled={readonly}
-                        onClick={() =>
+                        onSelect={() =>
                           void selectFallback(credential, fallbackSelected)
                         }
                       >
                         {fallbackSelected ? "清除兜底" : "设为兜底"}
-                      </Button>
+                      </RowAction>
                     )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-danger"
+                    <RowActionSeparator />
+                    <RowAction
+                      icon={<Trash2 />}
+                      variant="destructive"
                       disabled={readonly}
-                      onClick={() => setRemove(credential)}
+                      onSelect={() => setRemove(credential)}
                     >
-                      <Trash2 />
-                    </Button>
-                  </div>
+                      删除凭证
+                    </RowAction>
+                  </RowActions>
                 </td>
               </tr>
             );
           })}
         </SimpleTable>
       </AsyncBoundary>
-      {editor && (
-        <CredentialEditor
-          key={`${editor.mode}-${editor.credential?.id ?? "new"}`}
-          base={base}
-          provider={provider}
-          mode={editor.mode}
-          credential={editor.credential}
-          collectionEtag={list.data?.collectionEtag ?? ""}
-          onClose={() => setEditor(null)}
-          onSaved={refresh}
-        />
-      )}
-      {diagnostic && (
-        <CredentialDiagnostic
-          base={base}
-          credential={diagnostic}
-          onClose={() => setDiagnostic(null)}
-        />
-      )}
+      <OverlayPresence>
+        {editor && (
+          <CredentialEditor
+            key={`${editor.mode}-${editor.credential?.id ?? "new"}`}
+            base={base}
+            provider={provider}
+            mode={editor.mode}
+            credential={editor.credential}
+            collectionEtag={list.data?.collectionEtag ?? ""}
+            onClose={() => setEditor(null)}
+            onSaved={refresh}
+          />
+        )}
+      </OverlayPresence>
+      <OverlayPresence>
+        {diagnostic && (
+          <CredentialDiagnostic
+            base={base}
+            credential={diagnostic}
+            onClose={() => setDiagnostic(null)}
+          />
+        )}
+      </OverlayPresence>
       {remove && (
         <ConfirmDialog
           open

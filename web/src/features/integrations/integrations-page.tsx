@@ -248,6 +248,7 @@ function Directory({
         emptyDescription="管理员可添加已实现的服务类型；不会显示未实现的占位服务。"
       >
         <SimpleTable
+          actions
           label="服务连接"
           headers={["连接", "服务类型", "说明", "启停", "操作"]}
         >
@@ -282,7 +283,8 @@ function Directory({
               </td>
               <td>
                 <Link
-                  className="link"
+                  className="link inline-flex"
+                  aria-label={`查看 ${item.name}`}
                   to={`${location.pathname.replace(/\/$/, "")}/${item.id}?${params}`}
                 >
                   <ArrowRight className="size-4" />

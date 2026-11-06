@@ -148,6 +148,7 @@ export function ScopedRepositories({
         emptyDescription="零仓库是合法配置；请调整产品分支范围或联系系统管理员关联仓库。"
       >
         <SimpleTable
+          actions
           label="仓库与 Git 分支"
           headers={[
             "",

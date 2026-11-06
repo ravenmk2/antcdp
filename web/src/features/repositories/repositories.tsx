@@ -1,3 +1,10 @@
+import { OverlayPresence } from "@/components/overlay-presence";
+import { Info } from "lucide-react";
+import {
+  RowActions,
+  RowAction,
+  RowActionSeparator,
+} from "@/components/row-actions";
 import { TableToolbar } from "@/components/table-toolbar";
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -192,6 +199,7 @@ export function ProjectRepositories({
         }
       >
         <SimpleTable
+          actions
           label={`${project.name} Git 仓库`}
           headers={[
             ...(selecting ? [""] : []),
@@ -251,35 +259,31 @@ export function ProjectRepositories({
                 </StatusBadge>
               </td>
               <td>
-                <div className="flex gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setDetail(repo)}
-                  >
+                <RowActions label={repo.full_path}>
+                  <RowAction icon={<Info />} onSelect={() => setDetail(repo)}>
                     详情
-                  </Button>
+                  </RowAction>
                   {admin && (
                     <>
-                      <IconButton
-                        size="iconSm"
-                        label={`同步 ${repo.full_path}`}
+                      <RowAction
+                        icon={<RefreshCw />}
                         disabled={project.status !== "active"}
-                        onClick={() => setSync([repo])}
+                        onSelect={() => setSync([repo])}
                       >
-                        <RefreshCw />
-                      </IconButton>
-                      <IconButton
-                        size="iconSm"
-                        label={`解除 ${repo.full_path}`}
+                        同步仓库
+                      </RowAction>
+                      <RowActionSeparator />
+                      <RowAction
+                        icon={<Trash2 />}
+                        variant="destructive"
                         disabled={project.status !== "active"}
-                        onClick={() => setUnlink([repo])}
+                        onSelect={() => setUnlink([repo])}
                       >
-                        <Trash2 />
-                      </IconButton>
+                        解除关联
+                      </RowAction>
                     </>
                   )}
-                </div>
+                </RowActions>
               </td>
             </tr>
           ))}
@@ -294,21 +298,25 @@ export function ProjectRepositories({
           onChange={(page, size) => setParams({ ...params, page, size })}
         />
       )}
-      {picker && (
-        <RepositoryPicker
-          project={project}
-          etag={list.data?.collectionEtag ?? ""}
-          onClose={() => setPicker(false)}
-          onSaved={refresh}
-        />
-      )}
-      {detail && (
-        <RepositoryDetail
-          project={project}
-          repository={detail}
-          onClose={() => setDetail(null)}
-        />
-      )}
+      <OverlayPresence>
+        {picker && (
+          <RepositoryPicker
+            project={project}
+            etag={list.data?.collectionEtag ?? ""}
+            onClose={() => setPicker(false)}
+            onSaved={refresh}
+          />
+        )}
+      </OverlayPresence>
+      <OverlayPresence>
+        {detail && (
+          <RepositoryDetail
+            project={project}
+            repository={detail}
+            onClose={() => setDetail(null)}
+          />
+        )}
+      </OverlayPresence>
       {unlink.length > 0 && (
         <UnlinkDialog
           project={project}

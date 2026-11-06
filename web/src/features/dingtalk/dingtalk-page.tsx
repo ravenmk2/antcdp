@@ -1,3 +1,4 @@
+import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
@@ -131,6 +132,7 @@ function RobotList() {
         >
           {query.data && (
             <SimpleTable
+              actions
               label="钉钉机器人"
               headers={["机器人", "关键词", "状态", "最近测试", "操作"]}
             >
@@ -199,18 +201,20 @@ function RobotList() {
           />
         )}
       </Panel>
-      {create && (
-        <RobotEditor
-          onClose={() => setCreate(false)}
-          onSaved={async (id) => {
-            setCreate(false);
-            await queryClient.invalidateQueries({
-              queryKey: ["dingtalk-robots"],
-            });
-            window.location.assign(`/admin/dingtalk/${id}`);
-          }}
-        />
-      )}
+      <OverlayPresence>
+        {create && (
+          <RobotEditor
+            onClose={() => setCreate(false)}
+            onSaved={async (id) => {
+              setCreate(false);
+              await queryClient.invalidateQueries({
+                queryKey: ["dingtalk-robots"],
+              });
+              window.location.assign(`/admin/dingtalk/${id}`);
+            }}
+          />
+        )}
+      </OverlayPresence>
     </>
   );
 }
@@ -307,21 +311,25 @@ function RobotDetail({ id }: { id: string }) {
           )}
         </Panel>
       </div>
-      {mode && (
-        <RobotEditor
-          robot={robot}
-          etag={query.data.etag}
-          authOnly={mode === "auth"}
-          onClose={() => setMode(null)}
-          onSaved={async () => {
-            setMode(null);
-            await queryClient.invalidateQueries({
-              queryKey: ["dingtalk-robot", id],
-            });
-          }}
-        />
-      )}
-      {test && <RobotTest robot={robot} onClose={() => setTest(false)} />}
+      <OverlayPresence>
+        {mode && (
+          <RobotEditor
+            robot={robot}
+            etag={query.data.etag}
+            authOnly={mode === "auth"}
+            onClose={() => setMode(null)}
+            onSaved={async () => {
+              setMode(null);
+              await queryClient.invalidateQueries({
+                queryKey: ["dingtalk-robot", id],
+              });
+            }}
+          />
+        )}
+      </OverlayPresence>
+      <OverlayPresence>
+        {test && <RobotTest robot={robot} onClose={() => setTest(false)} />}
+      </OverlayPresence>
       <ConfirmDialog
         open={remove}
         danger

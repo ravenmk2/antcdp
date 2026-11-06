@@ -1,3 +1,4 @@
+import { OverlayPresence } from "@/components/overlay-presence";
 import { useState } from "react";
 import { Link } from "react-router";
 import {
@@ -161,9 +162,11 @@ export function OverviewPage() {
           </div>
         )}
       </AsyncBoundary>
-      {selected && (
-        <AuditDetail id={selected} onClose={() => setSelected("")} />
-      )}
+      <OverlayPresence>
+        {selected && (
+          <AuditDetail id={selected} onClose={() => setSelected("")} />
+        )}
+      </OverlayPresence>
     </div>
   );
 }

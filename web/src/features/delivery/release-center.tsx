@@ -1,3 +1,4 @@
+import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
@@ -243,6 +244,7 @@ export function ReleaseCenter({
           emptyDescription="可创建草稿后再补充变更与材料；允许零 MR 的纯材料发布。"
         >
           <SimpleTable
+            actions
             label="发布列表"
             headers={["发布", "产品分支", "阶段", "版本 / Tag", "最近更新", ""]}
           >
@@ -728,21 +730,23 @@ function ReleaseDetail({
           onChanged={refresh}
         />
       </div>
-      {edit && (
-        <ReleaseEditor
-          base={base}
-          release={current}
-          etag={release.data.etag}
-          canManage={flow.data.data.can_manage}
-          onClose={() => setEdit(false)}
-          onSaved={async () => {
-            setEdit(false);
-            await queryClient.invalidateQueries({
-              queryKey: ["release", project.id, variant.id, releaseId],
-            });
-          }}
-        />
-      )}
+      <OverlayPresence>
+        {edit && (
+          <ReleaseEditor
+            base={base}
+            release={current}
+            etag={release.data.etag}
+            canManage={flow.data.data.can_manage}
+            onClose={() => setEdit(false)}
+            onSaved={async () => {
+              setEdit(false);
+              await queryClient.invalidateQueries({
+                queryKey: ["release", project.id, variant.id, releaseId],
+              });
+            }}
+          />
+        )}
+      </OverlayPresence>
     </div>
   );
 }

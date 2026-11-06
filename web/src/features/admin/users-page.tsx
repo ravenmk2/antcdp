@@ -1,3 +1,9 @@
+import { Pencil, UserCheck, UserX } from "lucide-react";
+import {
+  RowActions,
+  RowAction,
+  RowActionSeparator,
+} from "@/components/row-actions";
 import { TableToolbar } from "@/components/table-toolbar";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -7,7 +13,7 @@ import { z } from "zod";
 import { request } from "@/api/client";
 import { useSession } from "@/app/auth";
 import { Avatar } from "@/components/resource-icon";
-import { Button, IconButton } from "@/components/button";
+import { Button } from "@/components/button";
 import {
   AsyncBoundary,
   ErrorNotice,
@@ -165,17 +171,21 @@ export function UsersPage() {
         id: "actions",
         header: "操作",
         cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            <Button
-              size="sm"
-              variant="ghost"
+          <RowActions
+            label={row.original.display_name}
+            disabled={
+              row.original.is_founder && row.original.id !== session.user.id
+            }
+          >
+            <RowAction
+              icon={<Pencil />}
               disabled={
                 row.original.is_founder && row.original.id !== session.user.id
               }
-              onClick={() => setAction({ type: "edit", user: row.original })}
+              onSelect={() => setAction({ type: "edit", user: row.original })}
             >
               编辑
-            </Button>
+            </RowAction>
             {!row.original.is_founder &&
               row.original.id !== session.user.id && (
                 <UserMenu
@@ -183,7 +193,7 @@ export function UsersPage() {
                   onAction={(type) => setAction({ type, user: row.original })}
                 />
               )}
-          </div>
+          </RowActions>
         ),
       },
     ],
@@ -264,6 +274,7 @@ export function UsersPage() {
         >
           {list.data && (
             <DataTable
+              actionColumn="actions"
               data={list.data.data}
               columns={columns}
               rowKey={(row) => row.id}
@@ -314,29 +325,28 @@ function UserMenu({
   onAction: (action: Action) => void;
 }) {
   return (
-    <div className="flex gap-1">
-      <Button size="sm" variant="ghost" onClick={() => onAction("role")}>
-        <Shield />
+    <>
+      <RowAction icon={<Shield />} onSelect={() => onAction("role")}>
         {user.role === "admin" ? "取消管理员" : "设为管理员"}
-      </Button>
-      <Button size="sm" variant="ghost" onClick={() => onAction("status")}>
+      </RowAction>
+      <RowAction
+        icon={user.status === "active" ? <UserX /> : <UserCheck />}
+        onSelect={() => onAction("status")}
+      >
         {user.status === "active" ? "禁用" : "启用"}
-      </Button>
-      <IconButton
-        size="iconSm"
-        label={`重置 ${user.display_name} 密码`}
-        onClick={() => onAction("password")}
+      </RowAction>
+      <RowAction icon={<KeyRound />} onSelect={() => onAction("password")}>
+        重置密码
+      </RowAction>
+      <RowActionSeparator />
+      <RowAction
+        icon={<Trash2 />}
+        variant="destructive"
+        onSelect={() => onAction("delete")}
       >
-        <KeyRound />
-      </IconButton>
-      <IconButton
-        size="iconSm"
-        label={`删除 ${user.display_name}`}
-        onClick={() => onAction("delete")}
-      >
-        <Trash2 />
-      </IconButton>
-    </div>
+        删除用户
+      </RowAction>
+    </>
   );
 }
 
@@ -509,25 +519,41 @@ function UserAction({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const [restoreFocusTo] = useState(() =>
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null,
+  );
   const detail = useApiQuery<User>(
     ["user", user.id],
     `/admin/users/${user.id}`,
   );
   if (detail.isPending)
     return (
-      <Modal open title="读取用户" onClose={onClose}>
+      <Modal
+        open
+        restoreFocusTo={restoreFocusTo}
+        title="读取用户"
+        onClose={onClose}
+      >
         <AsyncBoundary loading />
       </Modal>
     );
   if (detail.error)
     return (
-      <Modal open title="无法读取用户" onClose={onClose}>
+      <Modal
+        open
+        restoreFocusTo={restoreFocusTo}
+        title="无法读取用户"
+        onClose={onClose}
+      >
         <ErrorNotice error={detail.error} />
       </Modal>
     );
   if (action === "edit")
     return (
       <EditUser
+        restoreFocusTo={restoreFocusTo}
         user={detail.data.data}
         etag={detail.data.etag}
         onClose={onClose}
@@ -536,6 +562,7 @@ function UserAction({
     );
   return (
     <SimpleUserAction
+      restoreFocusTo={restoreFocusTo}
       action={action}
       user={detail.data.data}
       etag={detail.data.etag}
@@ -550,11 +577,13 @@ function EditUser({
   etag,
   onClose,
   onSaved,
+  restoreFocusTo,
 }: {
   user: User;
   etag: string;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  restoreFocusTo: HTMLElement | null;
 }) {
   const [form, setForm] = useState({
     username: user.username,
@@ -592,6 +621,7 @@ function EditUser({
   }
   return (
     <Modal
+      restoreFocusTo={restoreFocusTo}
       open
       wide
       title="编辑用户"
@@ -655,12 +685,14 @@ function SimpleUserAction({
   etag,
   onClose,
   onSaved,
+  restoreFocusTo,
 }: {
   action: "role" | "status" | "password" | "delete";
   user: User;
   etag: string;
   onClose: () => void;
   onSaved: () => Promise<void>;
+  restoreFocusTo: HTMLElement | null;
 }) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -729,6 +761,7 @@ function SimpleUserAction({
   }
   return (
     <Modal
+      restoreFocusTo={restoreFocusTo}
       open
       title={title}
       description={`${user.display_name} · @${user.username}`}

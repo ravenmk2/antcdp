@@ -1,3 +1,4 @@
+import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
 import { StandaloneSelect } from "@/components/fields";
 import { useState } from "react";
@@ -100,6 +101,7 @@ export function MembersPanel({
       >
         {list.data && (
           <SimpleTable
+            actions
             label={`${resource.name}成员`}
             headers={[
               "成员",
@@ -196,15 +198,17 @@ export function MembersPanel({
           }}
         />
       )}
-      {add && (
-        <AddMember
-          kind={kind}
-          resource={resource}
-          etag={membershipEtag}
-          onClose={() => setAdd(false)}
-          onSaved={refresh}
-        />
-      )}
+      <OverlayPresence>
+        {add && (
+          <AddMember
+            kind={kind}
+            resource={resource}
+            etag={membershipEtag}
+            onClose={() => setAdd(false)}
+            onSaved={refresh}
+          />
+        )}
+      </OverlayPresence>
       {remove && (
         <RemoveMember
           kind={kind}

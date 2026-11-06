@@ -125,6 +125,7 @@ function CreationHistory({
         emptyTitle="暂无创建记录"
       >
         <SimpleTable
+          actions
           label="分支创建记录"
           headers={["目标分支", "来源", "状态", "逐项计数", "创建时间", "操作"]}
         >

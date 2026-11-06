@@ -1,3 +1,6 @@
+import { OverlayPresence } from "@/components/overlay-presence";
+import { Info } from "lucide-react";
+import { RowActions, RowAction } from "@/components/row-actions";
 import { StandaloneSelect } from "@/components/fields";
 import { useState } from "react";
 import {
@@ -187,9 +190,11 @@ function StagePanel(props: StageProps) {
       {action === "start" && (
         <StartRelease {...props} onClose={() => setAction(null)} />
       )}
-      {action === "freeze" && (
-        <FreezeRelease {...props} onClose={() => setAction(null)} />
-      )}
+      <OverlayPresence>
+        {action === "freeze" && (
+          <FreezeRelease {...props} onClose={() => setAction(null)} />
+        )}
+      </OverlayPresence>
       {(action === "review" || action === "return") && current && (
         <ReviewRelease
           {...props}
@@ -696,6 +701,7 @@ function Manifests(props: StageProps) {
         当前草稿、当前验收版与历史送验版分别保留；每次退回后再次送验会生成新清单。
       </Notice>
       <SimpleTable
+        actions
         label="送验清单"
         headers={["清单", "摘要", "冻结时间", "验收结论", "说明", "操作"]}
       >
@@ -732,22 +738,20 @@ function Manifests(props: StageProps) {
               {manifest.review_note || "—"}
             </td>
             <td>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setSelected(manifest)}
+              <RowActions label={`Manifest ${manifest.sequence_no}`}>
+                <RowAction
+                  icon={<Info />}
+                  onSelect={() => setSelected(manifest)}
                 >
                   详情
-                </Button>
-                <a
-                  className="link p-2"
-                  aria-label={`下载 Manifest ${manifest.sequence_no}`}
+                </RowAction>
+                <RowAction
+                  icon={<Download />}
                   href={`/api/v1${releaseBase(props)}/manifests/${manifest.id}/download`}
                 >
-                  <Download className="size-4" />
-                </a>
-              </div>
+                  下载清单
+                </RowAction>
+              </RowActions>
             </td>
           </tr>
         ))}
@@ -755,13 +759,15 @@ function Manifests(props: StageProps) {
       {!props.flow.manifests.length && (
         <p className="p-8 text-center text-sm text-muted">尚未冻结送验清单。</p>
       )}
-      {selected && (
-        <ManifestDetail
-          {...props}
-          manifest={selected}
-          onClose={() => setSelected(null)}
-        />
-      )}
+      <OverlayPresence>
+        {selected && (
+          <ManifestDetail
+            {...props}
+            manifest={selected}
+            onClose={() => setSelected(null)}
+          />
+        )}
+      </OverlayPresence>
     </Panel>
   );
 }
@@ -885,6 +891,7 @@ function Operations(props: StageProps) {
         Tag；已确认失败的步骤才可由新的明确命令重试。
       </Notice>
       <SimpleTable
+        actions
         label="发布操作记录"
         headers={["操作", "状态", "时间", "操作者", "操作"]}
       >

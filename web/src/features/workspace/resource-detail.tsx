@@ -1,3 +1,4 @@
+import { OverlayPresence } from "@/components/overlay-presence";
 import { useEffect, useState } from "react";
 import {
   Link,
@@ -297,19 +298,21 @@ function DetailContent({
         )}
         {!project && tab === "projects" && <TeamProjects team={resource} />}
       </div>
-      {edit && (
-        <ResourceEditor
-          kind={kind}
-          resource={resource}
-          onClose={() => setEdit(false)}
-          onSaved={() => {
-            setEdit(false);
-            void queryClient.invalidateQueries({
-              queryKey: [project ? "project" : "team", resource.id],
-            });
-          }}
-        />
-      )}
+      <OverlayPresence>
+        {edit && (
+          <ResourceEditor
+            kind={kind}
+            resource={resource}
+            onClose={() => setEdit(false)}
+            onSaved={() => {
+              setEdit(false);
+              void queryClient.invalidateQueries({
+                queryKey: [project ? "project" : "team", resource.id],
+              });
+            }}
+          />
+        )}
+      </OverlayPresence>
       <ConfirmDialog
         open={Boolean(life)}
         danger={life === "dissolve" || life === "archive"}

@@ -1,3 +1,9 @@
+import { OverlayPresence } from "@/components/overlay-presence";
+import {
+  RowActions,
+  RowAction,
+  RowActionSeparator,
+} from "@/components/row-actions";
 import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import {
@@ -97,6 +103,7 @@ export function ReleaseMaterials(props: ReleaseViewProps) {
                   {groups[kind]} · {items.length}
                 </h3>
                 <SimpleTable
+                  actions
                   label={groups[kind]}
                   headers={[
                     ...(kind === "sql" ? ["顺序"] : []),
@@ -155,40 +162,38 @@ export function ReleaseMaterials(props: ReleaseViewProps) {
                         {formatBytes(item.size_bytes)}
                       </td>
                       <td>
-                        <div className="flex flex-wrap gap-1">
-                          <a
-                            className="p-2 text-muted hover:text-primary"
+                        <RowActions label={item.filename}>
+                          <RowAction
+                            icon={<Download />}
                             href={`/api/v1${base}/items/${item.id}/revisions/${item.revision_id}/file`}
-                            aria-label={`下载 ${item.filename}`}
                           >
-                            <Download className="size-4" />
-                          </a>
-                          <IconButton
-                            size="iconSm"
-                            label={`${item.filename} 修订历史`}
-                            onClick={() => setHistory(item)}
+                            下载文件
+                          </RowAction>
+                          <RowAction
+                            icon={<FileClock />}
+                            onSelect={() => setHistory(item)}
                           >
-                            <FileClock />
-                          </IconButton>
+                            修订历史
+                          </RowAction>
                           {editable && (
                             <>
-                              <IconButton
-                                size="iconSm"
-                                label={`编辑 ${item.filename}`}
-                                onClick={() => setEditor(item)}
+                              <RowAction
+                                icon={<Pencil />}
+                                onSelect={() => setEditor(item)}
                               >
-                                <Pencil />
-                              </IconButton>
-                              <IconButton
-                                size="iconSm"
-                                label={`移出 ${item.filename}`}
-                                onClick={() => setRemove(item)}
+                                编辑材料
+                              </RowAction>
+                              <RowActionSeparator />
+                              <RowAction
+                                icon={<Trash2 />}
+                                variant="destructive"
+                                onSelect={() => setRemove(item)}
                               >
-                                <Trash2 />
-                              </IconButton>
+                                移出材料
+                              </RowAction>
                             </>
                           )}
-                        </div>
+                        </RowActions>
                       </td>
                     </tr>
                   ))}
@@ -224,20 +229,24 @@ export function ReleaseMaterials(props: ReleaseViewProps) {
           </div>
         )}
       </Panel>
-      {editor && (
-        <MaterialEditor
-          {...props}
-          material={editor === "new" ? undefined : editor}
-          onClose={() => setEditor(null)}
-        />
-      )}
-      {history && (
-        <MaterialHistory
-          {...props}
-          material={history}
-          onClose={() => setHistory(null)}
-        />
-      )}
+      <OverlayPresence>
+        {editor && (
+          <MaterialEditor
+            {...props}
+            material={editor === "new" ? undefined : editor}
+            onClose={() => setEditor(null)}
+          />
+        )}
+      </OverlayPresence>
+      <OverlayPresence>
+        {history && (
+          <MaterialHistory
+            {...props}
+            material={history}
+            onClose={() => setHistory(null)}
+          />
+        )}
+      </OverlayPresence>
       {removed && (
         <RemovedMaterials {...props} onClose={() => setRemoved(false)} />
       )}
@@ -591,6 +600,7 @@ function MaterialHistory(
         {query.data && (
           <>
             <SimpleTable
+              actions
               label="材料修订"
               headers={["修订", "文件", "大小", "SHA-256", "下载"]}
             >
@@ -649,6 +659,7 @@ function RemovedMaterials(props: ReleaseViewProps & { onClose: () => void }) {
         {query.data && (
           <>
             <SimpleTable
+              actions
               label="已移出材料"
               headers={["类型", "文件", "修订", "下载"]}
             >

@@ -1,3 +1,4 @@
+import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
 import { DateRangePicker } from "@/components/date-time-picker";
 import { useEffect, useState } from "react";
@@ -153,6 +154,7 @@ export function AuditPage() {
         >
           {query.data && (
             <SimpleTable
+              actions
               label="审计日志"
               className="min-w-[800px]"
               headers={["时间", "事件", "操作者", "操作对象", "详情"]}
@@ -214,9 +216,11 @@ export function AuditPage() {
           />
         )}
       </Panel>
-      {selected && (
-        <AuditDetail id={selected} onClose={() => setSelected("")} />
-      )}
+      <OverlayPresence>
+        {selected && (
+          <AuditDetail id={selected} onClose={() => setSelected("")} />
+        )}
+      </OverlayPresence>
     </div>
   );
 }

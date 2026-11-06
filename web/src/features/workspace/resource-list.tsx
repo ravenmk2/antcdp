@@ -1,3 +1,4 @@
+import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -305,6 +306,7 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
         >
           {list.data && (
             <DataTable
+              actionColumn="actions"
               data={list.data.data.items}
               columns={columns}
               label={title}
@@ -333,17 +335,19 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
           />
         )}
       </section>
-      {create && admin && (
-        <ResourceEditor
-          kind={kind}
-          onClose={() => setCreate(false)}
-          onSaved={(resource) => {
-            setCreate(false);
-            void queryClient.invalidateQueries({ queryKey: [kind] });
-            navigate(`/admin/${kind}/${resource.id}`);
-          }}
-        />
-      )}
+      <OverlayPresence>
+        {create && admin && (
+          <ResourceEditor
+            kind={kind}
+            onClose={() => setCreate(false)}
+            onSaved={(resource) => {
+              setCreate(false);
+              void queryClient.invalidateQueries({ queryKey: [kind] });
+              navigate(`/admin/${kind}/${resource.id}`);
+            }}
+          />
+        )}
+      </OverlayPresence>
     </div>
   );
 }

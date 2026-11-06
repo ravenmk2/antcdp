@@ -1,3 +1,4 @@
+import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
@@ -95,35 +96,39 @@ export function SmsPage() {
         />
       )}
       <div className="mt-5">
-        {section === "send-logs" &&
-          (id ? (
-            <MessageLogDetail
-              module="sms"
-              id={id}
-              onClose={() => navigate(`${base}/send-logs`)}
-            />
-          ) : (
-            <MessageLogList module="sms" />
-          ))}
+        <OverlayPresence>
+          {section === "send-logs" &&
+            (id ? (
+              <MessageLogDetail
+                module="sms"
+                id={id}
+                onClose={() => navigate(`${base}/send-logs`)}
+              />
+            ) : (
+              <MessageLogList module="sms" />
+            ))}
+        </OverlayPresence>
         {section === "profiles" &&
           (id ? <ProfileDetail id={id} /> : <ProfileList />)}
         {section === "templates" &&
           (id ? <TemplateEditor id={id} /> : <TemplateList />)}
       </div>
-      {params.get("test") === "1" && (
-        <SmsTest
-          onClose={() => {
-            const next = new URLSearchParams(params);
-            next.delete("test");
-            window.history.replaceState(
-              null,
-              "",
-              `${location.pathname}?${next}`,
-            );
-            window.dispatchEvent(new PopStateEvent("popstate"));
-          }}
-        />
-      )}
+      <OverlayPresence>
+        {params.get("test") === "1" && (
+          <SmsTest
+            onClose={() => {
+              const next = new URLSearchParams(params);
+              next.delete("test");
+              window.history.replaceState(
+                null,
+                "",
+                `${location.pathname}?${next}`,
+              );
+              window.dispatchEvent(new PopStateEvent("popstate"));
+            }}
+          />
+        )}
+      </OverlayPresence>
     </div>
   );
 }
@@ -215,6 +220,7 @@ function ProfileList() {
         >
           {query.data && (
             <SimpleTable
+              actions
               label="短信配置"
               headers={[
                 "配置",
@@ -279,16 +285,20 @@ function ProfileList() {
           />
         )}
       </Panel>
-      {create && (
-        <ProfileEditor
-          onClose={() => setCreate(false)}
-          onSaved={async (id) => {
-            setCreate(false);
-            await queryClient.invalidateQueries({ queryKey: ["sms-profiles"] });
-            window.location.assign(`${base}/profiles/${id}`);
-          }}
-        />
-      )}
+      <OverlayPresence>
+        {create && (
+          <ProfileEditor
+            onClose={() => setCreate(false)}
+            onSaved={async (id) => {
+              setCreate(false);
+              await queryClient.invalidateQueries({
+                queryKey: ["sms-profiles"],
+              });
+              window.location.assign(`${base}/profiles/${id}`);
+            }}
+          />
+        )}
+      </OverlayPresence>
     </>
   );
 }
@@ -372,20 +382,22 @@ function ProfileDetail({ id }: { id: string }) {
           <p className="text-sm text-muted">尚无发送记录。</p>
         )}
       </Panel>
-      {mode && (
-        <ProfileEditor
-          profile={profile}
-          etag={query.data.etag}
-          authOnly={mode === "auth"}
-          onClose={() => setMode(null)}
-          onSaved={async () => {
-            setMode(null);
-            await queryClient.invalidateQueries({
-              queryKey: ["sms-profile", id],
-            });
-          }}
-        />
-      )}
+      <OverlayPresence>
+        {mode && (
+          <ProfileEditor
+            profile={profile}
+            etag={query.data.etag}
+            authOnly={mode === "auth"}
+            onClose={() => setMode(null)}
+            onSaved={async () => {
+              setMode(null);
+              await queryClient.invalidateQueries({
+                queryKey: ["sms-profile", id],
+              });
+            }}
+          />
+        )}
+      </OverlayPresence>
       <ConfirmDialog
         open={remove}
         danger
@@ -679,6 +691,7 @@ function TemplateList() {
       >
         {query.data && (
           <SimpleTable
+            actions
             label="短信模板"
             headers={[
               "模板",

@@ -1,3 +1,10 @@
+import { OverlayPresence } from "@/components/overlay-presence";
+import { ArrowRight } from "lucide-react";
+import {
+  RowActions,
+  RowAction,
+  RowActionSeparator,
+} from "@/components/row-actions";
 import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -12,7 +19,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { request } from "@/api/client";
-import { Button, IconButton } from "@/components/button";
+import { Button } from "@/components/button";
 import {
   AsyncBoundary,
   ErrorNotice,
@@ -186,6 +193,7 @@ function VariantsContent({ project }: { project: Resource }) {
           emptyTitle="没有匹配的产品分支"
         >
           <SimpleTable
+            actions
             label="产品分支"
             headers={[
               "产品分支",
@@ -241,37 +249,41 @@ function VariantsContent({ project }: { project: Resource }) {
                   </StatusBadge>
                 </td>
                 <td>
-                  <div className="flex gap-1">
-                    <Link
-                      className="link text-xs"
+                  <RowActions label={variant.name}>
+                    <RowAction
+                      icon={<ArrowRight />}
                       to={`/projects/${project.id}/variants/${variant.id}`}
                     >
-                      进入
-                    </Link>
+                      进入产品分支
+                    </RowAction>
                     {variant.kind === "custom" && variant.can_manage && (
                       <>
-                        <IconButton
-                          size="iconSm"
-                          label={`${variant.archived_at ? "恢复" : "归档"} ${variant.name}`}
-                          onClick={() =>
+                        <RowAction
+                          icon={
+                            variant.archived_at ? <RotateCcw /> : <Archive />
+                          }
+                          onSelect={() =>
                             setAction({
                               type: variant.archived_at ? "restore" : "archive",
                               variant,
                             })
                           }
                         >
-                          {variant.archived_at ? <RotateCcw /> : <Archive />}
-                        </IconButton>
-                        <IconButton
-                          size="iconSm"
-                          label={`删除 ${variant.name}`}
-                          onClick={() => setAction({ type: "delete", variant })}
+                          {variant.archived_at ? "恢复" : "归档"}
+                        </RowAction>
+                        <RowActionSeparator />
+                        <RowAction
+                          icon={<Trash2 />}
+                          variant="destructive"
+                          onSelect={() =>
+                            setAction({ type: "delete", variant })
+                          }
                         >
-                          <Trash2 />
-                        </IconButton>
+                          删除产品分支
+                        </RowAction>
                       </>
                     )}
-                  </div>
+                  </RowActions>
                 </td>
               </tr>
             ))}
@@ -294,19 +306,21 @@ function VariantsContent({ project }: { project: Resource }) {
           />
         )}
       </section>
-      {create && (
-        <VariantEditor
-          project={project}
-          collectionEtag={list.data?.collectionEtag ?? ""}
-          onClose={() => setCreate(false)}
-          onSaved={() => {
-            setCreate(false);
-            void queryClient.invalidateQueries({
-              queryKey: ["variants", project.id],
-            });
-          }}
-        />
-      )}
+      <OverlayPresence>
+        {create && (
+          <VariantEditor
+            project={project}
+            collectionEtag={list.data?.collectionEtag ?? ""}
+            onClose={() => setCreate(false)}
+            onSaved={() => {
+              setCreate(false);
+              void queryClient.invalidateQueries({
+                queryKey: ["variants", project.id],
+              });
+            }}
+          />
+        )}
+      </OverlayPresence>
       <ConfirmDialog
         open={Boolean(action)}
         danger={action?.type !== "restore"}
@@ -464,19 +478,21 @@ function VariantDetail({
           <BranchCreations project={project} variant={variant} />
         )}
       </div>
-      {edit && (
-        <VariantEditor
-          project={project}
-          variant={variant}
-          onClose={() => setEdit(false)}
-          onSaved={async () => {
-            setEdit(false);
-            await queryClient.invalidateQueries({
-              queryKey: ["variant", project.id, variant.id],
-            });
-          }}
-        />
-      )}
+      <OverlayPresence>
+        {edit && (
+          <VariantEditor
+            project={project}
+            variant={variant}
+            onClose={() => setEdit(false)}
+            onSaved={async () => {
+              setEdit(false);
+              await queryClient.invalidateQueries({
+                queryKey: ["variant", project.id, variant.id],
+              });
+            }}
+          />
+        )}
+      </OverlayPresence>
     </div>
   );
 }
@@ -735,6 +751,7 @@ function EnvironmentsPanel({
         emptyTitle="尚未配置环境"
       >
         <SimpleTable
+          actions
           label="环境"
           headers={["环境", "绑定 Git 分支", "仓库", "绑定状态", "操作"]}
         >
@@ -779,24 +796,28 @@ function EnvironmentsPanel({
           ))}
         </SimpleTable>
       </AsyncBoundary>
-      {create && (
-        <EnvironmentEditor
-          project={project}
-          variant={variant}
-          collectionEtag={list.data?.collectionEtag ?? ""}
-          onClose={() => onCreate(false)}
-          onSaved={refresh}
-        />
-      )}
-      {selected && (
-        <EnvironmentEditor
-          project={project}
-          variant={variant}
-          environment={selected}
-          onClose={() => setSelected(null)}
-          onSaved={refresh}
-        />
-      )}
+      <OverlayPresence>
+        {create && (
+          <EnvironmentEditor
+            project={project}
+            variant={variant}
+            collectionEtag={list.data?.collectionEtag ?? ""}
+            onClose={() => onCreate(false)}
+            onSaved={refresh}
+          />
+        )}
+      </OverlayPresence>
+      <OverlayPresence>
+        {selected && (
+          <EnvironmentEditor
+            project={project}
+            variant={variant}
+            environment={selected}
+            onClose={() => setSelected(null)}
+            onSaved={refresh}
+          />
+        )}
+      </OverlayPresence>
     </Panel>
   );
 }

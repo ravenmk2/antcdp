@@ -150,6 +150,7 @@ export function MessageLogList({ module }: { module: "email" | "sms" }) {
       >
         {query.data && (
           <SimpleTable
+            actions
             label="发送日志"
             headers={["发送配置", "接收目标", "结果", "开始时间", "操作"]}
           >

@@ -44,7 +44,6 @@ import { ConfirmDialog, Drawer, Modal } from "@/components/overlays";
 import { ErrorNotice, Notice, StatusBadge } from "@/components/feedback";
 import { useApiQuery } from "@/hooks/use-api";
 import { useSubmission } from "@/hooks/use-form";
-import { cn } from "@/lib/utils";
 import type { Page, Resource, Shortcuts } from "@/types/collaboration";
 import { ShortcutEditor } from "@/features/workspace/shortcuts";
 import { ProjectSwitcher } from "./project-switcher";
@@ -150,41 +149,37 @@ export function AppShell() {
     if (!ok) setLogout(true);
   }
   const navigation = (compact: boolean, close?: () => void) => (
-    <>
-      <div
-        className={cn(
-          "flex h-16 shrink-0 items-center border-b px-4",
-          compact ? "justify-center" : "justify-between",
-        )}
-      >
-        {!compact && (
-          <Link
-            to="/home"
-            className="flex min-w-0 items-center gap-2"
-            onClick={close}
-          >
-            <img src="/logo.svg" alt="" className="size-[30px] dark:hidden" />
-            <img
-              src="/logo-inverse.svg"
-              alt=""
-              className="hidden size-[30px] dark:block"
-            />
-            <span className="min-w-0">
-              <strong className="block text-[17px]">AntCDP</strong>
-              {brand !== "AntCDP" && (
-                <small className="block truncate text-[11px] text-muted">
-                  {brand}
-                </small>
-              )}
-            </span>
-            <small className="rounded border px-1 py-0.5 text-[9px] font-medium text-faint">
-              {consoleMode ? "CONSOLE" : "TEAM"}
-            </small>
-          </Link>
-        )}
+    <div className="sidebar-navigation" data-compact={compact}>
+      <div className="flex h-16 shrink-0 items-center gap-2 border-b px-4">
+        <Link
+          to="/home"
+          className="sidebar-brand flex min-w-0 items-center gap-2"
+          aria-hidden={compact}
+          tabIndex={compact ? -1 : undefined}
+          onClick={close}
+        >
+          <img src="/logo.svg" alt="" className="size-[30px] dark:hidden" />
+          <img
+            src="/logo-inverse.svg"
+            alt=""
+            className="hidden size-[30px] dark:block"
+          />
+          <span className="min-w-0">
+            <strong className="block text-[17px]">AntCDP</strong>
+            {brand !== "AntCDP" && (
+              <small className="block truncate text-[11px] text-muted">
+                {brand}
+              </small>
+            )}
+          </span>
+          <small className="rounded border px-1 py-0.5 text-[9px] font-medium text-faint">
+            {consoleMode ? "CONSOLE" : "TEAM"}
+          </small>
+        </Link>
         {!close && (
           <IconButton
             size="iconSm"
+            className="ml-auto"
             label={collapsed ? "展开侧栏" : "收起侧栏"}
             onClick={toggleCollapsed}
           >
@@ -198,20 +193,6 @@ export function AppShell() {
         )}
       </div>
       <div className="sidebar-scroll">
-        {consoleMode && (
-          <div
-            className="console-context"
-            title="系统控制台 · 管理员专属工作空间"
-          >
-            <Shield />
-            {!compact && (
-              <div>
-                <strong>系统控制台</strong>
-                <small>管理员专属工作空间</small>
-              </div>
-            )}
-          </div>
-        )}
         {!consoleMode && projectId && project.data && (
           <ProjectSwitcher
             project={project.data.data}
@@ -226,7 +207,9 @@ export function AppShell() {
             : [{ label: "个人工作区", items: workspaceItems }]
           ).map((group) => (
             <div key={group.label}>
-              {!compact && <div className="nav-label">{group.label}</div>}
+              <div className="nav-label" aria-hidden={compact}>
+                {group.label}
+              </div>
               {group.items.map((item) => (
                 <NavLink
                   key={item.to}
@@ -234,11 +217,13 @@ export function AppShell() {
                   end={"end" in item && item.end}
                   title={item.label}
                   aria-label={item.label}
-                  className={cn("nav-link", compact && "justify-center px-0")}
+                  className="nav-link"
                   onClick={close}
                 >
                   <item.icon className="size-[18px] shrink-0" />
-                  {!compact && item.label}
+                  <span className="sidebar-label" aria-hidden={compact}>
+                    {item.label}
+                  </span>
                 </NavLink>
               ))}
             </div>
@@ -246,7 +231,9 @@ export function AppShell() {
         </nav>
         {!consoleMode && projectId && project.data && (
           <div>
-            {!compact && <div className="nav-label">当前项目</div>}
+            <div className="nav-label" aria-hidden={compact}>
+              当前项目
+            </div>
             {[
               {
                 label: "项目总览",
@@ -294,11 +281,13 @@ export function AppShell() {
                   title={label}
                   aria-label={label}
                   aria-current={active ? "page" : undefined}
-                  className={cn("nav-link", compact && "justify-center px-0")}
+                  className="nav-link"
                   onClick={close}
                 >
-                  <Icon className="size-[18px]" />
-                  {!compact && label}
+                  <Icon className="size-[18px] shrink-0" />
+                  <span className="sidebar-label" aria-hidden={compact}>
+                    {label}
+                  </span>
                 </Link>
               );
             })}
@@ -307,10 +296,12 @@ export function AppShell() {
         {!consoleMode && (
           <div>
             <div className="flex items-center justify-between">
-              {!compact && <span className="nav-label">关注项目</span>}
+              <span className="nav-label sidebar-label" aria-hidden={compact}>
+                关注项目
+              </span>
               <IconButton
                 size="iconSm"
-                className="mr-3"
+                className="shortcut-manage mr-3"
                 label="管理关注项目"
                 onClick={() => setShortcutKind("projects")}
               >
@@ -332,7 +323,7 @@ export function AppShell() {
                 <Link
                   key={item.id}
                   to={`/projects/${item.id}`}
-                  className={cn("nav-link", compact && "justify-center px-0")}
+                  className="nav-link"
                   title={item.name}
                   onClick={close}
                 >
@@ -340,11 +331,19 @@ export function AppShell() {
                     resource={item}
                     className="size-5 rounded-sm border-0 bg-transparent"
                   />
-                  {!compact && (
-                    <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                  )}
-                  {!compact && item.status === "archived" && (
-                    <span className="text-[10px] text-muted">归档</span>
+                  <span
+                    className="sidebar-label min-w-0 flex-1 truncate"
+                    aria-hidden={compact}
+                  >
+                    {item.name}
+                  </span>
+                  {item.status === "archived" && (
+                    <span
+                      className="sidebar-label text-[10px] text-muted"
+                      aria-hidden={compact}
+                    >
+                      归档
+                    </span>
                   )}
                 </Link>
               ))
@@ -356,27 +355,28 @@ export function AppShell() {
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
-              className={cn(
-                "flex w-full items-center gap-2 rounded-lg p-2 text-left hover:bg-surface-hover",
-                compact && "justify-center",
-              )}
+              className="sidebar-user flex w-full items-center gap-2 rounded-lg p-2 text-left hover:bg-surface-hover"
               aria-label={`用户菜单，${session.user.display_name}`}
             >
               <Avatar
                 url={session.user.avatar?.url}
                 name={session.user.display_name}
               />
-              {!compact && (
-                <span className="min-w-0 flex-1">
-                  <strong className="block truncate text-xs">
-                    {session.user.display_name}
-                  </strong>
-                  <small className="block truncate text-[11px] text-muted">
-                    @{session.user.username}
-                  </small>
-                </span>
-              )}
-              {!compact && <ChevronDown className="size-4 text-muted" />}
+              <span
+                className="sidebar-label min-w-0 flex-1"
+                aria-hidden={compact}
+              >
+                <strong className="block truncate text-xs">
+                  {session.user.display_name}
+                </strong>
+                <small className="block truncate text-[11px] text-muted">
+                  @{session.user.username}
+                </small>
+              </span>
+              <ChevronDown
+                className="sidebar-label size-4 text-muted"
+                aria-hidden
+              />
             </button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
@@ -481,7 +481,7 @@ export function AppShell() {
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
       </div>
-    </>
+    </div>
   );
   const crumbs = breadcrumbs(
     location.pathname,

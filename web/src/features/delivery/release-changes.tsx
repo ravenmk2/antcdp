@@ -1,3 +1,9 @@
+import { OverlayPresence } from "@/components/overlay-presence";
+import {
+  RowActions,
+  RowAction,
+  RowActionSeparator,
+} from "@/components/row-actions";
 import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Pagination } from "@/components/pagination";
@@ -117,6 +123,7 @@ export function ReleaseChanges(props: ReleaseViewProps) {
           </Notice>
         )}
         <SimpleTable
+          actions
           label="发布仓库范围"
           headers={["仓库", "主干", "基线 SHA", "基线来源", "操作"]}
         >
@@ -190,6 +197,7 @@ export function ReleaseChanges(props: ReleaseViewProps) {
           的仓库仍属于完整发布范围，不表示“无变化”。
         </Notice>
         <SimpleTable
+          actions
           label="发布变更"
           headers={["仓库", "变更", "状态", "说明", "操作"]}
         >
@@ -228,49 +236,47 @@ export function ReleaseChanges(props: ReleaseViewProps) {
                   {change.note || "—"}
                 </td>
                 <td>
-                  <div className="flex flex-wrap gap-1">
-                    {editing &&
-                      flow.can_manage &&
-                      change.kind === "mr" &&
-                      change.status === "selected" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setRemote({ action: "merge", change })}
+                  {editing &&
+                  flow.can_manage &&
+                  (change.status === "selected" ||
+                    (!change.reverted_by && change.status !== "removed")) ? (
+                    <RowActions label={change.id}>
+                      {change.kind === "mr" && change.status === "selected" && (
+                        <RowAction
+                          icon={<GitMerge />}
+                          onSelect={() =>
+                            setRemote({ action: "merge", change })
+                          }
                         >
-                          <GitMerge />
                           合并
-                        </Button>
+                        </RowAction>
                       )}
-                    {editing &&
-                      flow.can_manage &&
-                      !change.reverted_by &&
-                      change.status !== "removed" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() =>
+                      {!change.reverted_by && change.status !== "removed" && (
+                        <RowAction
+                          icon={<RotateCcw />}
+                          onSelect={() =>
                             setRemote({ action: "create-revert", change })
                           }
                         >
-                          <RotateCcw />
                           创建回退
-                        </Button>
+                        </RowAction>
                       )}
-                    {editing &&
-                      flow.can_manage &&
-                      change.status === "selected" && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-danger"
-                          onClick={() => setRemove(change)}
-                        >
-                          <Trash2 />
-                          移出
-                        </Button>
+                      {change.status === "selected" && (
+                        <>
+                          <RowActionSeparator />
+                          <RowAction
+                            icon={<Trash2 />}
+                            variant="destructive"
+                            onSelect={() => setRemove(change)}
+                          >
+                            移出变更
+                          </RowAction>
+                        </>
                       )}
-                  </div>
+                    </RowActions>
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
                 </td>
               </tr>
             );
@@ -282,9 +288,11 @@ export function ReleaseChanges(props: ReleaseViewProps) {
           </p>
         )}
       </Panel>
-      {add && (
-        <ChangeEditor {...props} mode={add} onClose={() => setAdd(null)} />
-      )}
+      <OverlayPresence>
+        {add && (
+          <ChangeEditor {...props} mode={add} onClose={() => setAdd(null)} />
+        )}
+      </OverlayPresence>
       {baseline && (
         <BaselineEditor
           {...props}
