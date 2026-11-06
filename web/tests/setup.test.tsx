@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { createMemoryRouter, RouterProvider } from "react-router";
+import { AppRoot } from "@/app/auth";
 import userEvent from "@testing-library/user-event";
 import { resetCSRF } from "@/api/client";
 import { SetupPage } from "@/features/access/setup-page";
@@ -27,6 +29,131 @@ beforeEach(() => {
 });
 
 describe("installation wizard", () => {
+  it.each([true, false])(
+    "keeps the successful summary until manual entry (authenticated: %s)",
+    async (authenticated) => {
+      let installed = false;
+      vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const path = String(input);
+        if (path.endsWith("/setup/status"))
+          return json({
+            state: installed ? "ready" : "setup_required",
+            public_url: "https://setup.example.com",
+          });
+        if (path.endsWith("/auth/csrf")) return json({ csrf_token: "csrf" });
+        if (path.endsWith("/setup/database-check"))
+          return json({
+            reachable: true,
+            compatible: true,
+            empty_schema: true,
+          });
+        if (path.endsWith("/setup/install")) {
+          installed = true;
+          return json({ authenticated });
+        }
+        if (path.endsWith("/public/settings"))
+          return json({
+            site_name: "Example",
+            timezone: "Asia/Shanghai",
+            registration_enabled: false,
+            session_ttl_days: 7,
+          });
+        if (path.endsWith("/auth/session"))
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: "UNAUTHENTICATED",
+                message: "请登录",
+                details: [],
+              },
+            }),
+            { status: 401, headers: { "Content-Type": "application/json" } },
+          );
+        throw new Error(`Unexpected ${path}`);
+      });
+      const client = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      const router = createMemoryRouter(
+        [
+          {
+            element: <AppRoot />,
+            children: [
+              { path: "/setup", element: <SetupPage /> },
+              { path: "/login", element: <h1>登录入口</h1> },
+            ],
+          },
+        ],
+        { initialEntries: ["/setup"] },
+      );
+      render(
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>,
+      );
+      const user = userEvent.setup();
+      await user.type(
+        await screen.findByLabelText(/数据库主机/),
+        "mysql.internal",
+      );
+      await user.type(screen.getByLabelText("数据库密码"), "database-secret");
+      await user.click(screen.getByRole("button", { name: "检查连接" }));
+      await screen.findByText("数据库连接、版本与空库检查已通过。");
+      await user.click(screen.getByRole("button", { name: "下一步" }));
+      await user.type(screen.getByLabelText("系统名称"), "Example");
+      await user.click(screen.getByRole("button", { name: "下一步" }));
+      await user.type(screen.getByLabelText(/用户名/), "founder");
+      await user.type(screen.getByLabelText(/显示名称/), "创始人");
+      await user.type(screen.getByLabelText(/^密码/), "password123");
+      await user.type(screen.getByLabelText(/^确认密码/), "password123");
+      await user.click(screen.getByRole("button", { name: "确认并安装" }));
+      await screen.findByRole("heading", { name: "安装完成" });
+      expect(screen.getByRole("link", { name: "进入系统" })).toHaveAttribute(
+        "href",
+        authenticated ? "/home" : "/login",
+      );
+      for (const value of [
+        "Example",
+        "https://setup.example.com",
+        "Asia/Shanghai",
+        "founder",
+        "antcdp",
+      ])
+        expect(screen.getByText(value)).toBeVisible();
+      expect(document.body).not.toHaveTextContent("database-secret");
+      expect(document.body).not.toHaveTextContent("password123");
+      expect(document.querySelector("input")).toBeNull();
+      await act(async () => {
+        await client.invalidateQueries({ queryKey: ["setup"] });
+      });
+      expect(client.getQueryData(["setup"])).toMatchObject({
+        data: { state: "ready" },
+      });
+      vi.useFakeTimers();
+      try {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(10000);
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(screen.getByRole("heading", { name: "安装完成" })).toBeVisible();
+      expect(router.state.location.pathname).toBe("/setup");
+      await act(async () => {
+        await router.navigate("/login");
+      });
+      await screen.findByRole("heading", { name: "登录入口" });
+      await act(async () => {
+        await router.navigate(-1);
+      });
+      await waitFor(() =>
+        expect(router.state.location.pathname).toBe("/login"),
+      );
+      expect(
+        screen.queryByRole("heading", { name: "安装完成" }),
+      ).not.toBeInTheDocument();
+    },
+  );
   it("shows the actual failure, clears it on retry, and invalidates a successful check when edited", async () => {
     let checks = 0;
     let finish: (() => void) | undefined;
@@ -217,7 +344,7 @@ describe("installation wizard", () => {
     await user.type(await screen.findByLabelText(/用户名/), "founder");
     await user.type(screen.getByLabelText(/显示名称/), "创始人");
     await user.type(screen.getByLabelText(/^密码/), "password123");
-    await user.type(screen.getByLabelText(/确认密码/), "password123");
+    await user.type(screen.getByLabelText(/^确认密码/), "password123");
     await user.click(screen.getByRole("button", { name: "确认并安装" }));
     await waitFor(() =>
       expect(screen.getByText("安装结果未知")).toBeInTheDocument(),
@@ -285,7 +412,7 @@ describe("installation wizard", () => {
     await user.type(screen.getByLabelText(/用户名/), "founder");
     await user.type(screen.getByLabelText(/显示名称/), "创始人");
     await user.type(screen.getByLabelText(/^密码/), "password123");
-    await user.type(screen.getByLabelText(/确认密码/), "password123");
+    await user.type(screen.getByLabelText(/^确认密码/), "password123");
     await user.click(screen.getByRole("button", { name: "确认并安装" }));
     await waitFor(() =>
       expect(install).toHaveBeenCalledWith(

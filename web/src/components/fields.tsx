@@ -10,7 +10,7 @@ import {
 } from "react";
 import { Select as SelectPrimitive } from "radix-ui";
 import { NumberField } from "@base-ui/react/number-field";
-import { Check, ChevronDown, ChevronUp } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Combobox,
@@ -25,6 +25,7 @@ import {
 
 interface FieldContextValue {
   id: string;
+  label: string;
   descriptionId?: string;
   invalid: boolean;
 }
@@ -48,7 +49,7 @@ export function Field({
   const id = useId();
   const descriptionId = hint || error ? `${id}-description` : undefined;
   return (
-    <FieldContext value={{ id, descriptionId, invalid: Boolean(error) }}>
+    <FieldContext value={{ id, label, descriptionId, invalid: Boolean(error) }}>
       <div className={cn("grid content-start gap-1.5", className)}>
         <label htmlFor={id} className="text-xs font-medium text-text-soft">
           {label}
@@ -93,12 +94,69 @@ export function Input({
   className,
   ...props
 }: InputHTMLAttributes<HTMLInputElement>) {
+  const field = useFieldProps();
+  const context = useContext(FieldContext);
+  if (props.type === "password") {
+    return (
+      <PasswordControl
+        {...field}
+        {...props}
+        label={context?.label ?? "密码"}
+        className={cn(controlClass, "h-10", className)}
+      />
+    );
+  }
   return (
     <input
       className={cn(controlClass, "h-10", className)}
-      {...useFieldProps()}
+      {...field}
       {...props}
     />
+  );
+}
+
+function PasswordControl({
+  label,
+  className,
+  disabled,
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const [visible, setVisible] = useState(false);
+  const inputId = useId();
+  const id = props.id ?? inputId;
+  const action = `${visible ? "隐藏" : "显示"}${label}`;
+  return (
+    <div
+      className="relative min-w-0"
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+          setVisible(false);
+      }}
+    >
+      <input
+        {...props}
+        id={id}
+        disabled={disabled}
+        type={visible ? "text" : "password"}
+        className={cn(className, "password-input pr-11")}
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={action}
+        aria-controls={id}
+        title={action}
+        className="absolute inset-y-1 right-1 flex w-8 items-center justify-center rounded-md text-muted hover:bg-surface-hover hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => setVisible((current) => !current)}
+      >
+        {visible ? (
+          <EyeOff className="size-4" aria-hidden />
+        ) : (
+          <Eye className="size-4" aria-hidden />
+        )}
+      </button>
+    </div>
   );
 }
 
@@ -312,6 +370,14 @@ export function StandaloneInput({
   className,
   ...props
 }: InputHTMLAttributes<HTMLInputElement>) {
+  if (props.type === "password")
+    return (
+      <PasswordControl
+        {...props}
+        label={props["aria-label"] ?? "密码"}
+        className={cn(controlClass, className)}
+      />
+    );
   return <input className={cn(controlClass, className)} {...props} />;
 }
 

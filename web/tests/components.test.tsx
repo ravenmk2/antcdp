@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/button";
+import { Field, Input, StandaloneInput } from "@/components/fields";
 import { Pagination } from "@/components/pagination";
 import { DataTable, type DataColumn } from "@/components/table";
 import { Modal } from "@/components/overlays";
@@ -26,6 +27,47 @@ function SavedNavigation() {
 }
 
 describe("platform components", () => {
+  it("toggles shared password controls independently without submitting or losing field semantics", async () => {
+    const submit = vi.fn((event) => event.preventDefault());
+    const user = userEvent.setup();
+    render(
+      <form onSubmit={submit}>
+        <Field label="当前密码" hint="请输入当前密码">
+          <Input
+            type="password"
+            name="current"
+            autoComplete="current-password"
+            defaultValue="secret123"
+          />
+        </Field>
+        <Field label="新密码">
+          <Input type="password" name="next" />
+        </Field>
+        <StandaloneInput type="password" aria-label="连接凭据" disabled />
+      </form>,
+    );
+    const current = screen.getByLabelText("当前密码");
+    const next = screen.getByLabelText("新密码");
+    await user.click(current);
+    await user.click(screen.getByRole("button", { name: "显示当前密码" }));
+    expect(current).toHaveAttribute("type", "text");
+    expect(current).toHaveFocus();
+    expect(current).toHaveValue("secret123");
+    expect(current).toHaveAttribute("autocomplete", "current-password");
+    expect(current).toHaveAccessibleDescription("请输入当前密码");
+    expect(next).toHaveAttribute("type", "password");
+    await user.tab();
+    expect(screen.getByRole("button", { name: "隐藏当前密码" })).toHaveFocus();
+    await user.keyboard(" ");
+    expect(current).toHaveAttribute("type", "password");
+    await user.keyboard(" ");
+    expect(current).toHaveAttribute("type", "text");
+    await user.tab();
+    expect(next).toHaveFocus();
+    expect(current).toHaveAttribute("type", "password");
+    expect(screen.getByRole("button", { name: "显示连接凭据" })).toBeDisabled();
+    expect(submit).not.toHaveBeenCalled();
+  });
   it("prevents duplicate pending submissions", async () => {
     const onClick = vi.fn();
     render(

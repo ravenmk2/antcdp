@@ -167,12 +167,35 @@
   select {
     min-width: 0;
   }
+  input {
+    --autofill-surface: var(--surface);
+    --autofill-focus: 0 0 0 0 transparent;
+  }
+  input:read-only,
+  input:disabled {
+    --autofill-surface: var(--surface-subtle);
+  }
+  input:focus {
+    --autofill-focus: 0 0 0 3px
+      color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  .password-input::-ms-reveal,
+  .password-input::-ms-clear {
+    display: none;
+  }
   input:focus,
   textarea:focus,
   select:focus {
     border-color: var(--accent);
     outline: none;
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  input:is(:autofill, :-webkit-autofill) {
+    -webkit-text-fill-color: var(--text);
+    caret-color: var(--text);
+    box-shadow:
+      inset 0 0 0 1000px var(--autofill-surface),
+      var(--autofill-focus);
   }
   [aria-invalid="true"] {
     border-color: var(--danger) !important;

@@ -126,7 +126,7 @@ AuthSession.session_ttl_days 返回该会话创建时的滑动窗口，expires_a
 | --- | --- | --- |
 | `GET /setup/status` | 公开 | 200：`{state, public_url}`；五种启动状态及只读访问地址，不返回路径或连接详情 |
 | `POST /setup/database-check` | 未安装 + CSRF | 数据库连接对象；200：`{reachable:true, compatible:true, empty_schema:true}`，失败给出有限的分类错误 |
-| `POST /setup/install` | 未安装 + CSRF | 下方对象；201：`{installation_id,state:"ready",authenticated}`；写入持久化安装锁后，为提交成功请求的浏览器创建创始人会话 Cookie；前端显示 5 秒倒计时及手动按钮进入 `/home` |
+| `POST /setup/install` | 未安装 + CSRF | 下方对象；201：`{installation_id,state:"ready",authenticated}`；写入持久化安装锁后，为提交成功请求的浏览器创建创始人会话 Cookie；前端停留显示安装摘要，点击“进入系统”后按 `authenticated` 进入 `/home` 或 `/login` |
 
 数据库连接对象：`{host,port,name,username,password,tls_mode}`。`port` 为 1–65535 整数；`tls_mode` 仅允许 `disabled|verify_identity`，不提供跳过证书验证模式。私有 CA 路径由部署配置给出，浏览器不能指定任意磁盘文件。连接检查验证版本、连接、字符集和专用空 schema，不创建数据库，不接受任意 DSN 参数；完整 DDL/写入权限在安装执行时验证，连接检查通过不代表权限齐备。
 

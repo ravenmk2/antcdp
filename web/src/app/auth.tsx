@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { authHref } from "@/lib/routes";
 import type { PublicSettings, Session, SetupStatus } from "@/types/auth";
 import { LoadingState, Notice } from "@/components/feedback";
 import { Button } from "@/components/button";
+import { SetupCompletionContext } from "@/hooks/use-setup-completion";
 
 const userSchema = z.object({
   id: z.string(),
@@ -54,9 +55,23 @@ export function useSession() {
 }
 
 export function AppRoot() {
+  const route = useLocation();
+  const [completedLocation, setCompletedLocation] = useState<string | null>(
+    null,
+  );
+  if (completedLocation !== null && completedLocation !== route.key) {
+    setCompletedLocation(null);
+  }
   const setup = useApiQuery<SetupStatus>(["setup"], "/setup/status", {
     staleTime: 0,
   });
+  const setupContent = (
+    <SetupCompletionContext value={() => setCompletedLocation(route.key)}>
+      <Outlet />
+    </SetupCompletionContext>
+  );
+  if (route.pathname === "/setup" && completedLocation === route.key)
+    return setupContent;
   if (setup.isPending)
     return (
       <main className="grid min-h-dvh place-items-center">
@@ -72,8 +87,8 @@ export function AppRoot() {
     );
   const state = setup.data.data.state;
   if (state === "setup_required") {
-    return location.pathname === "/setup" ? (
-      <Outlet />
+    return route.pathname === "/setup" ? (
+      setupContent
     ) : (
       <Navigate to="/setup" replace />
     );

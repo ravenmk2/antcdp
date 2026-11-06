@@ -13,6 +13,7 @@ import {
 import { WizardSteps } from "@/components/wizard";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
 import { useApiQuery } from "@/hooks/use-api";
+import { useSetupCompletion } from "@/hooks/use-setup-completion";
 import type { SetupStatus } from "@/types/auth";
 import {
   displayNameSchema,
@@ -48,6 +49,15 @@ const founderSchema = z
 
 type DatabaseDraft = z.infer<typeof databaseSchema>;
 type FounderDraft = z.infer<typeof founderSchema>;
+interface InstallationSummary {
+  authenticated: boolean;
+  siteName: string;
+  publicUrl: string;
+  timezone: string;
+  username: string;
+  displayName: string;
+  databaseName: string;
+}
 const steps = ["连接数据库", "系统信息", "创始人账号", "完成"];
 const timezones = [
   ...new Set(["Asia/Shanghai", "UTC", ...Intl.supportedValuesOf("timeZone")]),
@@ -58,6 +68,7 @@ export function SetupPage({
 }: {
   publicUrl?: string;
 }) {
+  const holdCompletion = useSetupCompletion();
   const setupStatus = useApiQuery<SetupStatus>(["setup"], "/setup/status");
   const resolvedPublicUrl = setupStatus.data?.data.public_url ?? publicUrl;
   const [step, setStep] = useState(0);
@@ -80,9 +91,7 @@ export function SetupPage({
     confirm: "",
   });
   const [checked, setChecked] = useState(false);
-  const [completed, setCompleted] = useState<{ authenticated: boolean } | null>(
-    null,
-  );
+  const [completed, setCompleted] = useState<InstallationSummary | null>(null);
   const [unknown, setUnknown] = useState(false);
   const [status, setStatus] = useState("");
   const errors = useFormErrors();
@@ -209,7 +218,18 @@ export function SetupPage({
             },
           );
           resetCSRF();
-          setCompleted({ authenticated: result.authenticated });
+          setCompleted({
+            authenticated: result.authenticated,
+            siteName: site.site_name.trim() || "AntCDP",
+            publicUrl: resolvedPublicUrl,
+            timezone: site.timezone,
+            username: founder.username,
+            displayName: founder.display_name.trim(),
+            databaseName: database.name.trim(),
+          });
+          setDatabase((current) => ({ ...current, password: "" }));
+          setFounder((current) => ({ ...current, password: "", confirm: "" }));
+          holdCompletion?.();
           changeStep(3);
         } catch (error) {
           if (isUncertain(error)) setUnknown(true);
@@ -281,7 +301,7 @@ export function SetupPage({
                     : "创建首个系统管理员账号。"}
             </p>
             {completed ? (
-              <Completion authenticated={completed.authenticated} />
+              <Completion summary={completed} />
             ) : (
               <form
                 ref={errors.formRef}
@@ -542,49 +562,35 @@ export function SetupPage({
   );
 }
 
-function Completion({ authenticated }: { authenticated: boolean }) {
-  const [remaining, setRemaining] = useState(5);
+function Completion({ summary }: { summary: InstallationSummary }) {
+  const details = [
+    ["系统名称", summary.siteName],
+    ["系统时区", summary.timezone],
+    ["创始人账号", summary.username],
+    ["显示名称", summary.displayName],
+    ["数据库名", summary.databaseName],
+    ["公开访问地址", summary.publicUrl],
+  ];
   return (
     <div>
       <Notice tone="success" title="系统已就绪">
-        {authenticated
+        {summary.authenticated
           ? "已为当前浏览器建立创始人会话。"
           : "安装已完成，但当前浏览器未建立会话，请正常登录。"}
       </Notice>
-      <p className="my-5 text-sm text-muted">
-        {remaining} 秒后可进入系统，也可以立即继续。
-      </p>
-      <Button
-        onClick={() =>
-          window.location.replace(authenticated ? "/home" : "/login")
-        }
-      >
-        {authenticated ? "立即进入首页" : "前往登录"}
-      </Button>
-      <Timer onTick={setRemaining} authenticated={authenticated} />
+      <dl className="my-6 grid grid-cols-2 gap-x-6 gap-y-5 rounded-lg border bg-surface-subtle p-5">
+        {details.map(([label, value]) => (
+          <div key={label} className="min-w-0">
+            <dt className="mb-1.5 text-xs text-muted">{label}</dt>
+            <dd className="break-words text-sm font-medium">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="form-actions">
+        <Button asChild>
+          <a href={summary.authenticated ? "/home" : "/login"}>进入系统</a>
+        </Button>
+      </div>
     </div>
   );
-}
-
-import { useEffect } from "react";
-function Timer({
-  onTick,
-  authenticated,
-}: {
-  onTick: (value: number) => void;
-  authenticated: boolean;
-}) {
-  useEffect(() => {
-    let remaining = 5;
-    const timer = setInterval(() => {
-      remaining -= 1;
-      onTick(remaining);
-      if (remaining <= 0) {
-        clearInterval(timer);
-        window.location.replace(authenticated ? "/home" : "/login");
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [onTick, authenticated]);
-  return null;
 }
