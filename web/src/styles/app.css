@@ -191,7 +191,7 @@
     background: transparent;
   }
   @media (prefers-reduced-motion: reduce) {
-    *,
+    *:not(.setup-select-content),
     *::before,
     *::after {
       scroll-behavior: auto !important;
@@ -685,6 +685,95 @@
     width: min(1080px, calc(100% - 48px));
     margin: 0 auto;
     padding: 34px 0 60px;
+  }
+  .setup-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+    margin: 0 32px;
+    padding: 24px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .setup-panel-header .wizard-steps {
+    flex: 1;
+    min-width: 0;
+  }
+  .setup-panel-header .wizard-step {
+    white-space: nowrap;
+  }
+  .setup-panel-header .wizard-step:last-child {
+    flex: 0 0 auto;
+  }
+  .setup-panel-body {
+    padding: 28px 32px 32px;
+  }
+  .setup-panel .form-grid {
+    column-gap: 24px;
+    row-gap: 20px;
+  }
+  .setup-panel .form-actions {
+    margin-top: 28px;
+    padding-top: 20px;
+  }
+  .number-step {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--muted);
+  }
+  .number-step:hover:enabled {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+  .number-step:disabled {
+    cursor: not-allowed;
+    opacity: 0.35;
+  }
+  .setup-select-content {
+    z-index: 60;
+    width: var(--radix-select-trigger-width);
+    max-height: min(320px, var(--radix-select-content-available-height));
+    overflow: hidden;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
+    transform-origin: var(--radix-select-content-transform-origin);
+  }
+  .setup-select-content[data-state="open"] {
+    animation: setup-select-in 150ms ease-out;
+  }
+  .setup-select-content[data-state="closed"] {
+    animation: setup-select-out 150ms ease-in;
+  }
+  @keyframes setup-select-in {
+    from {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes setup-select-out {
+    from {
+      opacity: 1;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+  }
+  @media (max-width: 800px) {
+    .setup-panel-header {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 20px;
+    }
   }
   .markdown {
     max-width: 840px;

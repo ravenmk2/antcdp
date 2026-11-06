@@ -4,7 +4,7 @@ AntCDP 的前端是嵌入 Go 二进制的 React SPA。浏览器从根路径加�
 
 ## 1. 技术栈与目录
 
-当前技术栈为 React 19、TypeScript 7、Vite、Tailwind CSS 4、React Router、TanStack Query、TanStack Table、Radix/shadcn 风格本地组件、Lucide 与 Zod。
+当前技术栈为 React 19、TypeScript 7、Vite、Tailwind CSS 4、React Router、TanStack Query、TanStack Table、Radix/shadcn 风格本地组件、Base UI Number Field、Lucide 与 Zod。
 
 TypeScript 7 的原生编译器通过 `@typescript/native` 提供 `tsc`。由于 TypeScript 7.0 不提供旧编译器 API，`typescript` 别名使用 `@typescript/typescript6`，供 typescript-eslint 调用；业务源码始终通过 TS 7 strict 检查。两个编译器的版本均锁定在 `web/package-lock.json`。
 

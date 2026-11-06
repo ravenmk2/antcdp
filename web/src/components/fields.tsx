@@ -7,6 +7,9 @@ import {
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
+import { Select as SelectPrimitive } from "radix-ui";
+import { NumberField } from "@base-ui/react/number-field";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FieldContextValue {
@@ -35,7 +38,7 @@ export function Field({
   const descriptionId = hint || error ? `${id}-description` : undefined;
   return (
     <FieldContext value={{ id, descriptionId, invalid: Boolean(error) }}>
-      <div className={cn("grid gap-1.5", className)}>
+      <div className={cn("grid content-start gap-1.5", className)}>
         <label htmlFor={id} className="text-xs font-medium text-text-soft">
           {label}
           {required && (
@@ -81,10 +84,137 @@ export function Input({
 }: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={cn(controlClass, className)}
+      className={cn(controlClass, "h-10", className)}
       {...useFieldProps()}
       {...props}
     />
+  );
+}
+
+export function NumberInput({
+  name,
+  value,
+  onValueChange,
+  label,
+  min,
+  max,
+  disabled,
+}: {
+  name: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  label: string;
+  min: number;
+  max: number;
+  disabled?: boolean;
+}) {
+  const field = useFieldProps();
+  return (
+    <NumberField.Root
+      id={field.id}
+      value={value === "" ? null : Number(value)}
+      onValueChange={(next) => onValueChange(next === null ? "" : String(next))}
+      min={min}
+      max={max}
+      step={1}
+      smallStep={1}
+      allowOutOfRange
+      format={{ useGrouping: false, maximumFractionDigits: 0 }}
+      disabled={disabled}
+    >
+      <NumberField.Group className="relative">
+        <NumberField.Input
+          {...field}
+          name={name}
+          inputMode="numeric"
+          className={cn(controlClass, "h-10 pr-10")}
+        />
+        <div className="absolute inset-y-1 right-1 grid w-7 grid-rows-2">
+          <NumberField.Increment
+            className="number-step"
+            aria-label={`增加${label}`}
+          >
+            <ChevronUp className="size-3" aria-hidden />
+          </NumberField.Increment>
+          <NumberField.Decrement
+            className="number-step"
+            aria-label={`减少${label}`}
+          >
+            <ChevronDown className="size-3" aria-hidden />
+          </NumberField.Decrement>
+        </div>
+      </NumberField.Group>
+    </NumberField.Root>
+  );
+}
+
+export function PopupSelect({
+  name,
+  value,
+  onValueChange,
+  options,
+  disabled,
+}: {
+  name: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+}) {
+  const field = useFieldProps();
+  return (
+    <SelectPrimitive.Root
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled}
+    >
+      <SelectPrimitive.Trigger
+        {...field}
+        name={name}
+        className={cn(
+          controlClass,
+          "flex h-10 items-center justify-between gap-3 text-left",
+        )}
+      >
+        <SelectPrimitive.Value />
+        <SelectPrimitive.Icon asChild>
+          <ChevronDown
+            className="size-3.5 shrink-0 text-muted/70"
+            aria-hidden
+          />
+        </SelectPrimitive.Icon>
+      </SelectPrimitive.Trigger>
+      <SelectPrimitive.Portal>
+        <SelectPrimitive.Content
+          position="popper"
+          sideOffset={5}
+          className="setup-select-content"
+        >
+          <SelectPrimitive.ScrollUpButton className="flex h-6 items-center justify-center text-muted">
+            <ChevronUp className="size-3.5" aria-hidden />
+          </SelectPrimitive.ScrollUpButton>
+          <SelectPrimitive.Viewport className="p-1">
+            {options.map((option) => (
+              <SelectPrimitive.Item
+                key={option.value}
+                value={option.value}
+                className="relative flex min-h-9 cursor-default items-center rounded-md py-2 pr-8 pl-3 text-sm outline-none select-none data-[highlighted]:bg-surface-hover data-[highlighted]:text-foreground"
+              >
+                <SelectPrimitive.ItemText>
+                  {option.label}
+                </SelectPrimitive.ItemText>
+                <SelectPrimitive.ItemIndicator className="absolute right-2 text-primary">
+                  <Check className="size-3.5" aria-hidden />
+                </SelectPrimitive.ItemIndicator>
+              </SelectPrimitive.Item>
+            ))}
+          </SelectPrimitive.Viewport>
+          <SelectPrimitive.ScrollDownButton className="flex h-6 items-center justify-center text-muted">
+            <ChevronDown className="size-3.5" aria-hidden />
+          </SelectPrimitive.ScrollDownButton>
+        </SelectPrimitive.Content>
+      </SelectPrimitive.Portal>
+    </SelectPrimitive.Root>
   );
 }
 

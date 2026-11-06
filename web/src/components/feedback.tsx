@@ -78,7 +78,11 @@ export function StatusBadge({
 
 export function ErrorNotice({ error }: { error: unknown }) {
   if (!error) return null;
-  return <Notice tone="danger">{errorMessage(error)}</Notice>;
+  return (
+    <Notice tone="danger">
+      {typeof error === "string" ? error : errorMessage(error)}
+    </Notice>
+  );
 }
 
 export function LoadingState({ label = "正在加载…" }: { label?: string }) {

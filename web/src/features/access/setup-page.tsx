@@ -1,10 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { z } from "zod";
-import { Check, Database, KeyRound } from "lucide-react";
 import { api, isUncertain, resetCSRF, type ApiError } from "@/api/client";
 import { Button } from "@/components/button";
 import { ErrorNotice, Notice } from "@/components/feedback";
-import { Field, Input, Select } from "@/components/fields";
+import { Field, Input, NumberInput, PopupSelect } from "@/components/fields";
 import { WizardSteps } from "@/components/wizard";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
 import { useApiQuery } from "@/hooks/use-api";
@@ -44,6 +43,9 @@ const founderSchema = z
 type DatabaseDraft = z.infer<typeof databaseSchema>;
 type FounderDraft = z.infer<typeof founderSchema>;
 const steps = ["连接数据库", "系统信息", "创始人账号", "完成"];
+const timezones = [
+  ...new Set(["Asia/Shanghai", "UTC", ...Intl.supportedValuesOf("timeZone")]),
+].map((zone) => ({ value: zone, label: zone }));
 
 export function SetupPage({
   publicUrl = location.origin,
@@ -83,7 +85,28 @@ export function SetupPage({
   function updateDatabase(key: keyof DatabaseDraft, value: string) {
     setDatabase((current) => ({ ...current, [key]: value }));
     setChecked(false);
+    setStatus("");
+    errors.setError("");
     errors.change(key);
+  }
+  function updateSite(key: keyof typeof site, value: string) {
+    setSite((current) => ({ ...current, [key]: value }));
+    errors.change(key);
+    errors.setError("");
+  }
+  function updateFounder(key: keyof FounderDraft, value: string) {
+    setFounder((current) => ({ ...current, [key]: value }));
+    errors.change(key);
+    if (key === "password") errors.change("confirm");
+    errors.setError("");
+  }
+  function changeStep(nextStep: number) {
+    errors.clear();
+    setStatus("");
+    setStep(nextStep);
+    requestAnimationFrame(() =>
+      document.getElementById("setup-title")?.focus(),
+    );
   }
   function validateCurrent() {
     if (step === 0) {
@@ -115,7 +138,10 @@ export function SetupPage({
     return true;
   }
   async function checkDatabase() {
+    if (submission.pending || unknown) return;
     errors.clear();
+    setStatus("");
+    setChecked(false);
     const result = databaseSchema.safeParse(database);
     if (!result.success) {
       errors.validate(
@@ -128,7 +154,7 @@ export function SetupPage({
       );
       return;
     }
-    const succeeded = await submission.run(
+    await submission.run(
       async () => {
         await api("/setup/database-check", {
           ...database,
@@ -146,19 +172,10 @@ export function SetupPage({
           ),
         ),
     );
-    if (!succeeded) {
-      setChecked(false);
-      errors.show(
-        submission.error,
-        Object.keys(database),
-        Object.fromEntries(
-          Object.keys(database).map((key) => [`database.${key}`, key]),
-        ),
-      );
-    }
   }
   async function next(event: FormEvent) {
     event.preventDefault();
+    if (submission.pending || unknown) return;
     errors.clear();
     setStatus("");
     if (!validateCurrent()) return;
@@ -167,10 +184,7 @@ export function SetupPage({
       return;
     }
     if (step < 2) {
-      setStep((current) => current + 1);
-      requestAnimationFrame(() =>
-        document.getElementById("setup-title")?.focus(),
-      );
+      changeStep(step + 1);
       return;
     }
     await submission.run(
@@ -190,7 +204,7 @@ export function SetupPage({
           );
           resetCSRF();
           setCompleted({ authenticated: result.authenticated });
-          setStep(3);
+          changeStep(3);
         } catch (error) {
           if (isUncertain(error)) setUnknown(true);
           try {
@@ -230,297 +244,291 @@ export function SetupPage({
   return (
     <main className="setup-page">
       <div className="setup-shell">
-        <header className="mb-8 flex items-center gap-3 text-lg font-semibold">
-          <img src="/logo.svg" alt="" className="size-9 dark:hidden" />
-          <img
-            src="/logo-inverse.svg"
-            alt=""
-            className="hidden size-9 dark:block"
-          />
-          AntCDP
-        </header>
-        <WizardSteps steps={steps} current={step} />
-        <section className="panel mt-6 p-7">
-          <h1
-            id="setup-title"
-            tabIndex={-1}
-            className="mb-2 text-[25px] font-semibold"
-          >
-            {completed ? "安装完成" : steps[step]}
-          </h1>
-          <p className="mb-6 text-sm text-muted">
-            {completed
-              ? "系统已完成初始化，可以开始使用。"
-              : step === 0
-                ? "准备专用的空 MySQL 数据库，并通过检查后继续。"
-                : step === 1
-                  ? "设置系统名称和默认时区。"
-                  : "创建首个系统管理员账号。"}
-          </p>
-          {completed ? (
-            <Completion authenticated={completed.authenticated} />
-          ) : (
-            <form
-              ref={errors.formRef}
-              noValidate
-              onSubmit={(event) => void next(event)}
+        <section className="panel setup-panel">
+          <header className="setup-panel-header">
+            <div className="flex shrink-0 items-center gap-2.5 text-lg font-semibold">
+              <img src="/logo.svg" alt="" className="size-8 dark:hidden" />
+              <img
+                src="/logo-inverse.svg"
+                alt=""
+                className="hidden size-8 dark:block"
+              />
+              AntCDP
+            </div>
+            <WizardSteps steps={steps} current={step} />
+          </header>
+          <div className="setup-panel-body">
+            <h1
+              id="setup-title"
+              tabIndex={-1}
+              className="mb-2 text-[25px] font-semibold"
             >
-              <fieldset disabled={submission.pending || unknown}>
-                <ErrorNotice error={errors.error} />
-                {status && (
-                  <Notice
-                    tone={status.includes("通过") ? "success" : "warning"}
-                    className="mb-4"
-                  >
-                    {status}
-                  </Notice>
-                )}
-                {unknown && (
-                  <Notice tone="warning" title="安装结果未知" className="mb-4">
-                    请求可能已经完成。请让维护者核对服务状态；不要重新提交安装。
-                  </Notice>
-                )}
-                {step === 0 && (
-                  <div className="form-grid">
-                    <Field
-                      label="数据库主机"
-                      required
-                      error={errors.fields.host}
-                    >
-                      <Input
-                        name="host"
-                        autoComplete="off"
-                        value={database.host}
-                        onChange={(event) =>
-                          updateDatabase("host", event.target.value)
-                        }
-                      />
-                    </Field>
-                    <Field label="端口" required error={errors.fields.port}>
-                      <Input
-                        name="port"
-                        type="number"
-                        value={database.port}
-                        onChange={(event) =>
-                          updateDatabase("port", event.target.value)
-                        }
-                      />
-                    </Field>
-                    <Field label="数据库名" required error={errors.fields.name}>
-                      <Input
-                        name="name"
-                        autoComplete="off"
-                        value={database.name}
-                        onChange={(event) =>
-                          updateDatabase("name", event.target.value)
-                        }
-                      />
-                    </Field>
-                    <Field
-                      label="数据库用户"
-                      required
-                      error={errors.fields.username}
-                    >
-                      <Input
-                        name="username"
-                        autoComplete="off"
-                        value={database.username}
-                        onChange={(event) =>
-                          updateDatabase("username", event.target.value)
-                        }
-                      />
-                    </Field>
-                    <Field label="数据库密码" error={errors.fields.password}>
-                      <Input
-                        name="password"
-                        type="password"
-                        autoComplete="off"
-                        value={database.password}
-                        onChange={(event) =>
-                          updateDatabase("password", event.target.value)
-                        }
-                      />
-                    </Field>
-                    <Field label="传输加密" required>
-                      <Select
-                        name="tls_mode"
-                        value={database.tls_mode}
-                        onChange={(event) =>
-                          updateDatabase("tls_mode", event.target.value)
-                        }
+              {completed ? "安装完成" : steps[step]}
+            </h1>
+            <p className="mb-6 text-sm text-muted">
+              {completed
+                ? "系统已完成初始化，可以开始使用。"
+                : step === 0
+                  ? "准备专用的空 MySQL 数据库，并通过检查后继续。"
+                  : step === 1
+                    ? "设置系统名称和默认时区。"
+                    : "创建首个系统管理员账号。"}
+            </p>
+            {completed ? (
+              <Completion authenticated={completed.authenticated} />
+            ) : (
+              <form
+                ref={errors.formRef}
+                noValidate
+                onSubmit={(event) => void next(event)}
+              >
+                <fieldset disabled={submission.pending || unknown}>
+                  {(errors.error || status || unknown) && (
+                    <div className="mb-5 grid gap-3">
+                      <ErrorNotice error={errors.error} />
+                      {status && (
+                        <Notice
+                          tone={status.includes("通过") ? "success" : "warning"}
+                        >
+                          {status}
+                        </Notice>
+                      )}
+                      {unknown && (
+                        <Notice tone="warning" title="安装结果未知">
+                          请求可能已经完成。请让维护者核对服务状态；不要重新提交安装。
+                        </Notice>
+                      )}
+                    </div>
+                  )}
+                  {step === 0 && (
+                    <div className="form-grid">
+                      <Field
+                        label="数据库主机"
+                        required
+                        error={errors.fields.host}
                       >
-                        <option value="disabled">不启用 TLS</option>
-                        <option value="verify_identity">验证服务器身份</option>
-                      </Select>
-                    </Field>
-                    <div className="form-full flex flex-wrap items-center gap-3">
+                        <Input
+                          name="host"
+                          autoComplete="off"
+                          value={database.host}
+                          onChange={(event) =>
+                            updateDatabase("host", event.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field label="端口" required error={errors.fields.port}>
+                        <NumberInput
+                          name="port"
+                          label="端口"
+                          disabled={submission.pending || unknown}
+                          min={1}
+                          max={65535}
+                          value={database.port}
+                          onValueChange={(value) =>
+                            updateDatabase("port", value)
+                          }
+                        />
+                      </Field>
+                      <Field
+                        label="数据库名"
+                        required
+                        error={errors.fields.name}
+                      >
+                        <Input
+                          name="name"
+                          autoComplete="off"
+                          value={database.name}
+                          onChange={(event) =>
+                            updateDatabase("name", event.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field
+                        label="数据库用户"
+                        required
+                        error={errors.fields.username}
+                      >
+                        <Input
+                          name="username"
+                          autoComplete="off"
+                          value={database.username}
+                          onChange={(event) =>
+                            updateDatabase("username", event.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field label="数据库密码" error={errors.fields.password}>
+                        <Input
+                          name="password"
+                          type="password"
+                          autoComplete="off"
+                          value={database.password}
+                          onChange={(event) =>
+                            updateDatabase("password", event.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field
+                        label="传输加密"
+                        required
+                        error={errors.fields.tls_mode}
+                      >
+                        <PopupSelect
+                          name="tls_mode"
+                          value={database.tls_mode}
+                          disabled={submission.pending || unknown}
+                          onValueChange={(value) =>
+                            updateDatabase("tls_mode", value)
+                          }
+                          options={[
+                            { value: "disabled", label: "不启用 TLS" },
+                            {
+                              value: "verify_identity",
+                              label: "验证服务器身份",
+                            },
+                          ]}
+                        />
+                      </Field>
+                    </div>
+                  )}
+                  {step === 1 && (
+                    <div className="form-grid">
+                      <Field
+                        label="系统名称"
+                        hint="可选，最多 40 个字符"
+                        error={errors.fields.site_name}
+                      >
+                        <Input
+                          name="site_name"
+                          value={site.site_name}
+                          onChange={(event) =>
+                            updateSite("site_name", event.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field
+                        label="系统时区"
+                        required
+                        error={errors.fields.timezone}
+                      >
+                        <PopupSelect
+                          name="timezone"
+                          value={site.timezone}
+                          disabled={submission.pending || unknown}
+                          onValueChange={(value) =>
+                            updateSite("timezone", value)
+                          }
+                          options={timezones}
+                        />
+                      </Field>
+                      <Field
+                        label="公开访问地址"
+                        hint="由部署配置提供"
+                        className="form-full"
+                      >
+                        <Input value={resolvedPublicUrl} readOnly />
+                      </Field>
+                    </div>
+                  )}
+                  {step === 2 && (
+                    <div className="form-grid">
+                      <Field
+                        label="用户名"
+                        required
+                        hint="3–30 位小写字母、数字、_ 或 -"
+                        error={errors.fields.username}
+                      >
+                        <Input
+                          name="username"
+                          autoComplete="username"
+                          value={founder.username}
+                          onChange={(event) =>
+                            updateFounder("username", event.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field
+                        label="显示名称"
+                        required
+                        error={errors.fields.display_name}
+                      >
+                        <Input
+                          name="display_name"
+                          autoComplete="nickname"
+                          value={founder.display_name}
+                          onChange={(event) =>
+                            updateFounder("display_name", event.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field
+                        label="密码"
+                        required
+                        hint="至少 8 个字符，且不超过 72 个 UTF-8 字节"
+                        error={errors.fields.password}
+                      >
+                        <Input
+                          name="password"
+                          type="password"
+                          autoComplete="new-password"
+                          value={founder.password}
+                          onChange={(event) =>
+                            updateFounder("password", event.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field
+                        label="确认密码"
+                        required
+                        error={errors.fields.confirm}
+                      >
+                        <Input
+                          name="confirm"
+                          type="password"
+                          autoComplete="new-password"
+                          value={founder.confirm}
+                          onChange={(event) =>
+                            updateFounder("confirm", event.target.value)
+                          }
+                        />
+                      </Field>
+                      <Notice className="form-full">
+                        创始人拥有系统管理权限，请妥善保存密码。
+                      </Notice>
+                    </div>
+                  )}
+                  <div className="form-actions">
+                    {step > 0 && (
+                      <Button
+                        variant="outline"
+                        className="mr-auto"
+                        disabled={submission.pending}
+                        onClick={() => changeStep(step - 1)}
+                      >
+                        上一步
+                      </Button>
+                    )}
+                    {step === 0 && (
                       <Button
                         variant="outline"
                         pending={submission.pending}
                         onClick={() => void checkDatabase()}
                       >
-                        检查数据库连接
+                        检查连接
                       </Button>
-                      {checked && (
-                        <span className="flex items-center gap-1 text-sm text-success">
-                          <Check className="size-4" />
-                          检查通过
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {step === 1 && (
-                  <div className="form-grid">
-                    <Field
-                      label="系统名称"
-                      hint="可选，最多 40 个字符"
-                      error={errors.fields.site_name}
-                    >
-                      <Input
-                        name="site_name"
-                        value={site.site_name}
-                        onChange={(event) =>
-                          setSite({ ...site, site_name: event.target.value })
-                        }
-                      />
-                    </Field>
-                    <Field
-                      label="系统时区"
-                      required
-                      error={errors.fields.timezone}
-                    >
-                      <Select
-                        name="timezone"
-                        value={site.timezone}
-                        onChange={(event) =>
-                          setSite({ ...site, timezone: event.target.value })
-                        }
-                      >
-                        {[
-                          ...new Set([
-                            "Asia/Shanghai",
-                            "UTC",
-                            ...Intl.supportedValuesOf("timeZone"),
-                          ]),
-                        ].map((zone) => (
-                          <option key={zone}>{zone}</option>
-                        ))}
-                      </Select>
-                    </Field>
-                    <Field
-                      label="公开访问地址"
-                      hint="由部署配置提供"
-                      className="form-full"
-                    >
-                      <Input value={resolvedPublicUrl} readOnly />
-                    </Field>
-                  </div>
-                )}
-                {step === 2 && (
-                  <div className="form-grid">
-                    <Field
-                      label="用户名"
-                      required
-                      hint="3–30 位小写字母、数字、_ 或 -"
-                      error={errors.fields.username}
-                    >
-                      <Input
-                        name="username"
-                        autoComplete="username"
-                        value={founder.username}
-                        onChange={(event) =>
-                          setFounder({
-                            ...founder,
-                            username: event.target.value,
-                          })
-                        }
-                      />
-                    </Field>
-                    <Field
-                      label="显示名称"
-                      required
-                      error={errors.fields.display_name}
-                    >
-                      <Input
-                        name="display_name"
-                        autoComplete="nickname"
-                        value={founder.display_name}
-                        onChange={(event) =>
-                          setFounder({
-                            ...founder,
-                            display_name: event.target.value,
-                          })
-                        }
-                      />
-                    </Field>
-                    <Field
-                      label="密码"
-                      required
-                      hint="至少 8 个字符，且不超过 72 个 UTF-8 字节"
-                      error={errors.fields.password}
-                    >
-                      <Input
-                        name="password"
-                        type="password"
-                        autoComplete="new-password"
-                        value={founder.password}
-                        onChange={(event) =>
-                          setFounder({
-                            ...founder,
-                            password: event.target.value,
-                          })
-                        }
-                      />
-                    </Field>
-                    <Field
-                      label="确认密码"
-                      required
-                      error={errors.fields.confirm}
-                    >
-                      <Input
-                        name="confirm"
-                        type="password"
-                        autoComplete="new-password"
-                        value={founder.confirm}
-                        onChange={(event) =>
-                          setFounder({
-                            ...founder,
-                            confirm: event.target.value,
-                          })
-                        }
-                      />
-                    </Field>
-                    <Notice className="form-full">
-                      <KeyRound className="size-4" />
-                      创始人拥有系统管理权限，请妥善保存密码。
-                    </Notice>
-                  </div>
-                )}
-                <div className="form-actions">
-                  {step > 0 && (
+                    )}
                     <Button
-                      variant="outline"
-                      disabled={submission.pending}
-                      onClick={() => setStep((current) => current - 1)}
+                      type="submit"
+                      pending={step === 2 && submission.pending}
                     >
-                      上一步
+                      {step === 2 ? "确认并安装" : "下一步"}
                     </Button>
-                  )}
-                  <Button type="submit" pending={submission.pending}>
-                    {step === 2 ? "确认并安装" : "继续"}
-                  </Button>
-                </div>
-              </fieldset>
-            </form>
-          )}
-        </section>
-        {step === 0 && !completed && (
-          <div className="mt-5 flex items-center gap-2 text-xs text-muted">
-            <Database className="size-4" />
-            连接检查不会创建数据库；最终安装会再次核对空库。
+                  </div>
+                </fieldset>
+              </form>
+            )}
           </div>
-        )}
+        </section>
       </div>
     </main>
   );
