@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useId,
+  useState,
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
@@ -11,6 +12,16 @@ import { Select as SelectPrimitive } from "radix-ui";
 import { NumberField } from "@base-ui/react/number-field";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
+} from "@/components/ui/combobox";
 
 interface FieldContextValue {
   id: string;
@@ -215,6 +226,56 @@ export function PopupSelect({
         </SelectPrimitive.Content>
       </SelectPrimitive.Portal>
     </SelectPrimitive.Root>
+  );
+}
+
+export function SearchableSelect({
+  name,
+  value,
+  onValueChange,
+  options,
+  searchLabel,
+  emptyLabel = "没有匹配选项",
+  disabled,
+}: {
+  name: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  options: string[];
+  searchLabel: string;
+  emptyLabel?: string;
+  disabled?: boolean;
+}) {
+  const field = useFieldProps();
+  const [search, setSearch] = useState("");
+  return (
+    <Combobox
+      items={options}
+      value={value}
+      onValueChange={(next) => {
+        if (next !== null) onValueChange(next);
+      }}
+      inputValue={search}
+      onInputValueChange={setSearch}
+      onOpenChange={() => setSearch("")}
+      disabled={disabled}
+      autoHighlight
+    >
+      <ComboboxTrigger {...field} name={name}>
+        <ComboboxValue />
+      </ComboboxTrigger>
+      <ComboboxContent>
+        <ComboboxInput aria-label={searchLabel} placeholder={searchLabel} />
+        <ComboboxEmpty role="status">{emptyLabel}</ComboboxEmpty>
+        <ComboboxList>
+          {(option: string) => (
+            <ComboboxItem key={option} value={option}>
+              {option}
+            </ComboboxItem>
+          )}
+        </ComboboxList>
+      </ComboboxContent>
+    </Combobox>
   );
 }
 

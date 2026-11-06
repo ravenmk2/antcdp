@@ -3,7 +3,13 @@ import { z } from "zod";
 import { api, isUncertain, resetCSRF, type ApiError } from "@/api/client";
 import { Button } from "@/components/button";
 import { ErrorNotice, Notice } from "@/components/feedback";
-import { Field, Input, NumberInput, PopupSelect } from "@/components/fields";
+import {
+  Field,
+  Input,
+  NumberInput,
+  PopupSelect,
+  SearchableSelect,
+} from "@/components/fields";
 import { WizardSteps } from "@/components/wizard";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
 import { useApiQuery } from "@/hooks/use-api";
@@ -45,7 +51,7 @@ type FounderDraft = z.infer<typeof founderSchema>;
 const steps = ["连接数据库", "系统信息", "创始人账号", "完成"];
 const timezones = [
   ...new Set(["Asia/Shanghai", "UTC", ...Intl.supportedValuesOf("timeZone")]),
-].map((zone) => ({ value: zone, label: zone }));
+];
 
 export function SetupPage({
   publicUrl = location.origin,
@@ -411,8 +417,10 @@ export function SetupPage({
                         required
                         error={errors.fields.timezone}
                       >
-                        <PopupSelect
+                        <SearchableSelect
                           name="timezone"
+                          searchLabel="搜索时区"
+                          emptyLabel="没有匹配的时区"
                           value={site.timezone}
                           disabled={submission.pending || unknown}
                           onValueChange={(value) =>

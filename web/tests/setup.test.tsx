@@ -224,4 +224,73 @@ describe("installation wizard", () => {
     );
     expect(screen.getByRole("button", { name: "确认并安装" })).toBeDisabled();
   });
+
+  it("searches timezones, keeps the selection on no match, and preserves it across steps", async () => {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const install = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, options) => {
+      const path = String(input);
+      if (path.endsWith("/setup/status"))
+        return json({ state: "setup_required" });
+      if (path.endsWith("/auth/csrf")) return json({ csrf_token: "csrf" });
+      if (path.endsWith("/setup/database-check"))
+        return json({ reachable: true, compatible: true, empty_schema: true });
+      if (path.endsWith("/setup/install")) {
+        install(JSON.parse(String(options?.body)));
+        throw new TypeError("connection lost");
+      }
+      throw new Error(`Unexpected ${path}`);
+    });
+    const user = userEvent.setup();
+    renderSetup();
+    await user.type(
+      await screen.findByLabelText(/数据库主机/),
+      "mysql.internal",
+    );
+    await user.click(screen.getByRole("button", { name: "检查连接" }));
+    await screen.findByText("数据库连接、版本与空库检查已通过。");
+    await user.click(screen.getByRole("button", { name: "下一步" }));
+    const timezone = screen.getByLabelText(/系统时区/);
+    expect(timezone).toHaveTextContent("Asia/Shanghai");
+    await user.click(timezone);
+    const search = await screen.findByRole("combobox", { name: "搜索时区" });
+    await waitFor(() => expect(search).toHaveFocus());
+    await user.type(search, "shanghai");
+    expect(
+      await screen.findByRole("option", { name: "Asia/Shanghai" }),
+    ).toBeVisible();
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    await user.clear(search);
+    await user.type(search, "NoSuchTimeZone");
+    expect(await screen.findByText("没有匹配的时区")).toBeVisible();
+    expect(screen.queryByRole("option")).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(timezone).toHaveFocus());
+    expect(timezone).toHaveTextContent("Asia/Shanghai");
+    await user.keyboard("{Enter}");
+    const reopened = await screen.findByRole("combobox", { name: "搜索时区" });
+    expect(reopened).toHaveValue("");
+    await user.type(reopened, "utc");
+    expect(await screen.findByRole("option", { name: "UTC" })).toBeVisible();
+    await user.keyboard("{ArrowDown}{Enter}");
+    await waitFor(() => expect(timezone).toHaveTextContent("UTC"));
+    await waitFor(() => expect(timezone).toHaveFocus());
+    await user.click(screen.getByRole("button", { name: "下一步" }));
+    await user.click(screen.getByRole("button", { name: "上一步" }));
+    expect(screen.getByLabelText(/系统时区/)).toHaveTextContent("UTC");
+    await user.click(screen.getByRole("button", { name: "下一步" }));
+    await user.type(screen.getByLabelText(/用户名/), "founder");
+    await user.type(screen.getByLabelText(/显示名称/), "创始人");
+    await user.type(screen.getByLabelText(/^密码/), "password123");
+    await user.type(screen.getByLabelText(/确认密码/), "password123");
+    await user.click(screen.getByRole("button", { name: "确认并安装" }));
+    await waitFor(() =>
+      expect(install).toHaveBeenCalledWith(
+        expect.objectContaining({ site: { site_name: "", timezone: "UTC" } }),
+      ),
+    );
+  });
 });

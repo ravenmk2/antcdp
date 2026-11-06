@@ -6,6 +6,8 @@ AntCDP 的前端是嵌入 Go 二进制的 React SPA。浏览器从根路径加�
 
 当前技术栈为 React 19、TypeScript 7、Vite、Tailwind CSS 4、React Router、TanStack Query、TanStack Table、Radix/shadcn 风格本地组件、Base UI Number Field、Lucide 与 Zod。
 
+可搜索选择器复用 `components/ui/combobox.tsx`，由 shadcn/ui 官方 Combobox 适配本地语义样式，底层使用已安装的 Base UI；来源与 MIT 许可随组件保留。`components/fields` 负责字段标签、错误关联及弹层搜索的组合，不在基础组件中加入业务数据。
+
 TypeScript 7 的原生编译器通过 `@typescript/native` 提供 `tsc`。由于 TypeScript 7.0 不提供旧编译器 API，`typescript` 别名使用 `@typescript/typescript6`，供 typescript-eslint 调用；业务源码始终通过 TS 7 strict 检查。两个编译器的版本均锁定在 `web/package-lock.json`。
 
 ```text
