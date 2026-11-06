@@ -16,7 +16,16 @@ import { useApiQuery } from "@/hooks/use-api";
 import { usePageSize } from "@/hooks/use-page-size";
 import { useDebouncedSearch } from "@/hooks/use-search";
 import { formatDate, jsonText } from "@/lib/utils";
-import { CodeBlock } from "@/components/code-block";
+import {
+  CodeBlock,
+  CodeBlockActions,
+  CodeBlockContent,
+  CodeBlockHeader,
+  CodeBlockLine,
+  CodeBlockTitle,
+} from "@/components/ui/code-block";
+import { CopyButton } from "@/components/copy-button";
+import { useHighlightedCode } from "@/hooks/use-highlighted-code";
 import { auditActionLabels, type AuditEvent } from "@/types/audit";
 
 export function AuditPage() {
@@ -156,38 +165,83 @@ export function AuditPage() {
             <SimpleTable
               actions
               label="审计日志"
-              className="min-w-[800px]"
-              headers={["时间", "事件", "操作者", "操作对象", "详情"]}
+              className="min-w-[1080px] table-fixed [&_th:nth-child(1)]:w-44 [&_th:nth-child(2)]:w-[15%] [&_th:nth-child(3)]:w-[23%] [&_th:nth-child(4)]:w-[22%] [&_th:last-child]:w-16"
+              headers={[
+                "时间",
+                "事件",
+                "事件代码",
+                "操作者",
+                "操作对象",
+                "详情",
+              ]}
             >
               {query.data.data.map((event) => (
-                <tr key={event.id}>
-                  <td className="text-xs text-muted">
+                <tr
+                  key={event.id}
+                  tabIndex={0}
+                  aria-label={`查看 ${auditActionLabels[event.action] ?? event.action}，${event.actor.display_name}`}
+                  className="cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                  onClick={() => setSelected(event.id)}
+                  onKeyDown={(keyEvent) => {
+                    if (
+                      keyEvent.target === keyEvent.currentTarget &&
+                      (keyEvent.key === "Enter" || keyEvent.key === " ")
+                    ) {
+                      keyEvent.preventDefault();
+                      setSelected(event.id);
+                    }
+                  }}
+                >
+                  <td className="text-xs whitespace-nowrap text-muted">
                     {formatDate(event.occurred_at, auth.settings.timezone)}
                   </td>
                   <td>
-                    <strong className="text-foreground">
+                    <strong
+                      className="block truncate text-foreground"
+                      title={auditActionLabels[event.action] ?? event.action}
+                    >
                       {auditActionLabels[event.action] ?? event.action}
                     </strong>
-                    <small className="mono block text-muted">
-                      {event.action}
-                    </small>
                   </td>
                   <td>
-                    {event.actor.display_name}
-                    <small className="block text-muted">
-                      {event.actor.username
-                        ? `@${event.actor.username}`
-                        : "系统"}
-                    </small>
+                    <span
+                      className="mono block truncate text-muted"
+                      title={event.action}
+                    >
+                      {event.action}
+                    </span>
                   </td>
-                  <td className="max-w-sm break-all">
-                    {event.target.label || "—"}
+                  <td>
+                    <div
+                      className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
+                      title={`${event.actor.display_name}${event.actor.username ? ` @${event.actor.username}` : "（系统）"}`}
+                    >
+                      <span className="min-w-0 truncate text-foreground">
+                        {event.actor.display_name}
+                      </span>
+                      <span className="min-w-0 max-w-[55%] shrink-0 truncate text-xs text-muted">
+                        {event.actor.username
+                          ? `@${event.actor.username}`
+                          : "系统"}
+                      </span>
+                    </div>
+                  </td>
+                  <td>
+                    <span
+                      className="block truncate"
+                      title={event.target.label || undefined}
+                    >
+                      {event.target.label || "—"}
+                    </span>
                   </td>
                   <td>
                     <IconButton
                       size="iconSm"
                       label={`查看 ${auditActionLabels[event.action] ?? event.action}`}
-                      onClick={() => setSelected(event.id)}
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        setSelected(event.id);
+                      }}
                     >
                       <ChevronRight />
                     </IconButton>
@@ -242,7 +296,6 @@ export function AuditDetail({
       open
       wide
       title="审计事件详情"
-      description={id}
       onClose={onClose}
       footer={<Button onClick={onClose}>关闭</Button>}
     >
@@ -255,6 +308,14 @@ export function AuditDetail({
           <div className="grid gap-5">
             <DescriptionList
               items={[
+                {
+                  label: "ID",
+                  value: <span className="mono">{query.data.data.id}</span>,
+                },
+                {
+                  label: "对象",
+                  value: `${query.data.data.target.type} · ${query.data.data.target.label}`,
+                },
                 {
                   label: "事件",
                   value:
@@ -277,11 +338,6 @@ export function AuditDetail({
                   ),
                 },
                 {
-                  label: "对象",
-                  value: `${query.data.data.target.type} · ${query.data.data.target.label}`,
-                  full: true,
-                },
-                {
                   label: "请求编号",
                   value: (
                     <span className="mono">
@@ -300,17 +356,40 @@ export function AuditDetail({
               ]}
             />
             <section>
-              <h3 className="mb-2 text-sm font-medium">操作详情</h3>
-              <CodeBlock
-                source={jsonText(query.data.data.detail)}
-                language="json"
-                className="my-0"
-                contentClassName="max-h-96 [&_pre]:break-all [&_pre]:whitespace-pre-wrap"
-              />
+              <h3
+                id="audit-operation-data"
+                className="mb-2 text-sm font-medium"
+              >
+                操作数据
+              </h3>
+              <AuditData source={jsonText(query.data.data.detail)} />
             </section>
           </div>
         )}
       </AsyncBoundary>
     </Drawer>
+  );
+}
+
+function AuditData({ source }: { source: string }) {
+  const lines = useHighlightedCode(source, "json");
+  return (
+    <CodeBlock>
+      <CodeBlockHeader>
+        <CodeBlockTitle>JSON</CodeBlockTitle>
+        <CodeBlockActions>
+          <CopyButton value={source} label="复制操作数据" />
+        </CodeBlockActions>
+      </CodeBlockHeader>
+      <CodeBlockContent
+        wrap
+        className="max-h-96 [overflow-wrap:anywhere]"
+        aria-labelledby="audit-operation-data"
+      >
+        {lines.map((line, index) => (
+          <CodeBlockLine key={index}>{line}</CodeBlockLine>
+        ))}
+      </CodeBlockContent>
+    </CodeBlock>
   );
 }

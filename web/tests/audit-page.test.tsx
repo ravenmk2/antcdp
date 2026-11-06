@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -17,7 +17,7 @@ const events = Array.from({ length: 27 }, (_, index) => ({
   action: "user.profile_updated",
   actor: { display_name: "测试操作者", username: "tester" },
   target: { type: "user", label: `对象 ${27 - index}` },
-  detail: {},
+  detail: { enabled: true, count: 3, name: "<script>示例</script>" },
 }));
 let requests: URL[];
 beforeEach(() => {
@@ -56,6 +56,31 @@ function mount(entry = "/admin/audit") {
   return router;
 }
 describe("audit numbered pagination", () => {
+  it("opens details from a row click or keyboard and restores focus", async () => {
+    const user = userEvent.setup();
+    mount();
+    const target = await screen.findByText("对象 27");
+    const row = target.closest("tr")!;
+    expect(
+      screen.getByRole("columnheader", { name: "事件代码" }),
+    ).toBeVisible();
+    const cells = within(row).getAllByRole("cell");
+    expect(cells[1]).toHaveTextContent("更新用户资料");
+    expect(cells[2]).toHaveTextContent("user.profile_updated");
+    expect(cells[3]).toHaveTextContent("测试操作者@tester");
+    await user.click(target);
+    expect(await screen.findByText("操作数据")).toBeVisible();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    for (const key of ["{Enter}", " "]) {
+      row.focus();
+      await user.keyboard(key);
+      expect(await screen.findByText("操作数据")).toBeVisible();
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(row).toHaveFocus();
+    }
+  });
   it("moves beyond page two, returns and jumps to both ends", async () => {
     const user = userEvent.setup();
     const router = mount();
@@ -97,7 +122,28 @@ describe("audit numbered pagination", () => {
     await user.click(
       screen.getAllByRole("button", { name: "查看 更新用户资料" })[0],
     );
-    expect(await screen.findByText("操作详情")).toBeVisible();
+    expect(await screen.findByText("操作数据")).toBeVisible();
+    const dialog = screen.getByRole("dialog", { name: "审计事件详情" });
+    expect(dialog.querySelector("dl")?.querySelectorAll("dt")).toHaveLength(8);
+    expect(within(dialog).getByText("ID").nextElementSibling).toHaveTextContent(
+      "27",
+    );
+    const code = within(dialog).getByLabelText("操作数据");
+    expect(code).toHaveAttribute("tabindex", "0");
+    await waitFor(() =>
+      expect(code.querySelector("span[style*='--shiki-light']")).not.toBeNull(),
+    );
+    expect(code.querySelector("span[style*='--shiki-dark']")).not.toBeNull();
+    expect(code).toHaveTextContent("<script>示例</script>");
+    expect(code.querySelector("script")).toBeNull();
+    const copy = vi.spyOn(navigator.clipboard, "writeText");
+    await user.click(
+      within(dialog).getByRole("button", { name: "复制操作数据" }),
+    );
+    expect(copy).toHaveBeenCalledWith(
+      JSON.stringify(events[0].detail, null, 2),
+    );
+    expect(within(dialog).queryByText("操作详情")).not.toBeInTheDocument();
     expect(screen.queryByText("白名单变更详情")).not.toBeInTheDocument();
   });
   it("recovers from an out-of-range bookmarked page", async () => {
