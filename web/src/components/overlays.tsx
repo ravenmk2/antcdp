@@ -225,6 +225,7 @@ export function ConfirmDialog({
   confirmLabel = "确认",
   danger,
   pending,
+  confirmDisabled,
   onClose,
   onConfirm,
 }: {
@@ -235,6 +236,7 @@ export function ConfirmDialog({
   confirmLabel?: string;
   danger?: boolean;
   pending?: boolean;
+  confirmDisabled?: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }) {
@@ -253,6 +255,7 @@ export function ConfirmDialog({
           <Button
             variant={danger ? "danger" : "default"}
             pending={pending}
+            disabled={confirmDisabled}
             onClick={onConfirm}
           >
             {confirmLabel}

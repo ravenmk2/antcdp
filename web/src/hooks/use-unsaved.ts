@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigationGuard } from "@/components/navigation-guard";
 
-export function useUnsaved(dirty: boolean, pending = false) {
+export function useUnsaved(
+  dirty: boolean,
+  pending = false,
+  allowTabChange = false,
+) {
   const [saved, setSaved] = useState(false);
-  const release = useNavigationGuard((dirty || pending) && !saved);
+  const release = useNavigationGuard(
+    (dirty || pending) && !saved,
+    allowTabChange,
+  );
   useEffect(() => {
     if ((!dirty && !pending) || saved) return;
     const handler = (event: BeforeUnloadEvent) => {

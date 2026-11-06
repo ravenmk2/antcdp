@@ -10,19 +10,31 @@ import {
 import { useBlocker } from "react-router";
 import { ConfirmDialog } from "./overlays";
 
-type Register = (active: boolean) => () => void;
+type Register = (active: boolean, allowTabChange: boolean) => () => void;
 const NavigationGuardContext = createContext<Register | null>(null);
 
 export function NavigationGuardProvider({ children }: { children: ReactNode }) {
-  const active = useRef(new Set<symbol>());
+  const active = useRef(new Map<symbol, boolean>());
   const [open, setOpen] = useState(false);
-  const blocker = useBlocker(() => active.current.size > 0);
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    const current = new URLSearchParams(currentLocation.search);
+    const next = new URLSearchParams(nextLocation.search);
+    current.delete("tab");
+    next.delete("tab");
+    const onlyTabChanged =
+      currentLocation.pathname === nextLocation.pathname &&
+      currentLocation.hash === nextLocation.hash &&
+      current.toString() === next.toString();
+    return Array.from(active.current.values()).some(
+      (allowTabChange) => !allowTabChange || !onlyTabChanged,
+    );
+  });
   useEffect(() => {
     if (blocker.state === "blocked") setOpen(true);
   }, [blocker.state]);
-  const register = useCallback<Register>((enabled) => {
+  const register = useCallback<Register>((enabled, allowTabChange) => {
     const token = Symbol("unsaved");
-    if (enabled) active.current.add(token);
+    if (enabled) active.current.set(token, allowTabChange);
     return () => {
       active.current.delete(token);
     };
@@ -50,17 +62,17 @@ export function NavigationGuardProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useNavigationGuard(active: boolean) {
+export function useNavigationGuard(active: boolean, allowTabChange = false) {
   const register = useContext(NavigationGuardContext);
   const release = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!register || !active) return;
-    const unregister = register(true);
+    const unregister = register(true, allowTabChange);
     release.current = unregister;
     return () => {
       unregister();
       if (release.current === unregister) release.current = null;
     };
-  }, [register, active]);
+  }, [register, active, allowTabChange]);
   return useCallback(() => release.current?.(), []);
 }

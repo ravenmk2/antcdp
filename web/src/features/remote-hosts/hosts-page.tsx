@@ -9,10 +9,11 @@ import {
 } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   ArrowRight,
   KeyRound,
   Pencil,
+  Power,
+  Settings2,
   Plus,
   Server,
   ShieldCheck,
@@ -31,35 +32,34 @@ import { CopyButton } from "@/components/copy-button";
 import {
   Field,
   Input,
-  Select,
   StandaloneInput,
   StandaloneSelect,
   Textarea,
 } from "@/components/fields";
 import { DescriptionList, PageHeader, Panel, Tabs } from "@/components/layout";
 import { ConfirmDialog } from "@/components/overlays";
+import { OverlayPresence } from "@/components/overlay-presence";
+import {
+  RowActions,
+  RowAction,
+  RowActionSeparator,
+} from "@/components/row-actions";
 import { SimpleTable } from "@/components/table";
-import { WizardSteps } from "@/components/wizard";
 import { useApiQuery } from "@/hooks/use-api";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
 import { useUnsaved } from "@/hooks/use-unsaved";
-import {
-  authenticationBody,
-  diagnosticText,
-  diagnosticTone,
-} from "@/domain/service-providers";
+import { diagnosticText, diagnosticTone } from "@/domain/service-providers";
 import { sshProvider } from "@/domain/ssh-provider";
 import type { Resource } from "@/types/collaboration";
-import type {
-  Credential,
-  Diagnostic,
-  ServiceConnection,
-} from "@/types/integrations";
+import type { Diagnostic, ServiceConnection } from "@/types/integrations";
+
+import { HostCreateDrawer } from "./host-create-drawer";
 
 export function RemoteHostsPage() {
   const { hostId, projectId } = useParams();
   const location = useLocation();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const admin = location.pathname.startsWith("/admin");
   const directory = useApiQuery<{ items: ServiceConnection[] }>(
     ["remote-host-directory"],
@@ -73,21 +73,25 @@ export function RemoteHostsPage() {
   const selected = directory.data?.data.items.find(
     (item) => item.id === hostId,
   );
-  if ((params.get("create") === "1" || hostId === "new") && admin)
-    return (
-      <div className="page">
-        <HostCreate />
-      </div>
+  const creating = admin && (params.get("create") === "1" || hostId === "new");
+  const closeCreate = () => {
+    const next = new URLSearchParams(params);
+    next.delete("create");
+    navigate(
+      { pathname: "/admin/remote-hosts", search: next.toString() },
+      { replace: true },
     );
+  };
   if (hostId && selected)
     return (
       <HostDetail
+        key={selected.id}
         summary={selected}
         admin={admin}
         project={project.data?.data}
       />
     );
-  if (hostId && directory.data && !selected)
+  if (hostId && !creating && directory.data && !selected)
     return (
       <div className="page">
         <Notice tone="danger">主机不存在或当前账号不可见。</Notice>
@@ -111,14 +115,11 @@ export function RemoteHostsPage() {
           admin && (
             <Button
               onClick={() => {
-                const next = new URLSearchParams(location.search);
-                next.set("create", "1");
-                window.history.pushState(
-                  null,
-                  "",
-                  `${location.pathname}?${next}`,
-                );
-                window.dispatchEvent(new PopStateEvent("popstate"));
+                setParams((current) => {
+                  const next = new URLSearchParams(current);
+                  next.set("create", "1");
+                  return next;
+                });
               }}
             >
               <Plus />
@@ -131,6 +132,9 @@ export function RemoteHostsPage() {
         error={directory.error}
         retry={() => void directory.refetch()}
       />
+      <OverlayPresence>
+        {creating && <HostCreateDrawer onClose={closeCreate} />}
+      </OverlayPresence>
     </div>
   );
 }
@@ -152,6 +156,11 @@ function HostDirectory({
 }) {
   const location = useLocation();
   const [params, setParams] = useSearchParams();
+  const basePath = location.pathname
+    .replace(/\/new\/?$/, "")
+    .replace(/\/$/, "");
+  const linkParams = new URLSearchParams(params);
+  linkParams.delete("create");
   const q = params.get("q") ?? "";
   const status = params.get("status") ?? "";
   const filtered = items.filter(
@@ -231,7 +240,7 @@ function HostDirectory({
                   <div>
                     <Link
                       className="font-medium text-foreground hover:text-primary"
-                      to={`${location.pathname.replace(/\/$/, "")}/${host.id}?${params}`}
+                      to={`${basePath}/${host.id}?${linkParams}`}
                     >
                       {host.name}
                     </Link>
@@ -252,7 +261,7 @@ function HostDirectory({
                 <Link
                   className="link inline-flex"
                   aria-label={`查看 ${host.name}`}
-                  to={`${location.pathname.replace(/\/$/, "")}/${host.id}?${params}`}
+                  to={`${basePath}/${host.id}?${linkParams}`}
                 >
                   <ArrowRight className="size-4" />
                 </Link>
@@ -262,312 +271,6 @@ function HostDirectory({
         </SimpleTable>
       </AsyncBoundary>
     </Panel>
-  );
-}
-
-function HostCreate() {
-  const navigate = useNavigate();
-  const [step, setStep] = useState(0);
-  const [form, setForm] = useState({
-    name: "",
-    code: "",
-    description: "",
-    host: "",
-    port: "22",
-    enabled: true,
-  });
-  const [withCredential, setWithCredential] = useState(true);
-  const [credential, setCredential] = useState({
-    name: "",
-    code: "",
-    method: "ssh_password",
-  });
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [created, setCreated] = useState<ServiceConnection | null>(null);
-  const [credentialError, setCredentialError] = useState("");
-  const errors = useFormErrors();
-  const submission = useSubmission();
-  const markSaved = useUnsaved(true, submission.pending);
-  const method =
-    sshProvider.methods.find((item) => item.value === credential.method) ??
-    sshProvider.methods[0];
-  async function save(includeCredential: boolean) {
-    if (!form.name.trim() || !form.host.trim()) {
-      errors.validate({
-        name: !form.name.trim() ? "请输入主机名称" : "",
-        host: !form.host.trim() ? "请输入主机名或 IP" : "",
-      });
-      return;
-    }
-    await submission.run(async () => {
-      let host = created;
-      if (!host) {
-        const response = await request<ServiceConnection>(
-          "/admin/remote-hosts",
-          {
-            method: "POST",
-            body: {
-              name: form.name.trim(),
-              code: form.code.trim(),
-              description: form.description,
-              enabled: form.enabled,
-              config: { host: form.host, port: Number(form.port) },
-            },
-          },
-        );
-        host = response.data;
-        setCreated(host);
-      }
-      if (includeCredential && method) {
-        if (!credential.name.trim()) {
-          errors.validate({ credential_name: "请输入首个凭证名称" });
-          return;
-        }
-        try {
-          const base = `/admin/remote-hosts/${host.id}/credentials`;
-          const collection = await request<{ items: Credential[] }>(base);
-          await request(base, {
-            method: "POST",
-            etag: collection.etag,
-            body: {
-              code: credential.code.trim(),
-              name: credential.name.trim(),
-              description: "",
-              expires_at: null,
-              authentication: authenticationBody(method, values),
-            },
-          });
-        } catch (error) {
-          setCredentialError(
-            error instanceof Error ? error.message : "凭证创建失败",
-          );
-          return;
-        }
-      }
-      markSaved();
-      navigate(`/admin/remote-hosts/${host.id}`);
-    });
-  }
-  return (
-    <div>
-      <PageHeader
-        title="添加 SSH 主机"
-        description="主机信息 → 首个凭证；公钥信任在创建后单独核对"
-        actions={
-          <Button
-            variant="outline"
-            onClick={() => navigate("/admin/remote-hosts")}
-          >
-            <ArrowLeft />
-            返回列表
-          </Button>
-        }
-      />
-      <WizardSteps steps={["主机信息", "首个凭证"]} current={step} />
-      <Panel className="mt-5">
-        <ErrorNotice error={errors.error} />
-        <ErrorNotice error={submission.error} />
-        {step === 0 ? (
-          <div className="form-grid">
-            <Field label="主机名称" required error={errors.fields.name}>
-              <Input
-                name="name"
-                value={form.name}
-                onChange={(event) =>
-                  setForm({ ...form, name: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="编码（可选）">
-              <Input
-                className="mono"
-                value={form.code}
-                onChange={(event) =>
-                  setForm({ ...form, code: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="主机名 / IP" required error={errors.fields.host}>
-              <Input
-                name="host"
-                autoComplete="off"
-                value={form.host}
-                onChange={(event) =>
-                  setForm({ ...form, host: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="SSH 端口" required>
-              <Input
-                type="number"
-                min={1}
-                max={65535}
-                value={form.port}
-                onChange={(event) =>
-                  setForm({ ...form, port: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="说明" className="form-full">
-              <Textarea
-                value={form.description}
-                onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
-                }
-              />
-            </Field>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={form.enabled}
-                onChange={(event) =>
-                  setForm({ ...form, enabled: event.target.checked })
-                }
-              />
-              创建后启用
-            </label>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            <Notice>
-              创建主机不会自动信任公钥。请先测试握手并从可信来源核对 SHA256
-              指纹。
-            </Notice>
-            {created && (
-              <Notice tone={credentialError ? "danger" : "warning"}>
-                主机「{created.name}」已创建。{credentialError}
-              </Notice>
-            )}
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={withCredential}
-                onChange={(event) => setWithCredential(event.target.checked)}
-              />
-              同时创建首个系统凭证
-            </label>
-            {withCredential && method && (
-              <div className="form-grid">
-                <Field
-                  label="凭证名称"
-                  required
-                  error={errors.fields.credential_name}
-                >
-                  <Input
-                    name="credential_name"
-                    value={credential.name}
-                    onChange={(event) =>
-                      setCredential({ ...credential, name: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="凭证编码（可选）">
-                  <Input
-                    className="mono"
-                    value={credential.code}
-                    onChange={(event) =>
-                      setCredential({ ...credential, code: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="认证方式" className="form-full">
-                  <Select
-                    value={credential.method}
-                    onValueChange={(value) => {
-                      setCredential({
-                        ...credential,
-                        method: value,
-                      });
-                      setValues({});
-                    }}
-                  >
-                    {sshProvider.methods.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                {[...method.identity, ...method.secret].map((field) => (
-                  <Field
-                    key={field.key}
-                    label={field.label}
-                    required
-                    className={
-                      field.type === "textarea" ? "form-full" : undefined
-                    }
-                  >
-                    {field.type === "textarea" ? (
-                      <Textarea
-                        className="font-mono"
-                        value={values[field.key] ?? ""}
-                        onChange={(event) =>
-                          setValues({
-                            ...values,
-                            [field.key]: event.target.value,
-                          })
-                        }
-                      />
-                    ) : (
-                      <Input
-                        type={field.type ?? "text"}
-                        autoComplete="off"
-                        value={values[field.key] ?? ""}
-                        onChange={(event) =>
-                          setValues({
-                            ...values,
-                            [field.key]: event.target.value,
-                          })
-                        }
-                      />
-                    )}
-                  </Field>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        <div className="form-actions">
-          {step > 0 && (
-            <Button variant="outline" onClick={() => setStep(0)}>
-              上一步
-            </Button>
-          )}
-          {step === 0 ? (
-            <Button
-              onClick={() => {
-                if (form.name.trim() && form.host.trim()) setStep(1);
-                else
-                  errors.validate({
-                    name: !form.name.trim() ? "请输入主机名称" : "",
-                    host: !form.host.trim() ? "请输入主机名或 IP" : "",
-                  });
-              }}
-            >
-              下一步
-            </Button>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                pending={submission.pending}
-                disabled={submission.uncertain}
-                onClick={() => void save(false)}
-              >
-                仅创建主机
-              </Button>
-              <Button
-                pending={submission.pending}
-                disabled={!withCredential || submission.uncertain}
-                onClick={() => void save(true)}
-              >
-                创建主机和凭证
-              </Button>
-            </>
-          )}
-        </div>
-      </Panel>
-    </div>
   );
 }
 
@@ -600,7 +303,13 @@ function HostDetail({
         onRetry={() => void detail.refetch()}
       />
     );
-  const tab = params.get("tab") ?? (admin ? "config" : "credentials");
+  const requestedTab = params.get("tab");
+  const tab =
+    admin && (requestedTab === "config" || requestedTab === "keys")
+      ? requestedTab
+      : requestedTab === "credentials" || !admin
+        ? "credentials"
+        : "config";
   const scope = admin ? "/admin" : project ? `/projects/${project.id}` : "/me";
   async function refresh() {
     await Promise.all([
@@ -609,26 +318,26 @@ function HostDetail({
     ]);
   }
   return (
-    <div>
+    <div className="page">
       <PageHeader
         title={
-          <span className="flex items-center gap-3">
-            <Server className="size-7 text-primary" />
-            {host.name}
-          </span>
-        }
-        description={
-          <span className="inline-flex items-center gap-2">
-            <span className="mono">{host.code}</span>
-            <CopyButton value={host.code} label="复制主机编码" /> · SSH
+          <span className="flex flex-wrap items-center gap-3">
+            <Server className="size-7 shrink-0 text-primary" aria-hidden />
+            <span className="min-w-0 break-all">{host.name}</span>
+            <StatusBadge tone={host.enabled ? "success" : "neutral"}>
+              {host.enabled ? "已启用" : "已停用"}
+            </StatusBadge>
           </span>
         }
         actions={
           admin && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() =>
+            <RowActions
+              label="主机"
+              disabled={submission.pending || submission.uncertain}
+            >
+              <RowAction
+                icon={<Power />}
+                onSelect={() =>
                   void submission.run(async () => {
                     await request(path, {
                       method: "PATCH",
@@ -640,12 +349,16 @@ function HostDetail({
                 }
               >
                 {host.enabled ? "停用主机" : "启用主机"}
-              </Button>
-              <Button variant="dangerSoft" onClick={() => setRemove(true)}>
-                <Trash2 />
+              </RowAction>
+              <RowActionSeparator />
+              <RowAction
+                icon={<Trash2 />}
+                variant="destructive"
+                onSelect={() => setRemove(true)}
+              >
                 删除主机
-              </Button>
-            </>
+              </RowAction>
+            </RowActions>
           )
         }
       />
@@ -663,31 +376,59 @@ function HostDetail({
         items={[
           ...(admin
             ? [
-                { value: "config", label: "主机配置" },
-                { value: "keys", label: "主机公钥" },
+                {
+                  value: "config",
+                  label: (
+                    <span className="inline-flex items-center gap-2">
+                      <Settings2 className="size-4" aria-hidden />
+                      主机配置
+                    </span>
+                  ),
+                },
+                {
+                  value: "keys",
+                  label: (
+                    <span className="inline-flex items-center gap-2">
+                      <ShieldCheck className="size-4" aria-hidden />
+                      主机公钥
+                    </span>
+                  ),
+                },
               ]
             : []),
-          { value: "credentials", label: admin ? "系统凭证" : "访问凭证" },
+          {
+            value: "credentials",
+            label: (
+              <span className="inline-flex items-center gap-2">
+                <KeyRound className="size-4" aria-hidden />
+                {admin ? "系统凭证" : "访问凭证"}
+              </span>
+            ),
+          },
         ]}
       />
       <div className="mt-5">
-        {tab === "config" && admin && (
-          <HostConfig
-            host={host}
-            path={path}
-            etag={detail.data?.etag ?? ""}
-            edit={edit}
-            onEdit={setEdit}
-            onSaved={refresh}
-          />
+        {admin && (
+          <div hidden={tab !== "config"} role="tabpanel" aria-label="主机配置">
+            <HostConfig
+              host={host}
+              path={path}
+              etag={detail.data?.etag ?? ""}
+              edit={edit}
+              onEdit={setEdit}
+              onSaved={refresh}
+            />
+          </div>
         )}
-        {tab === "keys" && admin && (
-          <HostKeys
-            host={host}
-            path={path}
-            etag={detail.data?.etag ?? ""}
-            onSaved={refresh}
-          />
+        {admin && (
+          <div hidden={tab !== "keys"} role="tabpanel" aria-label="主机公钥">
+            <HostKeys
+              host={host}
+              path={path}
+              etag={detail.data?.etag ?? ""}
+              onSaved={refresh}
+            />
+          </div>
         )}
         {tab === "credentials" && (
           <CredentialPanel
@@ -706,6 +447,7 @@ function HostDetail({
         description={host.name}
         confirmLabel="删除主机"
         pending={submission.pending}
+        confirmDisabled={submission.uncertain}
         onClose={() => setRemove(false)}
         onConfirm={() =>
           void submission.run(async () => {
@@ -738,6 +480,7 @@ function HostConfig({
   onEdit: (value: boolean) => void;
   onSaved: () => Promise<void>;
 }) {
+  const [editEtag, setEditEtag] = useState(etag);
   const [form, setForm] = useState({
     name: host.name,
     description: host.description,
@@ -750,6 +493,15 @@ function HostConfig({
   );
   const [current, setCurrent] = useState<Diagnostic | null>(null);
   const submission = useSubmission();
+  const errors = useFormErrors();
+  const savedForm = {
+    name: host.name,
+    description: host.description,
+    host: host.config?.host ?? "",
+    port: String(host.config?.port ?? 22),
+  };
+  const dirty = edit && JSON.stringify(form) !== JSON.stringify(savedForm);
+  useUnsaved(dirty, submission.pending, true);
   const diagnostic = current ?? diagnostics.data?.data.latest ?? null;
   return (
     <div className="grid gap-5">
@@ -757,7 +509,18 @@ function HostConfig({
         title="主机配置"
         action={
           !edit && (
-            <Button size="sm" variant="outline" onClick={() => onEdit(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={submission.pending || submission.uncertain}
+              onClick={() => {
+                setForm(savedForm);
+                setEditEtag(etag);
+                errors.clear();
+                submission.setError(null);
+                onEdit(true);
+              }}
+            >
               <Pencil />
               编辑配置
             </Button>
@@ -766,12 +529,29 @@ function HostConfig({
       >
         {edit ? (
           <form
+            ref={errors.formRef}
+            onChange={() => errors.clear()}
             onSubmit={(event) => {
               event.preventDefault();
+              if (
+                submission.pending ||
+                submission.uncertain ||
+                !errors.validate({
+                  name: !form.name.trim() ? "请输入主机名称" : "",
+                  host: !form.host.trim() ? "请输入主机名或 IP" : "",
+                  port:
+                    !Number.isInteger(Number(form.port)) ||
+                    Number(form.port) < 1 ||
+                    Number(form.port) > 65535
+                      ? "请输入 1–65535 的整数端口"
+                      : "",
+                })
+              )
+                return;
               void submission.run(async () => {
                 await request(path, {
                   method: "PATCH",
-                  etag,
+                  etag: editEtag,
                   body: {
                     name: form.name.trim(),
                     description: form.description,
@@ -784,49 +564,69 @@ function HostConfig({
             }}
           >
             <ErrorNotice error={submission.error} />
-            <Notice tone="warning" className="mb-4">
-              地址或端口变化会清空全部已信任公钥，必须重新核对。
-            </Notice>
-            <div className="form-grid">
-              <Field label="主机名称" required>
-                <Input
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm({ ...form, name: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="主机名 / IP" required>
-                <Input
-                  value={form.host}
-                  onChange={(event) =>
-                    setForm({ ...form, host: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="SSH 端口" required>
-                <Input
-                  type="number"
-                  value={form.port}
-                  onChange={(event) =>
-                    setForm({ ...form, port: event.target.value })
-                  }
-                />
-              </Field>
-              <Field label="说明">
-                <Input
-                  value={form.description}
-                  onChange={(event) =>
-                    setForm({ ...form, description: event.target.value })
-                  }
-                />
-              </Field>
-            </div>
+            <ErrorNotice error={errors.error} />
+            <fieldset
+              disabled={submission.pending || submission.uncertain}
+              className="min-w-0"
+            >
+              <Notice tone="warning" className="mb-4">
+                地址或端口变化会清空全部已信任公钥，必须重新核对。
+              </Notice>
+              <div className="form-grid">
+                <Field label="主机名称" required error={errors.fields.name}>
+                  <Input
+                    name="name"
+                    value={form.name}
+                    onChange={(event) =>
+                      setForm({ ...form, name: event.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="主机名 / IP" required error={errors.fields.host}>
+                  <Input
+                    name="host"
+                    value={form.host}
+                    onChange={(event) =>
+                      setForm({ ...form, host: event.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="SSH 端口" required error={errors.fields.port}>
+                  <Input
+                    name="port"
+                    type="number"
+                    value={form.port}
+                    onChange={(event) =>
+                      setForm({ ...form, port: event.target.value })
+                    }
+                  />
+                </Field>
+                <Field label="说明">
+                  <Input
+                    value={form.description}
+                    onChange={(event) =>
+                      setForm({ ...form, description: event.target.value })
+                    }
+                  />
+                </Field>
+              </div>
+            </fieldset>
             <div className="form-actions">
-              <Button variant="outline" onClick={() => onEdit(false)}>
+              <Button
+                variant="outline"
+                disabled={submission.pending}
+                onClick={() => {
+                  setForm(savedForm);
+                  onEdit(false);
+                }}
+              >
                 取消
               </Button>
-              <Button type="submit" pending={submission.pending}>
+              <Button
+                type="submit"
+                pending={submission.pending}
+                disabled={submission.uncertain || !dirty}
+              >
                 保存配置
               </Button>
             </div>
@@ -835,15 +635,37 @@ function HostConfig({
           <DescriptionList
             items={[
               {
+                label: "主机编码",
+                value: (
+                  <span className="inline-flex max-w-full items-center gap-2">
+                    <span className="mono break-all">{host.code}</span>
+                    <CopyButton value={host.code} label="复制主机编码" />
+                  </span>
+                ),
+              },
+              { label: "协议", value: "SSH" },
+              {
                 label: "主机名 / IP",
-                value: <span className="mono">{host.config?.host ?? "—"}</span>,
+                value: (
+                  <span className="mono break-all">
+                    {host.config?.host ?? "—"}
+                  </span>
+                ),
               },
               { label: "SSH 端口", value: host.config?.port ?? 22 },
               {
                 label: "已信任公钥",
                 value: `${host.config?.host_keys?.length ?? 0} 把`,
               },
-              { label: "说明", value: host.description || "—" },
+              {
+                label: "说明",
+                value: (
+                  <span className="whitespace-pre-wrap break-all">
+                    {host.description || "—"}
+                  </span>
+                ),
+                full: true,
+              },
             ]}
           />
         )}
@@ -854,7 +676,7 @@ function HostConfig({
           <Button
             size="sm"
             variant="outline"
-            disabled={!host.enabled || edit}
+            disabled={!host.enabled || edit || submission.uncertain}
             pending={submission.pending}
             onClick={() =>
               void submission.run(async () => {
@@ -872,7 +694,7 @@ function HostConfig({
           </Button>
         }
       >
-        <ErrorNotice error={submission.error} />
+        {!edit && <ErrorNotice error={submission.error} />}
         {diagnostic ? (
           <Notice tone={diagnosticTone(diagnostic)}>
             {diagnosticText(diagnostic)}
@@ -903,8 +725,10 @@ function HostKeys({
   const [testResult, setTestResult] = useState<Diagnostic | null>(null);
   const submission = useSubmission();
   const keys = host.config?.host_keys ?? [];
+  useUnsaved(Boolean(key.trim()), submission.pending, true);
   async function save(next: string[]) {
-    await submission.run(async () => {
+    if (submission.pending || submission.uncertain) return false;
+    return submission.run(async () => {
       await request(path, {
         method: "PATCH",
         etag,
@@ -932,7 +756,7 @@ function HostKeys({
           <Button
             size="sm"
             variant="outline"
-            disabled={!host.enabled}
+            disabled={!host.enabled || submission.uncertain}
             pending={submission.pending}
             onClick={() => void probe()}
           >
@@ -955,13 +779,14 @@ function HostKeys({
                 <li key={value} className="rounded-lg border p-3">
                   <code className="block break-all text-xs">{value}</code>
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <span className="mono text-xs text-muted">
+                    <span className="mono min-w-0 break-all text-xs text-muted">
                       {fingerprint ?? "指纹已记录"}
                     </span>
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-danger"
+                      className="shrink-0 text-danger"
+                      disabled={submission.pending || submission.uncertain}
                       onClick={() =>
                         void save(keys.filter((item) => item !== value))
                       }
@@ -994,6 +819,7 @@ function HostKeys({
             <Button
               className="mt-4"
               pending={submission.pending}
+              disabled={submission.uncertain || keys.length >= 8}
               onClick={() => void save([...keys, observedKey])}
             >
               <ShieldCheck />
@@ -1006,15 +832,20 @@ function HostKeys({
         <Field label="公钥" hint="不包含选项或注释；服务端计算指纹">
           <Textarea
             className="font-mono"
+            disabled={submission.pending || submission.uncertain}
             value={key}
             onChange={(event) => setKey(event.target.value)}
           />
         </Field>
         <Button
           className="mt-3"
-          disabled={!key.trim() || keys.length >= 8}
+          disabled={!key.trim() || keys.length >= 8 || submission.uncertain}
           pending={submission.pending}
-          onClick={() => void save([...keys, key.trim()])}
+          onClick={() =>
+            void save([...keys, key.trim()]).then((saved) => {
+              if (saved) setKey("");
+            })
+          }
         >
           <KeyRound />
           核对后加入信任
