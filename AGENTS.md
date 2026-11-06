@@ -25,7 +25,7 @@ antcdp/
 - [docs/extensibility.md](docs/extensibility.md)：设置 KV、凭据隔离、仓储事务接口及未实现扩展。
 - [docs/deployment.md](docs/deployment.md)：镜像发布、配置、安装、迁移、恢复与配套备份。
 - [docs/frontend.md](docs/frontend.md)：组件职责、路由兼容、样式定制及构建发布检查。
-- [docs/ui-design.md](docs/ui-design.md)：桌面支持范围、视觉与交互约束、页面组织。
+- [docs/ui-design.md](docs/ui-design.md)：新功能设计原则、桌面支持范围、视觉与交互约束、页面组织。
 - [docs/domain-model.md](docs/domain-model.md)：账号、创始人保护、注册、会话、头像与审计规则。
 - [docs/api.md](docs/api.md)：协议约定及安装、认证、用户、设置、审计接口。
 - [docs/database.md](docs/database.md)：表分组、字段职责、事务、生命周期与迁移边界。
@@ -48,6 +48,8 @@ antcdp/
 开发完成后，除运行与改动相关的测试外，必须使用与 CI 一致的 golangci-lint 版本及仓库 `.golangci.yml` 配置运行 `golangci-lint config verify` 和 `golangci-lint run`，修复全部问题后再交付。若环境限制导致无法完成检查，需明确说明未验证项及原因。
 
 ## UI 开发约定
+
+开发新前端功能或重构现有界面时，可先参考 [新功能的设计原则](docs/ui-design.md#新功能的设计原则)，按内容长度、操作频率与风险确定信息展示、表单、操作入口和容器，并据此复核错误恢复、焦点及真实内容下的布局。具体组件约束与桌面验收要求见该文档对应章节。
 
 后续开发不要生搬硬套旧原型、截图或现有页面。先理解用户任务、信息层级、内容长度和设备条件，再选择布局与组件；尺寸、间距和断点按场景调整，遵循 [UI 规范的约束分级](docs/ui-design.md#规范的适用方式)。保持产品语义、权限、数据真实性及可访问性，落实用户最新确认的交互要求。
 
