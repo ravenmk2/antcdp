@@ -677,6 +677,7 @@ function RepositoryPicker({
   const [search, setSearch] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [recursive, setRecursive] = useState(false);
+  const [size, setSize] = useState(20);
   const [cursor, setCursor] = useState("");
   const [cursorHistory, setCursorHistory] = useState<string[]>([""]);
   const [selected, setSelected] = useState<Map<string, RemoteRepository>>(
@@ -687,7 +688,10 @@ function RepositoryPicker({
   const submission = useSubmission();
   const errors = useFormErrors();
   const base = `/admin/projects/${project.id}/repository-connections/${connection}`;
-  const repoParams = new URLSearchParams({ q: search });
+  const repoParams = new URLSearchParams({
+    q: search,
+    page_size: String(size),
+  });
   if (group) repoParams.set("container_id", group.id);
   if (recursive && group) repoParams.set("recursive", "true");
   if (cursor) repoParams.set("cursor", cursor);
@@ -699,6 +703,7 @@ function RepositoryPicker({
       group?.id,
       search,
       recursive,
+      size,
       cursor,
     ],
     `${base}/repos?${repoParams}`,
@@ -730,16 +735,19 @@ function RepositoryPicker({
     setConnection(value);
     resetBrowsing();
   }
-  function nextPage() {
-    const next = repos.data?.data.next_cursor;
-    if (!next) return;
-    setCursorHistory((current) => [...current, next]);
-    setCursor(next);
-  }
-  function previousPage() {
-    const nextHistory = cursorHistory.slice(0, -1);
-    setCursorHistory(nextHistory);
-    setCursor(nextHistory.at(-1) ?? "");
+  function changePage(page: number, nextSize: number) {
+    if (nextSize !== size) {
+      setSize(nextSize);
+      setCursor("");
+      setCursorHistory([""]);
+    } else if (page <= cursorHistory.length) {
+      const history = cursorHistory.slice(0, page);
+      setCursorHistory(history);
+      setCursor(history.at(-1) ?? "");
+    } else if (repos.data?.data.next_cursor) {
+      setCursorHistory((current) => [...current, repos.data.data.next_cursor!]);
+      setCursor(repos.data.data.next_cursor);
+    }
   }
   async function save() {
     if (!selected.size) {
@@ -935,28 +943,14 @@ function RepositoryPicker({
                 />
               )}
             </div>
-            {!viewSelected && (
-              <div className="flex items-center justify-between border-t p-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={cursorHistory.length <= 1}
-                  onClick={previousPage}
-                >
-                  上一页
-                </Button>
-                <span className="text-xs text-muted">
-                  远端分页 · 每页 20 项
-                </span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={!repos.data?.data.next_cursor}
-                  onClick={nextPage}
-                >
-                  下一页
-                </Button>
-              </div>
+            {!viewSelected && repos.data && !repos.error && (
+              <Pagination
+                page={cursorHistory.length}
+                size={size}
+                hasNext={Boolean(repos.data.data.next_cursor)}
+                pending={repos.isFetching || submission.pending}
+                onChange={changePage}
+              />
             )}
           </section>
         </div>

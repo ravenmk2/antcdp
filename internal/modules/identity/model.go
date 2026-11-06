@@ -172,7 +172,7 @@ type Tx interface {
 	AvatarOwner(uint64) (uint64, error)
 	ExpiredAvatars(time.Time, int) ([]Avatar, error)
 	AvatarKeyExists(string) (bool, error)
-	AuditEvents(audit.Filter) ([]Event, error)
+	AuditEvents(audit.Filter) ([]Event, int, error)
 	AuditEvent(uint64) (*Event, error)
 	Audit(Event) error
 	ListUsers(Filter) ([]User, int, error)

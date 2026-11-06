@@ -129,7 +129,15 @@ func registerProjectRepositories(api *gin.RouterGroup, o Options, s *i.Service) 
 			if kind == "containers" {
 				container = c.Query("parent_id")
 			}
-			r, a, e := s.BrowseRepos(c.Request.Context(), rawSession(c), pid, cid, i.RepoBrowseQuery{Kind: kind, Search: c.Query("q"), Container: container, Cursor: c.Query("cursor"), Recursive: recursive == "true"})
+			size, ok := queryInt(c, "page_size", 20)
+			if !ok {
+				return
+			}
+			if size < 1 || size > 100 {
+				httpx.Write(c, httpx.Invalid("page_size", "invalid_value"))
+				return
+			}
+			r, a, e := s.BrowseRepos(c.Request.Context(), rawSession(c), pid, cid, i.RepoBrowseQuery{Size: size, Kind: kind, Search: c.Query("q"), Container: container, Cursor: c.Query("cursor"), Recursive: recursive == "true"})
 			finish(c, r, a, e, 200)
 		})
 	}

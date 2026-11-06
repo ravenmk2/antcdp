@@ -5,6 +5,7 @@ import { Button } from "@/components/button";
 import { ErrorNotice, Notice, StatusBadge } from "@/components/feedback";
 import { PageHeader, Panel } from "@/components/layout";
 import { ConfirmDialog } from "@/components/overlays";
+import { Pagination } from "@/components/pagination";
 import { SimpleTable } from "@/components/table";
 import { useSubmission } from "@/hooks/use-form";
 import { formatBytes, formatDate } from "@/lib/utils";
@@ -18,6 +19,7 @@ interface Candidate {
   token: string;
 }
 interface Preview {
+  offset: number;
   items: Candidate[];
   total: number;
   size_bytes: number;
@@ -30,18 +32,23 @@ interface CleanResult {
 export function MaintenancePage() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [offset, setOffset] = useState(0);
+  const [size, setSize] = useState(100);
   const [selected, setSelected] = useState<string[]>([]);
   const [confirm, setConfirm] = useState(false);
   const [result, setResult] = useState<CleanResult | null>(null);
   const submission = useSubmission();
-  async function load(next = 0) {
+  async function load(next = 0, nextSize = size) {
     await submission.run(async () => {
       const response = await request<Preview>(
         "/admin/maintenance/temp-files/preview",
-        { method: "POST", body: { source: "releases", offset: next } },
+        {
+          method: "POST",
+          body: { source: "releases", offset: next, page_size: nextSize },
+        },
       );
       setPreview(response.data);
-      setOffset(next);
+      setOffset(response.data.offset);
+      setSize(nextSize);
       setSelected([]);
     });
   }
@@ -159,27 +166,20 @@ export function MaintenancePage() {
                 当前没有可清理候选。
               </p>
             )}
+            <Pagination
+              page={Math.floor(offset / size) + 1}
+              size={size}
+              total={preview.total}
+              pending={submission.pending}
+              onChange={(page, nextSize) =>
+                void load((page - 1) * nextSize, nextSize)
+              }
+            />
             <div className="flex flex-wrap items-center gap-2 border-t p-4">
               <Button
                 size="sm"
-                variant="outline"
-                disabled={offset <= 0}
-                onClick={() => void load(Math.max(0, offset - 100))}
-              >
-                上一页
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={offset + preview.items.length >= preview.total}
-                onClick={() => void load(offset + 100)}
-              >
-                下一页
-              </Button>
-              <Button
-                size="sm"
                 variant="ghost"
-                disabled={!preview.items.length}
+                disabled={submission.pending || !preview.items.length}
                 onClick={() =>
                   setSelected(preview.items.map((item) => item.id))
                 }
@@ -189,7 +189,7 @@ export function MaintenancePage() {
               <Button
                 className="ml-auto"
                 variant="dangerSoft"
-                disabled={!selected.length}
+                disabled={submission.pending || !selected.length}
                 onClick={() => setConfirm(true)}
               >
                 <Trash2 />

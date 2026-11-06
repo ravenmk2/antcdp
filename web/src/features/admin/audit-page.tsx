@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { ChevronRight, FunnelX } from "lucide-react";
 import { useAuth } from "@/app/auth";
@@ -19,19 +19,25 @@ import { auditActionLabels, type AuditEvent } from "@/types/audit";
 export function AuditPage() {
   const [params, setParams] = useSearchParams();
   const [preferredSize, setPreferredSize] = usePageSize("audit", 10);
-  const [cursors, setCursors] = useState<string[]>([""]);
-  const [page, setPage] = useState(0);
+  const requestedPage = Number(params.get("page") ?? 1);
+  const page =
+    Number.isInteger(requestedPage) &&
+    requestedPage >= 1 &&
+    requestedPage <= 1000000
+      ? requestedPage
+      : 1;
+  const requestedSize = Number(params.get("page_size") ?? params.get("limit"));
   const [selected, setSelected] = useState("");
   const [dates, setDates] = useState(params.has("from") || params.has("to"));
   const [filterError, setFilterError] = useState("");
-  const size = [10, 20, 50, 100].includes(Number(params.get("limit")))
-    ? Number(params.get("limit"))
+  const size = [10, 20, 50, 100].includes(requestedSize)
+    ? requestedSize
     : preferredSize;
   const filters = new URLSearchParams();
   for (const key of ["q", "action_prefix", "from", "to"])
     if (params.get(key)) filters.set(key, params.get(key) ?? "");
-  filters.set("limit", String(size));
-  if (cursors[page]) filters.set("cursor", cursors[page]);
+  filters.set("page_size", String(size));
+  filters.set("page", String(page));
   const query = useApiQuery<AuditEvent[]>(
     ["audit", filters.toString()],
     `/admin/audit-events?${filters}`,
@@ -54,16 +60,27 @@ export function AuditPage() {
       return;
     }
     setFilterError("");
-    const next = new URLSearchParams({ limit: String(size) });
+    const next = new URLSearchParams({ page_size: String(size), page: "1" });
     for (const key of ["q", "action_prefix"])
       if (data.get(key)) next.set(key, String(data.get(key)).trim());
     if (from) next.set("from", new Date(from).toISOString());
     if (to) next.set("to", new Date(to).toISOString());
     setParams(next);
-    setCursors([""]);
-    setPage(0);
   }
-  const next = query.data?.pagination?.next_cursor;
+  const total = query.data?.pagination?.total;
+  useEffect(() => {
+    if (total === undefined) return;
+    const lastPage = Math.max(1, Math.ceil(total / size));
+    if (page > lastPage)
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          next.set("page", String(lastPage));
+          return next;
+        },
+        { replace: true },
+      );
+  }, [total, size, page, setParams]);
   return (
     <div className="page">
       <PageHeader
@@ -129,9 +146,7 @@ export function AuditPage() {
             onClick={() => {
               search.setValue("");
               setFilterError("");
-              setParams({ limit: String(size) });
-              setCursors([""]);
-              setPage(0);
+              setParams({ page_size: String(size), page: "1" });
             }}
           >
             <FunnelX />
@@ -215,26 +230,19 @@ export function AuditPage() {
         </AsyncBoundary>
         {query.data && (
           <Pagination
-            page={page + 1}
+            page={page}
             size={size}
-            pageItems={query.data.data.length}
-            hasNext={Boolean(next)}
+            total={total}
             pending={query.isFetching}
             onChange={(nextPage, nextSize) => {
-              if (nextSize !== size) {
-                setPreferredSize(nextSize);
-                setParams((current) => {
-                  const updated = new URLSearchParams(current);
-                  updated.set("limit", String(nextSize));
-                  return updated;
-                });
-                setCursors([""]);
-                setPage(0);
-              } else if (nextPage <= page + 1) setPage(nextPage - 1);
-              else if (next) {
-                setCursors((current) => [...current.slice(0, page + 1), next]);
-                setPage(nextPage - 1);
-              }
+              if (nextSize !== size) setPreferredSize(nextSize);
+              setParams((current) => {
+                const updated = new URLSearchParams(current);
+                updated.set("page_size", String(nextSize));
+                updated.set("page", String(nextPage));
+                updated.delete("limit");
+                return updated;
+              });
             }}
           />
         )}
@@ -325,7 +333,7 @@ export function AuditDetail({
               ]}
             />
             <section>
-              <h3 className="mb-2 text-sm font-medium">白名单变更详情</h3>
+              <h3 className="mb-2 text-sm font-medium">操作详情</h3>
               <CodeBlock
                 source={jsonText(query.data.data.detail)}
                 language="json"

@@ -157,6 +157,11 @@ func (s *Service) Workflow(ctx context.Context, raw string, cmd Command, rid uin
 func (s *Service) GitInput(ctx context.Context, raw string, cmd Command, rid uint64, op string, w FlowWrite) (i.Result, *identity.Auth, error) {
 	var out i.Result
 	var target gitTarget
+	if op == "mr-options" {
+		if err := validateQuery(&cmd.Query); err != nil {
+			return out, nil, err
+		}
+	}
 	admin := op != "mr-options" && op != "select-mr"
 	a, e := s.releaseAccess(ctx, raw, cmd, rid, true, admin, func(x *releaseContext) error {
 		if e := x.state("draft", "integrating"); e != nil {
@@ -173,7 +178,7 @@ func (s *Service) GitInput(ctx context.Context, raw string, cmd Command, rid uin
 		return out, a, e
 	}
 	if op == "mr-options" {
-		rows, e := target.Git.MRs(ctx, target.Repo.Branch, cmd.Query.Page)
+		rows, e := target.Git.MRs(ctx, target.Repo.Branch, cmd.Query.Page, cmd.Query.Size)
 		return i.Result{Data: rows}, a, e
 	}
 	var change ReleaseChange

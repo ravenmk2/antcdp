@@ -134,6 +134,10 @@ func verifyProjectRepositories(t *testing.T, db *Store, admin, member, other *ap
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": cred["id"].(string)}, 200, etag(sys+"/preferred"))
 	browse := testData(admin.call(t, "GET", catalog+"/"+cid+"/repos?q=remote", nil, 200, nil))
 	cursor := browse["next_cursor"].(string)
+	admin.call(t, "GET", catalog+"/"+cid+"/repos?page_size=10&cursor="+cursor, nil, 422, nil)
+	admin.call(t, "GET", catalog+"/"+cid+"/repos?page_size=0", nil, 422, nil)
+	admin.call(t, "GET", catalog+"/"+cid+"/repos?page_size=101", nil, 422, nil)
+
 	admin.call(t, "GET", catalog+"/"+cid+"/repos?q=different&cursor="+cursor, nil, 422, nil)
 	admin.call(t, "GET", catalog+"/"+cid+"/containers", nil, 200, nil)
 	admin.call(t, "GET", catalog+"/"+cid+"/repos?container_id=5&recursive=true", nil, 200, nil)

@@ -20,6 +20,7 @@ import (
 type RepoBrowseQuery struct {
 	Kind, Search, Container, Cursor string
 	Recursive                       bool
+	Size                            int
 }
 type RepoContainer struct {
 	ID       string  `json:"id"`
@@ -141,7 +142,7 @@ func getGitLabRepo(ctx context.Context, g *HTTPConfig, token, id string) (RepoIn
 	return out, e
 }
 func browseGitLab(ctx context.Context, g *HTTPConfig, token string, q RepoBrowseQuery, page int) (any, bool, error) {
-	params := url.Values{"page": {strconv.Itoa(page)}, "per_page": {"20"}, "order_by": {"name"}, "sort": {"asc"}}
+	params := url.Values{"page": {strconv.Itoa(page)}, "per_page": {strconv.Itoa(q.Size)}, "order_by": {"name"}, "sort": {"asc"}}
 	if q.Search != "" {
 		params.Set("search", q.Search)
 	}
@@ -174,7 +175,7 @@ func browseGitLab(ctx context.Context, g *HTTPConfig, token string, q RepoBrowse
 			}
 			out = append(out, RepoContainer{ID: v.ID.String(), Name: v.Name, FullPath: v.Path, ParentID: parent})
 		}
-		return out, more || len(groups) == 20, nil
+		return out, more || len(groups) == q.Size, nil
 	}
 	path := "/projects"
 	if q.Container != "" {
@@ -195,5 +196,5 @@ func browseGitLab(ctx context.Context, g *HTTPConfig, token string, q RepoBrowse
 		}
 		out = append(out, i)
 	}
-	return out, more || len(rows) == 20, nil
+	return out, more || len(rows) == q.Size, nil
 }

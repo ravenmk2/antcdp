@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Pagination } from "@/components/pagination";
 import {
   GitMerge,
   GitPullRequest,
@@ -401,21 +402,25 @@ function ChangeEditor(
   const [original, setOriginal] = useState("");
   const [options, setOptions] = useState<MergeRequest[]>([]);
   const [page, setPage] = useState(1);
+  const [size, setSize] = useState(20);
+  const [loaded, setLoaded] = useState(false);
   const errors = useFormErrors();
   const submission = useSubmission();
   const base = releaseBase(props);
-  async function load(nextPage = page) {
+  async function load(nextPage = page, nextSize = size) {
     if (!repoId) {
       errors.setError("请先选择仓库。");
       return;
     }
     await submission.run(async () => {
       const response = await request<MergeRequest[]>(
-        `${base}/mr-options?page=${nextPage}`,
+        `${base}/mr-options?page=${nextPage}&page_size=${nextSize}`,
         { method: "POST", etag: props.releaseEtag, body: { repo_id: repoId } },
       );
       setOptions(response.data);
       setPage(nextPage);
+      setSize(nextSize);
+      setLoaded(true);
     });
   }
   async function save(targetRef = ref) {
@@ -488,10 +493,13 @@ function ChangeEditor(
         <Field label="范围内仓库" required error={errors.fields.repo_id}>
           <Select
             name="repo_id"
+            disabled={submission.pending}
             value={repoId}
             onChange={(event) => {
               setRepoId(event.target.value);
               setOptions([]);
+              setPage(1);
+              setLoaded(false);
             }}
           >
             <option value="">请选择</option>
@@ -558,23 +566,15 @@ function ChangeEditor(
                 按 IID 纳入
               </Button>
             </div>
-            <div className="flex justify-between">
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={page <= 1}
-                onClick={() => void load(page - 1)}
-              >
-                上一页
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => void load(page + 1)}
-              >
-                下一页
-              </Button>
-            </div>
+            {loaded && (
+              <Pagination
+                page={page}
+                size={size}
+                hasNext={options.length === size}
+                pending={submission.pending}
+                onChange={(nextPage, nextSize) => void load(nextPage, nextSize)}
+              />
+            )}
           </>
         )}
         {mode === "commit" && (

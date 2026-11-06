@@ -136,12 +136,21 @@ func registerTempMaintenance(api *gin.RouterGroup, o Options) {
 			var w struct {
 				Source string `json:"source"`
 				Offset int    `json:"offset"`
+				Size   *int   `json:"page_size"`
 				Items  []struct {
 					ID    string `json:"id"`
 					Token string `json:"token"`
 				} `json:"items"`
 			}
 			if !collaborationBody(c, &w) {
+				return
+			}
+			size := 100
+			if w.Size != nil {
+				size = *w.Size
+			}
+			if size < 1 || size > 100 {
+				httpx.Write(c, httpx.Invalid("page_size", "invalid_value"))
 				return
 			}
 			src, ok := sources[w.Source]
@@ -166,12 +175,12 @@ func registerTempMaintenance(api *gin.RouterGroup, o Options) {
 					return e
 				}
 				if action == "preview" {
-					var size int64
+					var bytes int64
 					for _, v := range all {
-						size += v.Size
+						bytes += v.Size
 					}
-					start := min(w.Offset, len(all))
-					out = map[string]any{"total": len(all), "size_bytes": size, "items": all[start:min(start+100, len(all))]}
+					start := min(w.Offset, max(0, (len(all)-1)/size)*size)
+					out = map[string]any{"total": len(all), "size_bytes": bytes, "offset": start, "items": all[start:min(start+size, len(all))]}
 					return nil
 				}
 				if len(w.Items) == 0 {

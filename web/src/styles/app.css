@@ -214,7 +214,11 @@
     background: transparent;
   }
   @media (prefers-reduced-motion: reduce) {
-    *:not(.setup-select-content, .combobox-content),
+    *:not(
+      .setup-select-content,
+      .combobox-content,
+      [data-slot="select-content"]
+    ),
     *::before,
     *::after {
       scroll-behavior: auto !important;

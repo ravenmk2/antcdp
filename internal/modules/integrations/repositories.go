@@ -492,10 +492,19 @@ func (s *Service) RefreshRepo(ctx context.Context, raw string, pid, id uint64, t
 // Keep the platform ID a string all the way through JSON and storage.
 func repoCursorPayload(snap repoSnapshot, q RepoBrowseQuery, page int, expires int64) string {
 	b, _ := json.Marshal([]any{snap.Actor, snap.ProjectVersion, snap.Connection.ID, snap.Connection.Version, snap.Connection.CredentialsVersion, snap.Credential.ID, snap.Credential.MaterialVersion, q.Kind, q.Search, q.Container, q.Recursive, page, expires})
+	if q.Size != 20 {
+		return string(b) + ":size=" + strconv.Itoa(q.Size)
+	}
 	return string(b)
 }
 func (s *Service) BrowseRepos(ctx context.Context, raw string, pid, cid uint64, q RepoBrowseQuery) (Result, *identity.Auth, error) {
 	var out Result
+	if q.Size == 0 {
+		q.Size = 20
+	}
+	if q.Size < 1 || q.Size > 100 {
+		return out, nil, httpx.Invalid("page_size", "invalid_value")
+	}
 	if len(q.Search) > 400 || utf8.RuneCountInString(q.Search) > 100 || (q.Kind != "repos" && q.Kind != "containers") {
 		return out, nil, httpx.Invalid("query", "invalid_value")
 	}

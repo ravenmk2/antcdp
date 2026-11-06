@@ -254,10 +254,10 @@ AuthSession.session_ttl_days 返回该会话创建时的滑动窗口，expires_a
 
 | 方法与路径 | 参数 / 响应 |
 | --- | --- |
-| `GET /admin/audit-events` | `cursor?`、`limit` 默认 20 最大 100、`q?`、`action_prefix?`、`actor_user_id?`、`target_type?`、`target_id?`、`from?`、`to?`；200 列表 |
+| `GET /admin/audit-events` | `page` 默认 1（1–1000000）、`page_size` 默认 20 最大 100、`q?`、`action_prefix?`、`actor_user_id?`、`target_type?`、`target_id?`、`from?`、`to?`；200 列表 |
 | `GET /admin/audit-events/{id}` | 200 单个 AuditEvent；不存在 404 |
 
-`from` 包含、`to` 不包含，必须为有效 RFC 3339；固定按 `occurred_at DESC,id DESC`。游标为不透明的编码时间+ID，校验格式；筛选变化时客户端清空游标。响应：`{"data":[],"pagination":{"next_cursor":null,"has_more":false}}`，不计算总数。没有创建、修改或删除审计的 API。
+`from` 包含、`to` 不包含，必须为有效 RFC 3339；固定按 `occurred_at DESC,id DESC`。使用页码分页，筛选变化或每页条数变化时客户端回到第一页。响应：`{"data":[],"pagination":{"page":1,"page_size":20,"total":0}}`，total 为当前筛选条件下的实际记录总数；超出末页返回空数组及实际总数，页面据此返回有效末页。兼容旧 `limit` 作为未传 `page_size` 时的别名；非空 `cursor` 返回 422，不再支持游标响应。分页按实时数据查询，不提供跨页快照，新增事件可能使页边界移动。没有创建、修改或删除审计的 API。
 
 `q` 最多 64 个 Unicode 码点，匹配操作者名称/用户名、对象名称、事件代码及已知事件的中文名称；`%` 和 `_` 按普通字符搜索。`action_prefix` 使用代码前缀，例如 `user.` 或 `user.avatar_changed`。页面提供关键词、事件类型和时间范围筛选；时间选择器采用浏览器时区，事件列表按系统时区显示。
 

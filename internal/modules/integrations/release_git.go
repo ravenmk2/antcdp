@@ -149,8 +149,8 @@ func (g ReleaseGit) MR(ctx context.Context, iid uint64) (ReleaseMR, error) {
 	}
 	return m, e
 }
-func (g ReleaseGit) MRs(ctx context.Context, branch string, page int) ([]ReleaseMR, error) {
-	q := url.Values{"target_branch": {branch}, "state": {"opened"}, "page": {strconv.Itoa(page)}, "per_page": {"20"}}
+func (g ReleaseGit) MRs(ctx context.Context, branch string, page, size int) ([]ReleaseMR, error) {
+	q := url.Values{"target_branch": {branch}, "state": {"opened"}, "page": {strconv.Itoa(page)}, "per_page": {strconv.Itoa(size)}}
 	rows := []ReleaseMR{}
 	e := g.remote(ctx, "GET", g.project+"/merge_requests?"+q.Encode(), nil, &rows)
 	return rows, e

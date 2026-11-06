@@ -108,15 +108,15 @@ last_sync_check 格式为 `{status,reason,started_at,finished_at,check_id,connec
 | GET P/{id} | 本地快照与对象 ETag；不联网 |
 | GET P/{id}/diagnostics | 脱敏最近同步诊断，无 ETag；有效成员可读 |
 | GET C | 可用类型的有限连接目录与能力；不返回 config、凭证或秘密 |
-| GET C/{connection_id}/containers | parent_id、q、cursor；items,next_cursor；查询组时返回扁平搜索结果 |
-| GET C/{connection_id}/repos | q、container_id、recursive、cursor；items,next_cursor，项含 already_linked |
+| GET C/{connection_id}/containers | parent_id、q、cursor、page_size；items,next_cursor；查询组时返回扁平搜索结果 |
+| GET C/{connection_id}/repos | q、container_id、recursive、cursor、page_size；items,next_cursor，项含 already_linked |
 | POST P | `{connection_id,repo_ids:["101","102"]}`；集合 If-Match；201 返回新增 items、mutation_version、X-Collection-ETag |
 | POST P/batch-unlink | `{ids:["本地关联ID"]}`；集合 If-Match；200 返回 removed_ids、mutation_version、X-Collection-ETag |
 | POST P/{id}/refresh | `{}`；对象 If-Match；200 返回更新 item、ETag、X-Collection-ETag；远端失败走错误响应并保存受控诊断 |
 
 P 的 item 包含数据库非秘密快照字段，以及 connection_id、connection_name、service_type、connection_enabled 平铺字段。诊断从独立端点获取。对象 etag 和列表 mutation_version 为完整带引号写标签；GET 列表使用 X-Collection-ETag，不提供缓存 ETag。单条对象标签仅覆盖关联行，连接实时投影不参与缓存，API 使用 no-store。单条解除调用 batch-unlink 并提交一个 ID。
 
-本地 q 最大 100 字符；page_size=10/20/50/100。远端每页固定 20，不接受 limit；next_cursor=null 表示结束，不伪造 total。游标绑定连接、操作者、系统首选与材料/配置版本、查询条件，签名且有限期（10 分钟）；不承诺远端多页结果为一致性快照，客户端按 repo_id 去重。更换条件/凭证令旧游标失效，要求重查。分组搜索不支持同时传 parent_id；scope 全部时省略 container_id，recursive 仅有容器且平台支持时接受。
+本地 q 最大 100 字符；page_size=10/20/50/100。远端 page_size 默认 20，范围 1–100，界面提供 10/20/50/100，不接受 limit；next_cursor=null 表示结束，不伪造 total。游标绑定连接、操作者、系统首选与材料/配置版本、查询条件和每页数量，签名且有限期（10 分钟）；不承诺远端多页结果为一致性快照，客户端按 repo_id 去重。更换条件/凭证令旧游标失效，要求重查。分组搜索不支持同时传 parent_id；scope 全部时省略 container_id，recursive 仅有容器且平台支持时接受。
 
 新增与批量解除每批 1–100 个唯一 ID，超限拒绝，不静默截断。批量新增目标已经关联返回 409 REPOSITORY_ALREADY_LINKED，并列出当前项目内冲突项；前端刷新状态，用户移除冲突项后重提。批量解除任一 ID 不属该项目或不存在，整批失败，不泄露其他项目目标。成功后只有新增关联 ID 才进入成员可见列表。
 

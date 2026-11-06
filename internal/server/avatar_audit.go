@@ -100,16 +100,24 @@ func registerAvatarAudit(business *gin.RouterGroup, o Options) {
 		c.Data(200, "image/png", data)
 	})
 	business.GET("/admin/audit-events", func(c *gin.Context) {
-		limit, ok := queryInt(c, "limit", 20)
+		if c.Query("cursor") != "" {
+			httpx.Write(c, httpx.Invalid("cursor", "unsupported_parameter"))
+			return
+		}
+		page, ok := queryInt(c, "page", 1)
 		if !ok {
 			return
 		}
-		before, err := audit.DecodeCursor(c.Query("cursor"))
-		if err != nil {
-			httpx.Write(c, err)
+		sizeKey := "page_size"
+		if _, exists := c.GetQuery("page_size"); !exists && c.Query("limit") != "" {
+			sizeKey = "limit"
+		}
+		size, ok := queryInt(c, sizeKey, 20)
+		if !ok {
 			return
 		}
-		f := audit.Filter{Limit: limit, Query: c.Query("q"), ActionPrefix: c.Query("action_prefix"), TargetType: c.Query("target_type"), TargetID: c.Query("target_id"), Before: before}
+		f := audit.Filter{Page: page, PageSize: size, Query: c.Query("q"), ActionPrefix: c.Query("action_prefix"), TargetType: c.Query("target_type"), TargetID: c.Query("target_id")}
+
 		if raw := c.Query("actor_user_id"); raw != "" {
 			id, e := strconv.ParseUint(raw, 10, 64)
 			if e != nil || id == 0 || strconv.FormatUint(id, 10) != raw {
@@ -128,7 +136,7 @@ func registerAvatarAudit(business *gin.RouterGroup, o Options) {
 				*dst = &value
 			}
 		}
-		events, next, a, err := service.Events(c.Request.Context(), rawSession(c), f)
+		events, total, a, err := service.Events(c.Request.Context(), rawSession(c), f)
 		if err != nil {
 			httpx.Write(c, err)
 			return
@@ -137,12 +145,9 @@ func registerAvatarAudit(business *gin.RouterGroup, o Options) {
 		for _, e := range events {
 			data = append(data, eventDTO(e))
 		}
-		var cursor any
-		if next != "" {
-			cursor = next
-		}
+
 		setSession(c, o, rawSession(c), a)
-		c.JSON(200, gin.H{"data": data, "pagination": gin.H{"next_cursor": cursor, "has_more": next != ""}})
+		c.JSON(200, gin.H{"data": data, "pagination": gin.H{"page": page, "page_size": size, "total": total}})
 	})
 	business.GET("/admin/audit-events/:id", func(c *gin.Context) {
 		id, ok := parseID(c)

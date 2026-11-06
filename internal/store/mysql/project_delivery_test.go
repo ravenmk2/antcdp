@@ -162,6 +162,18 @@ func verifyProjectDelivery(t *testing.T, db *Store, admin, manager, outsider *ap
 	manager.call(t, "POST", endpoint+"preview", map[string]string{"source": "releases"}, 403, nil)
 	maintenancePreview := testData(admin.call(t, "POST", endpoint+"preview", map[string]string{"source": "releases"}, 200, nil))
 	all := maintenancePreview["items"].([]any)
+	for _, size := range []int{0, 101} {
+		admin.call(t, "POST", endpoint+"preview", map[string]any{"source": "releases", "page_size": size}, 422, nil)
+	}
+	single := testData(admin.call(t, "POST", endpoint+"preview", map[string]any{"source": "releases", "page_size": 1}, 200, nil))
+	if len(single["items"].([]any)) != min(1, len(all)) || single["total"] != maintenancePreview["total"] || single["offset"] != float64(0) {
+		t.Fatal(single)
+	}
+	last := testData(admin.call(t, "POST", endpoint+"preview", map[string]any{"source": "releases", "page_size": 1, "offset": 1000000}, 200, nil))
+	if last["offset"] != float64(max(0, int(last["total"].(float64))-1)) {
+		t.Fatal("maintenance page not normalized", last)
+	}
+
 	selected := []map[string]string{}
 	for _, item := range all {
 		row := item.(map[string]any)

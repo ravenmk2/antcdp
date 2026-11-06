@@ -79,7 +79,7 @@ func (t *identityTx) AvatarKeyExists(key string) (bool, error) {
 	err := t.tx.GetContext(t.ctx, &count, "SELECT COUNT(*) FROM avatar_file WHERE storage_key=?", key)
 	return count > 0, err
 }
-func (t *identityTx) AuditEvents(f audit.Filter) ([]identity.Event, error) {
+func (t *identityTx) AuditEvents(f audit.Filter) ([]identity.Event, int, error) {
 	where := []string{"1=1"}
 	args := []any{}
 	if f.Query != "" {
@@ -123,14 +123,15 @@ func (t *identityTx) AuditEvents(f audit.Filter) ([]identity.Event, error) {
 		where = append(where, "occurred_at<?")
 		args = append(args, f.To.UTC())
 	}
-	if f.Before != nil {
-		where = append(where, "(occurred_at<? OR (occurred_at=? AND id<?))")
-		args = append(args, f.Before.Time, f.Before.Time, f.Before.ID)
+	condition := strings.Join(where, " AND ")
+	var total int
+	if err := t.tx.GetContext(t.ctx, &total, "SELECT COUNT(*) FROM audit_event WHERE "+condition, args...); err != nil {
+		return nil, 0, err
 	}
-	args = append(args, f.Limit+1)
+	args = append(args, f.PageSize, (f.Page-1)*f.PageSize)
 	events := []identity.Event{}
-	err := t.tx.SelectContext(t.ctx, &events, "SELECT "+eventColumns+" FROM audit_event WHERE "+strings.Join(where, " AND ")+" ORDER BY occurred_at DESC,id DESC LIMIT ?", args...)
-	return events, err
+	err := t.tx.SelectContext(t.ctx, &events, "SELECT "+eventColumns+" FROM audit_event WHERE "+condition+" ORDER BY occurred_at DESC,id DESC LIMIT ? OFFSET ?", args...)
+	return events, total, err
 }
 func (t *identityTx) AuditEvent(id uint64) (*identity.Event, error) {
 	v := &identity.Event{}

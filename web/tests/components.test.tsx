@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Button } from "@/components/button";
@@ -97,8 +97,79 @@ describe("platform components", () => {
     expect(screen.getByText("共 35 条")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "下一页" }));
     expect(onChange).toHaveBeenCalledWith(3, 10);
-    await userEvent.selectOptions(screen.getByLabelText("每页条数"), "50");
+    await userEvent.click(screen.getByRole("combobox", { name: "每页条数" }));
+    await userEvent.click(await screen.findByRole("option", { name: "50" }));
     expect(onChange).toHaveBeenCalledWith(1, 50);
+  });
+  it("selects page sizes with the keyboard and restores focus after Escape", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Pagination page={2} size={10} total={135} onChange={onChange} />);
+    const trigger = screen.getByRole("combobox", { name: "每页条数" });
+    await user.tab();
+    await user.keyboard("{Enter}");
+    expect(await screen.findByRole("listbox")).toBeVisible();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(onChange).not.toHaveBeenCalled();
+    await user.keyboard("{Enter}");
+    await screen.findByRole("listbox");
+    await user.keyboard("{End}{Enter}");
+    expect(onChange).toHaveBeenLastCalledWith(1, 100);
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+  it("navigates to both ends and preserves a usable keyboard order", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(<Pagination page={3} size={10} total={105} onChange={onChange} />);
+    expect(screen.getByText("3/11")).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("aria-label")),
+    ).toEqual(["首页", "上一页", "下一页", "末页"]);
+    await user.tab();
+    expect(screen.getByLabelText("每页条数")).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole("button", { name: "首页" })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(onChange).toHaveBeenLastCalledWith(1, 10);
+    await user.click(screen.getByRole("button", { name: "上一页" }));
+    expect(onChange).toHaveBeenLastCalledWith(2, 10);
+    await user.click(screen.getByRole("button", { name: "末页" }));
+    expect(onChange).toHaveBeenLastCalledWith(11, 10);
+  });
+  it("disables unavailable directions and all controls while fetching", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(
+      <Pagination page={1} size={10} total={0} onChange={onChange} />,
+    );
+    expect(screen.getByText("共 0 条")).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+    for (const button of screen.getAllByRole("button"))
+      expect(button).toBeDisabled();
+    rerender(<Pagination page={3} size={10} total={27} onChange={onChange} />);
+    expect(screen.getByRole("button", { name: "首页" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "上一页" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "下一页" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "末页" })).toBeDisabled();
+    rerender(
+      <Pagination page={2} size={10} total={27} pending onChange={onChange} />,
+    );
+    for (const button of screen.getAllByRole("button"))
+      expect(button).toBeDisabled();
+    expect(screen.getByLabelText("每页条数")).toBeDisabled();
+  });
+  it("does not invent a total or last page for remote cursor results", async () => {
+    const onChange = vi.fn();
+    render(<Pagination page={3} size={20} hasNext onChange={onChange} />);
+    expect(screen.getByText("总数未知")).toBeInTheDocument();
+    expect(screen.getByText("3/—")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "末页" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "下一页" }));
+    expect(onChange).toHaveBeenLastCalledWith(4, 20);
+    await userEvent.click(screen.getByRole("button", { name: "首页" }));
+    expect(onChange).toHaveBeenLastCalledWith(1, 20);
   });
   it("mounts overlays on demand and supports keyboard dismissal", async () => {
     const onClose = vi.fn();

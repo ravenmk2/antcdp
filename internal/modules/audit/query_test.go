@@ -1,33 +1,20 @@
 package audit
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 )
 
-func TestCursorAndFilter(t *testing.T) {
+func TestPaginationAndFilter(t *testing.T) {
 	at := time.Date(2026, 10, 18, 12, 0, 0, 123000000, time.FixedZone("local", 28800))
-	cursor, err := DecodeCursor(EncodeCursor(at, 9007199254740993))
-	if err != nil || !cursor.Time.Equal(at) || cursor.ID != 9007199254740993 {
-		t.Fatal(cursor, err)
-	}
-	for _, raw := range []string{"!", strings.Repeat("x", 161), base64.RawURLEncoding.EncodeToString([]byte("2026-10-18T00:00:00.000001Z|1")), base64.RawURLEncoding.EncodeToString([]byte("2026-10-18T00:00:00Z|01")), base64.RawURLEncoding.EncodeToString([]byte("2026-10-18T00:00:00Z|0"))} {
-		if _, err := DecodeCursor(raw); err == nil {
-			t.Errorf("accepted cursor %q", raw)
-		}
-	}
-	if c, err := DecodeCursor(""); err != nil || c != nil {
-		t.Fatal(c, err)
-	}
-	for _, filter := range []Filter{{Limit: 0}, {Limit: 101}, {Limit: 20, Query: strings.Repeat("字", 65)}, {Limit: 20, ActionPrefix: "user.%"}, {Limit: 20, TargetType: "user OR 1=1"}, {Limit: 20, From: &at, To: &at}} {
+	for _, filter := range []Filter{{Page: 0, PageSize: 20}, {Page: 1000001, PageSize: 20}, {Page: 1, PageSize: 0}, {Page: 1, PageSize: 101}, {Page: 1, PageSize: 20, Query: strings.Repeat("字", 65)}, {Page: 1, PageSize: 20, ActionPrefix: "user.%"}, {Page: 1, PageSize: 20, TargetType: "user OR 1=1"}, {Page: 1, PageSize: 20, From: &at, To: &at}} {
 		if filter.Validate() == nil {
 			t.Errorf("accepted filter %+v", filter)
 		}
 	}
-	if err := (Filter{Limit: 20, Query: "用户", ActionPrefix: "user.", From: &at}).Validate(); err != nil {
+	if err := (Filter{Page: 1, PageSize: 20, Query: "用户", ActionPrefix: "user.", From: &at}).Validate(); err != nil {
 		t.Fatal(err)
 	}
 	if codes := SearchActions("头像"); len(codes) != 1 || codes[0] != "user.avatar_changed" {

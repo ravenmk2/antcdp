@@ -203,7 +203,7 @@ func testAuditQueries(t *testing.T, db *Store, founder, visitor, anon *apiClient
 	ctx := context.Background()
 	visitor.call(t, "GET", "/admin/audit-events", nil, 403, nil)
 	anon.call(t, "GET", "/admin/audit-events", nil, 401, nil)
-	for _, query := range []string{"limit=0", "limit=101", "cursor=bad", "from=yesterday", "from=2026-10-18T00:00:00Z&to=2026-10-18T00:00:00Z", "actor_user_id=01", "action_prefix=user.%25"} {
+	for _, query := range []string{"page=0", "page=-1", "page=1000001", "page=1.5", "page_size=0", "page_size=101", "limit=0", "limit=101", "cursor=bad", "from=yesterday", "from=2026-10-18T00:00:00Z&to=2026-10-18T00:00:00Z", "actor_user_id=01", "action_prefix=user.%25"} {
 		founder.call(t, "GET", "/admin/audit-events?"+query, nil, 422, nil)
 	}
 	founder.call(t, "GET", "/admin/audit-events/999999999", nil, 404, nil)
@@ -220,18 +220,17 @@ func testAuditQueries(t *testing.T, db *Store, founder, visitor, anon *apiClient
 		}
 		ids = append(ids, strconv.FormatInt(id, 10))
 	}
-	base := "/admin/audit-events?limit=10&target_type=user&target_id=audit_fixture&actor_user_id=" + founderID + "&from=" + url.QueryEscape(when.Format(time.RFC3339)) + "&to=" + url.QueryEscape(when.Add(time.Second).Format(time.RFC3339))
+	base := "/admin/audit-events?page_size=10&target_type=user&target_id=audit_fixture&actor_user_id=" + founderID + "&from=" + url.QueryEscape(when.Format(time.RFC3339)) + "&to=" + url.QueryEscape(when.Add(time.Second).Format(time.RFC3339))
 	seen := map[string]bool{}
-	cursor := ""
 	for page := range 3 {
-		response := founder.call(t, "GET", base+"&cursor="+url.QueryEscape(cursor), nil, 200, nil)
+		response := founder.call(t, "GET", base+"&page="+strconv.Itoa(page+1), nil, 200, nil)
 		rows := response["data"].([]any)
 		expect := 10
 		if page == 2 {
 			expect = 7
 		}
 		if len(rows) != expect {
-			t.Fatal("bad cursor page size", len(rows))
+			t.Fatal("bad numbered page size", len(rows))
 		}
 		for _, raw := range rows {
 			row := raw.(map[string]any)
@@ -246,19 +245,37 @@ func testAuditQueries(t *testing.T, db *Store, founder, visitor, anon *apiClient
 			}
 		}
 		pagination := response["pagination"].(map[string]any)
-		if page < 2 {
-			cursor = pagination["next_cursor"].(string)
-			if pagination["has_more"] != true {
-				t.Fatal(pagination)
-			}
-		} else if pagination["next_cursor"] != nil || pagination["has_more"] != false {
+		if pagination["page"] != float64(page+1) || pagination["page_size"] != float64(10) || pagination["total"] != float64(27) {
 			t.Fatal(pagination)
 		}
+
 	}
 	for _, id := range ids {
 		if !seen[id] {
-			t.Fatal("cursor lost event", id)
+			t.Fatal("pagination lost event", id)
 		}
+	}
+	// Random access and empty out-of-range pages retain the actual filtered count.
+	for _, page := range []int{3, 1, 2, 4} {
+		response := founder.call(t, "GET", base+"&page="+strconv.Itoa(page), nil, 200, nil)
+		rows := response["data"].([]any)
+		want := 10
+		if page == 3 {
+			want = 7
+		}
+		if page == 4 {
+			want = 0
+		}
+		if len(rows) != want || response["pagination"].(map[string]any)["total"] != float64(27) {
+			t.Fatal(response)
+		}
+		if len(rows) > 0 && rows[0].(map[string]any)["id"] != ids[26-(page-1)*10] {
+			t.Fatal("unstable timestamp tie ordering", rows[0])
+		}
+	}
+	legacy := founder.call(t, "GET", "/admin/audit-events?limit=10&target_id=audit_fixture", nil, 200, nil)
+	if len(legacy["data"].([]any)) != 10 {
+		t.Fatal("legacy limit not honored")
 	}
 	detail := testData(founder.call(t, "GET", "/admin/audit-events/"+ids[0], nil, 200, nil))
 	if strings.Contains(fmt.Sprint(detail), "SECRET") || !strings.Contains(fmt.Sprint(detail), "新名称") {

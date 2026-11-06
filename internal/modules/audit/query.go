@@ -1,11 +1,9 @@
 package audit
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -13,16 +11,11 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-type Cursor struct {
-	Time time.Time
-	ID   uint64
-}
 type Filter struct {
-	Limit                                     int
+	Page, PageSize                            int
 	Query, ActionPrefix, TargetType, TargetID string
 	ActorUserID                               uint64
 	From, To                                  *time.Time
-	Before                                    *Cursor
 }
 
 var prefixPattern = regexp.MustCompile(`^[a-z_]+(?:\.[a-z_]+)*\.?$`)
@@ -130,8 +123,8 @@ func SearchActions(query string) []string {
 
 func ValidTime(t time.Time) bool { return t.UTC().Year() >= 1000 && t.UTC().Year() <= 9999 }
 func (f Filter) Validate() error {
-	if f.Limit < 1 || f.Limit > 100 {
-		return httpx.Invalid("limit", "invalid_value")
+	if f.Page < 1 || f.Page > 1000000 || f.PageSize < 1 || f.PageSize > 100 {
+		return httpx.Invalid("pagination", "invalid_value")
 	}
 	if !utf8.ValidString(f.Query) || utf8.RuneCountInString(f.Query) > 64 {
 		return httpx.Invalid("q", "invalid_length")
@@ -152,35 +145,6 @@ func (f Filter) Validate() error {
 		return httpx.Invalid("to", "invalid_time_range")
 	}
 	return nil
-}
-func EncodeCursor(t time.Time, id uint64) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(t.UTC().Format(time.RFC3339Nano) + "|" + strconv.FormatUint(id, 10)))
-}
-func DecodeCursor(raw string) (*Cursor, error) {
-	if raw == "" {
-		return nil, nil
-	}
-	invalid := func() (*Cursor, error) { return nil, httpx.Invalid("cursor", "invalid_cursor") }
-	if len(raw) > 160 {
-		return invalid()
-	}
-	b, err := base64.RawURLEncoding.DecodeString(raw)
-	if err != nil {
-		return invalid()
-	}
-	parts := strings.Split(string(b), "|")
-	if len(parts) != 2 {
-		return invalid()
-	}
-	t, err := time.Parse(time.RFC3339Nano, parts[0])
-	if err != nil || !ValidTime(t) || t.Nanosecond()%1000000 != 0 {
-		return invalid()
-	}
-	id, err := strconv.ParseUint(parts[1], 10, 64)
-	if err != nil || id == 0 || strconv.FormatUint(id, 10) != parts[1] {
-		return invalid()
-	}
-	return &Cursor{t.UTC(), id}, nil
 }
 
 // Read-side allowlists prevent accidental future payloads exposing credentials.
