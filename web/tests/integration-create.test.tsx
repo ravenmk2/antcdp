@@ -114,7 +114,12 @@ async function fill(
     screen.getByLabelText(/^GitLab 实例地址/),
     "https://gitlab.example.test",
   );
-  if (advance) await user.click(screen.getByRole("button", { name: "下一步" }));
+  if (advance) {
+    await user.click(screen.getByRole("button", { name: "下一步" }));
+    await screen.findByRole("checkbox", {
+      name: "同时添加系统凭证（可选）",
+    });
+  }
   if (credential)
     await user.click(
       screen.getByRole("checkbox", { name: "同时添加系统凭证（可选）" }),
