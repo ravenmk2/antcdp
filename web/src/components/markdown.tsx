@@ -80,11 +80,39 @@ export function MarkdownView({
           attributes[names[attr.name] || attr.name] = attr.value;
       if (["br", "hr"].includes(node.tagName.toLowerCase()))
         return createElement(node.tagName.toLowerCase(), attributes);
-      return createElement(
-        node.tagName.toLowerCase(),
-        attributes,
-        ...[...node.childNodes].map(render),
-      );
+      const children = [...node.childNodes].map(render);
+      if (node.tagName === "TH" && !node.nextElementSibling) {
+        const tableIndex = node
+          .closest("table")
+          ?.getAttribute("data-markdown-table");
+        const tableSource =
+          tableIndex != null ? document.tables[Number(tableIndex)] : undefined;
+        if (tableSource !== undefined) {
+          return (
+            <th {...attributes} key={key}>
+              <div className="markdown-table-heading">
+                <span>{children}</span>
+                <CopyButton value={tableSource} label="复制表格 Markdown" />
+              </div>
+            </th>
+          );
+        }
+      }
+      if (node.tagName === "TABLE") {
+        return (
+          <div key={key} className="markdown-table-frame">
+            <div
+              className="markdown-table-scroll"
+              tabIndex={0}
+              role="region"
+              aria-label="Markdown 表格"
+            >
+              <table {...attributes}>{children}</table>
+            </div>
+          </div>
+        );
+      }
+      return createElement(node.tagName.toLowerCase(), attributes, ...children);
     }
     return [...dom.body.childNodes].map(render);
   }, [document]);

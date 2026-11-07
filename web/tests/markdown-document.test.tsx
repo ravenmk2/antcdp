@@ -20,6 +20,23 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
+it("copies each complete table from its original Markdown source", async () => {
+  const first =
+    "| 名称 | 链接 |\r\n| --- | --- |\r\n| `a` | [站点](/home) |\r\n";
+  const second = "| 数量 |\n| ---: |\n| 12 |";
+  const source = `正文\r\n\r\n${first}\r\n间隔\n\n${second}`;
+  expect(parseMarkdown(source).tables).toEqual([first, second]);
+  const user = userEvent.setup();
+  const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  render(<MarkdownView source={source} />);
+  const buttons = screen.getAllByRole("button", { name: "复制表格 Markdown" });
+  expect(screen.getAllByRole("table")).toHaveLength(2);
+  await user.click(buttons[0]);
+  expect(write).toHaveBeenLastCalledWith(first);
+  await user.click(buttons[1]);
+  expect(write).toHaveBeenLastCalledWith(second);
+});
+
 it("reads explicit code filenames and bounded line ranges from fences", () => {
   const document = parseMarkdown(
     '```ts title="app/api/chat/route.ts" {2-3,999999999}\none\ntwo\nthree\n```',

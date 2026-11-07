@@ -17,10 +17,16 @@ export function parseMarkdown(source: string) {
   const renderer = new MarkdownIt({ html: false, linkify: true });
   const headings: DocumentHeading[] = [];
   const blocks: DocumentCode[] = [];
+  const tables: string[] = [];
+  const sourceLines = source.match(/[^\r\n]*(?:\r\n|\r|\n|$)/g) ?? [];
   const used = new Set<string>();
   const tokens = renderer.parse(source, {});
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
+    if (token.type === "table_open" && token.map) {
+      token.attrSet("data-markdown-table", String(tables.length));
+      tables.push(sourceLines.slice(token.map[0], token.map[1]).join(""));
+    }
     if (token.map && token.nesting !== -1)
       token.attrSet("data-source-line", String(token.map[0] + 1));
     if (token.type !== "heading_open") continue;
@@ -102,6 +108,7 @@ export function parseMarkdown(source: string) {
   return {
     headings,
     blocks,
+    tables,
     html: renderer.renderer.render(tokens, renderer.options, {}),
   };
 }

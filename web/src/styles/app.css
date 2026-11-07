@@ -761,8 +761,8 @@
   .settings-nav button {
     font-weight: 500;
   }
-  .settings-nav a:hover,
-  .settings-nav button:hover {
+  .settings-nav a:hover:not([aria-current="page"], [aria-pressed="true"]),
+  .settings-nav button:hover:not([aria-current="page"], [aria-pressed="true"]) {
     background: var(--surface-hover);
     color: var(--text);
   }
@@ -1083,15 +1083,42 @@
     background: var(--surface-subtle);
   }
   .markdown table {
-    display: block;
-    max-width: 100%;
-    overflow-x: auto;
-    border-collapse: collapse;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
   }
   .markdown th,
   .markdown td {
     padding: 8px 12px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .markdown th {
+    background: var(--surface-subtle);
+  }
+  .markdown :is(th, td):last-child {
+    border-right: 0;
+  }
+  .markdown tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .markdown-table-frame {
+    margin-block: 16px;
     border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+  .markdown-table-scroll {
+    overflow-x: auto;
+  }
+  .markdown-table-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .markdown-table-heading > :last-child {
+    flex-shrink: 0;
   }
   .markdown img {
     display: none;
@@ -1590,6 +1617,9 @@
 }
 .markdown :is(p, ul, ol, blockquote, table) {
   margin: 0.85em 0;
+}
+.markdown .markdown-table-scroll table {
+  margin: 0;
 }
 .markdown ul {
   list-style: disc;
