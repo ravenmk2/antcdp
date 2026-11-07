@@ -1,0 +1,54 @@
+name: ghcr-cleanup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    # Hold the same lock as dev and release from inventory through deletion.
+    concurrency:
+      group: ghcr-package-publish
+      cancel-in-progress: false
+      queue: max
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Compute package name
+        id: image
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          IMAGE_PATH="${REPOSITORY,,}"
+          echo "package=${IMAGE_PATH#*/}" >> "$GITHUB_OUTPUT"
+
+      - name: Check tagged image dependencies before cleanup
+        id: cleanup-check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_CLEANUP_MODE: manual
+        run: node scripts/check-ghcr-cleanup.mjs
+
+      - name: Report blocked cleanup
+        if: steps.cleanup-check.outputs.safe != 'true'
+        run: |
+          echo "::error::Cleanup was blocked. See the dependency check warning for the reason."
+          exit 1
+
+      - name: Keep the latest 10 untagged container versions
+        if: steps.cleanup-check.outputs.safe == 'true'
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ steps.image.outputs.package }}
+          package-type: container
+          delete-only-untagged-versions: "true"
+          min-versions-to-keep: 10

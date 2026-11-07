@@ -324,6 +324,77 @@ test("an older successful workflow cannot clean after another build moved dev", 
   assert.ok(!setup.calls.some(({ url }) => url.origin === "https://ghcr.io"));
 });
 
+test("manual cleanup snapshots current dev without a build digest", async () => {
+  const setup = fixture();
+  const result = await checkGhcrCleanup({
+    ...setup.options,
+    mode: "manual",
+    expectedDevDigest: undefined,
+  });
+  assert.equal(result.safe, true);
+  assert.equal(
+    setup.calls.filter(({ url }) => url.pathname.endsWith("/manifests/dev"))
+      .length,
+    2,
+  );
+});
+
+test("manual cleanup still requires dev and protects untagged dependencies", async () => {
+  const child = image("child");
+  const dev = index([child]);
+  for (const rows of [
+    [version(1, dev, ["latest"])],
+    [version(1, dev, ["dev"]), version(2, child)],
+  ]) {
+    const result = await checkGhcrCleanup({
+      ...fixture({ dev, rows }).options,
+      mode: "manual",
+      expectedDevDigest: undefined,
+    });
+    assert.equal(result.safe, false);
+    assert.match(result.reason, /missing|untagged/);
+  }
+});
+
+test("manual cleanup blocks changes to the inventory or registry dev tag", async () => {
+  const dev = image(),
+    newer = image("newer");
+  for (const changeInventory of [true, false]) {
+    let reads = 0;
+    const setup = fixture({
+      dev,
+      pages: (page, round) =>
+        page === 1
+          ? [version(1, changeInventory && round === 2 ? newer : dev, ["dev"])]
+          : [],
+      intercept: (url) =>
+        !changeInventory &&
+        url.pathname.endsWith("/manifests/dev") &&
+        ++reads === 2
+          ? manifestResponse(newer)
+          : undefined,
+    });
+    const result = await checkGhcrCleanup({
+      ...setup.options,
+      mode: "manual",
+      expectedDevDigest: undefined,
+    });
+    assert.equal(result.safe, false);
+    assert.match(result.reason, /changed during|digest/);
+  }
+});
+
+test("published cleanup cannot fall back to manual mode when its digest is absent", async () => {
+  const setup = fixture();
+  const result = await checkGhcrCleanup({
+    ...setup.options,
+    expectedDevDigest: undefined,
+  });
+  assert.equal(result.safe, false);
+  assert.match(result.reason, /EXPECTED_DEV_DIGEST/);
+  assert.equal(setup.calls.length, 0);
+});
+
 test("blocks a changed inventory and a registry dev tag that disagrees with GitHub metadata", async () => {
   const dev = image(),
     newer = image("newer");
@@ -534,6 +605,7 @@ test("rejects input injection before making any request", async () => {
     { actor: "raven:other" },
     { token: "secret\r\nInjected: true" },
     { expectedDevDigest: "sha256:x\nsafe=true" },
+    { mode: "unknown" },
   ])
     assert.equal(
       (await checkGhcrCleanup({ ...setup.options, ...override })).safe,
@@ -580,6 +652,14 @@ test("CLI publishes false on a blocked check or unexpected exception, and true o
     );
     assert.equal(warnings.length, 2);
     assert.ok(warnings.every((message) => !message.includes("secret-token")));
+    assert.equal(
+      await runCli({ ...env, GHCR_CLEANUP_MODE: "manual" }, async (options) => {
+        assert.equal(options.mode, "manual");
+        assert.equal(options.expectedDevDigest, undefined);
+        return { safe: true };
+      }),
+      true,
+    );
     await assert.rejects(
       runCli({}, async () => ({ safe: false })),
       /GITHUB_OUTPUT/,

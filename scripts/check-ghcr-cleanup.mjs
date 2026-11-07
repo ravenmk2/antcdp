@@ -165,6 +165,7 @@ export async function checkGhcrCleanup({
   actor,
   token,
   expectedDevDigest,
+  mode = "published",
   fetchImpl = globalThis.fetch,
   timeoutMs = 20_000,
 } = {}) {
@@ -186,7 +187,13 @@ export async function checkGhcrCleanup({
       "Configuration: missing or invalid GITHUB_TOKEN.",
     );
     requireSafe(
-      typeof expectedDevDigest === "string" && DIGEST.test(expectedDevDigest),
+      ["published", "manual"].includes(mode),
+      "Configuration: invalid GHCR_CLEANUP_MODE.",
+    );
+    requireSafe(
+      mode === "manual" ||
+        (typeof expectedDevDigest === "string" &&
+          DIGEST.test(expectedDevDigest)),
       "Configuration: invalid EXPECTED_DEV_DIGEST.",
     );
     requireSafe(
@@ -222,6 +229,15 @@ export async function checkGhcrCleanup({
     const tagged = new Map(
       rows.filter((row) => row.tags.length).map((row) => [row.digest, row]),
     );
+    // The manual workflow holds the publish lock and snapshots the current dev.
+    // Published mode must still match the digest from that run's successful push.
+    if (mode === "manual") {
+      expectedDevDigest = rows.find((row) => row.tags.includes("dev"))?.digest;
+      requireSafe(
+        expectedDevDigest,
+        "The dev tag is missing; cleanup is blocked.",
+      );
+    }
     requireSafe(
       rows.some(
         (row) => row.digest === expectedDevDigest && row.tags.includes("dev"),
@@ -368,6 +384,7 @@ export async function runCli(env = process.env, check = checkGhcrCleanup) {
       actor: env.GITHUB_ACTOR,
       token: env.GITHUB_TOKEN,
       expectedDevDigest: env.EXPECTED_DEV_DIGEST,
+      mode: env.GHCR_CLEANUP_MODE ?? "published",
     });
   } catch {
     result = {

@@ -12,7 +12,7 @@
 
 开发镜像目前只支持 `linux/amd64`，显式设置 `provenance: false` 和 `sbom: false`，不附带构建来源证明与软件物料清单，避免因证明附件产生无标签子镜像。正式发布保留 `.goreleaser.yml` 的版本号、`版本-amd64`、`版本-arm64` 标签及 `latest`；版本标签和架构标签不参与自动清理，`latest` 随正式发布更新。以后启用证明、增加开发镜像架构或迁移 GoReleaser 构建方式时，需要重新检查依赖标签策略。
 
-开发工作流保持整体串行；开发镜像推送及清理、正式发布使用相同的 job 并发组 `ghcr-package-publish`，不取消正在运行的任务，使用 `queue: max` 保留等待中的正式发布（最多 100 个等待任务）。其他向同一个 package 写入的自动化也必须加入该并发组，不能在清理期间另行上传或移动标签。
+开发工作流保持整体串行；开发镜像推送及清理、正式发布、独立手动清理使用相同的 job 并发组 `ghcr-package-publish`，不取消正在运行的任务，使用 `queue: max` 保留等待中的任务（最多 100 个等待任务）。其他向同一个 package 写入的自动化也必须加入该并发组，不能在清理期间另行上传或移动标签。
 
 开发镜像推送成功后，`scripts/check-ghcr-cleanup.mjs` 只读检查 GHCR：分页读取所有有效 package 版本，核对 `dev` 与本次推送摘要一致，读取所有带标签版本的 manifest，并确认索引引用的每个子 manifest 也有独立标签。遇到无标签依赖、未知结构、数据不一致或请求失败时，输出警告并跳过本次清理；镜像发布结果保留。普通镜像的 config/layers 属于 blob，不要求单独打标签。
 
@@ -20,7 +20,9 @@
 
 仅在检查通过后，使用官方 `actions/delete-package-versions@v5`，设置 `delete-only-untagged-versions: true` 和 `min-versions-to-keep: 10`。这会保留全部带标签版本及最新 10 个无标签条目，每次最多删除 100 个较旧的无标签条目；积压较多时通过后续成功发布逐批清理。10 按 GHCR 条目计数，不承诺保留 10 套完整历史构建。需要长期保留或按 digest 固定部署的历史镜像应添加保留标签。
 
-同一 package 的发布任务统一使用上述并发锁，清理只在本次构建和引用检查成功后进行。工作流使用 `GITHUB_TOKEN` 和 `packages: write`，关联仓库还需在 package 的 Manage Actions Access 中具备 Admin 权限；由该仓库工作流发布的 package 通常自动获得此权限。
+独立清理入口为 `.github/workflows/ghcr-cleanup.yml`，只接受 `workflow_dispatch`。文件进入默认分支后，在 GitHub **Actions → ghcr-cleanup → Run workflow** 中选择包含该文件的分支并运行，无需重新构建或推送镜像。工作流获得并发锁后，以 `GHCR_CLEANUP_MODE=manual` 读取当前 `dev` 摘要，复用同一依赖检查、列表复核和保留策略；`dev` 缺失、检查失败或删除失败会使手动任务失败。每次最多清理 100 个较旧无标签版本，积压较多时可重复运行。开发发布仍使用默认 `published` 模式，必须提供本次推送摘要，不能因遗漏摘要而退化为手动清理。
+
+同一 package 的发布和清理任务统一使用上述并发锁，自动清理只在本次构建和引用检查成功后进行，手动清理只在当前引用检查成功后进行。工作流使用 `GITHUB_TOKEN` 和 `packages: write`，关联仓库还需在 package 的 Manage Actions Access 中具备 Admin 权限；由该仓库工作流发布的 package 通常自动获得此权限。
 
 参考：[官方清理 Action](https://github.com/actions/delete-package-versions)、[GitHub 并发队列](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)、[GitHub package 权限](https://docs.github.com/en/packages/learn-github-packages/deleting-and-restoring-a-package)、[Docker 构建证明](https://docs.docker.com/build/metadata/attestations/)。
 
