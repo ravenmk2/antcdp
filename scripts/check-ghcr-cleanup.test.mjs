@@ -195,7 +195,7 @@ test("reads all active pages for an organization and rechecks the inventory", as
   assert.equal(result.versionCount, 101);
   assert.equal(
     setup.calls.filter(({ url }) => url.pathname.includes("/versions")).length,
-    4,
+    6,
   );
 });
 
@@ -329,7 +329,8 @@ test("blocks a changed inventory and a registry dev tag that disagrees with GitH
     newer = image("newer");
   const changed = fixture({
     dev,
-    pages: (_, round) => [version(1, dev, round === 1 ? ["dev"] : ["other"])],
+    pages: (page, round) =>
+      page === 1 ? [version(1, dev, round === 1 ? ["dev"] : ["other"])] : [],
   });
   assert.match(
     (await checkGhcrCleanup(changed.options)).reason,
@@ -377,18 +378,49 @@ for (const status of [301, 302, 401, 403, 404, 429, 500]) {
 }
 
 for (const link of [
+  '<https://api.github.com/user/123/packages/container/antcdp/versions?per_page=100&page=2>; rel="next"',
+  '<https://api.github.com/users/raven/packages/container/antcdp/versions?per_page=100&page=2>; rel="next"',
   '<https://evil.invalid/versions?page=2>; rel="next"',
   '<https://api.github.com/users/raven/packages/container/antcdp/versions?state=active&per_page=100&page=1>; rel="next"',
   '<https://api.github.com/users/raven/packages/container/antcdp/versions?state=active&per_page=100&page=3>; rel="next"',
   "not a Link header",
 ]) {
-  test(`rejects dangerous or invalid pagination ${link}`, async () => {
-    const result = await checkGhcrCleanup(
-      fixture({ link: () => link }).options,
+  test(`reads fixed pages without following or depending on Link: ${link}`, async () => {
+    const dev = image();
+    const setup = fixture({
+      dev,
+      link: () => link,
+      // A tagged version on a later short page must still be checked.
+      pages: (page) =>
+        page === 1
+          ? [version(1, image("old"))]
+          : page === 2
+            ? [version(2, dev, ["dev"])]
+            : [],
+    });
+    const result = await checkGhcrCleanup(setup.options);
+    assert.equal(result.safe, true);
+    assert.equal(result.versionCount, 2);
+    assert.deepEqual(
+      setup.calls
+        .filter(({ url }) => url.pathname.includes("/versions"))
+        .map(({ url }) => url.href),
+      [1, 2, 3, 1, 2, 3].map(
+        (page) =>
+          `https://api.github.com/users/raven/packages/container/antcdp/versions?state=active&per_page=100&page=${page}`,
+      ),
     );
-    assert.equal(result.safe, false);
   });
 }
+
+test("does not permit cleanup when pagination never reaches an empty page", async () => {
+  const setup = fixture({
+    pages: (page) => [version(page, image(String(page)))],
+  });
+  const result = await checkGhcrCleanup(setup.options);
+  assert.equal(result.safe, false);
+  assert.match(result.reason, /page limit exceeded/);
+});
 
 test("does not silently accept a failed later page or repeated version IDs", async () => {
   const dev = image();
@@ -405,7 +437,7 @@ test("does not silently accept a failed later page or repeated version IDs", asy
   assert.equal((await checkGhcrCleanup(failing.options)).safe, false);
   const duplicate = fixture({
     dev,
-    rows: [version(1, dev, ["dev"]), version(1, image("old"))],
+    pages: () => [version(1, dev, ["dev"])],
   });
   assert.match((await checkGhcrCleanup(duplicate.options)).reason, /duplicate/);
 });

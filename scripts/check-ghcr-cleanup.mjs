@@ -103,45 +103,6 @@ async function readJSON(fetchImpl, url, headers, timeoutMs, label) {
   }
 }
 
-function nextPage(link, endpoint, page) {
-  if (!link) return false;
-  let next = false;
-  const relations = new Set();
-  for (const part of link.split(/,\s*(?=<)/)) {
-    const match = /^<([^>]+)>;\s*rel="(next|prev|first|last)"$/.exec(
-      part.trim(),
-    );
-    requireSafe(match, "Package pagination: invalid Link header.");
-    const [, address, relation] = match;
-    const url = new URL(address);
-    requireSafe(
-      url.origin === API &&
-        url.pathname === endpoint &&
-        !url.username &&
-        !url.password &&
-        !url.hash &&
-        url.searchParams.get("per_page") === "100" &&
-        url.searchParams.get("state") === "active" &&
-        [...url.searchParams.keys()].length === 3 &&
-        /^[1-9]\d*$/.test(url.searchParams.get("page") || ""),
-      "Package pagination: unexpected page URL.",
-    );
-    requireSafe(
-      !relations.has(relation),
-      "Package pagination: duplicate relation.",
-    );
-    relations.add(relation);
-    if (relation === "next") {
-      requireSafe(
-        Number(url.searchParams.get("page")) === page + 1,
-        "Package pagination: next page is not sequential.",
-      );
-      next = true;
-    }
-  }
-  return next;
-}
-
 async function versions(fetchImpl, endpoint, headers, timeoutMs) {
   const rows = [];
   const ids = new Set(),
@@ -186,13 +147,10 @@ async function versions(fetchImpl, endpoint, headers, timeoutMs) {
       digests.add(row.name);
       rows.push({ id: row.id, digest: row.name, tags: [...rowTags].sort() });
     }
-    const next = nextPage(response.headers.get("link"), endpoint, page);
-    requireSafe(
-      !next || response.data.length > 0,
-      "Package pagination: empty page claims a next page.",
-    );
-    // Probe after a full page even if Link was omitted; never assume truncation is complete.
-    if (!next && response.data.length < 100) return rows;
+    // Build each page URL ourselves; GitHub may normalize its Link URLs.
+    // Never follow Link or let its shape decide whether cleanup is safe.
+    // Probe until an empty page, including after short pages, to avoid truncation.
+    if (response.data.length === 0) return rows;
   }
   throw new UnsafeCleanup("Package pagination: page limit exceeded.");
 }

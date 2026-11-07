@@ -16,6 +16,8 @@
 
 开发镜像推送成功后，`scripts/check-ghcr-cleanup.mjs` 只读检查 GHCR：分页读取所有有效 package 版本，核对 `dev` 与本次推送摘要一致，读取所有带标签版本的 manifest，并确认索引引用的每个子 manifest 也有独立标签。遇到无标签依赖、未知结构、数据不一致或请求失败时，输出警告并跳过本次清理；镜像发布结果保留。普通镜像的 config/layers 属于 blob，不要求单独打标签。
 
+版本列表使用固定的 GitHub API 地址，携带 `state=active`、`per_page=100` 并逐页递增 `page`，直到返回空页；不跟随或依赖响应 `Link` 中的 URL 格式，避免 GitHub 规范化分页链接后误阻止清理。读取失败、跨页重复或超过页数上限仍会阻止删除；依赖检查完成后再次读取完整列表，确认检查期间版本和标签未变化。
+
 仅在检查通过后，使用官方 `actions/delete-package-versions@v5`，设置 `delete-only-untagged-versions: true` 和 `min-versions-to-keep: 10`。这会保留全部带标签版本及最新 10 个无标签条目，每次最多删除 100 个较旧的无标签条目；积压较多时通过后续成功发布逐批清理。10 按 GHCR 条目计数，不承诺保留 10 套完整历史构建。需要长期保留或按 digest 固定部署的历史镜像应添加保留标签。
 
 同一 package 的发布任务统一使用上述并发锁，清理只在本次构建和引用检查成功后进行。工作流使用 `GITHUB_TOKEN` 和 `packages: write`，关联仓库还需在 package 的 Manage Actions Access 中具备 Admin 权限；由该仓库工作流发布的 package 通常自动获得此权限。
