@@ -42,8 +42,8 @@ export function MessageLogList({
     ? (params.get("days") ?? "30")
     : "30";
   const profile = params.get("profile_id") ?? "";
-  const template = module === "email" ? (params.get("template_id") ?? "") : "";
-  const actor = module === "email" ? (params.get("actor_user_id") ?? "") : "";
+  const template = params.get("template_id") ?? "";
+  const actor = params.get("actor_user_id") ?? "";
   const page = Math.max(1, Number(params.get("page")) || 1);
   const size = [10, 20, 50, 100].includes(Number(params.get("page_size")))
     ? Number(params.get("page_size"))
@@ -100,18 +100,12 @@ export function MessageLogList({
         }}
         advancedCount={[profile, template, actor].filter(Boolean).length}
         advanced={
-          <div
-            className={
-              module === "email"
-                ? "grid min-w-0 flex-1 grid-cols-1 gap-x-4 gap-y-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(12rem,0.6fr)]"
-                : "grid gap-4"
-            }
-          >
+          <div className="grid min-w-0 flex-1 grid-cols-1 gap-x-4 gap-y-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(12rem,0.6fr)]">
             <label className="grid min-w-0 gap-1.5 text-xs text-muted">
-              {module === "email" ? "SMTP 配置" : "配置 ID"}
+              {module === "email" ? "SMTP 配置" : "短信配置"}
               {profileOptions ? (
                 <StandaloneSelect
-                  aria-label="筛选 SMTP 配置"
+                  aria-label={`筛选${module === "email" ? "SMTP" : "短信"}配置`}
                   value={profile}
                   onValueChange={(value) => filter({ profile_id: value })}
                 >
@@ -137,58 +131,52 @@ export function MessageLogList({
                 />
               )}
             </label>
-            {module === "email" && (
-              <>
-                <label className="grid min-w-0 gap-1.5 text-xs text-muted">
-                  邮件模板
-                  {templateOptions ? (
-                    <StandaloneSelect
-                      aria-label="筛选邮件模板"
-                      value={template}
-                      onValueChange={(value) => filter({ template_id: value })}
-                    >
-                      <option value="">全部模板</option>
-                      {template &&
-                        !templateOptions.some(
-                          (item) => item.id === template,
-                        ) && (
-                          <option value={template}>
-                            历史模板 · {template}
-                          </option>
-                        )}
-                      {templateOptions.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </StandaloneSelect>
-                  ) : (
-                    <StandaloneInput
-                      aria-label="模板 ID"
-                      value={template}
-                      placeholder="输入模板 ID"
-                      onChange={(event) =>
-                        filter({ template_id: event.target.value })
-                      }
-                    />
-                  )}
-                </label>
-                <label className="grid min-w-0 gap-1.5 text-xs text-muted">
-                  操作者 ID
+            <>
+              <label className="grid min-w-0 gap-1.5 text-xs text-muted">
+                {module === "email" ? "邮件模板" : "短信模板"}
+                {templateOptions ? (
+                  <StandaloneSelect
+                    aria-label={`筛选${module === "email" ? "邮件" : "短信"}模板`}
+                    value={template}
+                    onValueChange={(value) => filter({ template_id: value })}
+                  >
+                    <option value="">全部模板</option>
+                    {template &&
+                      !templateOptions.some((item) => item.id === template) && (
+                        <option value={template}>历史模板 · {template}</option>
+                      )}
+                    {templateOptions.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </StandaloneSelect>
+                ) : (
                   <StandaloneInput
-                    aria-label="操作者 ID"
-                    value={actor}
-                    placeholder="输入操作者 ID"
+                    aria-label="模板 ID"
+                    value={template}
+                    placeholder="输入模板 ID"
                     onChange={(event) =>
-                      filter({ actor_user_id: event.target.value })
+                      filter({ template_id: event.target.value })
                     }
                   />
-                </label>
-                <p className="col-span-full text-xs text-muted">
-                  日志保留 30 天；已删除配置或模板的历史记录仍可查询。
-                </p>
-              </>
-            )}
+                )}
+              </label>
+              <label className="grid min-w-0 gap-1.5 text-xs text-muted">
+                操作者 ID
+                <StandaloneInput
+                  aria-label="操作者 ID"
+                  value={actor}
+                  placeholder="输入操作者 ID"
+                  onChange={(event) =>
+                    filter({ actor_user_id: event.target.value })
+                  }
+                />
+              </label>
+              <p className="col-span-full text-xs text-muted">
+                日志保留 30 天；已删除配置或模板的历史记录仍可查询。
+              </p>
+            </>
           </div>
         }
       >

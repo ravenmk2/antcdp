@@ -2005,3 +2005,14 @@ body:has(.diagram-viewer) .markdown-back-top {
     outline-color: Highlight;
   }
 }
+
+/* Keep SMS editing commands reachable while reading long parameter forms. */
+.sms-template-editor > .page-header {
+  position: sticky;
+  top: 64px;
+  z-index: 10;
+  margin-bottom: 0;
+  padding: 14px 0;
+  background: var(--canvas);
+  border-bottom: 1px solid var(--border);
+}

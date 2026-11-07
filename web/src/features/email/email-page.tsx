@@ -1,3 +1,4 @@
+import { EmailParameterSchema, EmailParameterValues } from "./email-parameters";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
 import { useRef, useState } from "react";
@@ -1315,10 +1316,10 @@ function TemplateForm({
     },
   );
   const [schema, setSchema] = useState(
-    JSON.stringify(form.parameter_schema, null, 2),
+    JSON.stringify(form.parameter_schema ?? {}, null, 2),
   );
   const [sample, setSample] = useState(
-    JSON.stringify(form.sample_data, null, 2),
+    JSON.stringify(form.sample_data ?? {}, null, 2),
   );
   const [preview, setPreview] = useState<{
     subject: string;
@@ -1667,36 +1668,23 @@ function TemplateForm({
                   />
                 </Field>
               )}
-              <Field
-                label="参数 Schema（JSON）"
-                className="form-full"
+              <EmailParameterSchema
+                value={schema}
                 error={errors.fields.parameter_schema}
-              >
-                <Textarea
-                  name="parameter_schema"
-                  className="min-h-40 font-mono"
-                  value={schema}
-                  onChange={(event) => {
-                    errors.change("parameter_schema");
-                    setSchema(event.target.value);
-                  }}
-                />
-              </Field>
-              <Field
-                label="样例数据（JSON）"
-                className="form-full"
+                onChange={(value) => {
+                  errors.change("parameter_schema");
+                  setSchema(value);
+                }}
+              />
+              <EmailParameterValues
+                schema={schema}
+                value={sample}
                 error={errors.fields.sample_data}
-              >
-                <Textarea
-                  name="sample_data"
-                  className="min-h-40 font-mono"
-                  value={sample}
-                  onChange={(event) => {
-                    errors.change("sample_data");
-                    setSample(event.target.value);
-                  }}
-                />
-              </Field>
+                onChange={(value) => {
+                  errors.change("sample_data");
+                  setSample(value);
+                }}
+              />
             </div>
           </Panel>
           <Panel title="邮件预览" className="min-w-0 xl:sticky xl:top-5">

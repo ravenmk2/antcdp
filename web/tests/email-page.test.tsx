@@ -295,6 +295,12 @@ it("marks stale previews, validates JSON locally and confirms template deletion"
   expect(
     screen.getByText("内容已修改，当前为上次预览。请重新预览草稿。"),
   ).toBeVisible();
+  await user.click(
+    within(screen.getByRole("region", { name: "参数定义" })).getByRole(
+      "button",
+      { name: "高级 JSON" },
+    ),
+  );
   await user.clear(
     screen.getByRole("textbox", { name: "参数 Schema（JSON）" }),
   );
