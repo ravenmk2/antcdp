@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -34,10 +35,38 @@ func verifyCollaborationHTTP(t *testing.T, backend *Store, dataDir string, admin
 		if members[0].(map[string]any)["avatar_file_id"] != avatarID {
 			t.Fatal("team member response did not project the attached avatar")
 		}
+		for _, path := range []string{"/admin/collaboration/user-options", p + "/member-options"} {
+			items := admin.call(t, "GET", path+"?q="+url.QueryEscape("中文用户"), nil, 200, nil)["data"].([]any)
+			if len(items) != 1 || items[0].(map[string]any)["avatar_file_id"] != avatarID {
+				t.Fatal("user option did not project the attached avatar")
+			}
+		}
 		imageResponse(t, member, avatarID, 200, nil)
 		outsider.call(t, "GET", g+"/members", nil, 404, nil)
 		_, userTag = admin.user(t, memberID)
 		admin.call(t, "PATCH", "/admin/users/"+memberID, map[string]any{"avatar_upload_id": nil}, 200, map[string]string{"If-Match": userTag})
+	})
+	t.Run("CompleteUserOptions", func(t *testing.T) {
+		const prefix = "picker_coverage_"
+		t.Cleanup(func() {
+			if _, err := backend.db.Exec("DELETE FROM `user` WHERE username LIKE 'picker!_coverage!_%' ESCAPE '!' "); err != nil {
+				t.Error(err)
+			}
+		})
+		for i := range 105 {
+			if _, err := backend.db.Exec("INSERT INTO `user` (username,display_name,created_at,updated_at) VALUES (?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", fmt.Sprintf("%s%03d", prefix, i), fmt.Sprintf("选择器用户 %03d", i)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		for _, path := range []string{"/admin/collaboration/user-options", p + "/member-options", g + "/member-options"} {
+			items := admin.call(t, "GET", path+"?q="+prefix, nil, 200, nil)["data"].([]any)
+			if len(items) != 105 || items[104].(map[string]any)["username"] != prefix+"104" {
+				t.Fatalf("%s truncated or reordered candidates: %d", path, len(items))
+			}
+			if _, ok := items[0].(map[string]any)["avatar_file_id"]; ok {
+				t.Fatal("option without avatar must omit avatar ID")
+			}
+		}
 	})
 	t.Run("UnicodeSearch", func(t *testing.T) {
 		for _, tc := range []struct {

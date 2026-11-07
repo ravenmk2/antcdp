@@ -102,9 +102,10 @@ type MemberPage struct {
 	MembershipETag string   `json:"membership_etag"`
 }
 type UserOption struct {
-	ID       uint64 `db:"id" json:"id,string"`
-	Username string `db:"username" json:"username"`
-	Name     string `db:"display_name" json:"display_name"`
+	AvatarID *uint64 `db:"avatar_file_id" json:"avatar_file_id,string,omitempty"`
+	ID       uint64  `db:"id" json:"id,string"`
+	Username string  `db:"username" json:"username"`
+	Name     string  `db:"display_name" json:"display_name"`
 }
 type TeamOption struct {
 	ID      uint64 `json:"id,string"`

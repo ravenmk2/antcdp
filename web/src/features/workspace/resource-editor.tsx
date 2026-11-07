@@ -78,7 +78,7 @@ export function ResourceEditor({
   const [image, setImage] = useState<ImageValue | null | undefined>(undefined);
   const [adminIds, setAdminIds] = useState<string[]>([session.user.id]);
   const [selectedUsers, setSelectedUsers] = useState<UserOption[]>([
-    session.user,
+    { ...session.user, avatar_url: session.user.avatar?.url },
   ]);
   const [iconOpen, setIconOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
@@ -297,7 +297,7 @@ export function ResourceEditor({
                         resource={resourcePreview}
                         className="size-12"
                       />
-                      <span className="text-sm text-primary">更换图标</span>
+                      <span className="text-sm text-foreground">更换图标</span>
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent
@@ -337,8 +337,10 @@ export function ResourceEditor({
                                 }}
                                 className="size-8"
                               />
-                              {iconLabels[key as keyof typeof iconLabels] ??
-                                key}
+                              <span className="text-foreground">
+                                {iconLabels[key as keyof typeof iconLabels] ??
+                                  key}
+                              </span>
                               {selected && (
                                 <Check
                                   className="absolute right-1 top-1 size-3"

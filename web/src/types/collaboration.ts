@@ -45,6 +45,8 @@ export interface MemberPage extends Page<Member> {
   membership_etag: string;
 }
 export interface UserOption {
+  avatar_file_id?: string;
+  avatar_url?: string | null;
   id: string;
   username: string;
   display_name: string;

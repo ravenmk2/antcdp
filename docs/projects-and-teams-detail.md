@@ -160,15 +160,15 @@ PATCH 只接受 name、summary、description、icon；code 不可提交。字段
 
 有效成员投影：user_id、username、display_name、account_status、direct_role（无直接关系时为空字符串）、effective_role、sources。sources 条目为 `{type:"direct"}` 或 `{type:"team",team_id,team_name}`，按团队 ID 稳定排序；同一用户只出现一次。禁用用户保留角色来源，但不得因此被授权。
 
-### 4.3 有界选择器
+### 4.3 资源范围选择器
 
 不向业务管理员开放既有 `/admin/users`：新增资源范围的选择器。
 
-- `GET /projects/{id}/member-options`、`GET /teams/{id}/member-options`：该对象管理员可搜索正常用户，只返回 ID、用户名、显示名称；排除已直接加入者。团队继承用户仍可作为直接成员添加。
+- `GET /projects/{id}/member-options`、`GET /teams/{id}/member-options`：该对象管理员可搜索正常用户，只返回 ID、用户名、显示名称及可选 `avatar_file_id`（十进制字符串，无头像时省略）；排除已直接加入者。团队继承用户仍可作为直接成员添加。
 - `GET /projects/{id}/team-options`：项目管理员搜索正常、尚未授权的团队，只返回 ID、编码、名称、摘要，不返回成员明细。
 - `GET /admin/collaboration/user-options`：系统管理员创建对象时选择初始管理员，同一用户白名单投影。
 
-选择器仅接受 q 搜索，最多返回 50 个候选，不提供分页或目录图标预览。对象需正常且可管理；提交时重新验证状态，不信任选项快照。
+用户选择器仅接受 q 搜索，按用户名排序返回全部匹配的正常、未删除用户，不截断前 50 人，支持约 100 人规模完整浏览；成员选择器在完整结果上排除已直接加入者。头像通过现有 `/api/v1/avatars/{id}` 登录鉴权接口读取。团队选择器仍最多返回 50 个候选。选择器不提供分页或目录图标预览。对象需正常且可管理；提交时重新验证状态，不信任选项快照。
 
 ### 4.4 图标
 

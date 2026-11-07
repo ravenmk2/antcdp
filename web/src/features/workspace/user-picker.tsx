@@ -16,14 +16,14 @@ export function WorkspaceUserPicker({
       `${endpoint}?q=${encodeURIComponent(query)}`,
       { signal },
     );
-    return response.data;
+    return response.data.map((user) => ({
+      ...user,
+      avatar_url: user.avatar_file_id
+        ? `/api/v1/avatars/${user.avatar_file_id}`
+        : null,
+    }));
   }
   return (
-    <UserPicker
-      {...props}
-      sourceKey={endpoint}
-      loadOptions={loadOptions}
-      resultLimit={50}
-    />
+    <UserPicker {...props} sourceKey={endpoint} loadOptions={loadOptions} />
   );
 }

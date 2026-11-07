@@ -381,7 +381,7 @@ func (t *identityTx) CleanupShortcuts(users []uint64, now time.Time) error {
 func (t *identityTx) UserOptions(q string) ([]c.UserOption, error) {
 	out := []c.UserOption{}
 	search := collabSearch(q)
-	err := t.tx.SelectContext(t.ctx, &out, "SELECT id,username,display_name FROM `user` WHERE status='active' AND deleted_at IS NULL AND (CONVERT(username USING utf8mb4) LIKE ? ESCAPE '!' OR display_name LIKE ? ESCAPE '!') ORDER BY username LIMIT 50", search, search)
+	err := t.tx.SelectContext(t.ctx, &out, "SELECT id,username,display_name,avatar_file_id FROM `user` WHERE status='active' AND deleted_at IS NULL AND (CONVERT(username USING utf8mb4) LIKE ? ESCAPE '!' OR display_name LIKE ? ESCAPE '!') ORDER BY username", search, search)
 	return out, err
 }
 
