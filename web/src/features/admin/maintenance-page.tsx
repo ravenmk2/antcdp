@@ -2,10 +2,17 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { request } from "@/api/client";
 import { Button } from "@/components/button";
-import { ErrorNotice, Notice, StatusBadge } from "@/components/feedback";
+import { ErrorNotice, LoadingState, StatusBadge } from "@/components/feedback";
 import { PageHeader, Panel } from "@/components/layout";
 import { ConfirmDialog } from "@/components/overlays";
 import { Pagination } from "@/components/pagination";
+import { CopyButton } from "@/components/copy-button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { TableToolbar } from "@/components/table-toolbar";
 import { SimpleTable } from "@/components/table";
 import { useSubmission } from "@/hooks/use-form";
 import { formatBytes, formatDate } from "@/lib/utils";
@@ -28,6 +35,13 @@ interface CleanResult {
   counts: Record<string, number>;
   items: { id: string; status: string }[];
 }
+
+const cleanStatusLabels: Record<string, string> = {
+  removed: "已清理",
+  missing: "已不存在",
+  skipped: "已跳过",
+  failed: "失败",
+};
 
 export function MaintenancePage() {
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -67,33 +81,30 @@ export function MaintenancePage() {
     });
     if (ok) await load(offset);
   }
+  const selectedItems =
+    preview?.items.filter((item) => selected.includes(item.id)) ?? [];
+  const selectedBytes = selectedItems.reduce(
+    (sum, item) => sum + item.size_bytes,
+    0,
+  );
   return (
     <div className="page">
       <PageHeader
         title="临时文件维护"
-        description="预览候选、明确选择并复核清理；不接受任意文件路径。"
-        actions={
-          <Button
-            variant="outline"
-            pending={submission.pending}
-            onClick={() => void load(offset)}
-          >
-            重新预览
-          </Button>
-        }
+        description="预览并清理发布过程中遗留的临时文件。"
       />
-      <Notice className="mb-5">
-        已绑定、正在上传、已变化或归属未知的候选会跳过。清理使用同一预览中的候选令牌，逐项返回事实。
-      </Notice>
-      <ErrorNotice error={submission.error} />
+      {!confirm && <ErrorNotice error={submission.error} />}
       {result && (
-        <Panel title="上次清理结果" className="mb-5">
-          <div className="mb-3 text-sm">
-            已清理 {result.counts.removed ?? 0} · 已不存在{" "}
-            {result.counts.missing ?? 0} · 跳过 {result.counts.skipped ?? 0} ·
-            失败 {result.counts.failed ?? 0}
-          </div>
-          <ul className="grid gap-2">
+        <details className="panel mb-5 px-4 py-3">
+          <summary className="cursor-pointer text-sm">
+            <span className="mr-4 font-medium">上次清理结果</span>
+            <span className="text-muted">
+              已清理 {result.counts.removed ?? 0} · 已不存在{" "}
+              {result.counts.missing ?? 0} · 跳过 {result.counts.skipped ?? 0} ·
+              失败 {result.counts.failed ?? 0}
+            </span>
+          </summary>
+          <ul className="mt-3 grid max-h-60 gap-2 overflow-y-auto border-t pt-3">
             {result.items.map((item) => (
               <li key={item.id} className="flex items-center gap-3 text-xs">
                 <StatusBadge
@@ -105,25 +116,56 @@ export function MaintenancePage() {
                         : "warning"
                   }
                 >
-                  {item.status}
+                  {cleanStatusLabels[item.status] ?? item.status}
                 </StatusBadge>
                 <span className="mono break-all">{item.id}</span>
               </li>
             ))}
           </ul>
-        </Panel>
+        </details>
       )}
-      <Panel
-        title="发布临时文件"
-        action={
-          preview && (
+      <Panel bodyClassName="p-0">
+        <TableToolbar
+          actions={
+            <>
+              {preview && (
+                <Button
+                  variant="outline"
+                  pending={submission.pending}
+                  onClick={() => void load(offset)}
+                >
+                  重新预览
+                </Button>
+              )}
+              <Button
+                variant="dangerSoft"
+                disabled={submission.pending || !selected.length}
+                onClick={() => {
+                  submission.setError(null);
+                  setConfirm(true);
+                }}
+              >
+                <Trash2 />
+                清理所选（{selected.length}）
+              </Button>
+            </>
+          }
+        >
+          <span className="text-sm font-medium">发布临时文件</span>
+          {preview && (
             <span className="text-xs text-muted">
-              {preview.total} 项 · {formatBytes(preview.size_bytes)}
+              总容量 {formatBytes(preview.size_bytes)}
             </span>
-          )
-        }
-      >
-        {!preview ? (
+          )}
+          {selected.length > 0 && (
+            <span className="text-xs text-muted">
+              已选 {selected.length} 项 · {formatBytes(selectedBytes)}
+            </span>
+          )}
+        </TableToolbar>
+        {!preview && submission.pending ? (
+          <LoadingState label="正在预览可清理文件…" />
+        ) : !preview ? (
           <div className="p-8 text-center">
             <p className="mb-4 text-sm text-muted">
               尚未读取候选；预览不会删除文件。
@@ -134,13 +176,45 @@ export function MaintenancePage() {
           <>
             <SimpleTable
               label="临时文件候选"
-              headers={["", "候选 ID", "形成原因", "大小", "最近变化"]}
+              className="min-w-[900px] table-fixed [&_th:first-child]:w-12 [&_th:nth-child(3)]:w-48 [&_th:nth-child(4)]:w-32 [&_th:nth-child(4)]:text-right [&_th:last-child]:w-48"
+              headers={[
+                <input
+                  key="select-all"
+                  type="checkbox"
+                  className="size-4 accent-primary"
+                  aria-label="选择本页全部候选"
+                  disabled={submission.pending || !preview.items.length}
+                  checked={
+                    preview.items.length > 0 &&
+                    selected.length === preview.items.length
+                  }
+                  ref={(node) => {
+                    if (node)
+                      node.indeterminate =
+                        selected.length > 0 &&
+                        selected.length < preview.items.length;
+                  }}
+                  onChange={(event) =>
+                    setSelected(
+                      event.target.checked
+                        ? preview.items.map((item) => item.id)
+                        : [],
+                    )
+                  }
+                />,
+                "候选 ID",
+                "形成原因",
+                "大小",
+                "最近变化",
+              ]}
             >
               {preview.items.map((item) => (
                 <tr key={item.id}>
                   <td>
                     <input
                       type="checkbox"
+                      className="size-4 accent-primary"
+                      disabled={submission.pending}
                       aria-label={`选择 ${item.id}`}
                       checked={selected.includes(item.id)}
                       onChange={(event) =>
@@ -152,9 +226,31 @@ export function MaintenancePage() {
                       }
                     />
                   </td>
-                  <td className="mono break-all text-xs">{item.id}</td>
+                  <td>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="mono min-w-0 truncate text-left hover:text-primary focus-visible:outline-2 focus-visible:outline-primary"
+                            title={item.id}
+                            aria-label={`查看候选 ${item.id}`}
+                          >
+                            {item.id}
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-96" align="start">
+                          <p className="mb-2 text-sm font-medium">候选 ID</p>
+                          <p className="mono break-all text-sm">{item.id}</p>
+                        </PopoverContent>
+                      </Popover>
+                      <CopyButton value={item.id} label="复制候选 ID" />
+                    </div>
+                  </td>
                   <td>{item.reason}</td>
-                  <td>{formatBytes(item.size_bytes)}</td>
+                  <td className="text-right tabular-nums">
+                    {formatBytes(item.size_bytes)}
+                  </td>
                   <td className="text-xs text-muted">
                     {formatDate(item.changed_at)}
                   </td>
@@ -175,27 +271,6 @@ export function MaintenancePage() {
                 void load((page - 1) * nextSize, nextSize)
               }
             />
-            <div className="flex flex-wrap items-center gap-2 border-t p-4">
-              <Button
-                size="sm"
-                variant="ghost"
-                disabled={submission.pending || !preview.items.length}
-                onClick={() =>
-                  setSelected(preview.items.map((item) => item.id))
-                }
-              >
-                选择本页
-              </Button>
-              <Button
-                className="ml-auto"
-                variant="dangerSoft"
-                disabled={submission.pending || !selected.length}
-                onClick={() => setConfirm(true)}
-              >
-                <Trash2 />
-                清理所选 {selected.length} 项
-              </Button>
-            </div>
           </>
         )}
       </Panel>
@@ -203,7 +278,7 @@ export function MaintenancePage() {
         open={confirm}
         danger
         title={`清理 ${selected.length} 项候选`}
-        description="服务端会在删除前重新核实候选状态与令牌"
+        description={`将清理所选 ${selected.length} 项，共 ${formatBytes(selectedBytes)}。已绑定、正在上传、状态变化或归属不明的文件会跳过。清理后无法恢复。`}
         confirmLabel="确认清理"
         pending={submission.pending}
         onClose={() => setConfirm(false)}
