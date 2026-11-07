@@ -42,7 +42,7 @@ function ConditionalDrawer({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <style>{`[data-slot="sheet-content"][data-state="open"] { animation-name: enter; animation-duration: 500ms; } [data-slot="sheet-content"][data-state="closed"] { animation-name: exit; animation-duration: 300ms; }`}</style>
+      <style>{`[data-slot="sheet-content"][data-state="open"] { animation-name: overlay-panel-in; animation-duration: 200ms; } [data-slot="sheet-content"][data-state="closed"] { animation-name: overlay-panel-out; animation-duration: 200ms; }`}</style>
       <button onClick={() => setOpen(true)}>打开抽屉</button>
       <OverlayPresence>
         {open && (
@@ -135,8 +135,8 @@ describe("row action and drawer interactions", () => {
             element.getAttribute("data-slot") === "sheet-content"
           )
             return element.getAttribute("data-state") === "closed"
-              ? "exit"
-              : "enter";
+              ? "overlay-panel-out"
+              : "overlay-panel-in";
           const value = Reflect.get(target, property);
           return typeof value === "function" ? value.bind(target) : value;
         },
@@ -147,14 +147,16 @@ describe("row action and drawer interactions", () => {
     const trigger = screen.getByRole("button", { name: "打开抽屉" });
     await user.click(trigger);
     const dialog = await screen.findByRole("dialog");
-    fireEvent.animationEnd(dialog, { animationName: "enter" });
+    fireEvent.animationEnd(dialog, { animationName: "overlay-panel-in" });
     await user.type(screen.getByLabelText("材料名称"), "内容");
     await user.keyboard("{Escape}");
     expect(dialog).toHaveAttribute("data-state", "closed");
     expect(dialog).toBeInTheDocument();
     expect(screen.getByLabelText("材料名称")).toHaveValue("草稿内容");
     const exitEvent = new Event("animationend", { bubbles: true });
-    Object.defineProperty(exitEvent, "animationName", { value: "exit" });
+    Object.defineProperty(exitEvent, "animationName", {
+      value: "overlay-panel-out",
+    });
     fireEvent(dialog, exitEvent);
     await waitFor(() => expect(dialog).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());

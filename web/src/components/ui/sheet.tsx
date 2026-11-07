@@ -1,5 +1,5 @@
-// Adapted from shadcn/ui Sheet (new-york-v4, Radix); see sheet.LICENSE.
-// https://ui.shadcn.com/r/styles/new-york-v4/sheet.json
+// Adapted from shadcn/ui Sheet (Radix); see sheet.LICENSE.
+// Motion follows registry/bases/radix/ui/sheet.tsx and styles/style-nova.css.
 "use client";
 
 import * as React from "react";
@@ -37,7 +37,7 @@ function SheetOverlay({
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-[#09101a]/50 backdrop-blur-[2px] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "overlay-backdrop fixed inset-0 z-50 bg-[#09101a]/50 backdrop-blur-[2px]",
         className,
       )}
       {...props}
@@ -60,16 +60,15 @@ function SheetContent({
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
+        data-side={side}
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500",
+          "overlay-panel sheet-motion fixed z-50 flex flex-col gap-4 bg-background shadow-lg",
           side === "right" &&
-            "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
+            "inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
           side === "left" &&
-            "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
-          side === "top" &&
-            "inset-x-0 top-0 h-auto border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
-          side === "bottom" &&
-            "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+            "inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm",
+          side === "top" && "inset-x-0 top-0 h-auto border-b",
+          side === "bottom" && "inset-x-0 bottom-0 h-auto border-t",
           className,
         )}
         {...props}

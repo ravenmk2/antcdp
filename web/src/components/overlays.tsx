@@ -53,10 +53,10 @@ export function Modal({
         }}
       >
         <Primitive.Portal>
-          <Primitive.Overlay className="fixed inset-0 z-50 bg-[#09101a]/50 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in" />
+          <Primitive.Overlay className="overlay-backdrop fixed inset-0 isolate z-50 bg-[#09101a]/50 backdrop-blur-[2px]" />
           <Primitive.Content
             className={cn(
-              "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-48px)] w-[calc(100%-32px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border bg-surface shadow-2xl outline-none data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:zoom-in-95",
+              "overlay-panel dialog-motion fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-48px)] w-[calc(100%-32px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border bg-surface shadow-2xl outline-none",
               wide ? "max-w-[680px]" : "max-w-[510px]",
             )}
             onOpenAutoFocus={() => {
@@ -152,7 +152,7 @@ export function Drawer({
           side="right"
           showCloseButton={false}
           className={cn(
-            "w-full gap-0 bg-surface shadow-2xl outline-none data-[state=closed]:pointer-events-none",
+            "w-full gap-0 bg-surface outline-none data-[state=closed]:pointer-events-none",
             wide
               ? "max-w-[720px] sm:max-w-[720px]"
               : "max-w-[540px] sm:max-w-[540px]",
