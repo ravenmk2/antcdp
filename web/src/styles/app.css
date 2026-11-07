@@ -1991,3 +1991,17 @@ body:has(.diagram-viewer) .markdown-back-top {
     text-align: left;
   }
 }
+
+/* Selection stays visible for pointer input; keyboard focus has its own inset marker. */
+.service-type-card:has(input:focus-visible) {
+  outline: 1px dashed var(--accent);
+  outline-offset: -4px;
+}
+.service-type-card > input:focus {
+  box-shadow: none;
+}
+@media (forced-colors: active) {
+  .service-type-card:has(input:focus-visible) {
+    outline-color: Highlight;
+  }
+}

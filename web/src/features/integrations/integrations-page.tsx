@@ -8,15 +8,7 @@ import {
   useSearchParams,
 } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Cable,
-  Check,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { ArrowRight, Cable, Pencil, Plus, Trash2 } from "lucide-react";
 import { request } from "@/api/client";
 import { Button } from "@/components/button";
 import {
@@ -37,14 +29,12 @@ import {
 import { DescriptionList, PageHeader, Panel, Tabs } from "@/components/layout";
 import { ConfirmDialog } from "@/components/overlays";
 import { SimpleTable } from "@/components/table";
-import { WizardSteps } from "@/components/wizard";
+import { OverlayPresence } from "@/components/overlay-presence";
+import { ConnectionCreateDrawer } from "./connection-create-drawer";
 import { CredentialPanel } from "@/components/credential-panel";
 import { useApiQuery } from "@/hooks/use-api";
-import { useFormErrors, useSubmission } from "@/hooks/use-form";
-import { useUnsaved } from "@/hooks/use-unsaved";
+import { useSubmission } from "@/hooks/use-form";
 import {
-  authenticationBody,
-  defaultConfig,
   diagnosticText,
   diagnosticTone,
   providerFor,
@@ -52,7 +42,6 @@ import {
 } from "@/domain/service-providers";
 import type { Resource } from "@/types/collaboration";
 import type {
-  Credential,
   Diagnostic,
   ServiceConnection,
   ServiceType,
@@ -62,7 +51,8 @@ import { WebhookPanel } from "./webhook-panel";
 export function IntegrationsPage() {
   const { connectionId, projectId } = useParams();
   const location = useLocation();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const admin = location.pathname.startsWith("/admin");
   const types = useApiQuery<{ items: ServiceType[] }>(
     ["service-types"],
@@ -80,12 +70,16 @@ export function IntegrationsPage() {
   const summary = directory.data?.data.items.find(
     (item) => item.id === connectionId,
   );
-  if ((params.get("create") === "1" || connectionId === "new") && admin)
-    return (
-      <div className="page">
-        <ConnectionCreate capabilities={types.data?.data.items ?? []} />
-      </div>
+  const creating =
+    admin && (params.get("create") === "1" || connectionId === "new");
+  function closeCreate() {
+    const next = new URLSearchParams(params);
+    next.delete("create");
+    navigate(
+      { pathname: "/admin/integrations", search: next.toString() },
+      { replace: true },
     );
+  }
   if (connectionId && summary)
     return (
       <ConnectionDetail
@@ -95,7 +89,7 @@ export function IntegrationsPage() {
         capabilities={types.data?.data.items ?? []}
       />
     );
-  if (connectionId && directory.data && !summary)
+  if (connectionId && !creating && directory.data && !summary)
     return (
       <div className="page">
         <Notice tone="danger">连接不存在或当前账号不可见。</Notice>
@@ -119,7 +113,7 @@ export function IntegrationsPage() {
               onClick={() => {
                 const next = new URLSearchParams(location.search);
                 next.set("create", "1");
-                navigateWithQuery(next);
+                setParams(next);
               }}
             >
               <Plus />
@@ -136,13 +130,11 @@ export function IntegrationsPage() {
           void types.refetch();
         }}
       />
+      <OverlayPresence>
+        {creating && <ConnectionCreateDrawer onClose={closeCreate} />}
+      </OverlayPresence>
     </div>
   );
-}
-
-function navigateWithQuery(query: URLSearchParams) {
-  window.history.pushState(null, "", `${location.pathname}?${query}`);
-  window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
 function Directory({
@@ -314,340 +306,6 @@ function ServiceIcon({ type }: { type: string }) {
   );
 }
 
-function ConnectionCreate({ capabilities }: { capabilities: ServiceType[] }) {
-  const navigate = useNavigate();
-  const [step, setStep] = useState(0);
-  const [type, setType] = useState("");
-  const [search, setSearch] = useState("");
-  const provider = providerFor(type);
-  const [config, setConfig] = useState<Record<string, string>>({});
-  const [form, setForm] = useState({
-    name: "",
-    code: "",
-    description: "",
-    enabled: true,
-  });
-  const [withCredential, setWithCredential] = useState(true);
-  const [credential, setCredential] = useState({
-    name: "",
-    code: "",
-    description: "",
-    method: "",
-  });
-  const [secrets, setSecrets] = useState<Record<string, string>>({});
-  const [created, setCreated] = useState<ServiceConnection | null>(null);
-  const [credentialError, setCredentialError] = useState("");
-  const errors = useFormErrors();
-  const submission = useSubmission();
-  const markSaved = useUnsaved(true, submission.pending);
-  const available = capabilities
-    .filter((capability) => providerFor(capability.service_type))
-    .filter(
-      (capability) =>
-        !search ||
-        `${capability.name} ${capability.service_type}`
-          .toLowerCase()
-          .includes(search.toLowerCase()),
-    );
-  function choose(value: string) {
-    const next = providerFor(value);
-    setType(value);
-    setConfig(next ? defaultConfig(next) : {});
-    setCredential((current) => ({
-      ...current,
-      method: next?.methods[0]?.value ?? "",
-    }));
-    setSecrets({});
-  }
-  function validate(target: number) {
-    const fields: Record<string, string> = {};
-    if (target === 0 && !provider) fields.service_type = "请选择服务类型";
-    if (target >= 1) {
-      if (!form.name.trim()) fields.name = "请输入连接名称";
-      if (form.code && !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(form.code))
-        fields.code = "编码格式不正确";
-      if (provider)
-        for (const field of provider.configFields)
-          if (
-            !field.key.includes("ca_pem") &&
-            !(config[field.key] ?? "") &&
-            !(field.key === "tls_mode")
-          )
-            fields[field.key] = `请输入${field.label}`;
-    }
-    return errors.validate(fields);
-  }
-  async function saveCredential(connection: ServiceConnection) {
-    if (!provider) return;
-    const method =
-      provider.methods.find((item) => item.value === credential.method) ??
-      provider.methods[0];
-    if (!method) return;
-    const base = `/admin/service-connections/${connection.service_type}/${connection.id}/credentials`;
-    const collection = await request<{ items: Credential[] }>(base);
-    await request(base, {
-      method: "POST",
-      etag: collection.etag,
-      body: {
-        code: credential.code.trim(),
-        name: credential.name.trim(),
-        description: credential.description,
-        expires_at: null,
-        authentication: authenticationBody(method, secrets),
-      },
-    });
-  }
-  async function save(includeCredential: boolean) {
-    if (!provider || !validate(1)) return;
-    await submission.run(async () => {
-      let connection = created;
-      if (!connection) {
-        const response = await request<ServiceConnection>(
-          `/admin/service-connections/${type}`,
-          {
-            method: "POST",
-            body: { ...form, config: provider.configBody(config) },
-          },
-        );
-        connection = response.data;
-        setCreated(connection);
-      }
-      if (includeCredential) {
-        if (!credential.name.trim()) {
-          errors.validate({ credential_name: "请输入首个凭证名称" });
-          return;
-        }
-        try {
-          await saveCredential(connection);
-        } catch (error) {
-          setCredentialError(
-            error instanceof Error ? error.message : "凭证创建失败",
-          );
-          return;
-        }
-      }
-      markSaved();
-      navigate(`/admin/integrations/${connection.id}`);
-    });
-  }
-  return (
-    <div>
-      <PageHeader
-        title="添加服务连接"
-        description="选类型 → 连接信息 → 首个凭证；前两步只保留本地草稿"
-        actions={
-          <Button
-            variant="outline"
-            onClick={() => navigate("/admin/integrations")}
-          >
-            <ArrowLeft />
-            返回列表
-          </Button>
-        }
-      />
-      <WizardSteps
-        steps={["选择类型", "连接信息", "首个凭证"]}
-        current={step}
-      />
-      <Panel className="mt-5">
-        <ErrorNotice error={errors.error} />
-        <ErrorNotice error={submission.error} />
-        {step === 0 && (
-          <div>
-            <StandaloneInput
-              aria-label="搜索服务类型"
-              placeholder="搜索服务类型"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {available.map((capability) => {
-                const item = providerFor(capability.service_type);
-                if (!item) return null;
-                return (
-                  <button
-                    key={item.type}
-                    className={`flex items-start gap-3 rounded-lg border p-4 text-left ${type === item.type ? "border-primary bg-accent-soft" : "hover:bg-surface-hover"}`}
-                    onClick={() => choose(item.type)}
-                  >
-                    <ServiceIcon type={item.type} />
-                    <span>
-                      <strong>{item.name}</strong>
-                      <small className="mt-1 block text-muted">
-                        {item.description}
-                      </small>
-                    </span>
-                    {type === item.type && (
-                      <Check className="ml-auto text-primary" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            {errors.fields.service_type && (
-              <p className="mt-2 text-xs text-danger">
-                {errors.fields.service_type}
-              </p>
-            )}
-          </div>
-        )}
-        {step === 1 && provider && (
-          <div className="form-grid">
-            <Field label="连接名称" required error={errors.fields.name}>
-              <Input
-                name="name"
-                value={form.name}
-                onChange={(event) =>
-                  setForm({ ...form, name: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="编码（可选）" error={errors.fields.code}>
-              <Input
-                name="code"
-                className="mono"
-                value={form.code}
-                onChange={(event) =>
-                  setForm({ ...form, code: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="说明" className="form-full">
-              <Textarea
-                value={form.description}
-                onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
-                }
-              />
-            </Field>
-            <ProviderConfigFields
-              provider={provider}
-              values={config}
-              onChange={setConfig}
-              errors={errors.fields}
-            />
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={form.enabled}
-                onChange={(event) =>
-                  setForm({ ...form, enabled: event.target.checked })
-                }
-              />
-              创建后启用
-            </label>
-          </div>
-        )}
-        {step === 2 && provider && (
-          <div className="grid gap-4">
-            <Notice>
-              连接成功而凭证失败时会保留连接，只重试凭证；不会自动设首选或兜底。
-            </Notice>
-            {created && (
-              <Notice tone={credentialError ? "danger" : "warning"}>
-                连接「{created.name}」已创建。
-                {credentialError ? `凭证尚未创建：${credentialError}` : ""}
-              </Notice>
-            )}
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={withCredential}
-                onChange={(event) => setWithCredential(event.target.checked)}
-              />
-              同时创建首个系统凭证
-            </label>
-            {withCredential && (
-              <div className="form-grid">
-                <Field
-                  label="凭证名称"
-                  required
-                  error={errors.fields.credential_name}
-                >
-                  <Input
-                    name="credential_name"
-                    value={credential.name}
-                    onChange={(event) =>
-                      setCredential({ ...credential, name: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="凭证编码（可选）">
-                  <Input
-                    className="mono"
-                    value={credential.code}
-                    onChange={(event) =>
-                      setCredential({ ...credential, code: event.target.value })
-                    }
-                  />
-                </Field>
-                <Field label="认证方式" className="form-full">
-                  <Select
-                    value={credential.method}
-                    onValueChange={(value) => {
-                      setCredential({
-                        ...credential,
-                        method: value,
-                      });
-                      setSecrets({});
-                    }}
-                  >
-                    {provider.methods.map((method) => (
-                      <option key={method.value} value={method.value}>
-                        {method.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <AuthenticationFields
-                  provider={provider}
-                  method={credential.method}
-                  values={secrets}
-                  onChange={setSecrets}
-                />
-              </div>
-            )}
-          </div>
-        )}
-        <div className="form-actions">
-          {step > 0 && (
-            <Button variant="outline" onClick={() => setStep(step - 1)}>
-              上一步
-            </Button>
-          )}
-          {step < 2 ? (
-            <Button
-              onClick={() => {
-                if (validate(step)) setStep(step + 1);
-              }}
-            >
-              下一步
-            </Button>
-          ) : (
-            <>
-              <Button
-                variant="outline"
-                pending={submission.pending}
-                disabled={submission.uncertain}
-                onClick={() => void save(false)}
-              >
-                仅创建连接
-              </Button>
-              <Button
-                pending={submission.pending}
-                disabled={!withCredential || submission.uncertain}
-                onClick={() => void save(true)}
-              >
-                创建连接和凭证
-              </Button>
-            </>
-          )}
-        </div>
-      </Panel>
-    </div>
-  );
-}
-
 function ProviderConfigFields({
   provider,
   values,
@@ -706,54 +364,6 @@ function ProviderConfigFields({
     </>
   );
 }
-function AuthenticationFields({
-  provider,
-  method,
-  values,
-  onChange,
-}: {
-  provider: ProviderDefinition;
-  method: string;
-  values: Record<string, string>;
-  onChange: (values: Record<string, string>) => void;
-}) {
-  const current =
-    provider.methods.find((item) => item.value === method) ??
-    provider.methods[0];
-  if (!current) return null;
-  return (
-    <>
-      {[...current.identity, ...current.secret].map((field) => (
-        <Field
-          key={field.key}
-          label={field.label}
-          required
-          className={field.type === "textarea" ? "form-full" : undefined}
-        >
-          {field.type === "textarea" ? (
-            <Textarea
-              className="font-mono"
-              value={values[field.key] ?? ""}
-              onChange={(event) =>
-                onChange({ ...values, [field.key]: event.target.value })
-              }
-            />
-          ) : (
-            <Input
-              type={field.type ?? "text"}
-              autoComplete="off"
-              value={values[field.key] ?? ""}
-              onChange={(event) =>
-                onChange({ ...values, [field.key]: event.target.value })
-              }
-            />
-          )}
-        </Field>
-      ))}
-    </>
-  );
-}
-
 function ConnectionDetail({
   summary,
   admin,
@@ -766,6 +376,7 @@ function ConnectionDetail({
   capabilities: ServiceType[];
 }) {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const [edit, setEdit] = useState(false);
   const [remove, setRemove] = useState(false);
   const submission = useSubmission();
@@ -839,6 +450,11 @@ function ConnectionDetail({
           )
         }
       />
+      {location.state?.connectionCreated && (
+        <Notice>
+          连接已创建。请在下方查看实际诊断状态；创建成功不代表连接或身份已验证。
+        </Notice>
+      )}
       {connection.description && (
         <p className="-mt-3 mb-4 text-sm text-muted">
           {connection.description}
