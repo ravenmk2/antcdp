@@ -117,7 +117,6 @@ export interface DingTalkRobot {
   name: string;
   description: string;
   enabled: boolean;
-  keyword: string;
   has_secret: boolean;
   version: string;
   created_at: string;

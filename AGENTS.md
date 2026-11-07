@@ -41,7 +41,7 @@ antcdp/
 - [docs/message-management.md](docs/message-management.md)：邮件、短信、钉钉的模块隔离与共同产品要求。
 - [docs/email-management.md](docs/email-management.md)：SMTP、发件名称、模板、附件、发送测试与日志。
 - [docs/sms-management.md](docs/sms-management.md)：供应商参数映射、模板、本地模拟、发送测试与日志。
-- [docs/dingtalk-management.md](docs/dingtalk-management.md)：机器人配置、加签、关键词、文本/Markdown 测试。
+- [docs/dingtalk-management.md](docs/dingtalk-management.md)：机器人配置、签名认证、文本/Markdown 测试。
 
 ## 开发完成验证
 

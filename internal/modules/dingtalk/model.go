@@ -15,7 +15,6 @@ type Robot struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description"`
 	Enabled     bool        `json:"enabled"`
-	Keyword     string      `json:"keyword"`
 	HasSecret   bool        `json:"has_secret"`
 	RowVersion  uint64      `json:"-"`
 	Version     string      `json:"version"`
@@ -32,7 +31,6 @@ type Write struct {
 	Name           *string         `json:"name"`
 	Description    *string         `json:"description"`
 	Enabled        *bool           `json:"enabled"`
-	Keyword        *string         `json:"keyword"`
 	Authentication *Authentication `json:"authentication"`
 }
 type Diagnostic struct {
@@ -80,7 +78,7 @@ type Service struct {
 	Store    func() (identity.Store, error)
 	Cipher   func(string, string, bool) (string, error)
 	ETag     func(string) string
-	Send     func(context.Context, Authentication, string, TestInput) Diagnostic
+	Send     func(context.Context, Authentication, TestInput) Diagnostic
 	mu       sync.Mutex
 	recent   map[string][]time.Time
 }

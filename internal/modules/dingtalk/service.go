@@ -143,17 +143,11 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 			if w.Enabled != nil {
 				p.Enabled = *w.Enabled
 			}
-			if w.Keyword != nil {
-				p.Keyword = strings.TrimSpace(*w.Keyword)
-			}
 			if !regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`).MatchString(p.Code) {
 				return httpx.Invalid("code", "invalid_format")
 			}
 			if p.Name == "" || utf8.RuneCountInString(p.Name) > 100 || utf8.RuneCountInString(p.Description) > 1000 {
 				return httpx.Invalid("name", "invalid_length")
-			}
-			if p.Keyword == "" || utf8.RuneCountInString(p.Keyword) > 20 || strings.ContainsAny(p.Keyword, "\r\n") {
-				return httpx.Invalid("keyword", "invalid_keyword")
 			}
 			if op != "create" && w.Authentication != nil {
 				return httpx.Invalid("authentication", "use_authentication_endpoint")
@@ -303,7 +297,7 @@ func (s *Service) Test(ctx context.Context, raw string, id uint64, tag string, w
 	if send == nil {
 		send = sendRobot
 	}
-	result := send(work, credentials, p.Keyword, w)
+	result := send(work, credentials, w)
 	d.Status = result.Status
 	d.Stage = result.Stage
 	d.Reason = result.Reason

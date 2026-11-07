@@ -123,12 +123,19 @@ func verifyMessageManagement(t *testing.T, db *Store, installer *install.Service
 	admin.call(t, "DELETE", smsTemplatePath, nil, 204, headers(smsTemplatePath))
 	admin.call(t, "DELETE", smsPath, nil, 204, headers(smsPath))
 	admin.call(t, "GET", "/admin/sms/send-logs/"+fmt.Sprint(sl.ID), nil, 200, nil)
-	robot := testData(admin.call(t, "POST", "/admin/dingtalk/robots", map[string]any{"name": "机器人验收", "code": "robot-qa", "keyword": "AntCDP", "authentication": map[string]string{"access_token": strings.Repeat("a", 32), "secret": "SEC" + strings.Repeat("b", 32)}}, 201, nil))
+	robot := testData(admin.call(t, "POST", "/admin/dingtalk/robots", map[string]any{"name": "机器人验收", "code": "robot-qa", "authentication": map[string]string{"access_token": strings.Repeat("a", 32), "secret": "SEC" + strings.Repeat("b", 32)}}, 201, nil))
 	robotID := robot["id"].(string)
 	rid, _ := strconv.ParseUint(robotID, 10, 64)
 	robotPath := "/admin/dingtalk/robots/" + robotID
-	robotService := &dingtalk.Service{Identity: accounts, Store: store, Cipher: installer.DingTalkSecret, ETag: installer.DingTalkETag, Send: func(_ context.Context, _ dingtalk.Authentication, keyword string, w dingtalk.TestInput) dingtalk.Diagnostic {
-		if keyword != "AntCDP" || w.Format != "markdown" {
+	if _, ok := robot["keyword"]; ok {
+		t.Fatal("removed keyword exposed in robot response")
+	}
+	var config string
+	if err := db.db.GetContext(ctx, &config, "SELECT config FROM dingtalk_robot WHERE id=?", rid); err != nil || config != "{}" {
+		t.Fatalf("robot configuration contains duplicated fields: %q (%v)", config, err)
+	}
+	robotService := &dingtalk.Service{Identity: accounts, Store: store, Cipher: installer.DingTalkSecret, ETag: installer.DingTalkETag, Send: func(_ context.Context, _ dingtalk.Authentication, w dingtalk.TestInput) dingtalk.Diagnostic {
+		if w.Format != "markdown" {
 			t.Fatal("robot snapshot")
 		}
 		admin.call(t, "PATCH", robotPath, map[string]any{"description": "发送中修改"}, 200, headers(robotPath))

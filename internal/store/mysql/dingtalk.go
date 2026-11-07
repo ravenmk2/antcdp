@@ -48,7 +48,7 @@ func (t *dingtalkTx) decodeRobot(row dingtalkRow) (*e.Robot, error) {
 	if row.SchemaVersion != 1 {
 		return nil, errors.New("unsupported dingtalk config schema")
 	}
-	if err := json.Unmarshal(row.Config, p); err != nil {
+	if err := json.Unmarshal(row.Config, &struct{}{}); err != nil {
 		return nil, err
 	}
 	p.ID = row.ID
@@ -101,13 +101,9 @@ func (t *dingtalkTx) Robot(id uint64) (*e.Robot, error) {
 	return t.decodeRobot(row)
 }
 func (t *dingtalkTx) Save(p *e.Robot, create bool) error {
-	copy := *p
-	copy.Latest = nil
-	copy.Version = ""
-	b, err := json.Marshal(copy)
-	if err != nil {
-		return err
-	}
+	// Version 1 has no non-secret configuration beyond the dedicated columns.
+	b := []byte(`{}`)
+	var err error
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	if create {
 		p.CreatedAt = now

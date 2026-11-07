@@ -39,7 +39,6 @@ it.each([
       name: "测试配置",
       code: "test",
       enabled: true,
-      keyword: "test",
       access_key_id: "test",
       sender_names: [],
       config: {
@@ -97,10 +96,9 @@ it.each([
       });
       await user.keyboard("{Escape}");
     } else {
-      await user.click(await screen.findByRole("button", { name: toggle }));
-      await screen.findByRole("button", {
-        name: toggle.replace("停用", "启用"),
-      });
+      await user.click(screen.getByRole("button", { name: "测试配置的操作" }));
+      await user.click(await screen.findByRole("menuitem", { name: toggle }));
+      await waitFor(() => expect(screen.getByText("已停用")).toBeVisible());
     }
     await act(() => router.navigate(path));
     await waitFor(() =>

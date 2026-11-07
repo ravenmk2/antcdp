@@ -44,7 +44,7 @@
 | [消息管理](message-management.md) | 邮件、短信、钉钉的模块隔离与共同产品要求 |
 | [邮件](email-management.md) | SMTP、发件名称、模板、附件、发送测试与日志 |
 | [短信](sms-management.md) | 供应商参数映射、模板、本地模拟、发送测试与日志 |
-| [钉钉](dingtalk-management.md) | 机器人配置、加签、关键词、文本/Markdown 测试 |
+| [钉钉](dingtalk-management.md) | 机器人配置、签名认证、文本/Markdown 测试 |
 
 ## 维护约定
 

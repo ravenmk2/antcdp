@@ -3,15 +3,18 @@ import { TableToolbar } from "@/components/table-toolbar";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Pencil, Plus, Send, Trash2 } from "lucide-react";
-import { request } from "@/api/client";
-import { Button } from "@/components/button";
 import {
-  AsyncBoundary,
-  ErrorNotice,
-  Notice,
-  StatusBadge,
-} from "@/components/feedback";
+  ArrowLeft,
+  KeyRound,
+  Pencil,
+  Plus,
+  Power,
+  Send,
+  Trash2,
+} from "lucide-react";
+import { ApiError, request } from "@/api/client";
+import { Button } from "@/components/button";
+import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
 import {
   Field,
   Input,
@@ -22,6 +25,13 @@ import {
 } from "@/components/fields";
 import { DescriptionList, PageHeader, Panel } from "@/components/layout";
 import { ConfirmDialog, Drawer } from "@/components/overlays";
+import { SheetClose } from "@/components/ui/sheet";
+import { CopyButton } from "@/components/copy-button";
+import {
+  RowActions,
+  RowAction,
+  RowActionSeparator,
+} from "@/components/row-actions";
 import { Pagination } from "@/components/pagination";
 import { SimpleTable } from "@/components/table";
 import { useApiQuery } from "@/hooks/use-api";
@@ -77,14 +87,7 @@ function RobotList() {
   }
   return (
     <>
-      <PageHeader
-        title="钉钉机器人"
-        description="独立维护群机器人 Access Token、加签、关键词与文本 / Markdown 测试。"
-      />
-      <Notice className="mb-5">
-        只输入 Access Token，不输入完整 Webhook
-        URL。测试会真实发往机器人群；不支持 @ 提醒。
-      </Notice>
+      <PageHeader title="钉钉机器人" />
       <Panel bodyClassName="p-0">
         <TableToolbar
           onReset={() => filter({ q: "", status: "" })}
@@ -134,7 +137,7 @@ function RobotList() {
             <SimpleTable
               actions
               label="钉钉机器人"
-              headers={["机器人", "关键词", "状态", "最近测试", "操作"]}
+              headers={["机器人", "状态", "最近测试", "操作"]}
             >
               {query.data.data.items.map((robot) => (
                 <tr key={robot.id}>
@@ -149,7 +152,6 @@ function RobotList() {
                       {robot.code}
                     </small>
                   </td>
-                  <td>{robot.keyword}</td>
                   <td>
                     <StatusBadge tone={robot.enabled ? "success" : "neutral"}>
                       {robot.enabled ? "已启用" : "已停用"}
@@ -241,76 +243,147 @@ function RobotDetail({ id }: { id: string }) {
   const robot = query.data.data;
   return (
     <section>
+      <Link
+        className="mb-4 inline-flex items-center gap-2 text-sm text-muted hover:text-foreground"
+        to="/admin/dingtalk"
+      >
+        <ArrowLeft className="size-4" />
+        返回列表
+      </Link>
       <PageHeader
-        title={robot.name}
-        description={robot.code}
+        title={
+          <span className="flex flex-wrap items-center gap-3">
+            <span className="break-all">{robot.name}</span>
+            <StatusBadge tone={robot.enabled ? "success" : "neutral"}>
+              {robot.enabled ? "已启用" : "已停用"}
+            </StatusBadge>
+          </span>
+        }
         actions={
           <>
-            <Button
-              variant="outline"
-              onClick={() => navigate("/admin/dingtalk")}
-            >
-              <ArrowLeft />
-              返回列表
-            </Button>
-            <Button disabled={!robot.enabled} onClick={() => setTest(true)}>
-              <Send />
-              发送测试
-            </Button>
-            <Button variant="outline" onClick={() => setMode("edit")}>
-              <Pencil />
-              编辑配置
-            </Button>
-            <Button variant="dangerSoft" onClick={() => setRemove(true)}>
-              <Trash2 />
-              删除
-            </Button>
+            <RowActions label={robot.name} disabled={submission.pending}>
+              <RowAction
+                icon={<Power />}
+                onSelect={() =>
+                  void submission.run(async () => {
+                    await request(`${base}/${id}`, {
+                      method: "PATCH",
+                      etag: query.data.etag,
+                      body: { enabled: !robot.enabled },
+                    });
+                    await query.refetch();
+                    await queryClient.invalidateQueries({
+                      queryKey: ["dingtalk-robots"],
+                    });
+                  })
+                }
+              >
+                {robot.enabled ? "停用机器人" : "启用机器人"}
+              </RowAction>
+              <RowActionSeparator />
+              <RowAction
+                icon={<Trash2 />}
+                variant="destructive"
+                disabled={robot.latest?.status === "in_progress"}
+                onSelect={() => setRemove(true)}
+              >
+                删除机器人
+              </RowAction>
+            </RowActions>
           </>
         }
       />
-      <div className="split-workspace">
-        <Panel title="机器人配置">
+      {!remove && <ErrorNotice error={submission.error} />}
+      <div className="grid gap-5">
+        <Panel
+          title="基本信息"
+          action={
+            <Button variant="outline" size="sm" onClick={() => setMode("edit")}>
+              <Pencil />
+              编辑资料
+            </Button>
+          }
+        >
           <DescriptionList
             items={[
-              { label: "关键词", value: robot.keyword },
-              { label: "状态", value: robot.enabled ? "已启用" : "已停用" },
+              { label: "名称", value: robot.name },
               {
-                label: "Access Token / 加签",
-                value: robot.has_secret ? "已加密保存" : "未配置",
+                label: "编码",
+                value: (
+                  <span className="inline-flex max-w-full items-center gap-2">
+                    <span className="mono break-all">{robot.code}</span>
+                    <CopyButton value={robot.code} label="复制机器人编码" />
+                  </span>
+                ),
               },
-              { label: "说明", value: robot.description || "—", full: true },
+              { label: "创建时间", value: formatDate(robot.created_at) },
+              { label: "更新时间", value: formatDate(robot.updated_at) },
+              {
+                label: "说明",
+                value: (
+                  <div className="max-h-52 overflow-y-auto whitespace-pre-wrap break-words">
+                    {robot.description || "未填写"}
+                  </div>
+                ),
+                full: true,
+              },
             ]}
           />
-          <div className="mt-5 flex gap-2 border-t pt-4">
-            <Button variant="outline" onClick={() => setMode("auth")}>
-              替换认证
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() =>
-                void submission.run(async () => {
-                  await request(`${base}/${id}`, {
-                    method: "PATCH",
-                    etag: query.data.etag,
-                    body: { enabled: !robot.enabled },
-                  });
-                  await query.refetch();
-                  await queryClient.invalidateQueries({
-                    queryKey: ["dingtalk-robots"],
-                  });
-                })
-              }
-            >
-              {robot.enabled ? "停用机器人" : "启用机器人"}
-            </Button>
-          </div>
-          <ErrorNotice error={submission.error} />
         </Panel>
-        <Panel title="最近测试">
+        <Panel
+          title="机器人认证"
+          action={
+            <Button variant="outline" size="sm" onClick={() => setMode("auth")}>
+              <KeyRound />
+              更新认证
+            </Button>
+          }
+        >
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-muted">Access Token 与签名密钥</span>
+            <StatusBadge tone={robot.has_secret ? "neutral" : "warning"}>
+              {robot.has_secret ? "已配置" : "未配置"}
+            </StatusBadge>
+          </div>
+        </Panel>
+        <Panel
+          title="最近测试"
+          action={
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={query.isFetching}
+                onClick={() => void query.refetch()}
+              >
+                刷新结果
+              </Button>
+              <Button
+                size="sm"
+                disabled={
+                  !robot.enabled ||
+                  robot.latest?.status === "in_progress" ||
+                  submission.pending
+                }
+                onClick={() => setTest(true)}
+              >
+                <Send />
+                发送测试
+              </Button>
+            </div>
+          }
+        >
+          {(!robot.enabled || robot.latest?.status === "in_progress") && (
+            <p className="mb-3 text-sm text-muted">
+              {robot.latest?.status === "in_progress"
+                ? "测试正在发送，请等待结果后再发送。"
+                : "机器人已停用，启用后可发送测试。"}
+            </p>
+          )}
           {robot.latest ? (
             <Result value={robot.latest} />
           ) : (
-            <p className="text-sm text-muted">尚无测试记录。</p>
+            <p className="text-sm text-muted">尚无测试记录</p>
           )}
         </Panel>
       </div>
@@ -319,6 +392,7 @@ function RobotDetail({ id }: { id: string }) {
           <RobotEditor
             robot={robot}
             etag={query.data.etag}
+            onReload={() => void query.refetch()}
             authOnly={mode === "auth"}
             onClose={() => setMode(null)}
             onSaved={async () => {
@@ -368,12 +442,14 @@ function RobotEditor({
   robot,
   etag,
   authOnly = false,
+  onReload,
   onClose,
   onSaved,
 }: {
   robot?: DingTalkRobot;
   etag?: string;
   authOnly?: boolean;
+  onReload?: () => void;
   onClose: () => void;
   onSaved: (id: string) => Promise<void>;
 }) {
@@ -382,25 +458,30 @@ function RobotEditor({
     name: robot?.name ?? "",
     description: robot?.description ?? "",
     enabled: robot?.enabled ?? true,
-    keyword: robot?.keyword ?? "",
     access_token: "",
     secret: "",
   });
   const errors = useFormErrors();
   const submission = useSubmission();
-  useUnsaved(true, submission.pending);
+  const dirty =
+    form.name !== (robot?.name ?? "") ||
+    form.code !== (robot?.code ?? "") ||
+    form.description !== (robot?.description ?? "") ||
+    Boolean(form.access_token || form.secret);
+  const markSaved = useUnsaved(dirty, submission.pending);
   async function save() {
-    if (!authOnly && (!form.name.trim() || !form.keyword.trim())) {
+    if (submission.pending) return;
+    errors.clear();
+    if (!authOnly && !form.name.trim()) {
       errors.validate({
         name: !form.name.trim() ? "请输入名称" : "",
-        keyword: !form.keyword.trim() ? "请输入关键词" : "",
       });
       return;
     }
     if ((!robot || authOnly) && (!form.access_token || !form.secret)) {
       errors.validate({
         access_token: !form.access_token ? "请输入 Access Token" : "",
-        secret: !form.secret ? "请输入加签秘密" : "",
+        secret: !form.secret ? "请输入签名密钥" : "",
       });
       return;
     }
@@ -437,17 +518,17 @@ function RobotEditor({
                     name: form.name.trim(),
                     description: form.description,
                     enabled: form.enabled,
-                    keyword: form.keyword,
                   },
                 },
               );
+        markSaved();
         await onSaved(response.data.id);
       },
       (error) =>
         errors.show(error, [
           "name",
           "code",
-          "keyword",
+          "description",
           "access_token",
           "secret",
         ]),
@@ -456,16 +537,19 @@ function RobotEditor({
   return (
     <Drawer
       open
-      title={authOnly ? "替换机器人认证" : robot ? "编辑机器人" : "新建机器人"}
-      description="Token 与加签秘密完整替换；离开表单即清除"
-      dirty
+      title={
+        authOnly ? "更新机器人认证" : robot ? "编辑机器人资料" : "新建机器人"
+      }
+      dirty={dirty}
       pending={submission.pending}
       onClose={onClose}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
-            取消
-          </Button>
+          <SheetClose asChild>
+            <Button variant="outline" disabled={submission.pending}>
+              取消
+            </Button>
+          </SheetClose>
           <Button pending={submission.pending} onClick={() => void save()}>
             保存
           </Button>
@@ -480,48 +564,45 @@ function RobotEditor({
           void save();
         }}
       >
-        <ErrorNotice error={errors.error} />
-        <ErrorNotice error={submission.error} />
+        <ErrorNotice
+          error={
+            errors.error ||
+            (Object.keys(errors.fields).length ? null : submission.error)
+          }
+        />
+        {submission.error instanceof ApiError &&
+          ["VERSION_CONFLICT", "PRECONDITION_REQUIRED"].includes(
+            submission.error.code,
+          ) &&
+          onReload && (
+            <Button variant="outline" onClick={onReload}>
+              重新加载当前版本
+            </Button>
+          )}
         {!authOnly && (
           <>
             <Field label="名称" required error={errors.fields.name}>
               <Input
                 name="name"
+                maxLength={100}
                 value={form.name}
                 onChange={(event) =>
                   setForm({ ...form, name: event.target.value })
                 }
               />
             </Field>
-            <Field label="编码（可选）">
+            <Field
+              label={robot ? "编码" : "编码（可选）"}
+              error={errors.fields.code}
+            >
               <Input
                 className="mono"
+                name="code"
+                maxLength={64}
                 readOnly={Boolean(robot)}
                 value={form.code}
                 onChange={(event) =>
                   setForm({ ...form, code: event.target.value })
-                }
-              />
-            </Field>
-            <Field label="说明">
-              <Textarea
-                value={form.description}
-                onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
-                }
-              />
-            </Field>
-            <Field
-              label="关键词"
-              required
-              hint="发送时作为前缀加入内容"
-              error={errors.fields.keyword}
-            >
-              <Input
-                name="keyword"
-                value={form.keyword}
-                onChange={(event) =>
-                  setForm({ ...form, keyword: event.target.value })
                 }
               />
             </Field>
@@ -536,6 +617,7 @@ function RobotEditor({
             >
               <Input
                 type="password"
+                name="access_token"
                 autoComplete="off"
                 value={form.access_token}
                 onChange={(event) =>
@@ -543,9 +625,10 @@ function RobotEditor({
                 }
               />
             </Field>
-            <Field label="加签秘密" required error={errors.fields.secret}>
+            <Field label="签名密钥" required error={errors.fields.secret}>
               <Input
                 type="password"
+                name="secret"
                 autoComplete="off"
                 value={form.secret}
                 onChange={(event) =>
@@ -554,6 +637,18 @@ function RobotEditor({
               />
             </Field>
           </>
+        )}
+        {!authOnly && (
+          <Field label="说明（可选）" error={errors.fields.description}>
+            <Textarea
+              name="description"
+              maxLength={1000}
+              value={form.description}
+              onChange={(event) =>
+                setForm({ ...form, description: event.target.value })
+              }
+            />
+          </Field>
         )}
       </form>
     </Drawer>
@@ -571,8 +666,15 @@ function RobotTest({
   const [result, setResult] = useState<Diagnostic | null>(null);
   const errors = useFormErrors();
   const submission = useSubmission();
-  const preview = `${robot.keyword}\n${form.body}`;
+  const queryClient = useQueryClient();
   async function send() {
+    if (
+      submission.pending ||
+      !robot.enabled ||
+      robot.latest?.status === "in_progress"
+    )
+      return;
+    errors.clear();
     if (!form.body || (form.format === "markdown" && !form.title.trim())) {
       errors.validate({
         body: !form.body ? "请输入正文" : "",
@@ -591,6 +693,10 @@ function RobotTest({
           body: { format: form.format, title: form.title, body: form.body },
         });
         setResult(response.data);
+        await queryClient.invalidateQueries({
+          queryKey: ["dingtalk-robot", robot.id],
+        });
+        await queryClient.invalidateQueries({ queryKey: ["dingtalk-robots"] });
       },
       (error) => errors.show(error, ["body", "title"]),
     );
@@ -599,15 +705,21 @@ function RobotTest({
     <Drawer
       open
       title="发送钉钉测试"
-      description="真实外发到机器人群；受理不代表成员已读"
+      description={`发送到 ${robot.name} 所在的钉钉群`}
       onClose={onClose}
       pending={submission.pending}
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
-            关闭
-          </Button>
-          <Button pending={submission.pending} onClick={() => void send()}>
+          <SheetClose asChild>
+            <Button variant="outline" disabled={submission.pending}>
+              关闭
+            </Button>
+          </SheetClose>
+          <Button
+            pending={submission.pending}
+            disabled={!robot.enabled || robot.latest?.status === "in_progress"}
+            onClick={() => void send()}
+          >
             <Send />
             确认发送
           </Button>
@@ -623,7 +735,6 @@ function RobotTest({
         }}
       >
         <ErrorNotice error={errors.error} />
-        <ErrorNotice error={submission.error} />
         {result && <Result value={result} />}
         <Field label="消息格式">
           <Select
@@ -653,31 +764,63 @@ function RobotTest({
             onChange={(event) => setForm({ ...form, body: event.target.value })}
           />
         </Field>
-        <Field label="发送内容预览">
-          <Textarea readOnly className="min-h-32 font-mono" value={preview} />
-        </Field>
       </form>
     </Drawer>
   );
 }
 
 function Result({ value }: { value: Diagnostic }) {
+  const tone =
+    value.status === "accepted"
+      ? "success"
+      : value.status === "unknown"
+        ? "warning"
+        : value.status === "in_progress"
+          ? "neutral"
+          : "danger";
   return (
-    <Notice
-      tone={
-        value.status === "accepted"
-          ? "success"
-          : value.status === "unknown"
-            ? "warning"
-            : "danger"
-      }
-    >
-      {value.outdated ? "历史结果 · " : ""}
-      {messageStatusLabels[value.status] ?? value.status} ·{" "}
-      {messageReasons[value.reason_code] ?? value.reason_code}
-      <small className="mt-1 block">
-        {value.test_id} · {formatDate(value.started_at)}
-      </small>
-    </Notice>
+    <div className="space-y-3 text-sm" aria-live="polite">
+      <div className="flex flex-wrap items-center gap-3">
+        <StatusBadge tone={tone}>
+          {messageStatusLabels[value.status] ?? value.status}
+        </StatusBadge>
+        <span className="text-muted">{formatDate(value.started_at)}</span>
+        {value.outdated && <StatusBadge tone="warning">历史结果</StatusBadge>}
+      </div>
+      <p>{messageReasons[value.reason_code] ?? value.reason_code}</p>
+      {value.outdated && (
+        <p className="text-muted">配置已变化，此结果来自修改前的配置。</p>
+      )}
+      {value.status === "unknown" && (
+        <p className="text-warning">
+          请先到钉钉群核实消息，再决定是否重新发送。
+        </p>
+      )}
+      <details className="text-muted">
+        <summary className="w-fit cursor-pointer rounded-sm focus-visible:outline-2 focus-visible:outline-ring">
+          诊断详情
+        </summary>
+        <dl className="mt-3 grid gap-2 break-all">
+          <div>
+            <dt className="inline">测试编号：</dt>
+            <dd className="mono inline">{value.test_id}</dd>
+          </div>
+          <div>
+            <dt className="inline">处理阶段：</dt>
+            <dd className="inline">{value.stage}</dd>
+          </div>
+          <div>
+            <dt className="inline">结果代码：</dt>
+            <dd className="mono inline">{value.reason_code}</dd>
+          </div>
+          {value.finished_at && (
+            <div>
+              <dt className="inline">完成时间：</dt>
+              <dd className="inline">{formatDate(value.finished_at)}</dd>
+            </div>
+          )}
+        </dl>
+      </details>
+    </div>
   );
 }

@@ -21,15 +21,8 @@ func signature(secret, timestamp string) string {
 	mac.Write([]byte(timestamp + "\n" + secret))
 	return base64.StdEncoding.EncodeToString(mac.Sum(nil))
 }
-func sendRobot(ctx context.Context, a Authentication, keyword string, w TestInput) Diagnostic {
-	body := keyword + "\n" + w.Body
-	payload := map[string]any{"msgtype": w.Format}
-	if w.Format == "text" {
-		payload["text"] = map[string]string{"content": body}
-	} else {
-		payload["markdown"] = map[string]string{"title": w.Title, "text": body}
-	}
-	b, err := json.Marshal(payload)
+func sendRobot(ctx context.Context, a Authentication, w TestInput) Diagnostic {
+	b, err := robotPayload(w)
 	if err != nil {
 		return Diagnostic{Status: "failed_before_submit", Stage: "prepare", Reason: "invalid_message"}
 	}
@@ -65,4 +58,14 @@ func robotResult(status int, body []byte) Diagnostic {
 		return Diagnostic{Status: "accepted", Stage: "submit", Reason: "provider_accepted"}
 	}
 	return Diagnostic{Status: "rejected", Stage: "submit", Reason: "provider_rejected"}
+}
+
+func robotPayload(w TestInput) ([]byte, error) {
+	payload := map[string]any{"msgtype": w.Format}
+	if w.Format == "text" {
+		payload["text"] = map[string]string{"content": w.Body}
+	} else {
+		payload["markdown"] = map[string]string{"title": w.Title, "text": w.Body}
+	}
+	return json.Marshal(payload)
 }
