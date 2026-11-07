@@ -15,6 +15,7 @@ import {
 import {
   Field,
   Input,
+  NumberInput,
   Select,
   StandaloneInput,
   StandaloneSelect,
@@ -635,12 +636,16 @@ function ProfileEditor({
                 />
               </Field>
               <Field label="端口" required>
-                <Input
-                  type="number"
+                <NumberInput
+                  name="port"
+                  label="端口"
+                  min={1}
+                  max={65535}
                   value={form.port}
-                  onChange={(event) =>
-                    setForm({ ...form, port: event.target.value })
-                  }
+                  disabled={submission.pending}
+                  onValueChange={(value) => {
+                    setForm({ ...form, port: value });
+                  }}
                 />
               </Field>
               <Field label="安全模式">

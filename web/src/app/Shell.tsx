@@ -105,6 +105,14 @@ export function AppShell() {
   const submission = useSubmission();
   const consoleMode =
     location.pathname.startsWith("/admin") && session.user.role === "admin";
+  const teamId = location.pathname.match(
+    /^\/admin\/teams\/([1-9]\d*)(?:\/|$)/,
+  )?.[1];
+  const team = useApiQuery<Resource>(
+    ["team", teamId],
+    `/teams/${teamId ?? ""}`,
+    { enabled: Boolean(teamId && consoleMode) },
+  );
   const projectMatch = location.pathname.match(/^\/projects\/([1-9]\d*)/);
   const projectId = projectMatch?.[1];
   const project = useApiQuery<Resource>(
@@ -487,6 +495,7 @@ export function AppShell() {
     location.pathname,
     project.data?.data,
     consoleMode,
+    team.data?.data.name,
   );
   return (
     <div className="app-layout" data-collapsed={collapsed}>
@@ -649,6 +658,7 @@ function breadcrumbs(
   path: string,
   project: Resource | undefined,
   consoleMode: boolean,
+  teamName?: string,
 ): Crumb[] {
   if (path === "/home") return [{ label: "工作区" }, { label: "首页" }];
   if (path.startsWith("/account"))
@@ -699,11 +709,18 @@ function breadcrumbs(
       { label: "项目管理", to: "/admin/projects" },
       { label: "项目详情" },
     ];
+  if (/^\/admin\/teams\/[1-9]\d*\/description\/edit$/.test(path))
+    return [
+      { label: "控制台", to: "/admin" },
+      { label: "团队管理", to: "/admin/teams" },
+      { label: teamName || "团队", to: path.replace("/description/edit", "") },
+      { label: "编辑描述" },
+    ];
   if (path.startsWith("/admin/teams/"))
     return [
       { label: "控制台", to: "/admin" },
       { label: "团队管理", to: "/admin/teams" },
-      { label: "团队详情" },
+      { label: teamName || "团队" },
     ];
   if (path.includes("/integrations/"))
     return [

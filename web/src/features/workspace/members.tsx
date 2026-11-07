@@ -1,3 +1,4 @@
+import { RowActions, RowAction } from "@/components/row-actions";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
 import { StandaloneSelect } from "@/components/fields";
@@ -10,6 +11,7 @@ import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
 import { Field, Select, StandaloneInput } from "@/components/fields";
 import { ConfirmDialog, Drawer, Modal } from "@/components/overlays";
 import { Pagination } from "@/components/pagination";
+import { Avatar } from "@/components/resource-icon";
 import { SimpleTable } from "@/components/table";
 import { useApiQuery } from "@/hooks/use-api";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
@@ -67,7 +69,7 @@ export function MembersPanel({
               onClick={() => setAdd(true)}
             >
               <Plus />
-              添加直接成员
+              {kind === "teams" ? "添加成员" : "添加直接成员"}
             </Button>
           )
         }
@@ -103,32 +105,52 @@ export function MembersPanel({
           <SimpleTable
             actions
             label={`${resource.name}成员`}
-            headers={[
-              "成员",
-              "有效角色",
-              "直接角色",
-              "权限来源",
-              "账号状态",
-              "操作",
-            ]}
+            headers={
+              kind === "teams"
+                ? ["成员", "团队角色", "账号状态", "操作"]
+                : [
+                    "成员",
+                    "有效角色",
+                    "直接角色",
+                    "权限来源",
+                    "账号状态",
+                    "操作",
+                  ]
+            }
           >
             {list.data.data.items.map((member) => (
               <tr key={member.user_id}>
                 <td>
-                  <strong className="text-foreground">
-                    {member.display_name}
-                  </strong>
-                  <small className="mt-1 block text-muted">
-                    @{member.username}
-                  </small>
+                  <div className="flex items-center gap-3">
+                    {kind === "teams" && (
+                      <Avatar
+                        name={member.display_name}
+                        url={
+                          member.avatar_file_id
+                            ? `/api/v1/avatars/${member.avatar_file_id}`
+                            : undefined
+                        }
+                      />
+                    )}
+                    <div>
+                      <strong className="text-foreground">
+                        {member.display_name}
+                      </strong>
+                      <small className="mt-1 block text-muted">
+                        @{member.username}
+                      </small>
+                    </div>
+                  </div>
                 </td>
-                <td>
-                  {member.effective_role === "admin"
-                    ? kind === "projects"
-                      ? "项目管理员"
-                      : "团队管理员"
-                    : "成员"}
-                </td>
+                {kind === "projects" && (
+                  <td>
+                    {member.effective_role === "admin"
+                      ? kind === "projects"
+                        ? "项目管理员"
+                        : "团队管理员"
+                      : "成员"}
+                  </td>
+                )}
                 <td>
                   {member.direct_role ? (
                     <RoleSelect
@@ -142,19 +164,21 @@ export function MembersPanel({
                     "—"
                   )}
                 </td>
-                <td>
-                  <div className="flex max-w-md flex-wrap gap-1">
-                    {member.sources.map((source, index) => (
-                      <StatusBadge
-                        key={`${source.type}-${source.team_id ?? index}`}
-                      >
-                        {source.type === "direct"
-                          ? "直接成员"
-                          : source.team_name || "团队"}
-                      </StatusBadge>
-                    ))}
-                  </div>
-                </td>
+                {kind === "projects" && (
+                  <td>
+                    <div className="flex max-w-md flex-wrap gap-1">
+                      {member.sources.map((source, index) => (
+                        <StatusBadge
+                          key={`${source.type}-${source.team_id ?? index}`}
+                        >
+                          {source.type === "direct"
+                            ? "直接成员"
+                            : source.team_name || "团队"}
+                        </StatusBadge>
+                      ))}
+                    </div>
+                  </td>
+                )}
                 <td>
                   <StatusBadge
                     tone={
@@ -166,15 +190,27 @@ export function MembersPanel({
                 </td>
                 <td>
                   {resource.can_manage && member.direct_role ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-danger"
-                      onClick={() => setRemove(member)}
-                    >
-                      <Trash2 />
-                      移除直接关系
-                    </Button>
+                    kind === "teams" ? (
+                      <RowActions label={member.display_name}>
+                        <RowAction
+                          icon={<Trash2 />}
+                          variant="destructive"
+                          onSelect={() => setRemove(member)}
+                        >
+                          移除成员
+                        </RowAction>
+                      </RowActions>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-danger"
+                        onClick={() => setRemove(member)}
+                      >
+                        <Trash2 />
+                        移除直接关系
+                      </Button>
+                    )
                   ) : member.direct_role ? (
                     "仅可查看来源"
                   ) : (
@@ -242,7 +278,7 @@ function RoleSelect({
   return (
     <>
       <StandaloneSelect
-        aria-label={`调整 ${member.display_name} 的直接角色`}
+        aria-label={`调整 ${member.display_name} 的${kind === "teams" ? "团队角色" : "直接角色"}`}
         className="min-h-8 w-28 rounded-md border bg-surface px-2 py-1 text-xs data-[size=default]:h-8"
         value={member.direct_role}
         disabled={submission.pending}
@@ -310,7 +346,7 @@ function AddMember({
   return (
     <Drawer
       open
-      title="添加直接成员"
+      title={kind === "teams" ? "添加成员" : "添加直接成员"}
       description={`${resource.name} · 团队继承身份不会改变`}
       onClose={onClose}
       pending={submission.pending}
@@ -374,7 +410,11 @@ function AddMember({
         {errors.fields.user_id && (
           <p className="text-xs text-danger">{errors.fields.user_id}</p>
         )}
-        <Field label="直接角色" required error={errors.fields.role}>
+        <Field
+          label={kind === "teams" ? "团队角色" : "直接角色"}
+          required
+          error={errors.fields.role}
+        >
           <Select
             name="role"
             value={role}
@@ -409,9 +449,9 @@ function RemoveMember({
     <ConfirmDialog
       open
       danger
-      title="移除直接成员关系"
+      title={kind === "teams" ? "移除团队成员" : "移除直接成员关系"}
       description={`${member.display_name} · @${member.username}`}
-      confirmLabel="移除直接关系"
+      confirmLabel={kind === "teams" ? "移除成员" : "移除直接关系"}
       pending={submission.pending}
       onClose={onClose}
       onConfirm={() =>
@@ -427,7 +467,10 @@ function RemoveMember({
     >
       <ErrorNotice error={submission.error} />
       <p className="text-sm text-muted">
-        其他团队来源不会受影响。若移除最后一位管理员，之后需由系统管理员接管。
+        {kind === "teams"
+          ? "移除后，该用户将失去通过本团队获得的项目权限；其他直接成员关系或团队来源不受影响。"
+          : "其他团队来源不会受影响。"}
+        若移除最后一位管理员，之后需由系统管理员接管。
       </p>
     </ConfirmDialog>
   );

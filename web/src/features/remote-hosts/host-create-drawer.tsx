@@ -4,7 +4,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { request } from "@/api/client";
 import { Button } from "@/components/button";
 import { ErrorNotice, Notice } from "@/components/feedback";
-import { Field, Input, Select, Textarea } from "@/components/fields";
+import {
+  Field,
+  Input,
+  NumberInput,
+  Select,
+  Textarea,
+} from "@/components/fields";
 import { Drawer } from "@/components/overlays";
 import { SheetClose } from "@/components/ui/sheet";
 import { WizardSteps } from "@/components/wizard";
@@ -287,15 +293,16 @@ export function HostCreateDrawer({ onClose }: { onClose: () => void }) {
                 />
               </Field>
               <Field label="SSH 端口" required error={errors.fields.port}>
-                <Input
+                <NumberInput
                   name="port"
-                  type="number"
+                  label="端口"
                   min={1}
                   max={65535}
                   value={form.port}
-                  onChange={(event) =>
-                    setForm({ ...form, port: event.target.value })
-                  }
+                  disabled={submission.pending}
+                  onValueChange={(value) => {
+                    setForm({ ...form, port: value });
+                  }}
                 />
               </Field>
               <Field label="说明" className="form-full">

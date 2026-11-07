@@ -102,7 +102,12 @@ function CodeBlockContent({
       data-numbered={lineNumbers || undefined}
       dir="ltr"
       tabIndex={0}
-      style={{ counterReset: `line ${startLine - 1}`, ...style }}
+      style={{
+        counterReset: `line ${startLine - 1}`,
+        whiteSpace: wrap ? "pre-wrap" : "pre",
+        overflowWrap: wrap ? "anywhere" : "normal",
+        ...style,
+      }}
       className={cn(
         "min-h-0 min-w-0 scroll-fade-x scrollbar-thin overflow-auto px-3 py-3 text-start font-mono leading-relaxed outline-none group-has-data-[slot=code-block-footer]/code-block:pb-2 group-has-data-[slot=code-block-header]/code-block:pt-2 group-data-[size=sm]/code-block:px-2.5 group-data-[size=sm]/code-block:py-2.5 group-data-[size=sm]/code-block:group-has-data-[slot=code-block-header]/code-block:pt-1.5 data-wrap:scroll-fade-y data-wrap:wrap-break-word data-wrap:whitespace-pre-wrap",
         className,
@@ -111,6 +116,17 @@ function CodeBlockContent({
     >
       <code
         data-slot="code-block-code"
+        style={
+          wrap
+            ? {
+                minWidth: 0,
+                width: "100%",
+                gridTemplateColumns: lineNumbers
+                  ? "auto minmax(0, 1fr)"
+                  : "minmax(0, 1fr)",
+              }
+            : undefined
+        }
         className="grid min-h-lh min-w-max content-start in-data-numbered:grid-cols-[auto_1fr] in-data-wrap:min-w-0"
       >
         {lineNumbers && typeof children === "string"

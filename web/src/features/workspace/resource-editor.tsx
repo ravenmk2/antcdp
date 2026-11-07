@@ -42,16 +42,19 @@ const resourceSchema = z.object({
 export function ResourceEditor({
   kind,
   resource,
+  separateDescription = false,
   onClose,
   onSaved,
 }: {
   kind: ResourceKind;
   resource?: Resource;
+  separateDescription?: boolean;
   onClose: () => void;
   onSaved: (resource: Resource) => void;
 }) {
   const session = useSession();
   const create = !resource;
+  const wizard = create && kind === "projects";
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({
     name: resource?.name ?? "",
@@ -70,6 +73,7 @@ export function ResourceEditor({
   const [adminIds, setAdminIds] = useState<string[]>([session.user.id]);
   const [userSearch, setUserSearch] = useState("");
   const [userQuery, setUserQuery] = useState("");
+  const [chosenUsers, setChosenUsers] = useState<UserOption[]>([]);
   const errors = useFormErrors();
   const submission = useSubmission();
   const queryClient = useQueryClient();
@@ -103,6 +107,7 @@ export function ResourceEditor({
       .map(
         (id) =>
           options.find((user) => user.id === id) ??
+          chosenUsers.find((user) => user.id === id) ??
           (id === session.user.id
             ? {
                 id,
@@ -112,7 +117,7 @@ export function ResourceEditor({
             : undefined),
       )
       .filter((user) => user !== undefined);
-  }, [adminIds, users.data, session.user]);
+  }, [adminIds, users.data, session.user, chosenUsers]);
   const title = `${create ? "创建" : "编辑"}${kind === "projects" ? "项目" : "团队"}`;
   function update(key: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -135,15 +140,21 @@ export function ResourceEditor({
     return true;
   }
   async function save() {
-    if (!validate()) return;
+    if (submission.pending || submission.uncertain || !validate()) return;
     const ok = await submission.run(
       async () => {
         const payload = create
-          ? { ...form, name: form.name.trim(), icon, admin_user_ids: adminIds }
+          ? {
+              ...form,
+              ...(separateDescription ? { description: "" } : {}),
+              name: form.name.trim(),
+              icon,
+              admin_user_ids: adminIds,
+            }
           : {
               name: form.name.trim(),
               summary: form.summary,
-              description: form.description,
+              ...(separateDescription ? {} : { description: form.description }),
               icon,
             };
         const response = await request<Resource>(
@@ -180,7 +191,9 @@ export function ResourceEditor({
       title={title}
       description={
         create
-          ? "按步骤填写资料并选择初始管理员，返回不会清空内容。"
+          ? kind === "teams"
+            ? "填写团队资料并选择初始管理员。简介和图标可稍后补充。"
+            : "按步骤填写资料并选择初始管理员，返回不会清空内容。"
           : `${resource.code} · 编码创建后不可修改`
       }
       dirty={dirty}
@@ -193,7 +206,7 @@ export function ResourceEditor({
       }}
       footer={
         <>
-          {create && step > 0 && (
+          {wizard && step > 0 && (
             <Button variant="outline" onClick={() => setStep(0)}>
               上一步
             </Button>
@@ -203,7 +216,7 @@ export function ResourceEditor({
               取消
             </Button>
           </SheetClose>
-          {create && step === 0 ? (
+          {wizard && step === 0 ? (
             <Button
               onClick={() => {
                 if (validate()) setStep(1);
@@ -223,7 +236,7 @@ export function ResourceEditor({
         </>
       }
     >
-      {create && (
+      {wizard && (
         <WizardSteps steps={["基本资料", "管理员与简介"]} current={step} />
       )}
       <form
@@ -232,200 +245,250 @@ export function ResourceEditor({
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          if (create && step === 0) {
+          if (wizard && step === 0) {
             if (validate()) setStep(1);
           } else void save();
         }}
       >
         <ErrorNotice error={errors.error} />
         <ErrorNotice error={submission.error} />
-        {(!create || step === 0) && (
-          <div className="form-grid">
-            <Field
-              label={kind === "projects" ? "项目名称" : "团队名称"}
-              required
-              error={errors.fields.name}
-            >
-              <Input
-                name="name"
-                value={form.name}
-                onChange={(event) => update("name", event.target.value)}
-              />
-            </Field>
-            <Field
-              label="编码"
-              required
-              hint={create ? "创建后不可修改" : "编码不可修改"}
-              error={errors.fields.code}
-            >
-              <Input
-                name="code"
-                className="mono"
-                value={form.code}
-                readOnly={!create}
-                onChange={(event) => update("code", event.target.value)}
-              />
-            </Field>
-            <Field
-              label="摘要"
-              hint="最多 300 个字符"
-              error={errors.fields.summary}
-              className="form-full"
-            >
-              <Textarea
-                name="summary"
-                value={form.summary}
-                onChange={(event) => update("summary", event.target.value)}
-              />
-            </Field>
-            <div className="form-full">
-              <span className="mb-2 block text-xs font-medium text-text-soft">
-                图标
-              </span>
-              <div className="flex flex-wrap items-center gap-3">
-                <ResourceIcon resource={resourcePreview} className="size-12" />
-                <ImageEditor
-                  kind="icon"
-                  current={
-                    resource?.icon_file_id
-                      ? `/api/v1/icons/${resource.icon_file_id}`
-                      : undefined
-                  }
-                  value={image}
-                  disabled={submission.pending}
-                  onChange={(value) => {
-                    setImage(value);
-                    setIcon(
-                      value
-                        ? { type: "upload", file_id: value.id }
-                        : { type: "default" },
-                    );
-                  }}
+        <fieldset disabled={submission.pending} className="min-w-0">
+          {(!create || step === 0) && (
+            <div className="form-grid">
+              <Field
+                label={kind === "projects" ? "项目名称" : "团队名称"}
+                required
+                error={errors.fields.name}
+              >
+                <Input
+                  name="name"
+                  value={form.name}
+                  onChange={(event) => update("name", event.target.value)}
                 />
-              </div>
-              <div className="mt-3 grid grid-cols-4 gap-2">
-                {(icons.data?.data ?? Object.keys(iconLabels)).map((key) => (
-                  <button
-                    type="button"
-                    key={key}
-                    aria-pressed={icon.type === "builtin" && icon.key === key}
-                    className={`grid justify-items-center gap-1 rounded-lg border p-2 text-[11px] ${icon.type === "builtin" && icon.key === key ? "border-primary bg-accent-soft text-primary" : "hover:bg-surface-hover"}`}
+              </Field>
+              <Field
+                label="编码"
+                required
+                hint={create ? "创建后不可修改" : "编码不可修改"}
+                error={errors.fields.code}
+              >
+                <Input
+                  name="code"
+                  className="mono"
+                  value={form.code}
+                  readOnly={!create}
+                  onChange={(event) => update("code", event.target.value)}
+                />
+              </Field>
+              <Field
+                label="摘要"
+                hint="最多 300 个字符"
+                error={errors.fields.summary}
+                className="form-full"
+              >
+                <Textarea
+                  name="summary"
+                  value={form.summary}
+                  onChange={(event) => update("summary", event.target.value)}
+                />
+              </Field>
+              <div className="form-full">
+                <span className="mb-2 block text-xs font-medium text-text-soft">
+                  图标
+                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <ResourceIcon
+                    resource={resourcePreview}
+                    className="size-12"
+                  />
+                  <ImageEditor
+                    kind="icon"
+                    current={
+                      resource?.icon_file_id
+                        ? `/api/v1/icons/${resource.icon_file_id}`
+                        : undefined
+                    }
+                    value={image}
+                    disabled={submission.pending}
+                    onChange={(value) => {
+                      setImage(value);
+                      setIcon(
+                        value
+                          ? { type: "upload", file_id: value.id }
+                          : { type: "default" },
+                      );
+                    }}
+                  />
+                </div>
+                <details
+                  open={kind === "projects" ? true : undefined}
+                  className="mt-3"
+                >
+                  <summary className="cursor-pointer text-sm text-muted">
+                    选择内置图标
+                  </summary>
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    {(icons.data?.data ?? Object.keys(iconLabels)).map(
+                      (key) => (
+                        <button
+                          type="button"
+                          key={key}
+                          aria-pressed={
+                            icon.type === "builtin" && icon.key === key
+                          }
+                          className={`grid justify-items-center gap-1 rounded-lg border p-2 text-[11px] ${icon.type === "builtin" && icon.key === key ? "border-primary bg-accent-soft text-primary" : "hover:bg-surface-hover"}`}
+                          onClick={() => {
+                            setIcon({ type: "builtin", key });
+                            setImage(undefined);
+                          }}
+                        >
+                          <ResourceIcon
+                            resource={{
+                              name:
+                                iconLabels[key as keyof typeof iconLabels] ??
+                                key,
+                              icon_key: key,
+                              icon_file_id: null,
+                            }}
+                            className="size-8"
+                          />
+                          {iconLabels[key as keyof typeof iconLabels] ?? key}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                  <Button
+                    className="mt-2"
+                    size="sm"
+                    variant="ghost"
                     onClick={() => {
-                      setIcon({ type: "builtin", key });
-                      setImage(undefined);
+                      setIcon({ type: "default" });
+                      setImage(null);
                     }}
                   >
-                    <ResourceIcon
-                      resource={{
-                        name: iconLabels[key as keyof typeof iconLabels] ?? key,
-                        icon_key: key,
-                        icon_file_id: null,
-                      }}
-                      className="size-8"
-                    />
-                    {iconLabels[key as keyof typeof iconLabels] ?? key}
-                  </button>
-                ))}
+                    使用默认图标
+                  </Button>
+                </details>
               </div>
-              <Button
-                className="mt-2"
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setIcon({ type: "default" });
-                  setImage(null);
-                }}
-              >
-                使用默认图标
-              </Button>
             </div>
-          </div>
-        )}
-        {create && step === 1 && (
-          <div className="grid gap-5">
-            <section>
-              <h3 className="mb-2 text-sm font-medium">
-                初始管理员 · {adminIds.length}
-              </h3>
-              <p className="mb-3 text-xs text-muted">
-                至少选择 1 位，最多 100 位；不会自动加入其他创建者。
-              </p>
-              <div className="mb-3 flex flex-wrap gap-2">
-                {selectedUsers.map((user) => (
-                  <span
-                    key={user.id}
-                    className="inline-flex items-center gap-2 rounded-md bg-accent-soft px-2 py-1 text-xs"
-                  >
-                    {user.display_name} @{user.username}
-                    <button
-                      type="button"
-                      aria-label={`移除 ${user.display_name}`}
-                      disabled={adminIds.length === 1}
-                      onClick={() =>
-                        setAdminIds(adminIds.filter((id) => id !== user.id))
-                      }
+          )}
+          {create && (!wizard || step === 1) && (
+            <div className="mt-6 grid gap-5">
+              <section>
+                <h3 className="mb-2 text-sm font-medium">
+                  初始管理员 · {adminIds.length}
+                </h3>
+                <p className="mb-3 text-xs text-muted">
+                  至少选择 1 位，最多 100 位；不会自动加入其他创建者。
+                </p>
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {selectedUsers.map((user) => (
+                    <span
+                      key={user.id}
+                      className="inline-flex items-center gap-2 rounded-md bg-accent-soft px-2 py-1 text-xs"
                     >
-                      <X className="size-3" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <div className="mb-2 flex gap-2">
-                <StandaloneInput
-                  aria-label="搜索初始管理员"
-                  placeholder="搜索用户名或显示名称"
-                  value={userSearch}
-                  onChange={(event) => setUserSearch(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      setUserQuery(userSearch.trim());
-                    }
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => setUserQuery(userSearch.trim())}
-                >
-                  搜索
-                </Button>
-              </div>
-              <div className="max-h-56 overflow-y-auto rounded-lg border">
-                {users.data?.data.map((user) => (
-                  <label
-                    key={user.id}
-                    className="flex items-center gap-3 border-b px-3 py-2 last:border-0"
+                      {user.display_name} @{user.username}
+                      <button
+                        type="button"
+                        aria-label={`移除 ${user.display_name}`}
+                        disabled={adminIds.length === 1}
+                        onClick={() =>
+                          setAdminIds(adminIds.filter((id) => id !== user.id))
+                        }
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="mb-2 flex gap-2">
+                  <StandaloneInput
+                    aria-label="搜索初始管理员"
+                    placeholder="搜索用户名或显示名称"
+                    value={userSearch}
+                    onChange={(event) => setUserSearch(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        setUserQuery(userSearch.trim());
+                      }
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => setUserQuery(userSearch.trim())}
                   >
-                    <input
-                      type="checkbox"
-                      checked={adminIds.includes(user.id)}
+                    搜索
+                  </Button>
+                </div>
+                <div className="max-h-56 overflow-y-auto rounded-lg border">
+                  {users.data?.data.map((user) => (
+                    <label
+                      key={user.id}
+                      className="flex items-center gap-3 border-b px-3 py-2 last:border-0"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={adminIds.includes(user.id)}
+                        onChange={(event) => {
+                          if (event.target.checked)
+                            setChosenUsers((current) => [
+                              ...current.filter((item) => item.id !== user.id),
+                              user,
+                            ]);
+                          setAdminIds(
+                            event.target.checked
+                              ? [...adminIds, user.id]
+                              : adminIds.filter((id) => id !== user.id),
+                          );
+                        }}
+                      />
+                      <span>
+                        {user.display_name}
+                        <small className="ml-2 text-muted">
+                          @{user.username}
+                        </small>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {errors.fields.admin_user_ids && (
+                  <p className="mt-1 text-xs text-danger">
+                    {errors.fields.admin_user_ids}
+                  </p>
+                )}
+              </section>
+              {!separateDescription && (
+                <>
+                  <Field
+                    label="简介"
+                    hint="支持 Markdown；不超过 100 KiB UTF-8"
+                    error={errors.fields.description}
+                  >
+                    <Textarea
+                      name="description"
+                      className="min-h-40 font-mono"
+                      value={form.description}
                       onChange={(event) =>
-                        setAdminIds(
-                          event.target.checked
-                            ? [...adminIds, user.id]
-                            : adminIds.filter((id) => id !== user.id),
-                        )
+                        update("description", event.target.value)
                       }
                     />
-                    <span>
-                      {user.display_name}
-                      <small className="ml-2 text-muted">
-                        @{user.username}
-                      </small>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {errors.fields.admin_user_ids && (
-                <p className="mt-1 text-xs text-danger">
-                  {errors.fields.admin_user_ids}
-                </p>
+                  </Field>
+                </>
               )}
-            </section>
+              {kind === "projects" && (
+                <Notice>
+                  创建只写入本地资料与成员关系，不会自动关联仓库或创建远端 Git
+                  分支。
+                </Notice>
+              )}
+            </div>
+          )}
+          {!create && !separateDescription && (
             <Field
-              label="简介"
-              hint="支持 Markdown；不超过 100 KiB UTF-8"
+              label={kind === "teams" ? "团队简介" : "项目简介"}
               error={errors.fields.description}
+              className="mt-5"
             >
               <Textarea
                 name="description"
@@ -434,26 +497,8 @@ export function ResourceEditor({
                 onChange={(event) => update("description", event.target.value)}
               />
             </Field>
-            <Notice>
-              创建只写入本地资料与成员关系，不会自动关联仓库或创建远端 Git
-              分支。
-            </Notice>
-          </div>
-        )}
-        {!create && (
-          <Field
-            label="项目简介"
-            error={errors.fields.description}
-            className="mt-5"
-          >
-            <Textarea
-              name="description"
-              className="min-h-40 font-mono"
-              value={form.description}
-              onChange={(event) => update("description", event.target.value)}
-            />
-          </Field>
-        )}
+          )}
+        </fieldset>
       </form>
     </Drawer>
   );

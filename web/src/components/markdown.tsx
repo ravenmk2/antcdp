@@ -1,378 +1,315 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import MarkdownIt from "markdown-it";
+import {
+  createElement,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import DOMPurify from "dompurify";
-import { EditorState } from "@codemirror/state";
-import {
-  EditorView,
-  keymap,
-  lineNumbers,
-  highlightActiveLine,
-} from "@codemirror/view";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { markdown } from "@codemirror/lang-markdown";
-import {
-  syntaxHighlighting,
-  defaultHighlightStyle,
-} from "@codemirror/language";
-import { Code2, Download, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowUp, ListTree, Download } from "lucide-react";
 import { Button, IconButton } from "./button";
-import { ErrorNotice } from "./feedback";
-import { Modal } from "./overlays";
-import { CodeBlock } from "./code-block";
 import { CopyButton } from "./copy-button";
-import { useTheme } from "@/app/theme";
+import { CodeBlock } from "./code-block";
+import { MermaidBlock } from "./mermaid-block";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { parseMarkdown, type DocumentHeading } from "@/lib/markdown-document";
+export { MarkdownEditor } from "./markdown-editor";
 
-const renderer = new MarkdownIt({
-  html: false,
-  linkify: true,
-  typographer: false,
-});
-renderer.renderer.rules.image = (tokens, index) =>
-  renderer.utils.escapeHtml(tokens[index]?.content ?? "图片");
-
-export function MarkdownView({ source }: { source: string }) {
-  const parts = useMemo(() => splitBlocks(source), [source]);
-  if (!source.trim())
-    return <p className="text-sm text-muted">暂无介绍内容。</p>;
-  return (
-    <div className="markdown">
-      {parts.map((part, index) =>
-        part.kind === "mermaid" ? (
-          <MermaidBlock key={index} source={part.value} />
-        ) : part.kind === "code" ? (
-          <CodeBlock
-            key={index}
-            source={part.value}
-            language={part.language ?? "text"}
-          />
-        ) : (
-          <div
-            key={index}
-            dangerouslySetInnerHTML={{
-              __html: DOMPurify.sanitize(renderer.render(part.value), {
-                USE_PROFILES: { html: true },
-                FORBID_TAGS: ["img", "iframe", "object", "embed"],
-                FORBID_ATTR: ["style"],
-              }),
-            }}
-          />
-        ),
-      )}
-    </div>
-  );
-}
-
-type Block = {
-  kind: "markdown" | "mermaid" | "code";
-  value: string;
-  language?: string;
-};
-function splitBlocks(source: string): Block[] {
-  const parts: Block[] = [];
-  const pattern = /```([^\n]*)\s*\n([\s\S]*?)```/g;
-  let offset = 0;
-  for (const match of source.matchAll(pattern)) {
-    const index = match.index;
-    if (index > offset)
-      parts.push({ kind: "markdown", value: source.slice(offset, index) });
-    const language = (match[1] ?? "").trim().toLowerCase();
-    parts.push({
-      kind: language === "mermaid" ? "mermaid" : "code",
-      value: match[2] ?? "",
-      language,
-    });
-    offset = index + match[0].length;
-  }
-  if (offset < source.length)
-    parts.push({ kind: "markdown", value: source.slice(offset) });
-  return parts;
-}
-
-function MermaidBlock({ source }: { source: string }) {
-  const { resolved } = useTheme();
-  const [svg, setSvg] = useState("");
-  const [error, setError] = useState("");
-  const [code, setCode] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(
-    null,
-  );
-  useEffect(() => {
-    let active = true;
-    setError("");
-    setSvg("");
-    void import("mermaid")
-      .then(async ({ default: mermaid }) => {
-        mermaid.initialize({
-          startOnLoad: false,
-          securityLevel: "strict",
-          theme: "base",
-          htmlLabels: false,
-          flowchart: { htmlLabels: false },
-          darkMode: resolved === "dark",
-          themeVariables: {
-            fontFamily:
-              "Microsoft YaHei UI, Microsoft YaHei, Segoe UI, sans-serif",
-            primaryColor: resolved === "dark" ? "#1d334f" : "#eaf1ff",
-            primaryTextColor: resolved === "dark" ? "#e7edf5" : "#17202c",
-            primaryBorderColor: resolved === "dark" ? "#93c5fd" : "#2563eb",
-            lineColor: resolved === "dark" ? "#94a5b9" : "#637286",
-          },
-        });
-        const result = await mermaid.render(
-          `diagram-${crypto.randomUUID().replaceAll("-", "")}`,
-          source,
-        );
-        if (active)
-          setSvg(
-            DOMPurify.sanitize(result.svg, {
-              USE_PROFILES: { svg: true, svgFilters: true },
-            }),
-          );
-      })
-      .catch((caught: unknown) => {
-        if (active)
-          setError(
-            caught instanceof Error ? caught.message : "图表语法无法解析",
-          );
-      });
-    return () => {
-      active = false;
-    };
-  }, [source, resolved]);
-  return (
-    <figure className="my-4 overflow-hidden rounded-lg border bg-surface-subtle">
-      <div className="flex items-center justify-end gap-1 border-b px-2 py-1">
-        <Button size="sm" variant="ghost" onClick={() => setCode(!code)}>
-          <Code2 />
-          {code ? "查看图表" : "查看源码"}
-        </Button>
-        <CopyButton label="复制 Mermaid 源码" value={source} />
-        {!code && (
-          <IconButton
-            size="iconSm"
-            label="放大查看图表"
-            onClick={() => setExpanded(true)}
-          >
-            <ZoomIn />
-          </IconButton>
-        )}
-      </div>
-      {code ? (
-        <pre className="overflow-auto p-4 text-xs">
-          <code>{source}</code>
-        </pre>
-      ) : error ? (
-        <div className="p-4">
-          <ErrorNotice error={error} />
-          <pre className="mt-2 text-xs">
-            <code>{source}</code>
-          </pre>
-        </div>
-      ) : svg ? (
-        <div
-          className="grid max-h-[480px] place-items-center overflow-auto p-4 [&_svg]:h-auto [&_svg]:max-w-full"
-          dangerouslySetInnerHTML={{ __html: svg }}
-        />
-      ) : (
-        <p className="p-5 text-sm text-muted">正在渲染图表…</p>
-      )}
-      <Modal
-        open={expanded}
-        wide
-        title="图表查看"
-        onClose={() => {
-          setExpanded(false);
-          setZoom(1);
-          setPan({ x: 0, y: 0 });
-        }}
-        footer={
-          <>
-            <IconButton
-              label="缩小"
-              onClick={() => setZoom((value) => Math.max(0.5, value - 0.1))}
-            >
-              <ZoomOut />
-            </IconButton>
-            <IconButton
-              label="放大"
-              onClick={() => setZoom((value) => Math.min(3, value + 0.1))}
-            >
-              <ZoomIn />
-            </IconButton>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setZoom(1);
-                setPan({ x: 0, y: 0 });
-              }}
-            >
-              复位
-            </Button>
-          </>
-        }
-      >
-        <div className="overflow-auto">
-          <div
-            tabIndex={0}
-            aria-label="图表平移区域，可拖动、滚轮缩放或使用方向键"
-            className="cursor-move touch-none focus:outline-offset-4"
-            onPointerDown={(event) => {
-              event.currentTarget.setPointerCapture(event.pointerId);
-              drag.current = {
-                x: event.clientX,
-                y: event.clientY,
-                px: pan.x,
-                py: pan.y,
-              };
-            }}
-            onPointerMove={(event) => {
-              if (drag.current)
-                setPan({
-                  x: drag.current.px + event.clientX - drag.current.x,
-                  y: drag.current.py + event.clientY - drag.current.y,
-                });
-            }}
-            onPointerUp={() => {
-              drag.current = null;
-            }}
-            onWheel={(event) => {
-              event.preventDefault();
-              setZoom((value) =>
-                Math.min(3, Math.max(0.5, value - event.deltaY * 0.001)),
-              );
-            }}
-            onKeyDown={(event) => {
-              const delta =
-                event.key === "ArrowLeft"
-                  ? { x: 20, y: 0 }
-                  : event.key === "ArrowRight"
-                    ? { x: -20, y: 0 }
-                    : event.key === "ArrowUp"
-                      ? { x: 0, y: 20 }
-                      : event.key === "ArrowDown"
-                        ? { x: 0, y: -20 }
-                        : null;
-              if (delta) {
-                event.preventDefault();
-                setPan((current) => ({
-                  x: current.x + delta.x,
-                  y: current.y + delta.y,
-                }));
-              }
-            }}
-            style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              transformOrigin: "top left",
-            }}
-            dangerouslySetInnerHTML={{ __html: svg }}
-          />
-        </div>
-      </Modal>
-    </figure>
-  );
-}
-
-export function MarkdownEditor({
-  initial,
-  onChange,
-  onDirty,
+export function MarkdownView({
+  source,
+  compact = false,
+  preview = false,
 }: {
-  initial: string;
-  onChange: (value: string) => void;
-  onDirty?: (dirty: boolean) => void;
+  source: string;
+  compact?: boolean;
+  preview?: boolean;
 }) {
-  const host = useRef<HTMLDivElement>(null);
-  const editor = useRef<EditorView | null>(null);
-  const dirty = useRef(false);
-  const [mode, setMode] = useState<"edit" | "preview" | "split">("edit");
-  const [source, setSource] = useState(initial);
-  const initialRef = useRef(initial);
-  const callbacks = useRef({ onChange, onDirty });
-  callbacks.current = { onChange, onDirty };
-  useEffect(() => {
-    if (!host.current) return;
-    const view = new EditorView({
-      parent: host.current,
-      state: EditorState.create({
-        doc: initialRef.current,
-        extensions: [
-          lineNumbers(),
-          highlightActiveLine(),
-          history(),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
-          markdown(),
-          syntaxHighlighting(defaultHighlightStyle),
-          EditorView.lineWrapping,
-          EditorView.updateListener.of((update) => {
-            if (!update.docChanged) return;
-            const value = update.state.doc.toString();
-            dirty.current = value !== initialRef.current;
-            setSource(value);
-            callbacks.current.onChange(value);
-            callbacks.current.onDirty?.(dirty.current);
-          }),
-          EditorView.theme({
-            "&": {
-              minHeight: "320px",
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
-              background: "var(--surface)",
-              color: "var(--text)",
-            },
-            ".cm-content": {
-              padding: "14px",
-              fontFamily: "Cascadia Code, Consolas, monospace",
-              fontSize: "13px",
-            },
-            ".cm-scroller": { overflow: "auto" },
-          }),
-        ],
-      }),
+  const document = useMemo(() => parseMarkdown(source), [source]);
+  const article = useRef<HTMLElement>(null);
+  const root = useRef<HTMLElement | null>(null);
+  const [active, setActive] = useState("");
+  const [backTop, setBackTop] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [deep, setDeep] = useState(false);
+  const toc = useRef<HTMLElement>(null);
+  const content = useMemo(() => {
+    const html = DOMPurify.sanitize(document.html, {
+      USE_PROFILES: { html: true },
+      FORBID_TAGS: ["img", "iframe", "object", "embed"],
+      FORBID_ATTR: ["style"],
     });
-    editor.current = view;
-    return () => {
-      view.destroy();
-      editor.current = null;
-    };
-  }, []);
-  return (
-    <div>
-      <div className="mb-3 flex flex-wrap items-center gap-1 rounded-lg border bg-surface-subtle p-1">
-        {(["edit", "preview", "split"] as const).map((value) => (
-          <Button
-            key={value}
-            size="sm"
-            variant={mode === value ? "secondary" : "ghost"}
-            aria-pressed={mode === value}
-            onClick={() => setMode(value)}
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    function render(node: Node, key: number): ReactNode {
+      if (node.nodeType === 3) return node.textContent;
+      if (!(node instanceof Element)) return null;
+      const index = node.getAttribute("data-markdown-block");
+      if (index !== null) {
+        const block = document.blocks[Number(index)];
+        if (!block) return null;
+        return (
+          <div
+            key={key}
+            data-source-line={node.getAttribute("data-source-line")}
           >
-            {value === "edit" ? "编辑" : value === "preview" ? "预览" : "分栏"}
-          </Button>
-        ))}
-        <span className="ml-auto px-2 text-xs text-muted">
-          {new TextEncoder().encode(source).length.toLocaleString()} / 102400
-          字节
-        </span>
-      </div>
-      <div className={mode === "split" ? "grid gap-4 xl:grid-cols-2" : "grid"}>
-        <div ref={host} className={mode === "preview" ? "hidden" : "min-w-0"} />
-        {mode !== "edit" && (
-          <div className="min-w-0 rounded-lg border p-5">
-            <MarkdownView source={source} />
+            {block.language === "mermaid" ? (
+              <MermaidBlock key={key} source={block.source} />
+            ) : (
+              <CodeBlock
+                key={key}
+                source={block.source}
+                language={block.language}
+                title={block.title}
+                highlightedLines={block.highlightedLines}
+              />
+            )}
           </div>
+        );
+      }
+      const attributes: Record<string, unknown> = { key };
+      const names: Record<string, string> = {
+        class: "className",
+        tabindex: "tabIndex",
+        colspan: "colSpan",
+        rowspan: "rowSpan",
+      };
+      for (const attr of [...node.attributes])
+        if (!attr.name.startsWith("on"))
+          attributes[names[attr.name] || attr.name] = attr.value;
+      if (["br", "hr"].includes(node.tagName.toLowerCase()))
+        return createElement(node.tagName.toLowerCase(), attributes);
+      return createElement(
+        node.tagName.toLowerCase(),
+        attributes,
+        ...[...node.childNodes].map(render),
+      );
+    }
+    return [...dom.body.childNodes].map(render);
+  }, [document]);
+  const scrollToHeading = useCallback(
+    (id?: string) => {
+      const target = id
+        ? [
+            ...(article.current?.querySelectorAll<HTMLElement>(
+              "h1,h2,h3,h4,h5,h6",
+            ) ?? []),
+          ].find((el) => el.id === id)
+        : article.current;
+      if (!target) return;
+      const scroll = root.current;
+      const offset = scroll ? 24 : 88;
+      const top =
+        target.getBoundingClientRect().top -
+        (scroll?.getBoundingClientRect().top ?? 0) +
+        (scroll?.scrollTop ?? window.scrollY) -
+        offset;
+      if (scroll) scroll.scrollTo({ top: id ? top : 0, behavior: "smooth" });
+      else window.scrollTo({ top: id ? top : 0, behavior: "smooth" });
+      if (id) {
+        setActive(id);
+        if (!preview)
+          window.history.replaceState(
+            window.history.state,
+            "",
+            `${location.pathname}${location.search}#${encodeURIComponent(id)}`,
+          );
+      } else if (!preview)
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${location.pathname}${location.search}`,
+        );
+      setOpen(false);
+    },
+    [preview],
+  );
+  useEffect(() => {
+    const element = article.current;
+    if (!element) return;
+    root.current = element.closest<HTMLElement>("[data-markdown-scroll]");
+    const scroll = root.current;
+    const eventTarget = scroll ?? window;
+    let frame = 0;
+    const update = () => {
+      const top = scroll ? scroll.getBoundingClientRect().top + 24 : 88;
+      const headings = [
+        ...element.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6"),
+      ];
+      let current = headings[0]?.id ?? "";
+      for (const heading of headings)
+        if (heading.getBoundingClientRect().top <= top + 8)
+          current = heading.id;
+      setActive(current);
+      setBackTop(
+        top - element.getBoundingClientRect().top >
+          (scroll?.clientHeight ?? window.innerHeight),
+      );
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(update);
+    };
+    const fromHash = () => {
+      if (preview || !location.hash) return;
+      try {
+        scrollToHeading(decodeURIComponent(location.hash.slice(1)));
+      } catch {
+        /* Ignore malformed fragments. */
+      }
+    };
+    update();
+    fromHash();
+    eventTarget.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    window.addEventListener("hashchange", fromHash);
+    const observer =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(schedule)
+        : null;
+    observer?.observe(element);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+      eventTarget.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("hashchange", fromHash);
+    };
+  }, [document, preview, scrollToHeading]);
+  useEffect(() => {
+    const nav = toc.current;
+    const link = nav?.querySelector<HTMLElement>('[aria-current="location"]');
+    if (!nav || !link) return;
+    const delta =
+      link.getBoundingClientRect().top - nav.getBoundingClientRect().top;
+    if (delta < 0) nav.scrollTop += delta;
+    else if (delta + link.offsetHeight > nav.clientHeight)
+      nav.scrollTop += delta + link.offsetHeight - nav.clientHeight;
+  }, [active]);
+  const headings = document.headings.filter(
+    (heading) => deep || heading.level <= 3,
+  );
+  const activeIndex = document.headings.findIndex(
+    (heading) => heading.id === active,
+  );
+  const visibleActive = document.headings
+    .slice(0, activeIndex + 1)
+    .filter((heading) => deep || heading.level <= 3)
+    .at(-1)?.id;
+  function links(items: DocumentHeading[]) {
+    return items.map((heading) => (
+      <a
+        key={heading.id}
+        href={`#${heading.id}`}
+        aria-current={visibleActive === heading.id ? "location" : undefined}
+        style={{ paddingLeft: `${8 + (heading.level - 1) * 12}px` }}
+        onClick={(event) => {
+          event.preventDefault();
+          scrollToHeading(heading.id);
+        }}
+      >
+        {heading.title}
+      </a>
+    ));
+  }
+  const directory = (
+    <>
+      <div className="flex items-center justify-between gap-2 pb-2 text-xs text-muted">
+        <span>本页目录</span>
+        {document.headings.some((h) => h.level > 3) && (
+          <Button
+            size="sm"
+            variant="ghost"
+            aria-expanded={deep}
+            onClick={() => setDeep(!deep)}
+          >
+            {deep ? "收起层级" : "展开全部"}
+          </Button>
         )}
       </div>
+      {links(headings)}
+    </>
+  );
+  return (
+    <div
+      className={`markdown-layout ${compact ? "markdown-layout-compact" : ""} ${document.headings.length ? "has-directory" : ""}`}
+    >
+      {!!document.headings.length && (
+        <div className="markdown-directory-trigger">
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm">
+                <ListTree />
+                目录
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72">
+              <nav
+                className="markdown-directory max-h-[60vh] overflow-auto"
+                aria-label="文档目录"
+              >
+                {directory}
+              </nav>
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
+      <div className="markdown-reading-grid">
+        <article
+          ref={article}
+          className="markdown"
+          aria-label="Markdown 正文"
+          onClick={(event) => {
+            const link = (event.target as Element).closest?.("a");
+            const href = link?.getAttribute("href");
+            if (
+              href?.startsWith("#") &&
+              document.headings.some((h) => `#${h.id}` === href)
+            ) {
+              event.preventDefault();
+              scrollToHeading(href.slice(1));
+            }
+          }}
+        >
+          {source.trim() ? (
+            content
+          ) : (
+            <p className="text-sm text-muted">暂无介绍内容。</p>
+          )}
+        </article>
+        {!!document.headings.length && !compact && (
+          <aside className="markdown-directory-rail">
+            <nav ref={toc} className="markdown-directory" aria-label="文档目录">
+              {directory}
+            </nav>
+          </aside>
+        )}
+      </div>
+      {backTop &&
+        (preview && root.current?.parentElement
+          ? createPortal(
+              <div className="markdown-back-top is-preview">
+                <IconButton label="回到顶部" onClick={() => scrollToHeading()}>
+                  <ArrowUp />
+                </IconButton>
+              </div>,
+              root.current.parentElement,
+            )
+          : createPortal(
+              <div className="markdown-back-top">
+                <IconButton label="回到顶部" onClick={() => scrollToHeading()}>
+                  <ArrowUp />
+                </IconButton>
+              </div>,
+              window.document.body,
+            ))}
     </div>
   );
 }
-
 export function MarkdownActions({ source }: { source: string }) {
   return <CopyButton value={source} label="复制 Markdown" text />;
 }
-
 export function DownloadLink({
   href,
   children,

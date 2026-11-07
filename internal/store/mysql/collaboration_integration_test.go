@@ -21,6 +21,24 @@ func verifyCollaborationHTTP(t *testing.T, backend *Store, dataDir string, admin
 	head := func(path, field string) map[string]string {
 		return map[string]string{"If-Match": get(path)[field].(string)}
 	}
+	t.Run("TeamMemberAvatar", func(t *testing.T) {
+		members := get(g + "/members")["items"].([]any)
+		if _, ok := members[0].(map[string]any)["avatar_file_id"]; ok {
+			t.Fatal("member without an avatar should omit the avatar ID")
+		}
+		draft := testData(upload(t, admin, avatarPNG(t), 201))
+		avatarID := draft["id"].(string)
+		_, userTag := admin.user(t, memberID)
+		admin.call(t, "PATCH", "/admin/users/"+memberID, map[string]any{"avatar_upload_id": avatarID}, 200, map[string]string{"If-Match": userTag})
+		members = testData(member.call(t, "GET", g+"/members", nil, 200, nil))["items"].([]any)
+		if members[0].(map[string]any)["avatar_file_id"] != avatarID {
+			t.Fatal("team member response did not project the attached avatar")
+		}
+		imageResponse(t, member, avatarID, 200, nil)
+		outsider.call(t, "GET", g+"/members", nil, 404, nil)
+		_, userTag = admin.user(t, memberID)
+		admin.call(t, "PATCH", "/admin/users/"+memberID, map[string]any{"avatar_upload_id": nil}, 200, map[string]string{"If-Match": userTag})
+	})
 	t.Run("UnicodeSearch", func(t *testing.T) {
 		for _, tc := range []struct {
 			kind, query string

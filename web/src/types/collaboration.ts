@@ -32,6 +32,7 @@ export interface Page<T> {
   can_manage?: boolean;
 }
 export interface Member {
+  avatar_file_id?: string | null;
   user_id: string;
   username: string;
   display_name: string;

@@ -59,6 +59,7 @@ type Source struct {
 	Name   string `json:"team_name,omitempty"`
 }
 type Member struct {
+	AvatarID      *uint64  `db:"avatar_file_id" json:"avatar_file_id,string,omitempty"`
 	ID            uint64   `db:"id" json:"user_id,string"`
 	Username      string   `db:"username" json:"username"`
 	Name          string   `db:"display_name" json:"display_name"`

@@ -16,16 +16,7 @@ import { useApiQuery } from "@/hooks/use-api";
 import { usePageSize } from "@/hooks/use-page-size";
 import { useDebouncedSearch } from "@/hooks/use-search";
 import { formatDate, jsonText } from "@/lib/utils";
-import {
-  CodeBlock,
-  CodeBlockActions,
-  CodeBlockContent,
-  CodeBlockHeader,
-  CodeBlockLine,
-  CodeBlockTitle,
-} from "@/components/ui/code-block";
-import { CopyButton } from "@/components/copy-button";
-import { useHighlightedCode } from "@/hooks/use-highlighted-code";
+import { CodeBlock } from "@/components/code-block";
 import { auditActionLabels, type AuditEvent } from "@/types/audit";
 
 export function AuditPage() {
@@ -372,24 +363,17 @@ export function AuditDetail({
 }
 
 function AuditData({ source }: { source: string }) {
-  const lines = useHighlightedCode(source, "json");
   return (
-    <CodeBlock>
-      <CodeBlockHeader>
-        <CodeBlockTitle>JSON</CodeBlockTitle>
-        <CodeBlockActions>
-          <CopyButton value={source} label="复制操作数据" />
-        </CodeBlockActions>
-      </CodeBlockHeader>
-      <CodeBlockContent
-        wrap
-        className="max-h-96 [overflow-wrap:anywhere]"
-        aria-labelledby="audit-operation-data"
-      >
-        {lines.map((line, index) => (
-          <CodeBlockLine key={index}>{line}</CodeBlockLine>
-        ))}
-      </CodeBlockContent>
-    </CodeBlock>
+    <CodeBlock
+      source={source}
+      language="json"
+      title="JSON"
+      lineNumbers={false}
+      defaultWrap
+      copyLabel="复制操作数据"
+      contentLabel="操作数据"
+      className="my-0"
+      contentClassName="max-h-96"
+    />
   );
 }

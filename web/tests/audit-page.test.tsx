@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AuditPage } from "@/features/admin/audit-page";
+import { Blob as NodeBlob } from "node:buffer";
 
 vi.mock("@/app/auth", () => ({
   useAuth: () => ({ settings: { timezone: "Asia/Shanghai" } }),
@@ -21,6 +22,8 @@ const events = Array.from({ length: 27 }, (_, index) => ({
 }));
 let requests: URL[];
 beforeEach(() => {
+  // Shiki decompresses its embedded WASM with Blob.stream(), absent in jsdom.
+  vi.stubGlobal("Blob", NodeBlob);
   localStorage.clear();
   requests = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -39,7 +42,10 @@ beforeEach(() => {
     );
   });
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 function mount(entry = "/admin/audit") {
   const router = createMemoryRouter(
     [{ path: "/admin/audit", element: <AuditPage /> }],
@@ -130,10 +136,13 @@ describe("audit numbered pagination", () => {
     );
     const code = within(dialog).getByLabelText("操作数据");
     expect(code).toHaveAttribute("tabindex", "0");
-    await waitFor(() =>
-      expect(code.querySelector("span[style*='--shiki-light']")).not.toBeNull(),
+    await waitFor(
+      () => expect(code.querySelector("span[style*='color:']")).not.toBeNull(),
+      { timeout: 3000 },
     );
-    expect(code.querySelector("span[style*='--shiki-dark']")).not.toBeNull();
+    expect(code).not.toHaveAttribute("data-numbered");
+    expect(code).toHaveAttribute("data-wrap", "true");
+    expect(code).toHaveStyle({ whiteSpace: "pre-wrap" });
     expect(code).toHaveTextContent("<script>示例</script>");
     expect(code.querySelector("script")).toBeNull();
     const copy = vi.spyOn(navigator.clipboard, "writeText");

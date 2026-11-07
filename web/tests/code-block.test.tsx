@@ -75,4 +75,75 @@ describe("code block", () => {
     expect(copy).toHaveBeenCalledWith(source);
     expect(screen.getByRole("button", { name: "已复制" })).toBeInTheDocument();
   });
+
+  it("renders numbered lines and highlighted ranges with the official header actions", async () => {
+    mocks.codeToHtml.mockResolvedValue(
+      '<pre><code><span class="line">one</span>\n<span class="line"></span>\n<span class="line">three</span></code></pre>',
+    );
+    const user = userEvent.setup();
+    const { container } = render(
+      <CodeBlock
+        source={"one\n\nthree\n"}
+        language="ts"
+        title="app/example.ts"
+        highlightedLines={[2, 3]}
+      />,
+    );
+    expect(screen.getByText("app/example.ts")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下载代码" })).toBeEnabled();
+    await screen.findByText("three");
+    expect(container.querySelector("pre")).toHaveAttribute("data-numbered");
+    expect(
+      container.querySelectorAll('[data-slot="code-block-line"]'),
+    ).toHaveLength(3);
+    expect(
+      container.querySelectorAll(
+        '[data-slot="code-block-line"][data-variant="highlighted"]',
+      ),
+    ).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "自动换行" }));
+    expect(container.querySelector("pre")).toHaveAttribute("data-wrap");
+    expect(container.querySelector("pre")).toHaveStyle({
+      whiteSpace: "pre-wrap",
+      overflowWrap: "anywhere",
+    });
+    expect(
+      container.querySelector('[data-slot="code-block-code"]'),
+    ).toHaveStyle({
+      minWidth: "0",
+      width: "100%",
+      gridTemplateColumns: "auto minmax(0, 1fr)",
+    });
+    await user.click(screen.getByRole("button", { name: "自动换行" }));
+    expect(container.querySelector("pre")).toHaveStyle({ whiteSpace: "pre" });
+    expect(screen.getByRole("button", { name: "自动换行" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
+  it("shares audit styling and actions while keeping its data unnumbered", async () => {
+    mocks.codeToHtml.mockRejectedValue(new Error("plain fallback"));
+    const user = userEvent.setup();
+    const copy = vi.spyOn(navigator.clipboard, "writeText");
+    const { container } = render(
+      <CodeBlock
+        source={'{"enabled":true}'}
+        language="json"
+        title="JSON"
+        lineNumbers={false}
+        defaultWrap
+        copyLabel="复制操作数据"
+        contentLabel="操作数据"
+      />,
+    );
+    const content = screen.getByLabelText("操作数据");
+    expect(content).not.toHaveAttribute("data-numbered");
+    expect(content).toHaveAttribute("data-wrap");
+    expect(
+      container.querySelector('[data-slot="code-block-code"]'),
+    ).toHaveStyle({ gridTemplateColumns: "minmax(0, 1fr)" });
+    await user.click(screen.getByRole("button", { name: "复制操作数据" }));
+    expect(copy).toHaveBeenCalledWith('{"enabled":true}');
+  });
 });

@@ -5,7 +5,7 @@ import { Database, FileClock, Monitor, Settings } from "lucide-react";
 import { request } from "@/api/client";
 import { Button } from "@/components/button";
 import { AsyncBoundary, ErrorNotice, Notice } from "@/components/feedback";
-import { Field, Input, Select } from "@/components/fields";
+import { Field, Input, NumberInput, Select } from "@/components/fields";
 import { DescriptionList, PageHeader, Panel } from "@/components/layout";
 import { useApiQuery } from "@/hooks/use-api";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
@@ -106,7 +106,7 @@ function SettingsForm({
     site_name: initial.site_name,
     timezone: initial.timezone,
     registration_enabled: initial.registration_enabled,
-    session_ttl_days: initial.session_ttl_days,
+    session_ttl_days: String(initial.session_ttl_days),
   });
   const errors = useFormErrors();
   const submission = useSubmission();
@@ -115,7 +115,7 @@ function SettingsForm({
     site_name: initial.site_name,
     timezone: initial.timezone,
     registration_enabled: initial.registration_enabled,
-    session_ttl_days: initial.session_ttl_days,
+    session_ttl_days: String(initial.session_ttl_days),
   };
   const dirty = JSON.stringify(form) !== JSON.stringify(original);
   useUnsaved(dirty, submission.pending);
@@ -124,9 +124,9 @@ function SettingsForm({
     if (Array.from(form.site_name.trim()).length > 40)
       fields.site_name = "系统名称最多 40 个字符";
     if (
-      !Number.isInteger(form.session_ttl_days) ||
-      form.session_ttl_days < 1 ||
-      form.session_ttl_days > 30
+      !Number.isInteger(Number(form.session_ttl_days)) ||
+      Number(form.session_ttl_days) < 1 ||
+      Number(form.session_ttl_days) > 30
     )
       fields.session_ttl_days = "会话有效期须为 1–30 天";
     if (!errors.validate(fields)) return;
@@ -140,7 +140,7 @@ function SettingsForm({
               ? { site_name: form.site_name.trim(), timezone: form.timezone }
               : {
                   registration_enabled: form.registration_enabled,
-                  session_ttl_days: form.session_ttl_days,
+                  session_ttl_days: Number(form.session_ttl_days),
                 },
         });
         await Promise.all([
@@ -237,18 +237,17 @@ function SettingsForm({
               hint="仅影响新建会话；有效业务访问自动续期"
               error={errors.fields.session_ttl_days}
             >
-              <Input
+              <NumberInput
                 name="session_ttl_days"
-                type="number"
+                label="会话有效期"
+                disabled={submission.pending}
                 min={1}
                 max={30}
                 value={form.session_ttl_days}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    session_ttl_days: Number(event.target.value),
-                  })
-                }
+                onValueChange={(value) => {
+                  setForm({ ...form, session_ttl_days: value });
+                  errors.change("session_ttl_days");
+                }}
               />
             </Field>
           </div>

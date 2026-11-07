@@ -156,6 +156,8 @@ PATCH 只接受 name、summary、description、icon；code 不可提交。字段
 
 添加已存在且角色相同的直接成员视为无变化；角色不同返回 409 MEMBER_ALREADY_EXISTS，要求显式改角色。重复加入项目团队视为无变化；删除已不存在的直接关系在授权及版本检查后返回成功，无重复审计。成功成员命令返回 204；有效成员列表重新读取，不能在客户端凭本次操作推算所有间接权限。
 
+团队成员额外返回可选 `avatar_file_id`（十进制字符串，无头像时省略），页面使用现有登录鉴权头像接口读取；项目成员响应保持原字段。
+
 有效成员投影：user_id、username、display_name、account_status、direct_role（无直接关系时为空字符串）、effective_role、sources。sources 条目为 `{type:"direct"}` 或 `{type:"team",team_id,team_name}`，按团队 ID 稳定排序；同一用户只出现一次。禁用用户保留角色来源，但不得因此被授权。
 
 ### 4.3 有界选择器

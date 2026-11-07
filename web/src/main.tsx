@@ -24,6 +24,7 @@ import { AuditPage } from "./features/admin/audit-page";
 import { MaintenancePage } from "./features/admin/maintenance-page";
 import { HomePage } from "./features/workspace/home-page";
 import { ResourceList } from "./features/workspace/resource-list";
+import { TeamDescriptionEditor } from "./features/workspace/team-description-editor";
 import { ResourceDetail } from "./features/workspace/resource-detail";
 import { VariantsPage, VariantDetailPage } from "./features/delivery/variants";
 import { IntegrationsPage } from "./features/integrations/integrations-page";
@@ -140,6 +141,10 @@ const router = createBrowserRouter([
                   {
                     path: "admin/teams/:teamId",
                     element: <ResourceDetail kind="teams" />,
+                  },
+                  {
+                    path: "admin/teams/:teamId/description/edit",
+                    element: <TeamDescriptionEditor />,
                   },
                   { path: "admin/settings", element: <SettingsPage /> },
                   { path: "admin/audit", element: <AuditPage /> },

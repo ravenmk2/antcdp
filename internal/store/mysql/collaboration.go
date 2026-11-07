@@ -214,7 +214,11 @@ func (t *identityTx) SaveResource(k c.Kind, o *c.Resource) error {
 func (t *identityTx) Members(k c.Kind, id uint64) ([]c.Member, error) {
 	rows := []c.Member{}
 	table := collabTable(k)
-	q := "SELECT u.id,u.username,u.display_name,u.status,m.role,0 AS team_id,'' AS team_name FROM " + table + "_member m JOIN `user` u ON u.id=m.user_id AND u.deleted_at IS NULL WHERE m." + table + "_id=?"
+	avatarColumn := ""
+	if k == c.Team {
+		avatarColumn = "u.avatar_file_id,"
+	}
+	q := "SELECT " + avatarColumn + "u.id,u.username,u.display_name,u.status,m.role,0 AS team_id,'' AS team_name FROM " + table + "_member m JOIN `user` u ON u.id=m.user_id AND u.deleted_at IS NULL WHERE m." + table + "_id=?"
 	args := []any{id}
 	if k == c.Project {
 		q += " UNION ALL SELECT u.id,u.username,u.display_name,u.status,'' AS role,tm.id AS team_id,tm.name AS team_name FROM project_team pt JOIN team tm ON tm.id=pt.team_id AND tm.dissolved_at IS NULL JOIN team_member m ON m.team_id=tm.id JOIN `user` u ON u.id=m.user_id AND u.deleted_at IS NULL WHERE pt.project_id=?"

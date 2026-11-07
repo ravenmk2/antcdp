@@ -1,13 +1,21 @@
+import { useState } from "react";
+import { DescriptionPreview } from "@/components/description-preview";
+import {
+  RowActions,
+  RowAction,
+  RowActionSeparator,
+} from "@/components/row-actions";
+import { TeamDissolveDialog } from "./team-dissolve-dialog";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DataColumn } from "@/components/table";
-import { Plus, Star } from "lucide-react";
+import { Plus, Star, Pencil, Trash2, Users } from "lucide-react";
 import { request } from "@/api/client";
 import { useSession } from "@/app/auth";
 import { Button } from "@/components/button";
-import { AsyncBoundary, StatusBadge } from "@/components/feedback";
+import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
 import { IconButton as ActionButton } from "@/components/button";
 import { StandaloneInput, StandaloneSelect } from "@/components/fields";
 import { PageHeader } from "@/components/layout";
@@ -29,6 +37,8 @@ import { ResourceEditor } from "./resource-editor";
 
 export function ResourceList({ kind }: { kind: ResourceKind }) {
   const session = useSession();
+  const [editing, setEditing] = useState<Resource | null>(null);
+  const [dissolving, setDissolving] = useState<Resource | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -140,7 +150,7 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
           <ResourceIcon resource={row.original} />
           <div className="min-w-0">
             <Link
-              className="font-medium text-foreground hover:text-primary"
+              className="inline-block max-w-lg break-all font-medium text-foreground hover:text-primary"
               to={`${admin ? "/admin" : ""}/${kind}/${row.original.id}`}
             >
               {row.original.name}
@@ -148,7 +158,7 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
             <div className="mono mt-1 text-[11px] text-muted">
               {row.original.code}
             </div>
-            {row.original.summary && (
+            {row.original.summary && kind !== "teams" && (
               <div
                 className="mt-1 max-w-md truncate text-xs text-muted"
                 title={row.original.summary}
@@ -157,6 +167,13 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
               </div>
             )}
           </div>
+          {kind === "teams" && row.original.summary && (
+            <DescriptionPreview
+              name={row.original.name}
+              description={row.original.summary}
+              label="团队摘要"
+            />
+          )}
         </div>
       ),
     },
@@ -212,15 +229,45 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
     },
     {
       id: "actions",
-      header: "",
-      cell: ({ row }) => (
-        <Link
-          className="link text-xs"
-          to={`${admin ? "/admin" : ""}/${kind}/${row.original.id}`}
-        >
-          查看
-        </Link>
-      ),
+      header: "操作",
+      cell: ({ row }) =>
+        admin && kind === "teams" ? (
+          <RowActions label={row.original.name} disabled={submission.pending}>
+            <RowAction icon={<Users />} to={`/admin/teams/${row.original.id}`}>
+              管理成员
+            </RowAction>
+            <RowAction
+              icon={<Pencil />}
+              disabled={!row.original.can_manage}
+              onSelect={() => {
+                void submission.run(async () => {
+                  const response = await request<Resource>(
+                    `/teams/${row.original.id}`,
+                  );
+                  setEditing(response.data);
+                });
+              }}
+            >
+              编辑资料
+            </RowAction>
+            <RowActionSeparator />
+            <RowAction
+              icon={<Trash2 />}
+              variant="destructive"
+              disabled={row.original.status !== "active"}
+              onSelect={() => setDissolving(row.original)}
+            >
+              解散团队
+            </RowAction>
+          </RowActions>
+        ) : (
+          <Link
+            className="link text-xs"
+            to={`${admin ? "/admin" : ""}/${kind}/${row.original.id}`}
+          >
+            查看
+          </Link>
+        ),
     },
   ];
   return (
@@ -233,6 +280,7 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
             : `仅展示你通过直接成员或团队关系参与的${kind === "projects" ? "项目" : "团队"}。`
         }
       />
+      <ErrorNotice error={submission.error} />
       <section className="panel">
         <TableToolbar
           onReset={() => {
@@ -308,11 +356,18 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
             <DataTable
               actionColumn="actions"
               data={list.data.data.items}
-              columns={columns}
+              columns={
+                admin && kind === "teams"
+                  ? columns.filter((column) => column.id !== "role")
+                  : columns
+              }
               label={title}
               rowKey={(row) => row.id}
-              onRowClick={(row) =>
-                navigate(`${admin ? "/admin" : ""}/${kind}/${row.id}`)
+              onRowClick={
+                admin && kind === "teams"
+                  ? undefined
+                  : (row) =>
+                      navigate(`${admin ? "/admin" : ""}/${kind}/${row.id}`)
               }
             />
           )}
@@ -335,10 +390,34 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
           />
         )}
       </section>
+      {dissolving && (
+        <TeamDissolveDialog
+          team={dissolving}
+          onClose={() => setDissolving(null)}
+        />
+      )}
+      <OverlayPresence>
+        {editing && (
+          <ResourceEditor
+            kind="teams"
+            separateDescription
+            resource={editing}
+            onClose={() => setEditing(null)}
+            onSaved={() => {
+              setEditing(null);
+              void queryClient.invalidateQueries({ queryKey: ["teams"] });
+              void queryClient.invalidateQueries({
+                queryKey: ["team", editing.id],
+              });
+            }}
+          />
+        )}
+      </OverlayPresence>
       <OverlayPresence>
         {create && admin && (
           <ResourceEditor
             kind={kind}
+            separateDescription={kind === "teams"}
             onClose={() => setCreate(false)}
             onSaved={(resource) => {
               setCreate(false);

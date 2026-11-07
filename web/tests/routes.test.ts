@@ -10,6 +10,10 @@ describe("History routes", () => {
         origin,
       ),
     ).toBe("/projects/21?tab=releases&variant=41&release=81#materials");
+    expect(
+      safeReturnTo("/admin/teams/7/description/edit#md-section", origin),
+    ).toBe("/admin/teams/7/description/edit#md-section");
+    expect(safeReturnTo("/teams/7/description/edit", origin)).toBeNull();
     expect(safeReturnTo("/admin/email/templates/new", origin)).toBe(
       "/admin/email/templates/new",
     );

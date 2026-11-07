@@ -10,6 +10,9 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  Users,
+  FolderGit2,
+  FileText,
   ArrowRight,
   Pencil,
   RotateCcw,
@@ -20,16 +23,23 @@ import { request } from "@/api/client";
 import { useAuth, useSession } from "@/app/auth";
 import { Button } from "@/components/button";
 import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
-import { Field, Input } from "@/components/fields";
 import { DescriptionList, PageHeader, Panel, Tabs } from "@/components/layout";
 import { MarkdownView } from "@/components/markdown";
 import { ConfirmDialog } from "@/components/overlays";
 import { ResourceIcon } from "@/components/resource-icon";
 import { useApiQuery } from "@/hooks/use-api";
 import { useSubmission } from "@/hooks/use-form";
+import { formatDate } from "@/lib/utils";
 import { recordRecent } from "@/lib/recent";
 import type { Resource, ResourceKind } from "@/types/collaboration";
 import { MembersPanel, ProjectTeams } from "./members";
+import { CopyButton } from "@/components/copy-button";
+import {
+  RowActions,
+  RowAction,
+  RowActionSeparator,
+} from "@/components/row-actions";
+import { TeamDissolveDialog } from "./team-dissolve-dialog";
 import { ResourceEditor } from "./resource-editor";
 import { ProjectOverview } from "./project-overview";
 import { ProjectDescription } from "./project-description";
@@ -80,13 +90,13 @@ function DetailContent({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [edit, setEdit] = useState(false);
-  const [life, setLife] = useState<
-    "archive" | "restore" | "dissolve" | "leave" | null
-  >(null);
-  const [confirmation, setConfirmation] = useState("");
+  const [life, setLife] = useState<"archive" | "restore" | "leave" | null>(
+    null,
+  );
+  const [dissolve, setDissolve] = useState(false);
   const submission = useSubmission();
   const project = kind === "projects";
-  const tab = params.get("tab") ?? (admin ? "settings" : "overview");
+  const requestedTab = params.get("tab");
   useEffect(() => {
     if (!admin)
       recordRecent(session.user.id, {
@@ -111,15 +121,83 @@ function DetailContent({
           { value: "description", label: "项目介绍" },
           { value: "settings", label: "项目设置" },
         ]
-    : [
-        { value: "overview", label: "团队概览" },
-        { value: "members", label: "直接成员" },
-        { value: "projects", label: "加入项目" },
-      ];
+    : admin
+      ? [
+          {
+            value: "overview",
+            label: (
+              <span className="inline-flex items-center gap-2">
+                <FileText className="size-4" />
+                团队信息
+              </span>
+            ),
+          },
+          {
+            value: "members",
+            label: (
+              <span className="inline-flex items-center gap-2">
+                <Users className="size-4" />
+                成员管理
+                <span
+                  className="team-member-count"
+                  aria-label={`${resource.member_count} 人`}
+                >
+                  {resource.member_count}
+                </span>
+              </span>
+            ),
+          },
+          {
+            value: "projects",
+            label: (
+              <span className="inline-flex items-center gap-2">
+                <FolderGit2 className="size-4" />
+                关联项目
+              </span>
+            ),
+          },
+        ]
+      : [
+          {
+            value: "overview",
+            label: (
+              <span className="inline-flex items-center gap-2">
+                <FileText className="size-4" />
+                团队概览
+              </span>
+            ),
+          },
+          {
+            value: "members",
+            label: (
+              <span className="inline-flex items-center gap-2">
+                <Users className="size-4" />
+                成员管理
+              </span>
+            ),
+          },
+          {
+            value: "projects",
+            label: (
+              <span className="inline-flex items-center gap-2">
+                <FolderGit2 className="size-4" />
+                关联项目
+              </span>
+            ),
+          },
+        ];
+  const defaultTab = project ? (admin ? "settings" : "overview") : "overview";
+  const normalizedTab =
+    !project && requestedTab === "settings" ? "overview" : requestedTab;
+  const tab = project
+    ? (requestedTab ?? defaultTab)
+    : tabs.some((item) => item.value === normalizedTab)
+      ? normalizedTab!
+      : defaultTab;
   function changeTab(value: string) {
     setParams((current) => {
       const next = new URLSearchParams(current);
-      if (value === "overview") next.delete("tab");
+      if (value === defaultTab) next.delete("tab");
       else next.set("tab", value);
       next.delete("release");
       return next;
@@ -128,15 +206,6 @@ function DetailContent({
   async function lifecycle() {
     if (!life) return;
     const action = life;
-    if (
-      action === "dissolve" &&
-      confirmation.toLowerCase() !== resource.code.toLowerCase()
-    ) {
-      submission.setError(
-        new Error("请输入完全一致的团队编码（忽略大小写）。"),
-      );
-      return;
-    }
     const ok = await submission.run(async () => {
       const path = `/${kind}/${resource.id}/${action === "leave" ? "leave" : action}`;
       await request(path, {
@@ -144,8 +213,7 @@ function DetailContent({
         ...(action === "leave"
           ? {}
           : {
-              etag:
-                action === "dissolve" ? resource.dissolve_etag : resource.etag,
+              etag: resource.etag,
             }),
         body: {},
       });
@@ -165,13 +233,51 @@ function DetailContent({
             title={
               <span className="flex items-center gap-3">
                 <ResourceIcon resource={resource} className="size-11" />
-                {resource.name}
+                <span className="min-w-0 break-all">{resource.name}</span>
+                {!project && (
+                  <StatusBadge
+                    tone={resource.status === "active" ? "success" : "neutral"}
+                  >
+                    {resource.status === "active" ? "正常" : "已解散"}
+                  </StatusBadge>
+                )}
               </span>
             }
-            description={<span className="mono">{resource.code}</span>}
+            description={
+              admin && !project ? (
+                <>
+                  <span className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-muted">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="mono">{resource.code}</span>
+                      <CopyButton value={resource.code} label="复制团队编码" />
+                    </span>
+                    <span>
+                      创建于{" "}
+                      {formatDate(resource.created_at, auth.settings.timezone)}
+                    </span>
+                    <span>
+                      最近更新{" "}
+                      {formatDate(resource.updated_at, auth.settings.timezone)}
+                    </span>
+                  </span>
+                  {resource.summary && (
+                    <p className="mt-2 max-w-4xl whitespace-pre-wrap break-all text-sm leading-6">
+                      {resource.summary}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  <span className="mono break-all">{resource.code}</span>
+                  {!project && (
+                    <CopyButton value={resource.code} label="复制团队编码" />
+                  )}
+                </span>
+              )
+            }
             actions={
               <>
-                {resource.can_manage && (
+                {resource.can_manage && (project || !admin) && (
                   <Button variant="outline" onClick={() => setEdit(true)}>
                     <Pencil />
                     编辑资料
@@ -198,14 +304,35 @@ function DetailContent({
                       {resource.status === "active" ? "归档项目" : "恢复项目"}
                     </Button>
                   ) : (
-                    <Button
-                      variant="dangerSoft"
-                      disabled={resource.status === "dissolved"}
-                      onClick={() => setLife("dissolve")}
-                    >
-                      <Trash2 />
-                      解散团队
-                    </Button>
+                    <RowActions label={resource.name}>
+                      <RowAction
+                        icon={<Pencil />}
+                        disabled={!resource.can_manage}
+                        onSelect={() => setEdit(true)}
+                      >
+                        编辑资料
+                      </RowAction>
+                      <RowAction
+                        icon={<FileText />}
+                        disabled={!resource.can_manage}
+                        to={
+                          resource.can_manage
+                            ? `/admin/teams/${resource.id}/description/edit`
+                            : undefined
+                        }
+                      >
+                        编辑描述
+                      </RowAction>
+                      <RowActionSeparator />
+                      <RowAction
+                        icon={<Trash2 />}
+                        variant="destructive"
+                        disabled={resource.status === "dissolved"}
+                        onSelect={() => setDissolve(true)}
+                      >
+                        解散团队
+                      </RowAction>
+                    </RowActions>
                   ))}
                 {!admin && resource.direct_role && (
                   <Button variant="ghost" onClick={() => setLife("leave")}>
@@ -216,26 +343,28 @@ function DetailContent({
               </>
             }
           />
-          {resource.summary && (
+          {project && resource.summary && (
             <p className="-mt-3 mb-5 max-w-4xl text-sm leading-6 text-muted">
               {resource.summary}
             </p>
           )}
-          <div className="mb-5 flex items-center gap-3">
-            <StatusBadge
-              tone={resource.status === "active" ? "success" : "neutral"}
-            >
-              {resource.status === "active"
-                ? "正常"
-                : resource.status === "archived"
-                  ? "已归档"
-                  : "已解散"}
-            </StatusBadge>
-            <span className="text-xs text-muted">
-              {resource.member_count} 位成员 ·{" "}
-              {resource.can_manage ? "可管理资料" : "只读或成员权限"}
-            </span>
-          </div>
+          {project && (
+            <div className="mb-5 flex items-center gap-3">
+              <StatusBadge
+                tone={resource.status === "active" ? "success" : "neutral"}
+              >
+                {resource.status === "active"
+                  ? "正常"
+                  : resource.status === "archived"
+                    ? "已归档"
+                    : "已解散"}
+              </StatusBadge>
+              <span className="text-xs text-muted">
+                {resource.member_count} 位成员 ·{" "}
+                {resource.can_manage ? "可管理资料" : "只读或成员权限"}
+              </span>
+            </div>
+          )}
         </>
       )}
       {(!project || admin) && (
@@ -293,16 +422,33 @@ function DetailContent({
             onEdit={() => setEdit(true)}
           />
         )}
-        {!project && tab === "overview" && (
-          <TeamOverview team={resource} timezone={auth.settings.timezone} />
+        {!project &&
+          tab === "overview" &&
+          (admin ? (
+            <div className="team-document-surface">
+              {!resource.description && resource.can_manage && (
+                <Button asChild variant="outline" className="mb-4">
+                  <Link to={`/admin/teams/${resource.id}/description/edit`}>
+                    <Pencil />
+                    编写团队描述
+                  </Link>
+                </Button>
+              )}
+              <MarkdownView source={resource.description} />
+            </div>
+          ) : (
+            <TeamOverview team={resource} timezone={auth.settings.timezone} />
+          ))}
+        {!project && tab === "projects" && (
+          <TeamProjects team={resource} admin={admin} />
         )}
-        {!project && tab === "projects" && <TeamProjects team={resource} />}
       </div>
       <OverlayPresence>
         {edit && (
           <ResourceEditor
             kind={kind}
             resource={resource}
+            separateDescription={admin && !project}
             onClose={() => setEdit(false)}
             onSaved={() => {
               setEdit(false);
@@ -313,17 +459,21 @@ function DetailContent({
           />
         )}
       </OverlayPresence>
+      {dissolve && (
+        <TeamDissolveDialog
+          team={resource}
+          onClose={() => setDissolve(false)}
+        />
+      )}
       <ConfirmDialog
         open={Boolean(life)}
-        danger={life === "dissolve" || life === "archive"}
+        danger={life === "archive"}
         title={
           life === "archive"
             ? "归档项目"
             : life === "restore"
               ? "恢复项目"
-              : life === "dissolve"
-                ? "解散团队"
-                : `退出${project ? "项目" : "团队"}`
+              : `退出${project ? "项目" : "团队"}`
         }
         description={resource.name}
         confirmLabel={
@@ -331,9 +481,7 @@ function DetailContent({
             ? "确认归档"
             : life === "restore"
               ? "确认恢复"
-              : life === "dissolve"
-                ? "确认解散"
-                : "确认退出"
+              : "确认退出"
         }
         pending={submission.pending}
         onClose={() => setLife(null)}
@@ -345,20 +493,8 @@ function DetailContent({
             ? "归档后资料与业务配置只读，历史发布和仓库快照保留。"
             : life === "restore"
               ? "恢复后可继续维护项目，既有成员关系保持不变。"
-              : life === "dissolve"
-                ? "解散不可恢复，将清除团队关系、项目授权和固定入口。名称与编码仍保留。"
-                : "只移除你的直接关系；团队继承来源可能仍然保留。"}
+              : "只移除你的直接关系；团队继承来源可能仍然保留。"}
         </p>
-        {life === "dissolve" && (
-          <Field label={`输入团队编码 ${resource.code} 确认`} required>
-            <Input
-              name="confirmation"
-              autoComplete="off"
-              value={confirmation}
-              onChange={(event) => setConfirmation(event.target.value)}
-            />
-          </Field>
-        )}
       </ConfirmDialog>
     </div>
   );
@@ -374,7 +510,16 @@ function TeamOverview({
   return (
     <div className="split-workspace">
       <Panel title="团队简介">
-        <MarkdownView source={team.description} />
+        {team.summary && (
+          <p className="mb-5 whitespace-pre-wrap break-all text-sm leading-6 text-muted">
+            {team.summary}
+          </p>
+        )}
+        {team.description ? (
+          <MarkdownView source={team.description} />
+        ) : (
+          <p className="text-sm text-muted">尚未填写团队简介。</p>
+        )}
       </Panel>
       <Panel title="基本信息">
         <DescriptionList
@@ -383,12 +528,12 @@ function TeamOverview({
               label: "团队编码",
               value: <span className="mono">{team.code}</span>,
             },
-            { label: "直接成员", value: `${team.member_count} 人` },
+            { label: "成员数量", value: `${team.member_count} 人` },
             { label: "创建时间", value: team.created_at },
             { label: "最近更新", value: team.updated_at },
           ].map((item) => ({
             ...item,
-            value: item.label.includes("时间")
+            value: ["创建时间", "最近更新"].includes(item.label)
               ? new Intl.DateTimeFormat("zh-CN", {
                   timeZone: timezone,
                   dateStyle: "medium",
@@ -402,13 +547,13 @@ function TeamOverview({
   );
 }
 
-function TeamProjects({ team }: { team: Resource }) {
+function TeamProjects({ team, admin }: { team: Resource; admin: boolean }) {
   const query = useApiQuery<Resource[]>(
     ["team-projects", team.id],
     `/teams/${team.id}/projects`,
   );
   return (
-    <Panel title="加入项目" bodyClassName="p-0">
+    <Panel title="关联项目" bodyClassName="p-0">
       <AsyncBoundary
         loading={query.isPending}
         error={query.error}
@@ -420,7 +565,7 @@ function TeamProjects({ team }: { team: Resource }) {
           {query.data?.data.map((project) => (
             <li key={project.id}>
               <Link
-                to={`/projects/${project.id}`}
+                to={`${admin ? "/admin" : ""}/projects/${project.id}`}
                 className="flex items-center gap-3 px-5 py-4 hover:bg-surface-hover"
               >
                 <ResourceIcon resource={project} />
@@ -430,6 +575,11 @@ function TeamProjects({ team }: { team: Resource }) {
                     {project.code}
                   </small>
                 </div>
+                <StatusBadge
+                  tone={project.status === "active" ? "success" : "neutral"}
+                >
+                  {project.status === "active" ? "正常" : "已归档"}
+                </StatusBadge>
                 <ArrowRight className="size-4 text-faint" />
               </Link>
             </li>

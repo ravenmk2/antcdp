@@ -32,6 +32,7 @@ import { CopyButton } from "@/components/copy-button";
 import {
   Field,
   Input,
+  NumberInput,
   StandaloneInput,
   StandaloneSelect,
   Textarea,
@@ -608,13 +609,16 @@ function HostConfig({
                   />
                 </Field>
                 <Field label="SSH 端口" required error={errors.fields.port}>
-                  <Input
+                  <NumberInput
                     name="port"
-                    type="number"
+                    label="端口"
+                    min={1}
+                    max={65535}
                     value={form.port}
-                    onChange={(event) =>
-                      setForm({ ...form, port: event.target.value })
-                    }
+                    disabled={submission.pending}
+                    onValueChange={(value) => {
+                      setForm({ ...form, port: value });
+                    }}
                   />
                 </Field>
                 <Field label="说明" className="form-full">
