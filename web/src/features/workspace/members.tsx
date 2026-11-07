@@ -1,3 +1,4 @@
+import { WorkspaceUserPicker } from "./user-picker";
 import { RowActions, RowAction } from "@/components/row-actions";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
@@ -314,16 +315,11 @@ function AddMember({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [query, setQuery] = useState("");
-  const [search, setSearch] = useState("");
-  const [userId, setUserId] = useState("");
+  const [selectedUsers, setSelectedUsers] = useState<UserOption[]>([]);
+  const userId = selectedUsers[0]?.id ?? "";
   const [role, setRole] = useState("member");
   const errors = useFormErrors();
   const submission = useSubmission();
-  const options = useApiQuery<UserOption[]>(
-    ["member-options", kind, resource.id, search],
-    `/${kind}/${resource.id}/member-options?q=${encodeURIComponent(search)}`,
-  );
   async function save() {
     if (!userId) {
       errors.validate({ user_id: "请选择用户" });
@@ -371,45 +367,20 @@ function AddMember({
       >
         <ErrorNotice error={errors.error} />
         <ErrorNotice error={submission.error} />
-        <div>
-          <label className="mb-2 block text-xs font-medium">搜索正常用户</label>
-          <div className="flex gap-2">
-            <StandaloneInput
-              aria-label="搜索可添加用户"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <Button variant="outline" onClick={() => setSearch(query.trim())}>
-              搜索
-            </Button>
-          </div>
-        </div>
-        <div className="max-h-64 overflow-y-auto rounded-lg border">
-          {options.data?.data.map((user) => (
-            <label
-              key={user.id}
-              className="flex items-center gap-3 border-b p-3 last:border-0"
-            >
-              <input
-                type="radio"
-                name="user_id"
-                value={user.id}
-                checked={userId === user.id}
-                onChange={() => setUserId(user.id)}
-              />
-              <span>
-                {user.display_name}
-                <small className="ml-2 text-muted">@{user.username}</small>
-              </span>
-            </label>
-          ))}
-          {options.data && !options.data.data.length && (
-            <p className="p-5 text-sm text-muted">没有可添加的用户。</p>
-          )}
-        </div>
-        {errors.fields.user_id && (
-          <p className="text-xs text-danger">{errors.fields.user_id}</p>
-        )}
+        <WorkspaceUserPicker
+          label="用户"
+          name="user_id"
+          endpoint={`/${kind}/${resource.id}/member-options`}
+          min={1}
+          max={1}
+          value={selectedUsers}
+          disabled={submission.pending}
+          error={errors.fields.user_id}
+          onChange={(users) => {
+            setSelectedUsers(users);
+            errors.change("user_id");
+          }}
+        />
         <Field
           label={kind === "teams" ? "团队角色" : "直接角色"}
           required

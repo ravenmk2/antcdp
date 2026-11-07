@@ -1,12 +1,18 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { X } from "lucide-react";
+import { Check } from "lucide-react";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import { WorkspaceUserPicker } from "./user-picker";
 import { request } from "@/api/client";
 import { useSession } from "@/app/auth";
 import { Button } from "@/components/button";
 import { ErrorNotice, Notice } from "@/components/feedback";
-import { Field, Input, StandaloneInput, Textarea } from "@/components/fields";
+import { Field, Input, Textarea } from "@/components/fields";
 import { ImageEditor, type ImageValue } from "@/components/image-editor";
 import { Drawer } from "@/components/overlays";
 import { SheetClose } from "@/components/ui/sheet";
@@ -71,20 +77,15 @@ export function ResourceEditor({
   );
   const [image, setImage] = useState<ImageValue | null | undefined>(undefined);
   const [adminIds, setAdminIds] = useState<string[]>([session.user.id]);
-  const [userSearch, setUserSearch] = useState("");
-  const [userQuery, setUserQuery] = useState("");
-  const [chosenUsers, setChosenUsers] = useState<UserOption[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<UserOption[]>([
+    session.user,
+  ]);
+  const [iconOpen, setIconOpen] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
   const errors = useFormErrors();
   const submission = useSubmission();
   const queryClient = useQueryClient();
   const icons = useApiQuery<string[]>(["icon-catalog"], "/icon-catalog");
-  const users = useApiQuery<UserOption[]>(
-    ["resource-admin-options", userQuery],
-    `/admin/collaboration/user-options?q=${encodeURIComponent(userQuery)}`,
-    {
-      enabled: (create && kind === "projects") || (create && kind === "teams"),
-    },
-  );
   const initial = {
     name: resource?.name ?? "",
     code: resource?.code ?? "",
@@ -101,23 +102,6 @@ export function ResourceEditor({
     JSON.stringify(icon) !== JSON.stringify(initialIcon) ||
     (create && JSON.stringify(adminIds) !== JSON.stringify([session.user.id]));
   const markSaved = useUnsaved(dirty, submission.pending);
-  const selectedUsers = useMemo(() => {
-    const options = users.data?.data ?? [];
-    return adminIds
-      .map(
-        (id) =>
-          options.find((user) => user.id === id) ??
-          chosenUsers.find((user) => user.id === id) ??
-          (id === session.user.id
-            ? {
-                id,
-                username: session.user.username,
-                display_name: session.user.display_name,
-              }
-            : undefined),
-      )
-      .filter((user) => user !== undefined);
-  }, [adminIds, users.data, session.user, chosenUsers]);
   const title = `${create ? "创建" : "编辑"}${kind === "projects" ? "项目" : "团队"}`;
   function update(key: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -296,167 +280,132 @@ export function ResourceEditor({
                 <span className="mb-2 block text-xs font-medium text-text-soft">
                   图标
                 </span>
-                <div className="flex flex-wrap items-center gap-3">
-                  <ResourceIcon
-                    resource={resourcePreview}
-                    className="size-12"
-                  />
-                  <ImageEditor
-                    kind="icon"
-                    current={
-                      resource?.icon_file_id
-                        ? `/api/v1/icons/${resource.icon_file_id}`
-                        : undefined
-                    }
-                    value={image}
-                    disabled={submission.pending}
-                    onChange={(value) => {
-                      setImage(value);
-                      setIcon(
-                        value
-                          ? { type: "upload", file_id: value.id }
-                          : { type: "default" },
-                      );
-                    }}
-                  />
-                </div>
-                <details
-                  open={kind === "projects" ? true : undefined}
-                  className="mt-3"
+                <Popover
+                  open={iconOpen}
+                  onOpenChange={(open) => {
+                    if (!cropOpen) setIconOpen(open);
+                  }}
                 >
-                  <summary className="cursor-pointer text-sm text-muted">
-                    选择内置图标
-                  </summary>
-                  <div className="mt-3 grid grid-cols-4 gap-2">
-                    {(icons.data?.data ?? Object.keys(iconLabels)).map(
-                      (key) => (
-                        <button
-                          type="button"
-                          key={key}
-                          aria-pressed={
-                            icon.type === "builtin" && icon.key === key
-                          }
-                          className={`grid justify-items-center gap-1 rounded-lg border p-2 text-[11px] ${icon.type === "builtin" && icon.key === key ? "border-primary bg-accent-soft text-primary" : "hover:bg-surface-hover"}`}
-                          onClick={() => {
-                            setIcon({ type: "builtin", key });
-                            setImage(undefined);
-                          }}
-                        >
-                          <ResourceIcon
-                            resource={{
-                              name:
-                                iconLabels[key as keyof typeof iconLabels] ??
-                                key,
-                              icon_key: key,
-                              icon_file_id: null,
-                            }}
-                            className="size-8"
-                          />
-                          {iconLabels[key as keyof typeof iconLabels] ?? key}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                  <Button
-                    className="mt-2"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setIcon({ type: "default" });
-                      setImage(null);
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="h-auto gap-3 p-1"
+                      disabled={submission.pending}
+                      aria-label="更换图标"
+                    >
+                      <ResourceIcon
+                        resource={resourcePreview}
+                        className="size-12"
+                      />
+                      <span className="text-sm text-primary">更换图标</span>
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="start"
+                    className="w-80"
+                    aria-label="选择图标"
+                    onInteractOutside={(event) => {
+                      if (cropOpen) event.preventDefault();
                     }}
                   >
-                    使用默认图标
-                  </Button>
-                </details>
+                    <p className="mb-3 text-sm font-medium">选择图标</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {(icons.data?.data ?? Object.keys(iconLabels)).map(
+                        (key) => {
+                          const selected =
+                            icon.type === "builtin" && icon.key === key;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              aria-pressed={selected}
+                              className={`relative grid justify-items-center gap-1 rounded-lg border px-1 py-2 text-xs hover:bg-surface-hover ${selected ? "border-primary bg-accent-soft text-primary" : "border-transparent"}`}
+                              onClick={() => {
+                                setIcon({ type: "builtin", key });
+                                setImage(null);
+                                setIconOpen(false);
+                              }}
+                            >
+                              <ResourceIcon
+                                resource={{
+                                  name:
+                                    iconLabels[
+                                      key as keyof typeof iconLabels
+                                    ] ?? key,
+                                  icon_key: key,
+                                  icon_file_id: null,
+                                }}
+                                className="size-8"
+                              />
+                              {iconLabels[key as keyof typeof iconLabels] ??
+                                key}
+                              {selected && (
+                                <Check
+                                  className="absolute right-1 top-1 size-3"
+                                  aria-hidden
+                                />
+                              )}
+                            </button>
+                          );
+                        },
+                      )}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
+                      <ImageEditor
+                        kind="icon"
+                        value={image}
+                        compact
+                        onEditingChange={setCropOpen}
+                        disabled={submission.pending}
+                        onChange={(value) => {
+                          if (value) {
+                            setImage(value);
+                            setIcon({ type: "upload", file_id: value.id });
+                            setIconOpen(false);
+                          }
+                        }}
+                      />
+                      {icon.type !== "default" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setIcon({ type: "default" });
+                            setImage(null);
+                            setIconOpen(false);
+                          }}
+                        >
+                          恢复默认
+                        </Button>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           )}
           {create && (!wizard || step === 1) && (
             <div className="mt-6 grid gap-5">
               <section>
-                <h3 className="mb-2 text-sm font-medium">
-                  初始管理员 · {adminIds.length}
-                </h3>
                 <p className="mb-3 text-xs text-muted">
                   至少选择 1 位，最多 100 位；不会自动加入其他创建者。
                 </p>
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {selectedUsers.map((user) => (
-                    <span
-                      key={user.id}
-                      className="inline-flex items-center gap-2 rounded-md bg-accent-soft px-2 py-1 text-xs"
-                    >
-                      {user.display_name} @{user.username}
-                      <button
-                        type="button"
-                        aria-label={`移除 ${user.display_name}`}
-                        disabled={adminIds.length === 1}
-                        onClick={() =>
-                          setAdminIds(adminIds.filter((id) => id !== user.id))
-                        }
-                      >
-                        <X className="size-3" />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <div className="mb-2 flex gap-2">
-                  <StandaloneInput
-                    aria-label="搜索初始管理员"
-                    placeholder="搜索用户名或显示名称"
-                    value={userSearch}
-                    onChange={(event) => setUserSearch(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        setUserQuery(userSearch.trim());
-                      }
-                    }}
-                  />
-                  <Button
-                    variant="outline"
-                    onClick={() => setUserQuery(userSearch.trim())}
-                  >
-                    搜索
-                  </Button>
-                </div>
-                <div className="max-h-56 overflow-y-auto rounded-lg border">
-                  {users.data?.data.map((user) => (
-                    <label
-                      key={user.id}
-                      className="flex items-center gap-3 border-b px-3 py-2 last:border-0"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={adminIds.includes(user.id)}
-                        onChange={(event) => {
-                          if (event.target.checked)
-                            setChosenUsers((current) => [
-                              ...current.filter((item) => item.id !== user.id),
-                              user,
-                            ]);
-                          setAdminIds(
-                            event.target.checked
-                              ? [...adminIds, user.id]
-                              : adminIds.filter((id) => id !== user.id),
-                          );
-                        }}
-                      />
-                      <span>
-                        {user.display_name}
-                        <small className="ml-2 text-muted">
-                          @{user.username}
-                        </small>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                {errors.fields.admin_user_ids && (
-                  <p className="mt-1 text-xs text-danger">
-                    {errors.fields.admin_user_ids}
-                  </p>
-                )}
+                <WorkspaceUserPicker
+                  label="初始管理员"
+                  name="admin_user_ids"
+                  endpoint="/admin/collaboration/user-options"
+                  multiple
+                  min={1}
+                  max={100}
+                  value={selectedUsers}
+                  disabled={submission.pending}
+                  error={errors.fields.admin_user_ids}
+                  onChange={(users) => {
+                    setSelectedUsers(users);
+                    setAdminIds(users.map((user) => user.id));
+                    errors.change("admin_user_ids");
+                  }}
+                />
               </section>
               {!separateDescription && (
                 <>

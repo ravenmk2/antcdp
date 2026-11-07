@@ -15,12 +15,16 @@ export function ImageEditor({
   value,
   onChange,
   disabled,
+  compact = false,
+  onEditingChange,
 }: {
   kind: "avatar" | "icon";
   current?: string | null;
   value?: ImageValue | null;
   onChange: (value: ImageValue | null | undefined) => void;
   disabled?: boolean;
+  compact?: boolean;
+  onEditingChange?: (editing: boolean) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState<string>();
@@ -28,17 +32,18 @@ export function ImageEditor({
   const preview = value === undefined ? current : value?.preview;
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {preview ? (
-        <img
-          src={preview}
-          alt="当前图片预览"
-          className="size-16 rounded-xl object-cover"
-        />
-      ) : (
-        <span className="grid size-16 place-items-center rounded-xl bg-surface-subtle text-muted">
-          <Upload className="size-5" />
-        </span>
-      )}
+      {!compact &&
+        (preview ? (
+          <img
+            src={preview}
+            alt="当前图片预览"
+            className="size-16 rounded-xl object-cover"
+          />
+        ) : (
+          <span className="grid size-16 place-items-center rounded-xl bg-surface-subtle text-muted">
+            <Upload className="size-5" />
+          </span>
+        ))}
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
@@ -46,9 +51,9 @@ export function ImageEditor({
           disabled={disabled}
           onClick={() => input.current?.click()}
         >
-          选择并裁剪图片
+          {compact ? "上传图片" : "选择并裁剪图片"}
         </Button>
-        {(value !== undefined || current) && (
+        {!compact && (value !== undefined || current) && (
           <Button
             variant="ghost"
             size="sm"
@@ -74,6 +79,7 @@ export function ImageEditor({
             setError("请选择 JPG、PNG 或 WebP 图片。");
             return;
           }
+          onEditingChange?.(true);
           setSource(URL.createObjectURL(file));
         }}
       />
@@ -86,8 +92,12 @@ export function ImageEditor({
         <CropDialog
           kind={kind}
           source={source}
-          onClose={() => setSource(undefined)}
+          onClose={() => {
+            setSource(undefined);
+            onEditingChange?.(false);
+          }}
           onSaved={(result) => {
+            onEditingChange?.(false);
             onChange(result);
             setSource(undefined);
           }}
@@ -215,7 +225,7 @@ function CropDialog({
           onWheel={(event) => {
             event.preventDefault();
             setZoom((current) =>
-              Math.min(4, Math.max(1, current - event.deltaY * 0.001)),
+              Math.min(10, Math.max(1, current - event.deltaY * 0.001)),
             );
           }}
           onKeyDown={(event) => {
@@ -245,7 +255,7 @@ function CropDialog({
             <input
               type="range"
               min="1"
-              max="4"
+              max="10"
               step="0.01"
               value={zoom}
               onChange={(event) => setZoom(Number(event.target.value))}
