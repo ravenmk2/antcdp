@@ -381,6 +381,9 @@ function EmailProfileDetail({ id }: { id: string }) {
                     body: { enabled: !profile.enabled },
                   });
                   await query.refetch();
+                  await queryClient.invalidateQueries({
+                    queryKey: ["email-profiles"],
+                  });
                 })
               }
             >
@@ -419,6 +422,9 @@ function EmailProfileDetail({ id }: { id: string }) {
               await queryClient.invalidateQueries({
                 queryKey: ["email-profile", id],
               });
+              await queryClient.invalidateQueries({
+                queryKey: ["email-profiles"],
+              });
             }}
           />
         )}
@@ -438,6 +444,9 @@ function EmailProfileDetail({ id }: { id: string }) {
               etag: query.data.etag,
             });
             navigate(`${base}/profiles`);
+            await queryClient.invalidateQueries({
+              queryKey: ["email-profiles"],
+            });
           })
         }
       >

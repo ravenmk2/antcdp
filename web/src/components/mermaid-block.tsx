@@ -111,6 +111,16 @@ export function MermaidBlock({ source }: { source: string }) {
     <figure className="mermaid-block">
       <div className="flex items-center gap-1 border-b px-3 py-2">
         <span className="mr-auto text-xs text-muted">Mermaid</span>
+        {graph && <CopyButton label="复制 Mermaid 源码" value={source} />}
+        {graph && diagram && (
+          <IconButton
+            label="放大查看图表"
+            size="iconSm"
+            onClick={() => setExpanded(true)}
+          >
+            <Expand />
+          </IconButton>
+        )}
         <ToggleGroup
           type="single"
           value={graph ? "graph" : "code"}
@@ -126,16 +136,6 @@ export function MermaidBlock({ source }: { source: string }) {
           <ToggleGroupItem value="code">代码</ToggleGroupItem>
           <ToggleGroupItem value="graph">图形</ToggleGroupItem>
         </ToggleGroup>
-        {graph && <CopyButton label="复制 Mermaid 源码" value={source} />}
-        {graph && diagram && (
-          <IconButton
-            label="放大查看图表"
-            size="iconSm"
-            onClick={() => setExpanded(true)}
-          >
-            <Expand />
-          </IconButton>
-        )}
       </div>
       {!graph ? (
         <CodeBlock
@@ -182,7 +182,7 @@ function DiagramViewer({
   image: string;
   onClose: () => void;
 }) {
-  const viewport = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState<HTMLDivElement | null>(null);
   const [returnFocus] = useState(() => document.activeElement);
   const drag = useRef<{ x: number; y: number; px: number; py: number } | null>(
     null,
@@ -203,7 +203,7 @@ function DiagramViewer({
     setZoom(Math.min(8, Math.max(min, next)));
   }
   useEffect(() => {
-    const element = viewport.current;
+    const element = viewport;
     if (!element) return;
     const update = () =>
       setSize({ width: element.clientWidth, height: element.clientHeight });
@@ -211,9 +211,9 @@ function DiagramViewer({
     const observer = new ResizeObserver(update);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [viewport]);
   useEffect(() => {
-    const element = viewport.current;
+    const element = viewport;
     if (!element) return;
     const wheel = (event: WheelEvent) => {
       event.preventDefault();
@@ -226,7 +226,7 @@ function DiagramViewer({
     };
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
-  }, [fit, min]);
+  }, [viewport, fit, min]);
   async function downloadPNG() {
     if (downloading) return;
     setDownloading(true);
@@ -345,7 +345,7 @@ function DiagramViewer({
             </div>
           )}
           <div
-            ref={viewport}
+            ref={setViewport}
             className="diagram-viewport"
             tabIndex={0}
             aria-label="图表画布，方向键移动，加减键缩放，Home 适应窗口"

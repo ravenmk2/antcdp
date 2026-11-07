@@ -85,6 +85,12 @@ export function UsersPage() {
     });
   }
   async function saved() {
+    if (action?.user) {
+      await queryClient.invalidateQueries({
+        queryKey: ["user", action.user.id],
+        refetchType: "none",
+      });
+    }
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["users"] }),
       queryClient.invalidateQueries({ queryKey: ["admin-overview"] }),
@@ -527,8 +533,10 @@ function UserAction({
   const detail = useApiQuery<User>(
     ["user", user.id],
     `/admin/users/${user.id}`,
+    { staleTime: 0 },
   );
-  if (detail.isPending)
+  // Never initialize a form or derive a toggle from a previous opening's cache.
+  if (detail.isPending || !detail.isFetchedAfterMount)
     return (
       <Modal
         open
@@ -548,6 +556,9 @@ function UserAction({
         onClose={onClose}
       >
         <ErrorNotice error={detail.error} />
+        <Button variant="outline" onClick={() => void detail.refetch()}>
+          重新加载
+        </Button>
       </Modal>
     );
   if (action === "edit")

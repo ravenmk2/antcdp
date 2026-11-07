@@ -367,6 +367,9 @@ function ProfileDetail({ id }: { id: string }) {
                   body: { enabled: !profile.enabled },
                 });
                 await query.refetch();
+                await queryClient.invalidateQueries({
+                  queryKey: ["sms-profiles"],
+                });
               })
             }
           >
@@ -394,6 +397,9 @@ function ProfileDetail({ id }: { id: string }) {
               await queryClient.invalidateQueries({
                 queryKey: ["sms-profile", id],
               });
+              await queryClient.invalidateQueries({
+                queryKey: ["sms-profiles"],
+              });
             }}
           />
         )}
@@ -413,6 +419,7 @@ function ProfileDetail({ id }: { id: string }) {
               etag: query.data.etag,
             });
             navigate(`${base}/profiles`);
+            await queryClient.invalidateQueries({ queryKey: ["sms-profiles"] });
           })
         }
       >

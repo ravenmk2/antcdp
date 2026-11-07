@@ -25,7 +25,11 @@ interface OverlayProps {
   restoreFocusTo?: HTMLElement | null;
 }
 
-export function Modal({
+export function Modal(props: OverlayProps) {
+  return <DialogFrame {...props} />;
+}
+
+function DialogFrame({
   open,
   title,
   description,
@@ -36,7 +40,8 @@ export function Modal({
   dirty,
   wide,
   restoreFocusTo,
-}: OverlayProps) {
+  confirmation = false,
+}: OverlayProps & { confirmation?: boolean }) {
   const [discard, setDiscard] = useState(false);
   const returnFocus = useRef<HTMLElement | null>(null);
   const requestClose = () => {
@@ -76,7 +81,13 @@ export function Modal({
               if (pending) event.preventDefault();
             }}
           >
-            <header className="flex items-start justify-between gap-4 border-b px-6 py-5">
+            <header
+              className={cn(
+                "flex items-start justify-between gap-4 px-6 py-5",
+                !confirmation && "border-b",
+                confirmation && "min-h-0 overflow-y-auto",
+              )}
+            >
               <div>
                 <Primitive.Title className="text-lg font-semibold">
                   {title}
@@ -93,11 +104,23 @@ export function Modal({
                 </IconButton>
               </Primitive.Close>
             </header>
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            <div
+              className={cn(
+                "min-h-0 flex-1 overflow-y-auto px-6 empty:hidden",
+                confirmation ? "pb-4" : "py-5",
+              )}
+            >
               {children}
             </div>
             {footer && (
-              <footer className="flex flex-wrap items-center justify-end gap-2 border-t bg-surface-subtle px-6 py-4">
+              <footer
+                className={cn(
+                  "flex shrink-0 flex-wrap items-center justify-end gap-2 px-6",
+                  confirmation
+                    ? "pt-1 pb-5"
+                    : "border-t bg-surface-subtle py-4",
+                )}
+              >
                 {footer}
               </footer>
             )}
@@ -241,7 +264,8 @@ export function ConfirmDialog({
   onConfirm: () => void;
 }) {
   return (
-    <Modal
+    <DialogFrame
+      confirmation
       open={open}
       title={title}
       description={description}
@@ -264,6 +288,6 @@ export function ConfirmDialog({
       }
     >
       {children}
-    </Modal>
+    </DialogFrame>
   );
 }

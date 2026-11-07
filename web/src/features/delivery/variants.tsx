@@ -119,6 +119,9 @@ function VariantsContent({ project }: { project: Resource }) {
       await queryClient.invalidateQueries({
         queryKey: ["variants", project.id],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["variant", project.id, variant.id],
+      });
       setAction(null);
     });
   }
@@ -488,6 +491,9 @@ function VariantDetail({
               setEdit(false);
               await queryClient.invalidateQueries({
                 queryKey: ["variant", project.id, variant.id],
+              });
+              await queryClient.invalidateQueries({
+                queryKey: ["variants", project.id],
               });
             }}
           />

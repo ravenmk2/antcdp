@@ -88,9 +88,11 @@ export function ProjectRepositories({
   const rows = list.data?.data.items ?? [];
   const selectedRows = rows.filter((row) => selected.includes(row.id));
   async function refresh() {
-    await queryClient.invalidateQueries({
-      queryKey: ["repositories", project.id],
-    });
+    await Promise.all(
+      ["repositories", "repository", "repository-diagnostics"].map((key) =>
+        queryClient.invalidateQueries({ queryKey: [key, project.id] }),
+      ),
+    );
   }
   function filter(next: Partial<typeof params>) {
     setParams((current) => ({ ...current, page: 1, ...next }));

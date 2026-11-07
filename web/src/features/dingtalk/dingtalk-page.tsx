@@ -295,6 +295,9 @@ function RobotDetail({ id }: { id: string }) {
                     body: { enabled: !robot.enabled },
                   });
                   await query.refetch();
+                  await queryClient.invalidateQueries({
+                    queryKey: ["dingtalk-robots"],
+                  });
                 })
               }
             >
@@ -323,6 +326,9 @@ function RobotDetail({ id }: { id: string }) {
               await queryClient.invalidateQueries({
                 queryKey: ["dingtalk-robot", id],
               });
+              await queryClient.invalidateQueries({
+                queryKey: ["dingtalk-robots"],
+              });
             }}
           />
         )}
@@ -345,6 +351,9 @@ function RobotDetail({ id }: { id: string }) {
               etag: query.data.etag,
             });
             navigate("/admin/dingtalk");
+            await queryClient.invalidateQueries({
+              queryKey: ["dingtalk-robots"],
+            });
           })
         }
       >

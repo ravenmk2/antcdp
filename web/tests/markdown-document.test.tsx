@@ -90,11 +90,17 @@ it("omits the directory for a document without headings and returns a long page 
 });
 
 it("renders Mermaid only on request, supports the image viewer and restores trigger focus", async () => {
+  const observe = vi.fn();
+  const disconnect = vi.fn();
+  let resize!: () => void;
   vi.stubGlobal(
     "ResizeObserver",
     class {
-      observe() {}
-      disconnect() {}
+      constructor(callback: () => void) {
+        resize = callback;
+      }
+      observe = observe;
+      disconnect = disconnect;
     },
   );
   diagram.mockResolvedValue({
@@ -113,6 +119,23 @@ it("renders Mermaid only on request, supports the image viewer and restores trig
   const trigger = await screen.findByRole("button", { name: "查看完整图表" });
   await user.click(trigger);
   const viewer = screen.getByRole("dialog", { name: "图表查看" });
+  const canvas = viewer.querySelector(".diagram-viewport")!;
+  expect(observe).toHaveBeenCalledWith(canvas);
+  Object.defineProperties(canvas, {
+    clientWidth: { configurable: true, value: 1548 },
+    clientHeight: { configurable: true, value: 848 },
+  });
+  act(() => resize());
+  expect(within(viewer).getByRole("img").style.transform).toContain(
+    "scale(0.5)",
+  );
+  fireEvent.wheel(canvas, { deltaY: -120 });
+  const enlarged = within(viewer).getByRole("img").style.transform;
+  expect(enlarged).not.toContain("scale(0.5)");
+  fireEvent.wheel(canvas, { deltaY: 120 });
+  expect(within(viewer).getByRole("img").style.transform).toContain(
+    "scale(0.5)",
+  );
   expect(within(viewer).getByRole("img")).toHaveStyle({
     width: "3000px",
     height: "1000px",
@@ -122,6 +145,7 @@ it("renders Mermaid only on request, supports the image viewer and restores trig
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(trigger).toHaveFocus();
+  expect(disconnect).toHaveBeenCalled();
 });
 
 it("keeps source available on malformed Mermaid and rejects unsafe SVG content", async () => {

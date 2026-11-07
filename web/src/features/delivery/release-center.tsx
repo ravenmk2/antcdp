@@ -398,6 +398,9 @@ function CreateRelease({
         await queryClient.invalidateQueries({
           queryKey: ["variant", project.id, currentVariant.id],
         });
+        await queryClient.invalidateQueries({
+          queryKey: ["variants", project.id],
+        });
       },
       (error) => errors.show(error, ["tag_prefix"]),
     );
