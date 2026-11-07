@@ -624,7 +624,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
                       <img
                         src={`/service-icons/${item.service_type}.svg`}
                         alt=""
-                        className="mt-0.5 size-6 shrink-0 dark:rounded dark:bg-white dark:p-0.5"
+                        className="mt-0.5 size-6 shrink-0"
                       />
                       <span className="min-w-0">
                         <strong className="text-sm">{definition.name}</strong>

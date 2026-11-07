@@ -31,25 +31,31 @@ export function Notice({
   tone = "info",
   title,
   children,
+  action,
   className,
 }: {
   tone?: Tone;
   title?: string;
   children: ReactNode;
+  action?: ReactNode;
   className?: string;
 }) {
   const Icon = toneIcon[tone];
   return (
     <div
-      className={cn("notice", className)}
+      className={cn("notice", action && "items-center", className)}
       data-tone={tone}
       role={tone === "danger" || tone === "warning" ? "alert" : "status"}
     >
-      <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
-      <div className="min-w-0">
+      <Icon
+        className={cn("size-4 shrink-0", !action && "mt-0.5")}
+        aria-hidden
+      />
+      <div className={cn("min-w-0", action && "flex-1")}>
         {title && <strong className="mb-1 block">{title}</strong>}
         <div>{children}</div>
       </div>
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }

@@ -153,6 +153,7 @@ export function Drawer({
   pending,
   dirty,
   wide,
+  restoreFocusTo,
 }: OverlayProps) {
   const [discard, setDiscard] = useState(false);
   const presence = useOverlayPresence();
@@ -182,9 +183,10 @@ export function Drawer({
           )}
           onOpenAutoFocus={() => {
             returnFocus.current =
-              document.activeElement instanceof HTMLElement
+              restoreFocusTo ??
+              (document.activeElement instanceof HTMLElement
                 ? document.activeElement
-                : null;
+                : null);
           }}
           onCloseAutoFocus={(event) => {
             presence?.onExitComplete();
