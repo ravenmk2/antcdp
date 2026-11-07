@@ -81,8 +81,27 @@ it.each([
     );
     const user = userEvent.setup();
     await user.click(await screen.findByRole("link", { name: "测试配置" }));
-    await user.click(await screen.findByRole("button", { name: toggle }));
-    await screen.findByRole("button", { name: toggle.replace("停用", "启用") });
+    if (api === "/admin/email/profiles") {
+      await user.click(
+        await screen.findByRole("button", { name: "SMTP 配置的操作" }),
+      );
+      await user.click(await screen.findByRole("menuitem", { name: toggle }));
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "SMTP 配置的操作" }),
+        ).toBeEnabled(),
+      );
+      await user.click(screen.getByRole("button", { name: "SMTP 配置的操作" }));
+      await screen.findByRole("menuitem", {
+        name: toggle.replace("停用", "启用"),
+      });
+      await user.keyboard("{Escape}");
+    } else {
+      await user.click(await screen.findByRole("button", { name: toggle }));
+      await screen.findByRole("button", {
+        name: toggle.replace("停用", "启用"),
+      });
+    }
     await act(() => router.navigate(path));
     await waitFor(() =>
       expect(

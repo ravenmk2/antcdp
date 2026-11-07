@@ -696,13 +696,43 @@ function breadcrumbs(
     "/admin/teams": "团队管理",
     "/admin/integrations": "服务集成",
     "/admin/remote-hosts": "远程主机",
-    "/admin/email": "邮件管理",
+    "/admin/email": "邮件配置",
     "/admin/sms": "短信管理",
     "/admin/dingtalk": "钉钉机器人",
     "/admin/audit": "审计日志",
     "/admin/settings": "系统设置",
     "/admin/maintenance": "临时文件",
   };
+  if (path.startsWith("/admin/email/")) {
+    const [, , , section, id] = path.split("/");
+    const label =
+      (
+        {
+          profiles: "SMTP 配置",
+          templates: "邮件模板",
+          "send-logs": "发送日志",
+        } as Record<string, string>
+      )[section] ?? "邮件配置";
+    return [
+      { label: "控制台", to: "/admin" },
+      { label: "邮件配置", to: "/admin/email" },
+      { label, ...(id ? { to: `/admin/email/${section}` } : {}) },
+      ...(id
+        ? [
+            {
+              label:
+                id === "new"
+                  ? "创建模板"
+                  : section === "profiles"
+                    ? "配置详情"
+                    : section === "templates"
+                      ? "编辑模板"
+                      : "发送记录",
+            },
+          ]
+        : []),
+    ];
+  }
   if (path.startsWith("/admin/projects/"))
     return [
       { label: "控制台", to: "/admin" },

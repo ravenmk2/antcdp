@@ -25,7 +25,15 @@ interface Page {
   page: number;
   page_size: number;
 }
-export function MessageLogList({ module }: { module: "email" | "sms" }) {
+export function MessageLogList({
+  module,
+  profileOptions,
+  templateOptions,
+}: {
+  module: "email" | "sms";
+  profileOptions?: { id: string; name: string }[];
+  templateOptions?: { id: string; name: string }[];
+}) {
   const { settings } = useAuth();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
@@ -34,6 +42,8 @@ export function MessageLogList({ module }: { module: "email" | "sms" }) {
     ? (params.get("days") ?? "30")
     : "30";
   const profile = params.get("profile_id") ?? "";
+  const template = module === "email" ? (params.get("template_id") ?? "") : "";
+  const actor = module === "email" ? (params.get("actor_user_id") ?? "") : "";
   const page = Math.max(1, Number(params.get("page")) || 1);
   const size = [10, 20, 50, 100].includes(Number(params.get("page_size")))
     ? Number(params.get("page_size"))
@@ -50,6 +60,8 @@ export function MessageLogList({ module }: { module: "email" | "sms" }) {
   });
   if (params.get("to")) filters.set("to", params.get("to")!);
   if (profile) filters.set("profile_id", profile);
+  if (template) filters.set("template_id", template);
+  if (actor) filters.set("actor_user_id", actor);
   const query = useApiQuery<Page>(
     ["message-logs", module, filters.toString()],
     `/admin/${module}/send-logs?${filters}`,
@@ -75,6 +87,8 @@ export function MessageLogList({ module }: { module: "email" | "sms" }) {
             status: "",
             days: "30",
             profile_id: "",
+            template_id: "",
+            actor_user_id: "",
             from: "",
             to: "",
           });
@@ -84,17 +98,98 @@ export function MessageLogList({ module }: { module: "email" | "sms" }) {
           if (params.get("from") || params.get("to")) void query.refetch();
           else setNow(Date.now());
         }}
-        advancedCount={profile ? 1 : 0}
+        advancedCount={[profile, template, actor].filter(Boolean).length}
         advanced={
-          <label className="grid gap-1.5 text-xs text-muted">
-            配置 ID
-            <StandaloneInput
-              aria-label="配置 ID"
-              placeholder="输入配置 ID"
-              value={profile}
-              onChange={(event) => filter({ profile_id: event.target.value })}
-            />
-          </label>
+          <div
+            className={
+              module === "email"
+                ? "grid min-w-0 flex-1 grid-cols-1 gap-x-4 gap-y-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(12rem,0.6fr)]"
+                : "grid gap-4"
+            }
+          >
+            <label className="grid min-w-0 gap-1.5 text-xs text-muted">
+              {module === "email" ? "SMTP 配置" : "配置 ID"}
+              {profileOptions ? (
+                <StandaloneSelect
+                  aria-label="筛选 SMTP 配置"
+                  value={profile}
+                  onValueChange={(value) => filter({ profile_id: value })}
+                >
+                  <option value="">全部配置</option>
+                  {profile &&
+                    !profileOptions.some((item) => item.id === profile) && (
+                      <option value={profile}>历史配置 · {profile}</option>
+                    )}
+                  {profileOptions.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </StandaloneSelect>
+              ) : (
+                <StandaloneInput
+                  aria-label="配置 ID"
+                  placeholder="输入配置 ID"
+                  value={profile}
+                  onChange={(event) =>
+                    filter({ profile_id: event.target.value })
+                  }
+                />
+              )}
+            </label>
+            {module === "email" && (
+              <>
+                <label className="grid min-w-0 gap-1.5 text-xs text-muted">
+                  邮件模板
+                  {templateOptions ? (
+                    <StandaloneSelect
+                      aria-label="筛选邮件模板"
+                      value={template}
+                      onValueChange={(value) => filter({ template_id: value })}
+                    >
+                      <option value="">全部模板</option>
+                      {template &&
+                        !templateOptions.some(
+                          (item) => item.id === template,
+                        ) && (
+                          <option value={template}>
+                            历史模板 · {template}
+                          </option>
+                        )}
+                      {templateOptions.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </StandaloneSelect>
+                  ) : (
+                    <StandaloneInput
+                      aria-label="模板 ID"
+                      value={template}
+                      placeholder="输入模板 ID"
+                      onChange={(event) =>
+                        filter({ template_id: event.target.value })
+                      }
+                    />
+                  )}
+                </label>
+                <label className="grid min-w-0 gap-1.5 text-xs text-muted">
+                  操作者 ID
+                  <StandaloneInput
+                    aria-label="操作者 ID"
+                    value={actor}
+                    placeholder="输入操作者 ID"
+                    onChange={(event) =>
+                      filter({ actor_user_id: event.target.value })
+                    }
+                  />
+                </label>
+                <p className="col-span-full text-xs text-muted">
+                  日志保留 30 天；已删除配置或模板的历史记录仍可查询。
+                </p>
+              </>
+            )}
+          </div>
         }
       >
         <form
@@ -257,7 +352,9 @@ export function MessageLogDetail({
                   ? "success"
                   : query.data.data.status === "unknown"
                     ? "warning"
-                    : "info"
+                    : query.data.data.status === "in_progress"
+                      ? "info"
+                      : "danger"
               }
             >
               {messageStatusLabels[query.data.data.status] ??
