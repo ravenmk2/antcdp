@@ -1,0 +1,13 @@
+name: Build web
+description: Install locked frontend dependencies, typecheck, build and verify assets
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v6
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: web/package-lock.json
+    - name: Build and verify frontend
+      shell: bash
+      run: node scripts/build-web.mjs

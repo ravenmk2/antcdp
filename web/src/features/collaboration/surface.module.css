@@ -1,0 +1,102 @@
+@layer components {
+  .scope
+    :global(:is(.team-description-workspace, .project-description-workspace)) {
+    display: flex;
+    width: 100%;
+    height: calc(100dvh - 64px);
+    min-height: 0;
+  }
+  .scope
+    :global(
+      :is(.team-description-workspace, .project-description-workspace)
+        > .markdown-editor
+    ) {
+    flex: 1;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .scope
+    :global(
+      :is(.team-description-workspace, .project-description-workspace)
+        .markdown-editor-toolbar
+    ) {
+    flex-shrink: 0;
+    padding: 10px 20px;
+  }
+
+  .scope :global(.project-card-grid) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 16px;
+  }
+  .scope :global(.project-card) {
+    min-width: 0;
+    padding: 17px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface-subtle);
+    transition:
+      border-color 150ms,
+      background 150ms,
+      transform 150ms;
+  }
+  .scope :global(.project-card:hover) {
+    border-color: var(--border-strong);
+    background: var(--surface);
+    transform: translateY(-1px);
+  }
+  .scope :global(.project-card-top) {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+  }
+  .scope :global(.project-card-title) {
+    min-width: 0;
+    flex: 1;
+  }
+  .scope :global(.project-card-title strong) {
+    display: block;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .scope :global(.project-card-title small) {
+    display: block;
+    margin-top: 4px;
+    color: var(--muted);
+    font-family: var(--font-code);
+    font-size: 11px;
+  }
+  .scope :global(.project-card > p) {
+    min-height: 38px;
+    margin: 14px 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .scope :global(.project-card-footer) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border-subtle);
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .scope :global(.project-card-footer .link) {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    white-space: nowrap;
+  }
+  .scope :global(.project-switcher) {
+    margin: 12px 12px 4px;
+    padding: 9px;
+    border: 1px solid var(--border);
+  }
+}

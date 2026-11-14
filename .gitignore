@@ -1,0 +1,17 @@
+.vscode/
+.idea/
+.agents/
+
+/dist/
+/web/dist/
+/web/node_modules/
+/web/.cache/
+/web/public/fonts/misans/
+/web/public/fonts/misans-staging/
+/data/
+/.data/
+*.test.exe
+
+/web/.vitest/
+/web/coverage/
+/web/test-results/

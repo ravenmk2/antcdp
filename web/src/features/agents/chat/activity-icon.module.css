@@ -1,0 +1,174 @@
+@keyframes activity-search {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  30% {
+    transform: translate(2px, -1.5px);
+  }
+  65% {
+    transform: translate(-1.5px, 1px);
+  }
+}
+
+@keyframes activity-scan {
+  0%,
+  20%,
+  100% {
+    opacity: 0.2;
+  }
+  45%,
+  65% {
+    opacity: 1;
+  }
+}
+
+@keyframes activity-write {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0);
+  }
+  30% {
+    transform: translate(-1px, 1px) rotate(-6deg);
+  }
+  65% {
+    transform: translate(1px, -1px) rotate(3deg);
+  }
+}
+
+@keyframes activity-prompt {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateX(1.5px);
+    opacity: 1;
+  }
+}
+
+@keyframes activity-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes activity-twinkle {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.65);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes activity-fade {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes activity-bulb-glow {
+  0%,
+  100% {
+    opacity: 0.015;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+@keyframes activity-bulb-filament {
+  0%,
+  100% {
+    opacity: 0.32;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--chat-process, #666);
+  position: relative;
+  top: 1px;
+  transform-origin: center;
+  overflow: visible;
+}
+.icon.active {
+  color: var(--chat-ink, #171717);
+}
+.search.active {
+  animation: activity-search 1.8s ease-in-out infinite;
+}
+.icon.active :global(.activity-signal),
+.fallback.active {
+  animation: activity-fade 1.8s ease-in-out infinite;
+}
+.icon :global(.activity-bulb-glow) {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0;
+}
+.icon :global(.activity-bulb-filament) {
+  opacity: 0.7;
+}
+.icon.active :global(.activity-bulb-glow) {
+  animation: activity-bulb-glow 2.4s ease-in-out infinite;
+}
+.icon.active :global(.activity-bulb-filament) {
+  animation: activity-bulb-filament 2.4s ease-in-out infinite;
+}
+.icon.active :global(.activity-scan) {
+  animation: activity-scan 1.8s ease-in-out infinite;
+}
+.icon.active :global(.activity-scan-middle) {
+  animation-delay: -1.2s;
+}
+.icon.active :global(.activity-scan-last) {
+  animation-delay: -0.6s;
+}
+.icon.active :global(.activity-scan-web-last) {
+  animation-delay: -0.9s;
+}
+.icon.active :global(.activity-pen) {
+  transform-origin: center;
+  animation: activity-write 1.8s ease-in-out infinite;
+}
+.icon.active :global(.activity-prompt) {
+  animation: activity-prompt 1.8s ease-in-out infinite;
+}
+.icon.active :global(.activity-cursor) {
+  animation: activity-blink 1s steps(1) infinite;
+}
+.icon.active :global(.activity-eye) {
+  animation: activity-fade 1.4s ease-in-out infinite;
+}
+.icon.active :global(.activity-eye-offset) {
+  animation-delay: -0.7s;
+}
+.icon.active :global(.activity-star) {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: activity-twinkle 1.8s ease-in-out infinite;
+}
+.icon.active :global(.activity-star-middle) {
+  animation-delay: -0.6s;
+}
+.icon.active :global(.activity-star-last) {
+  animation-delay: -1.2s;
+}

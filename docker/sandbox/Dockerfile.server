@@ -1,0 +1,27 @@
+# Dedicated Docker/proxy build: reviewed source atop the official 0.2.3 runtime.
+# The caller must pin SERVER_BASE_IMAGE to the reviewed official image digest.
+ARG SERVER_BASE_IMAGE
+FROM ${SERVER_BASE_IMAGE} AS verified
+USER root
+WORKDIR /app
+COPY opensandbox_server /app/opensandbox_server
+COPY LICENSE /usr/share/licenses/antcdp-sandbox-server/LICENSE
+COPY server-source-revision server-control.patch /usr/share/antcdp-sandbox-server/
+COPY server-contract-tests.py /tmp/server-contract-tests.py
+# No Docker socket or service credentials are available during these checks.
+RUN /app/.venv/bin/python -c "import importlib.metadata as m; import opensandbox_server as s; assert m.version('opensandbox-server') == '0.2.3'; assert s.__file__.startswith('/app/opensandbox_server/')" \
+    && /app/.venv/bin/python /tmp/server-contract-tests.py
+
+FROM ${SERVER_BASE_IMAGE}
+ARG SERVER_SOURCE_REVISION
+ARG SERVER_PATCH_SHA256
+LABEL io.antcdp.sandbox.server.upstream-version="0.2.3" \
+    io.antcdp.sandbox.server.source-revision=${SERVER_SOURCE_REVISION} \
+    io.antcdp.sandbox.server.patch-sha256=${SERVER_PATCH_SHA256} \
+    io.antcdp.sandbox.server.label-prefix="io.antcdp.sandbox/" \
+    io.antcdp.sandbox.server.network-contract="host-server-loopback-publish-v1"
+COPY --from=verified /app/opensandbox_server /app/opensandbox_server
+COPY --from=verified /usr/share/licenses/antcdp-sandbox-server /usr/share/licenses/antcdp-sandbox-server
+COPY --from=verified /usr/share/antcdp-sandbox-server /usr/share/antcdp-sandbox-server
+# Retain the upstream CLI entrypoint. Supply an explicit Docker configuration;
+# the upstream example Kubernetes config is intentionally rejected by this build.

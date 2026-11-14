@@ -1,0 +1,21 @@
+// Console summaries only. Model-facing descriptions and tool schemas stay unchanged.
+export const toolSummaries: Record<string, string> = {
+  web_search: "检索公开网页，返回带来源链接的搜索结果。",
+  web_fetch: "读取指定网页的正文，供智能体分析和引用。",
+  ask_user_question: "向参与者提问；有限等待后可继续，支持稍后回答。",
+  skill: "按需读取已绑定技能的说明与配套材料。",
+  update_plan: "展示任务计划和当前进度，便于跟踪执行过程。",
+  delegate: "创建一级临时子任务，共享身份、权限、沙箱和总预算。",
+  read_file: "读取沙箱中的文本文件，支持分段继续读取。",
+  read_image: "读取图片并提供给支持视觉的会话模型。",
+  write_file: "创建或覆盖文本文件；覆盖已有内容需要明确指定。",
+  edit_file: "精确替换文件中的一处内容，匹配不唯一时停止。",
+  glob: "按路径模式查找沙箱文件。",
+  grep: "在文本文件中搜索文字或正则表达式。",
+  import_file: "将当前输入明确选择的附件或产物复制到工作目录。",
+  exec_command: "在会话工作目录执行命令，支持后台运行。",
+  process_status: "查看本次任务中命令的运行或结束状态。",
+  process_output: "分段读取命令输出。",
+  process_cancel: "请求停止本次任务中的命令，并核实停止状态。",
+  present: "保存可下载的交付文件，清理沙箱后仍可查看。",
+};

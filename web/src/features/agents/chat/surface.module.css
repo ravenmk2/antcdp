@@ -1,0 +1,1893 @@
+/* These tokens are private to chat; admin controls cannot alter process typography. */
+.root :global(.agent-chat-page),
+.root :global(.agent-composer),
+.root :global(.agent-timeline),
+.root :global(.agent-interaction-card) {
+  --chat-font:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto,
+    "Noto Sans", Ubuntu, Cantarell, "Helvetica Neue", sans-serif, Arial,
+    "PingFang SC", "Source Han Sans SC", "Microsoft YaHei UI",
+    "Microsoft YaHei", "Noto Sans CJK SC";
+  --chat-ink: rgba(0, 0, 0, 0.9);
+  --chat-process: rgba(0, 0, 0, 0.6);
+  --chat-muted: rgba(0, 0, 0, 0.45);
+  --chat-divider: rgba(0, 0, 0, 0.09);
+  --chat-hover: rgba(0, 0, 0, 0.025);
+  --chat-composer: #fff;
+  --chat-composer-focus: rgba(0, 0, 0, 0.24);
+  --chat-bubble: #e8f2ff;
+  --chat-bubble-ink: #18375d;
+  --chat-primary: #3a83f7;
+  --chat-shimmer-base: #666;
+  --chat-shimmer-highlight: #404040;
+  font-family: var(--chat-font);
+  color: var(--chat-ink);
+  font-size: 16px;
+  line-height: 26px;
+  --markdown-body-font: var(--chat-font);
+}
+:global(.dark) .root :global(.agent-chat-page),
+:global(.dark) .root :global(.agent-composer),
+:global(.dark) .root :global(.agent-timeline),
+:global(.dark) .root :global(.agent-interaction-card) {
+  --chat-ink: #eee;
+  --chat-process: rgba(255, 255, 255, 0.56);
+  --chat-muted: rgba(255, 255, 255, 0.42);
+  --chat-divider: rgba(255, 255, 255, 0.1);
+  --chat-hover: rgba(255, 255, 255, 0.025);
+  --chat-composer: #242424;
+  --chat-composer-focus: rgba(255, 255, 255, 0.2);
+  --chat-bubble: #1d4077;
+  --chat-bubble-ink: #f1f6ff;
+  --chat-primary: #2c67c5;
+  --chat-shimmer-base: #999;
+  --chat-shimmer-highlight: #eee;
+}
+@media (min-width: 821px) {
+  .root :global(.app-layout[data-conversation="true"] > div > .topbar) {
+    display: none;
+  }
+  .root :global(.app-layout[data-conversation="true"] .agent-chat-page) {
+    height: 100dvh;
+  }
+}
+/* Chat owns its visual rules outside the shared component cascade. */
+@keyframes session-breathe {
+  0%,
+  100% {
+    opacity: 0.45;
+    box-shadow: 0 0 0 0 rgb(58 131 247 / 0%);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 0 4px rgb(58 131 247 / 12%);
+  }
+}
+.root :global(.agent-session-dot) {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  margin-left: auto;
+  margin-right: 3px;
+  border-radius: 50%;
+  background: #3a83f7;
+  animation: session-breathe 1.8s ease-in-out infinite;
+}
+.root :global(.agent-session-dot[data-state="stopping"]) {
+  background: #dc9324;
+}
+.root :global(.agent-chat-page) {
+  height: calc(100dvh - 64px);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+}
+.root :global(.agent-chat-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-shrink: 0;
+  min-height: 52px;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 24px;
+}
+.root :global(.agent-chat-heading) {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.root :global(.agent-chat-title-line) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.root :global(.agent-chat-title-line h1) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.root :global(.agent-chat-subline) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 5px;
+  color: var(--chat-process, var(--muted));
+  font-size: 12px;
+}
+.root :global(.agent-chat-subline > span) {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.root :global(.agent-chat-subline .agent-chat-model) {
+  display: block;
+  max-width: min(42vw, 600px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.root :global(.agent-chat-header-actions) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.root :global(.agent-workspace-toggle-active) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.root :global(.agent-chat-body) {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.root :global(.agent-chat-body[data-workspace-open="true"]) {
+  grid-template-columns: minmax(0, 1fr) 324px;
+}
+.root :global(.agent-chat-primary) {
+  isolation: isolate;
+  background: var(--surface);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.root :global(.agent-chat-scroll) {
+  position: relative;
+  z-index: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 32px 36px;
+  scrollbar-gutter: stable;
+}
+.root :global(.agent-chat-content) {
+  width: min(100%, 752px);
+  margin-inline: auto;
+}
+.root
+  :global(.agent-chat-body[data-workspace-open="false"] .agent-chat-content) {
+  width: min(100%, 752px);
+}
+.root :global(.agent-chat-footer) {
+  position: relative;
+  flex-shrink: 0;
+  padding: 0 36px 20px;
+  background: var(--surface);
+}
+.root :global(.agent-chat-footer .agent-composer-feedback) {
+  max-height: 150px;
+  overflow-y: auto;
+}
+.root :global(.agent-composer-feedback:empty) {
+  display: none;
+}
+.root :global(.agent-chat-footer .agent-composer-input) {
+  max-height: min(260px, 30dvh);
+}
+.root :global(.agent-chat-footer .agent-composer-attachments) {
+  max-height: 72px;
+}
+.root :global(.agent-chat-queuebar) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+}
+.root :global(.agent-queue-count) {
+  min-width: 20px;
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.root :global(.agent-chat-readonly) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  font-size: 14px;
+}
+.root :global(.agent-chat-readonly p) {
+  margin-top: 5px;
+  color: var(--chat-process, var(--muted));
+  line-height: 1.65;
+}
+.root :global(.agent-composer) {
+  position: relative;
+  z-index: 20;
+  min-width: 0;
+}
+.root :global(.agent-composer-surface) {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--chat-divider);
+  border-radius: 24px;
+  background: var(--chat-composer);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 3%);
+  transition: border-color 150ms;
+}
+.root :global(.agent-composer-surface:focus-within) {
+  border-color: var(--chat-composer-focus);
+}
+.root :global(.agent-composer-config) {
+  padding: 18px 20px;
+  border-bottom: 0.5px solid var(--chat-divider);
+}
+.root :global(.agent-composer-input) {
+  display: block;
+  width: 100%;
+  min-height: 66px;
+  max-height: 260px;
+  padding: 14px 16px 4px;
+  font-size: 16px;
+  line-height: 26px;
+  outline: none;
+}
+.root :global(.agent-composer-attachments) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-height: 148px;
+  overflow-y: auto;
+  padding: 12px 16px 0;
+}
+.root :global(.agent-composer-attachment) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: min(100%, 340px);
+  padding: 2px 6px 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--compact-control-radius);
+  background: var(--surface-subtle);
+}
+.root :global(.agent-composer-footer) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 12px 12px;
+}
+.root :global(.agent-composer-tools),
+.root :global(.agent-composer-actions) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.root :global(.agent-composer-tools) {
+  flex-shrink: 0;
+}
+.root :global(.agent-composer-actions) {
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+.root :global(.agent-composer-hint) {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--chat-process, var(--muted));
+  line-height: 1.6;
+}
+.root :global(.agent-composer-shortcut) {
+  font-size: 11px;
+  color: var(--chat-process, var(--muted));
+  white-space: nowrap;
+}
+.root :global(.agent-timeline) {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-wrap: anywhere;
+}
+.root
+  :global(
+    .agent-timeline
+      > :where(:not([hidden], .agent-turn-result[data-success="true"]))
+      ~ :where(:not([hidden], .agent-turn-result[data-success="true"]))
+  ) {
+  margin-top: 8px;
+}
+.root :global(.agent-timeline > .agent-message-user) {
+  margin-top: 24px;
+  margin-bottom: 0;
+}
+.root :global(.agent-timeline > .agent-message-user:first-child) {
+  margin-top: 4px;
+}
+.root :global(.agent-timeline > [data-disclosure-content]) {
+  margin: 0;
+}
+/* Keep spacing inside the animated height so hidden rows contribute no gaps. */
+.root :global(.agent-timeline > [data-disclosure-content] > div) {
+  padding-top: 8px;
+}
+.root :global(.agent-timeline > :is(.agent-turn-control, .agent-turn-working)) {
+  margin-top: 16px;
+}
+.root :global(.agent-message-content) {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.root :global(.agent-question-record) {
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--chat-hover);
+  font-size: 16px;
+  line-height: 26px;
+}
+.root :global(.agent-question-pair + .agent-question-pair) {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--chat-divider);
+}
+.root :global(.agent-question-pair :is(dt, dd)) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.root :global(.agent-question-pair dd) {
+  margin-top: 8px;
+}
+.root :global(.agent-question-pair dd[data-tone="answer"] > span:last-child) {
+  font-weight: 500;
+}
+.root :global(.agent-question-pair dt) {
+  color: var(--chat-process);
+}
+.root :global(.agent-question-mark) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 6px;
+  background: var(--chat-hover);
+  font-size: 12px;
+  color: var(--chat-muted);
+}
+.root
+  :global(.agent-question-pair dd[data-tone="answer"] .agent-question-mark) {
+  background: var(--chat-bubble);
+  color: var(--chat-primary);
+}
+.root :global(.agent-question-pair dd[data-tone="pending"]),
+.root :global(.agent-question-status[data-pending="true"]) {
+  color: var(--warning);
+}
+.root :global(.agent-question-pair dd[data-tone="skip"]) {
+  color: var(--chat-muted);
+}
+.root :global(.agent-question-record-note) {
+  margin-top: 8px;
+  color: var(--chat-muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+.root :global(.agent-question-type),
+.root :global(.agent-question-recommended) {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 20px;
+  vertical-align: middle;
+}
+.root :global(.agent-question-type) {
+  color: var(--chat-muted);
+  background: var(--chat-hover);
+}
+.root :global(.agent-question-recommended) {
+  color: var(--chat-primary);
+  background: var(--chat-bubble);
+}
+.root :global(.agent-timeline .markdown > :first-child) {
+  margin-top: 0;
+}
+.root :global(.agent-timeline .markdown > :last-child) {
+  margin-bottom: 0;
+}
+.root :global(.agent-timeline .markdown-layout .markdown) {
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  font-size: 16px;
+  line-height: 26px;
+}
+.root :global(.agent-timeline pre) {
+  max-width: 100%;
+}
+.root :global(.agent-timeline .markdown :is(th, td)),
+.root :global(.agent-file-markdown .markdown :is(th, td)) {
+  min-width: 7rem;
+}
+.root :global(.agent-message-user) {
+  padding-left: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+.root :global(.agent-user-message-content) {
+  max-width: 85%;
+  min-width: 0;
+}
+.root :global(.agent-message-user .agent-user-bubble) {
+  background: var(--chat-bubble);
+  color: var(--chat-bubble-ink);
+  border: 0;
+  border-radius: 16px;
+  padding: 10px 16px;
+}
+.root :global(.agent-process-row) {
+  min-width: 0;
+  color: var(--chat-process, var(--muted));
+}
+.root :global(.agent-process-row > summary) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 2px 0;
+  list-style: none;
+  font-size: 16px;
+  cursor: pointer;
+}
+.root :global(.agent-process-row > summary:hover) {
+  color: var(--chat-ink, var(--text));
+}
+.root :global(.agent-process-row > summary::-webkit-details-marker) {
+  display: none;
+}
+.root :global(.agent-process-row[open] > summary > svg:first-child) {
+  transform: rotate(90deg);
+}
+.root :global(.agent-process-row > summary > span) {
+  min-width: 0;
+}
+.root :global(.agent-process-row > summary[hidden]) {
+  display: none;
+}
+.root :global(.agent-process-attention > summary) {
+  color: var(--warning);
+}
+.root :global(.agent-process-attention .agent-disclosure-trigger) {
+  color: var(--warning);
+}
+.root :global(.agent-tool-body) {
+  margin: 6px 0 12px 24px;
+  color: var(--chat-ink, var(--text));
+}
+.root :global(.agent-tool-code [data-slot="code-block-header"]) {
+  padding: 8px 12px 0;
+}
+.root :global(.agent-tool-code [data-slot="code-block-title"]) {
+  color: var(--chat-process, var(--muted));
+  font-size: 12px;
+  font-weight: 400;
+}
+.root :global(.agent-tool-code [data-slot="code-block-title"] svg) {
+  display: none;
+}
+.root :global(.agent-turn-control) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 0;
+  border-bottom: 0.5px solid var(--chat-divider);
+  color: var(--chat-process, var(--muted));
+  font-size: 16px;
+  text-align: left;
+  cursor: pointer;
+}
+.root :global(.agent-turn-control:disabled) {
+  cursor: default;
+}
+.root :global(.agent-turn-bot) {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-right: 2px;
+  stroke-width: 1.5;
+}
+.root :global(.agent-turn-control:focus-visible),
+.root :global(.agent-process-row > summary:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.root :global(.agent-message-assistant) {
+  padding: 4px 0;
+}
+.root :global(.agent-turn-result) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0;
+  color: var(--chat-process, var(--muted));
+  font-size: 12px;
+}
+.root :global(.agent-turn-result[data-success="true"]) {
+  height: 1px;
+  overflow: hidden;
+  padding: 0;
+  margin-top: 0;
+  opacity: 0;
+}
+.root :global(.agent-session-workspace) {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--surface-subtle);
+}
+.root :global(.agent-workspace-heading) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 18px 10px 22px;
+}
+.root :global(.agent-workspace-heading h2) {
+  font-size: 14px;
+  font-weight: 600;
+}
+.root :global(.agent-workspace-tabs) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+.root :global(.agent-workspace-tablist) {
+  display: flex;
+  gap: 18px;
+  margin: 0 22px;
+  border-bottom: 0.5px solid var(--chat-divider);
+}
+.root :global(.agent-workspace-tablist button) {
+  gap: 5px;
+}
+.root :global(.agent-workspace-tablist button svg) {
+  width: 14px;
+  height: 14px;
+}
+.root :global(.agent-workspace-content) {
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1;
+  padding: 22px;
+  outline-offset: -4px;
+}
+.root :global(.agent-workspace-content[hidden]) {
+  display: none;
+}
+.root :global(.agent-workspace-sections > section + section) {
+  margin-top: 26px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-subtle);
+}
+.root :global(.agent-workspace-section-heading) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.root :global(.agent-workspace-section-heading h3),
+.root :global(.agent-workspace-section-title) {
+  font-size: 13px;
+  font-weight: 600;
+}
+.root :global(.agent-workspace-section-title) {
+  margin-bottom: 14px;
+}
+.root :global(.agent-run-summary) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 22px;
+}
+.root :global(.agent-run-summary strong) {
+  font-size: 16px;
+  font-weight: 600;
+}
+.root :global(.agent-run-summary p) {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--chat-process, var(--muted));
+}
+.root :global(.agent-run-mark) {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.root :global(.agent-run-mark svg) {
+  width: 19px;
+  height: 19px;
+}
+.root :global(.agent-run-mark.is-complete) {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 9%, transparent);
+}
+.root :global(.agent-workspace-facts) {
+  display: grid;
+  gap: 12px;
+  font-size: 12px;
+}
+.root :global(.agent-workspace-facts > div) {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+.root :global(.agent-workspace-facts dt) {
+  color: var(--chat-process, var(--muted));
+  flex-shrink: 0;
+}
+.root :global(.agent-workspace-facts dd) {
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.root :global(.agent-workspace-empty) {
+  padding: 18px 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--chat-process, var(--muted));
+}
+.root :global(.agent-workspace-empty svg) {
+  width: 25px;
+  height: 25px;
+  margin-bottom: 10px;
+  color: var(--chat-process, var(--muted));
+}
+.root :global(.agent-workspace-empty small) {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.root :global(.agent-workspace-plan) {
+  display: grid;
+  gap: 18px;
+}
+.root :global(.agent-workspace-plan li) {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.root :global(.agent-workspace-plan li > svg) {
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  flex-shrink: 0;
+  color: var(--chat-process, var(--muted));
+}
+.root :global(.agent-workspace-plan li[data-state="completed"] > svg) {
+  color: var(--success);
+}
+.root :global(.agent-workspace-plan li[data-state="in_progress"] > svg) {
+  color: var(--accent);
+}
+.root :global(.agent-workspace-files) {
+  display: grid;
+  gap: 18px;
+}
+.root :global(.agent-workspace-files [data-slot="button"]) {
+  width: 100%;
+  background: var(--surface);
+}
+.root :global(.agent-workspace-files [data-slot="button-content"]) {
+  min-width: 0;
+  width: 100%;
+  justify-content: flex-start;
+}
+.root :global(.agent-workspace-files p) {
+  font-size: 12px;
+  color: var(--chat-process, var(--muted));
+  line-height: 1.7;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.root :global(.agent-workspace-path) {
+  display: block;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.root :global(.agent-workspace-privacy) {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 15px 22px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--chat-process, var(--muted));
+}
+.root :global(.agent-workspace-privacy svg) {
+  width: 13px;
+  height: 13px;
+}
+.root :global(.agent-file-markdown .markdown-layout) {
+  margin: 0;
+}
+.root :global(.agent-file-markdown .markdown) {
+  padding: 0;
+}
+.root :global(.agent-chat-body .agent-chat-footer .agent-chat-content) {
+  width: min(100%, 800px);
+}
+.root :global(.agent-chat-subline:empty) {
+  display: none;
+}
+.root :global(.agent-composer-surface[data-dragging="true"]) {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.root :global(.agent-composer-settings) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+  min-width: 0;
+}
+.root :global(.agent-context-trigger) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  border-radius: 8px;
+  padding: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.root :global(.agent-context-trigger:hover) {
+  background: var(--surface-subtle);
+}
+.root :global(.agent-composer-model) {
+  max-width: 230px;
+  min-width: 0;
+}
+.root :global(.agent-composer-model [data-slot="button-content"]) {
+  min-width: 0;
+}
+.root :global(.agent-context-cache) {
+  color: var(--chat-process, var(--muted));
+  padding-left: 6px;
+  border-left: 1px solid var(--border);
+}
+.root :global(.agent-send-button) {
+  background: var(--text);
+  border-color: var(--chat-ink, var(--text));
+  color: var(--surface);
+  box-shadow: none;
+}
+.root :global(.agent-composer-caption) {
+  padding-top: 8px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--chat-process, var(--muted));
+}
+.root :global(.agent-composer-actions > button:last-child) {
+  border-radius: 999px;
+}
+.root :global(.agent-jump-latest) {
+  position: absolute;
+  top: -52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+}
+.root :global(.agent-jump-latest button) {
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--floating-shadow);
+}
+.root :global(.agent-pending-interactions) {
+  position: relative;
+  z-index: 30;
+  min-width: 0;
+  max-height: min(660px, calc(100dvh - 300px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  margin-bottom: 12px;
+}
+.root :global(.agent-message-actions) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--chat-process, var(--muted));
+  font-size: 11px;
+  line-height: 18px;
+}
+@media (hover: hover) {
+  .root :global(.agent-message-actions) {
+    opacity: 0;
+    transition: opacity 150ms;
+  }
+  .root :global(article:hover .agent-message-actions),
+  .root :global(article:focus-within .agent-message-actions),
+  .root :global(article[data-latest="true"] .agent-message-actions) {
+    opacity: 1;
+  }
+}
+@media (min-width: 1101px) and (max-width: 1600px) {
+  .root :global(.agent-chat-body[data-workspace-open="true"]) {
+    grid-template-columns: minmax(0, 1fr) 292px;
+  }
+}
+@media (max-width: 700px) {
+  .root :global(.agent-chat-body[data-workspace-open="true"]) {
+    grid-template-columns: minmax(0, 1fr);
+    position: relative;
+  }
+  .root :global(.agent-session-workspace) {
+    position: absolute;
+    inset: 0 0 0 auto;
+    width: min(90%, 324px);
+    z-index: 5;
+    background: var(--surface);
+    box-shadow: var(--floating-shadow);
+  }
+  .root :global(.agent-chat-heading) {
+    gap: 6px;
+  }
+  .root :global(.agent-composer-model) {
+    max-width: 130px;
+  }
+  .root :global(.agent-chat-scroll),
+  .root :global(.agent-chat-footer) {
+    padding-inline: 12px;
+  }
+  .root :global(.agent-composer-model) {
+    padding-inline: 4px;
+  }
+  .root :global(.agent-composer-tools) {
+    gap: 0;
+  }
+  .root :global(.agent-composer-footer) {
+    gap: 3px;
+    padding-inline: 8px;
+    flex-wrap: wrap;
+  }
+  .root :global(.agent-composer-settings) {
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+  .root :global(.agent-context-trigger) {
+    font-size: 11px;
+    gap: 4px;
+  }
+}
+@media (max-width: 1600px) {
+  .root :global(.agent-chat-scroll) {
+    padding: 26px;
+  }
+  .root :global(.agent-chat-footer) {
+    padding-inline: 26px;
+  }
+  .root :global(.agent-chat-header) {
+    gap: 14px;
+    padding-inline: 24px;
+  }
+  .root :global(.agent-composer-shortcut) {
+    display: none;
+  }
+  .root :global(.agent-workspace-tablist) {
+    gap: 16px;
+  }
+  .root :global(.agent-workspace-content) {
+    padding: 20px;
+  }
+}
+@media (min-width: 701px) and (max-width: 1100px) {
+  .root :global(.agent-chat-body[data-workspace-open="true"]) {
+    grid-template-columns: minmax(0, 1fr) 270px;
+  }
+  .root :global(.agent-chat-scroll),
+  .root :global(.agent-chat-footer) {
+    padding-inline: 18px;
+  }
+  .root :global(.agent-chat-header-actions) {
+    gap: 3px;
+  }
+}
+
+.root :global(.agent-disclosure) {
+  min-width: 0;
+  color: var(--chat-process, var(--muted));
+}
+.root :global(.agent-interaction-card) {
+  border: 1px solid var(--chat-divider);
+  border-radius: 24px;
+  background: var(--chat-composer);
+  overflow: hidden;
+  box-shadow: 0 4px 18px rgb(0 0 0 / 3%);
+}
+.root :global(.agent-interaction-heading) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: var(--chat-hover);
+  color: var(--chat-process);
+}
+.root :global(.agent-interaction-body) {
+  padding: 16px 18px;
+  display: grid;
+  gap: 12px;
+}
+.root :global(.agent-question-form) {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.root :global(.agent-question-wait-dot) {
+  display: none;
+}
+.root :global([data-kind="question"] .agent-interaction-heading) {
+  background: transparent;
+  padding: 14px 20px 4px;
+}
+.root :global([data-kind="question"] .agent-interaction-body) {
+  padding: 8px 18px 14px;
+}
+.root :global(.agent-interaction-body[hidden]) {
+  display: none;
+}
+.root :global([data-kind="question"] .agent-interaction-heading h2) {
+  font-size: 12px;
+  font-weight: 500;
+}
+.root :global(.agent-question-fields) {
+  display: grid;
+  gap: 4px;
+  padding: 2px;
+}
+.root :global(.agent-question-answer) {
+  width: 100%;
+  min-width: 0;
+  resize: none;
+  field-sizing: content;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--chat-divider);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--chat-ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 22px;
+  outline: none;
+  max-height: 160px;
+}
+.root :global(.agent-question-answer:focus) {
+  border-color: var(--chat-composer-focus);
+}
+.root :global(.agent-question-answer::placeholder) {
+  color: var(--chat-muted);
+}
+.root :global(.agent-question-custom) {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  min-height: 24px;
+}
+.root :global(.agent-question-custom-row) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+.root :global(.agent-question-custom-row:focus-within),
+.root :global(.agent-question-custom-row:hover) {
+  background: var(--chat-hover);
+  border-color: var(--chat-divider);
+}
+.root :global(.agent-question-custom-marker),
+.root :global(.agent-question-number) {
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 5px;
+  background: var(--chat-hover);
+  color: var(--chat-process);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.root :global(.agent-question-prompt) {
+  font-size: 16px;
+  line-height: 26px;
+  white-space: pre-wrap;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+.root :global(.agent-question-option) {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 15px;
+  line-height: 22px;
+  cursor: pointer;
+  transition:
+    border-color 150ms,
+    background 150ms;
+}
+.root :global(.agent-question-option:hover),
+.root :global(.agent-question-option[data-selected="true"]) {
+  border-color: var(--chat-divider);
+  background: var(--chat-hover);
+}
+.root :global(.agent-question-option-copy) {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  min-width: 0;
+}
+.root :global(.agent-question-option-label) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+.root :global(.agent-question-choice) {
+  appearance: none;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  border: 1px solid var(--chat-composer-focus);
+  border-radius: 50%;
+  background: var(--chat-composer);
+  transition:
+    background 120ms,
+    border-color 120ms;
+}
+.root :global(.agent-question-choice[type="checkbox"]) {
+  border-radius: 4px;
+}
+.root :global(.agent-question-choice[type="radio"]) {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.root
+  :global(.agent-question-option[data-selected="true"] .agent-question-number) {
+  background: var(--chat-primary);
+  color: white;
+}
+.root :global(.agent-question-choice:checked) {
+  border: 5px solid var(--chat-primary);
+}
+.root :global(.agent-question-option:has(input:focus-visible)) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.root :global(.agent-question-description) {
+  display: block;
+  margin-top: 0;
+  color: var(--chat-process, var(--muted));
+  font-size: 13px;
+  line-height: 21px;
+}
+.root :global(.agent-question-pagination) {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  margin-right: auto;
+}
+.root :global(.agent-question-footer) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+.root :global(.agent-question-hint) {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--chat-muted);
+}
+.root :global(.agent-question-minimize) {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: var(--chat-muted);
+  cursor: pointer;
+}
+.root :global(.agent-question-minimize:hover) {
+  background: var(--chat-hover);
+}
+.root :global(.agent-question-minimize svg) {
+  width: 16px;
+  height: 16px;
+}
+.root :global(.agent-question-footer button),
+.root :global(.agent-question-page-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  border: 0;
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition:
+    background 150ms,
+    opacity 150ms;
+}
+.root :global(.agent-question-footer button:disabled),
+.root :global(.agent-question-page-button:disabled) {
+  opacity: 0.4;
+  cursor: default;
+}
+.root :global(.agent-question-submit) {
+  background: var(--chat-primary);
+  color: white;
+}
+.root :global(.agent-question-submit svg) {
+  width: 15px;
+  height: 15px;
+}
+.root :global(.agent-question-skip) {
+  color: var(--chat-process);
+}
+.root :global(.agent-question-skip:hover),
+.root :global(.agent-question-page-button:hover) {
+  background: var(--chat-hover);
+}
+.root :global(.agent-question-page-button) {
+  padding: 3px;
+}
+.root :global(.agent-question-page-button svg) {
+  width: 16px;
+  height: 16px;
+}
+.root :global(.agent-interaction-switcher) {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--chat-process);
+  padding: 4px 10px 8px;
+}
+.root :global(.agent-interaction-actions) {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  gap: 8px;
+  padding-top: 4px;
+}
+.root :global(.agent-disclosure-trigger) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  padding: 2px 0;
+  line-height: 26px;
+  font-family: var(--chat-font);
+  color: var(--chat-process);
+  border-radius: 6px;
+  text-align: left;
+  font-size: 16px;
+  cursor: pointer;
+}
+.root :global(.agent-disclosure-trigger > span:not(.agent-disclosure-preview)) {
+  flex-shrink: 0;
+}
+.root :global(.agent-disclosure-trigger:hover) {
+  background: var(--chat-hover);
+  color: var(--chat-ink, var(--text));
+}
+.root :global(.agent-disclosure-trigger:disabled) {
+  cursor: default;
+}
+.root :global(.agent-disclosure-trigger:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.root :global(.agent-disclosure-preview) {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  opacity: 0.65;
+}
+.root :global(.agent-disclosure-chevron) {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.55;
+  position: relative;
+  top: 1px;
+}
+.root :global(.agent-activity-icon) {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  stroke-width: 1.6;
+}
+.root :global(.agent-reasoning-body) {
+  margin: 2px 0 6px 18px;
+  max-height: 288px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+  line-height: 26px;
+}
+.root :global(.agent-process-steps) {
+  padding-block: 4px;
+}
+.root :global(.agent-process-step) {
+  position: relative;
+  padding-block: 3px;
+}
+.root :global(.agent-process-step:not(:last-child)::after) {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 32px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--border-strong);
+  opacity: 0.5;
+}
+.root :global(.agent-turn-working) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--chat-process, var(--muted));
+  font-size: 16px;
+  min-height: 36px;
+  width: 100%;
+  padding: 8px 0;
+  border-bottom: 0.5px solid var(--chat-divider);
+}
+.root :global(.agent-thinking-dots) {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  color: var(--chat-muted);
+}
+.root :global(.agent-thinking-dots circle) {
+  animation: chat-dot-fade 1.5s ease-in-out infinite;
+}
+.root :global(.agent-thinking-dots circle:nth-child(2)) {
+  animation-delay: 0.2s;
+}
+.root :global(.agent-thinking-dots circle:nth-child(3)) {
+  animation-delay: 0.4s;
+}
+.root :global(.agent-activity-label) {
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--chat-shimmer-base) 35%,
+    var(--chat-shimmer-highlight) 50%,
+    var(--chat-shimmer-base) 65%
+  );
+  animation: chat-shimmer 3s linear infinite;
+}
+@keyframes chat-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@keyframes chat-dot-fade {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (max-width: 500px) {
+  .root :global(.agent-composer-footer) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 4px;
+  }
+  .root :global(.agent-composer-tools) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .root :global(.agent-composer-actions) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .root :global(.agent-composer-settings) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-left: 0;
+    justify-content: space-between;
+    flex-wrap: nowrap;
+  }
+  .root :global(.agent-composer-model) {
+    max-width: 140px;
+  }
+}
+
+.root :global(.agent-disclosure-spacer) {
+  flex: 1;
+  min-width: 0;
+}
+.root :global(.agent-composer-model) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--chat-process);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.root :global(.agent-composer-model:hover),
+.root :global(.agent-composer-tool-button:hover) {
+  background: var(--chat-hover);
+  color: var(--chat-ink);
+}
+.root :global(.agent-composer-tool-button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--chat-muted);
+  cursor: pointer;
+}
+.root :global(.agent-composer-tool-button svg) {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+.root :global(.agent-send-button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--chat-primary);
+  color: #fff;
+  box-shadow: none;
+  cursor: pointer;
+  transition: background 150ms;
+}
+.root :global(.agent-send-button svg) {
+  width: 20px;
+  height: 20px;
+}
+.root :global(.agent-send-button:hover) {
+  filter: brightness(0.95);
+}
+.root :global(.agent-send-button:disabled) {
+  opacity: 0.4;
+  cursor: default;
+}
+.root :global(.agent-stop-button) {
+  background: #d94b4b;
+}
+.root :global(.agent-stop-button svg) {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+.root :global(.agent-composer-attachment.is-image) {
+  position: relative;
+  display: block;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.root :global(.agent-attachment-image) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.root :global(.is-image .agent-attachment-name) {
+  display: none;
+}
+.root :global(.agent-attachment-remove) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.root :global(.agent-attachment-remove svg) {
+  width: 12px;
+  height: 12px;
+}
+.root :global(.is-image .agent-attachment-remove) {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  color: white;
+  background: rgb(0 0 0 / 60%);
+  opacity: 0;
+  transition: opacity 150ms;
+}
+.root :global(.is-image:hover .agent-attachment-remove),
+.root :global(.is-image:focus-within .agent-attachment-remove) {
+  opacity: 1;
+}
+@media (hover: none) {
+  .root :global(.is-image .agent-attachment-remove) {
+    opacity: 1;
+  }
+}
+.root :global(.agent-turn-usage-trigger) {
+  cursor: pointer;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.root :global(.agent-turn-usage-trigger:hover) {
+  background: var(--chat-hover);
+}
+.root :global(.agent-turn-usage-details) {
+  font-size: 12px;
+  line-height: 22px;
+}
+.root :global(.agent-turn-usage-details > div) {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.root :global(.agent-turn-usage-details dd) {
+  font-variant-numeric: tabular-nums;
+}
+.root :global(.agent-inline-queue) {
+  padding: 0 12px 4px;
+  font-family: var(--chat-font);
+}
+.root :global(.agent-queued-message) {
+  position: relative;
+  padding: 2px 0;
+  border-top: 1px solid var(--chat-divider);
+}
+.root :global(.agent-queued-message-row) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  color: var(--chat-process);
+  font-size: 14px;
+  line-height: 22px;
+}
+.root :global(.agent-queue-preview-anchor) {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  outline-offset: 3px;
+}
+.root :global(.agent-queue-preview-anchor > p) {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.root :global(.agent-queue-preview-anchor:has([role="tooltip"])::before) {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  width: 100%;
+  height: 10px;
+}
+.root :global(.agent-queue-preview) {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: -12px;
+  width: min(560px, 100% + 24px);
+  max-height: min(400px, 45dvh);
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 14px 16px;
+  border: 1px solid var(--chat-divider);
+  border-radius: 14px;
+  background: var(--chat-composer);
+  color: var(--chat-ink);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 12%);
+  z-index: 1;
+}
+@media (min-width: 1600px) {
+  .root :global(.agent-queue-preview) {
+    top: 50%;
+    bottom: auto;
+    left: auto;
+    right: calc(100% + 32px);
+    width: 340px;
+    transform: translateY(-50%);
+  }
+  .root :global(.agent-queue-preview-anchor:has([role="tooltip"])::before) {
+    top: 0;
+    bottom: auto;
+    left: -32px;
+    width: 32px;
+    height: 100%;
+  }
+}
+.root :global(.agent-queue-marker) {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--chat-muted);
+  flex-shrink: 0;
+}
+.root :global(.agent-queue-actions),
+.root :global(.agent-queue-files),
+.root :global(.agent-queue-pages) {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.root :global(.agent-queue-files) {
+  gap: 3px;
+  font-size: 12px;
+}
+.root :global(.agent-queue-files svg) {
+  width: 14px;
+  height: 14px;
+}
+.root :global(.agent-queue-actions) {
+  color: var(--chat-muted);
+}
+.root :global(.agent-chat-dock) {
+  display: flex;
+  flex-direction: column;
+}
+/* The question takes the composer's seat; the mounted composer preserves drafts. */
+.root
+  :global(
+    .agent-chat-dock:has(.agent-pending-interactions [data-kind="question"])
+  ) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.root
+  :global(
+    .agent-chat-dock:has(.agent-pending-interactions [data-kind="question"])
+      > .agent-queue-panel
+  ) {
+  grid-area: 1 / 1;
+}
+.root
+  :global(
+    .agent-chat-dock:has(.agent-pending-interactions [data-kind="question"])
+      > .agent-pending-interactions
+  ) {
+  grid-area: 2 / 1;
+  margin-bottom: 0;
+}
+.root
+  :global(
+    .agent-chat-dock:has(.agent-pending-interactions [data-kind="question"])
+      > .agent-composer
+  ) {
+  grid-area: 2 / 1;
+  align-self: end;
+  visibility: hidden;
+  pointer-events: none;
+}
+.root
+  :global(
+    .agent-chat-dock:has(.agent-pending-interactions [data-minimized="true"])
+      > .agent-composer
+  ) {
+  grid-area: 3 / 1;
+  visibility: visible;
+  pointer-events: auto;
+  margin-top: 10px;
+}
+.root :global(.agent-queue-panel) {
+  position: relative;
+  z-index: 10;
+  border: 1px solid var(--chat-divider);
+  border-radius: 20px 20px 0 0;
+  background: color-mix(in srgb, var(--chat-composer), var(--chat-process) 5%);
+  margin: 0 8px -24px;
+  padding: 5px 4px 28px;
+  box-shadow: 0 -2px 12px rgb(0 0 0 / 2%);
+}
+.root :global(.agent-queue-panel:empty) {
+  display: none;
+}
+.root :global(.agent-queue-panel .agent-chat-queuebar) {
+  padding: 0 10px 3px;
+}
+.root :global(.agent-queue-toggle) {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--chat-process);
+  cursor: pointer;
+}
+@media (max-height: 760px) {
+  .root :global(.agent-pending-interactions) {
+    max-height: 42dvh;
+  }
+}
+.root :global(.agent-queued-message:hover .agent-queue-actions),
+.root :global(.agent-queued-message:focus-within .agent-queue-actions) {
+  opacity: 1;
+}
+.root :global(.agent-queue-pages) {
+  justify-content: flex-end;
+  font-size: 12px;
+  color: var(--chat-muted);
+}
+.root :global(.agent-queue-empty) {
+  font-size: 13px;
+  color: var(--chat-muted);
+  padding: 4px 0;
+}
+@media (hover: none) {
+  .root :global(.agent-queue-actions) {
+    opacity: 1;
+  }
+}
+.root :global(.agent-composer-model:disabled),
+.root :global(.agent-composer-tool-button:disabled) {
+  opacity: 0.4;
+  cursor: default;
+}
+.root :global(.agent-composer-input) {
+  font-family: var(--chat-font);
+  color: var(--chat-ink);
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+.root :global(.agent-composer-input::placeholder) {
+  color: var(--chat-muted);
+}
+.root :global(.agent-chat-footer) {
+  padding-bottom: 16px;
+}
+.root :global(.agent-disclosure [data-disclosure-content][hidden]) {
+  display: none;
+}
+.root :global(.agent-timeline .markdown) {
+  font-family: var(--chat-font);
+  color: var(--chat-ink);
+}
+.root :global(.agent-chat-icon-button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--chat-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.root :global(.agent-chat-icon-button svg) {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.8;
+}
+.root :global(.agent-chat-icon-button:hover),
+.root :global(.agent-chat-icon-button[aria-pressed="true"]) {
+  background: var(--chat-hover);
+  color: var(--chat-ink);
+}
+.root :global(.agent-chat-icon-button:focus-visible),
+.root :global(.agent-send-button:focus-visible),
+.root :global(.agent-composer-tool-button:focus-visible) {
+  outline: 2px solid var(--chat-primary);
+  outline-offset: 2px;
+}
+.root :global(.agent-copy-control) {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  gap: 4px;
+}
+.root :global(.agent-tool-code) {
+  min-width: 0;
+  background: var(--surface-subtle);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--chat-process);
+}
+.root :global(.agent-tool-code-heading) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--chat-muted);
+}
+.root :global(.agent-tool-code-heading > div) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.root :global(.agent-tool-code pre) {
+  font-family: var(--chat-font);
+  font-size: 16px;
+  line-height: 26px;
+  margin: 0;
+  max-height: 208px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+}
+.root :global(.agent-tool-code pre[data-mono="true"]) {
+  font-family:
+    "SFMono-Regular", Consolas, Menlo, "Liberation Mono", "PingFang SC",
+    "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC",
+    "Source Han Sans SC", monospace;
+}
+.root :global(.agent-tool-code pre[data-wrapped="true"]) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.root :global(.agent-tool-code pre[data-expanded="true"]) {
+  max-height: 384px;
+  overflow-y: auto;
+}
+.root :global(.agent-tool-expand) {
+  margin-top: 8px;
+  border: 0;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--chat-process);
+  font-size: 12px;
+  cursor: pointer;
+}
+.root :global(.agent-terminal) {
+  min-width: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-subtle);
+}
+.root :global(.agent-terminal > .agent-tool-code) {
+  border-top: 0.5px solid var(--chat-divider);
+  border-radius: 0;
+}
+.root :global(.agent-terminal-heading) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--chat-muted);
+}
+.root :global(.agent-terminal-heading > span:first-child) {
+  flex: 1;
+}
+.root :global(.agent-empty-output) {
+  color: var(--chat-muted);
+  font-size: 12px;
+}

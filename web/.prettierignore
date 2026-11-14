@@ -1,0 +1,8 @@
+node_modules
+dist
+.cache
+public/fonts
+public/service-icons
+coverage
+test-results
+fonts.lock.json
