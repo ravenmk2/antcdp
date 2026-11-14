@@ -89,6 +89,14 @@ type Message struct {
 // DataBase64 is never persisted in event/request JSON. Replaying history must
 // re-read the same authorized file/hash; missing bytes are an error, not text.
 type ImagePart struct {
+	SourceSHA256  string `json:"source_sha256,omitempty"`
+	Variant       string `json:"variant,omitempty"`
+	Width         int    `json:"width,omitempty"`
+	Height        int    `json:"height,omitempty"`
+	Bytes         int64  `json:"bytes,omitempty"`
+	FileID        string `json:"file_id,omitempty"`
+	FileScope     string `json:"file_scope,omitempty"`
+	FileStyle     string `json:"file_style,omitempty"`
 	MIME          string `json:"mime"`
 	ContentSHA256 string `json:"content_sha256"`
 	// Origin is set only by the host's controlled read_image transaction. It

@@ -97,7 +97,7 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 	}
 	runner.Hub = hub
 	runtime.Hooks = func(_ context.Context, execution agentcore.ExecutionContext) (agentcore.EngineHooks, error) {
-		return &agentcore.PersistentHooks{Execution: execution, Prepare: service.PrepareStep, Models: agentModelFactory{modelsService}, Store: service, Tools: runner, Hub: hub, Estimate: estimateAgentRequest}, nil
+		return &agentcore.PersistentHooks{Execution: execution, Prepare: service.PrepareStep, RepairImages: service.RepairImageFiles, Models: agentModelFactory{modelsService}, Store: service, Tools: runner, Hub: hub, Estimate: estimateAgentRequest}, nil
 	}
 	service.Committed = func(ctx context.Context, receipt agentcore.CommitReceipt) {
 		hub.Committed(ctx, receipt)
@@ -133,7 +133,7 @@ func estimateAgentRequest(request modelcore.Request) (agentcore.Budget, error) {
 	input := uint64(len(b))
 	for _, message := range request.Messages {
 		for _, image := range message.Images {
-			input += uint64(len(image.DataBase64))
+			input += modelcore.EstimateImageTokens(image)
 		}
 	}
 	var output uint64

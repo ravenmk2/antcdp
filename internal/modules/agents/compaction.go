@@ -170,8 +170,16 @@ func (s *Service) CompactSession(ctx context.Context, raw string, id uint64, key
 			if v.ModelLockedAt == nil {
 				return httpx.E(409, "COMPACTION_NOT_NEEDED", "会话尚无可压缩上下文")
 			}
+			from := v.LastSeq + 1
 			manifest, facts, e := loadSurface(st, v)
 			if e != nil {
+				return e
+			}
+			rootSession := v.ID
+			if v.RootSessionID != nil {
+				rootSession = *v.RootSessionID
+			}
+			if e = budgetImages(st, v, rootSession, nil, &manifest, facts); e != nil {
 				return e
 			}
 			if _, e = agentcore.BuildSurface(manifest, facts); e != nil {
@@ -183,7 +191,6 @@ func (s *Service) CompactSession(ctx context.Context, raw string, id uint64, key
 			}
 			now := time.Now().UTC().Truncate(time.Millisecond)
 			deadline := now.Add(180 * time.Second)
-			from := v.LastSeq + 1
 			row, e := s.newCompaction(st, v, agentcore.CompactionRequest{SessionID: agentcore.ID(id), Source: manifest, First: first, Last: last, Deadline: deadline}, now)
 			if e != nil {
 				return e

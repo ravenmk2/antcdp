@@ -15,7 +15,7 @@ func (t *agentsTx) PendingCompactions(epoch string, now time.Time, limit int) ([
 }
 func (t *agentsTx) CompactionModelCall(id uint64) (*a.ModelCallRow, error) {
 	v := &a.ModelCallRow{}
-	e := t.tx.GetContext(t.ctx, v, "SELECT "+agentModelCallColumns+" FROM agent_model_call WHERE compaction_id=? AND purpose='compaction' ORDER BY id LIMIT 1", id)
+	e := t.tx.GetContext(t.ctx, v, "SELECT "+agentModelCallColumns+" FROM agent_model_call WHERE compaction_id=? AND purpose='compaction' ORDER BY id DESC LIMIT 1", id)
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -54,7 +54,7 @@ func (t *agentsTx) FileByHash(session uint64, hash []byte) (*a.FileRow, error) {
 
 func (t *agentsTx) SurfaceEvents(session, after, through uint64, limit int) ([]a.EventRow, error) {
 	rows := []a.EventRow{}
-	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentEventColumns+" FROM agent_event WHERE session_id=? AND seq>? AND seq<=? AND event_type IN ('input/message','assistant/message','assistant/attempt','tool/result','context/runtime','context/skills','context/authorization','context/tool_reconciliation','compaction/summary') ORDER BY seq LIMIT ?", session, after, through, limit)
+	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentEventColumns+" FROM agent_event WHERE session_id=? AND seq>? AND seq<=? AND event_type IN ('input/message','assistant/message','assistant/attempt','tool/result','context/runtime','context/skills','context/authorization','context/tool_reconciliation','compaction/summary','image/offload') ORDER BY seq LIMIT ?", session, after, through, limit)
 	return rows, e
 }
 func (t *agentsTx) PendingReconciliationEvents(session, through uint64, limit int) ([]a.EventRow, error) {

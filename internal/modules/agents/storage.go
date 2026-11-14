@@ -385,6 +385,11 @@ type ResourceReferenceRow struct {
 	ReleaseEvidence json.RawMessage `db:"release_evidence"`
 }
 type StateRepository interface {
+	EnsureImageCache(string, []byte, time.Time) error
+	ImageCache(string, []byte, bool) (*ImageCacheRow, error)
+	SaveImageCache(string, *ImageCacheRow) error
+	ImageCacheCandidates(string, time.Time, int) ([]ImageCacheRow, error)
+	DeleteImageCache(string, []byte, string) error
 	PendingCompactions(string, time.Time, int) ([]CompactionRow, error)
 	CompactionModelCall(uint64) (*ModelCallRow, error)
 	FileCleanupCandidates(time.Time, int) ([]FileRow, error)

@@ -9,6 +9,8 @@ import (
 
 // These projections and index signatures are the deployed migration contract.
 var agentSchemaColumns = map[string]string{
+	"agent_image_variant":       imageCacheColumns,
+	"agent_model_file":          imageCacheColumns,
 	"agent_session_projection":  "session_id,projection_version,through_seq,payload,payload_sha256,updated_at",
 	"agent_skill_binding":       skillBindingColumns,
 	"agent_run_context":         "root_run_id,agent_id,executor_user_id,agent_config_version,schema_version,project_context_id,cloud_computer_id,cwd,system_prompt,model_snapshot,runtime_policy,builtin_tools,mcp_bindings,resource_grants,skill_manifest,mcp_surface,mcp_prepared_at,created_at",
@@ -49,6 +51,12 @@ type agentSchemaIndex struct {
 }
 
 var agentSchemaIndexes = []agentSchemaIndex{
+	{"agent_image_variant", "PRIMARY", 0, "id"},
+	{"agent_image_variant", "uq_agent_image_variant_key", 0, "cache_key"},
+	{"agent_image_variant", "idx_agent_image_variant_expiry", 1, "last_used_at,id"},
+	{"agent_model_file", "PRIMARY", 0, "id"},
+	{"agent_model_file", "uq_agent_model_file_key", 0, "cache_key"},
+	{"agent_model_file", "idx_agent_model_file_expiry", 1, "last_used_at,id"},
 	{"agent_session", "idx_agent_session_title_pending", 1, "title_generation_status,id"},
 	{"agent_session_projection", "PRIMARY", 0, "session_id"},
 	{"agent_skill_binding", "PRIMARY", 0, "id"},

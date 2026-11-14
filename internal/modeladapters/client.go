@@ -38,9 +38,10 @@ type Client struct {
 
 // RemoteError deliberately excludes URL, headers, body and provider exception text.
 type RemoteError struct {
-	Status int
-	Kind   string
-	Delay  time.Duration
+	Status    int
+	Kind      string
+	Delay     time.Duration
+	ImageFile bool
 }
 
 func (e *RemoteError) RetryDelay() time.Duration { return e.Delay }
@@ -67,6 +68,9 @@ func (e *RemoteError) Error() string {
 }
 
 func (e *RemoteError) Unwrap() error {
+	if e.ImageFile {
+		return modelcore.ErrImageFileRejected
+	}
 	switch {
 	case e.Status == http.StatusTooManyRequests:
 		return modelcore.ErrRateLimited
@@ -171,6 +175,17 @@ func (c *Client) Generate(ctx context.Context, input modelcore.Request, emit mod
 	if input.Protocol != c.config.Protocol {
 		return modelcore.Response{}, modelcore.ErrUnsupported
 	}
+	usesFiles := false
+	for _, message := range input.Messages {
+		for _, part := range message.Images {
+			if part.FileID != "" {
+				if part.FileScope != c.ImageFileScope() || part.FileStyle != c.ImageFileStyle() {
+					return modelcore.Response{}, modelcore.ErrImageFileRejected
+				}
+				usesFiles = true
+			}
+		}
+	}
 	body, prefix, err := encodeBoundRequest(c.config.Provider, input)
 	if err != nil {
 		return modelcore.Response{}, err
@@ -184,6 +199,9 @@ func (c *Client) Generate(ctx context.Context, input modelcore.Request, emit mod
 	if c.config.Protocol == modelcore.AnthropicMessages {
 		req.Header.Set("x-api-key", c.config.APIKey)
 		req.Header.Set("anthropic-version", "2023-06-01")
+		if usesFiles && c.config.Provider == modelcore.DeepSeek {
+			req.Header.Set("anthropic-beta", "files-api-2025-04-14")
+		}
 	} else if c.config.APIKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.config.APIKey)
 	}
@@ -196,7 +214,7 @@ func (c *Client) Generate(ctx context.Context, input modelcore.Request, emit mod
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return modelcore.Response{}, &RemoteError{Status: resp.StatusCode, Delay: retryAfter(resp.Header.Get("Retry-After"), time.Now())}
+		return modelcore.Response{}, &RemoteError{Status: resp.StatusCode, Delay: retryAfter(resp.Header.Get("Retry-After"), time.Now()), ImageFile: usesFiles && rejectedImageFile(resp, input)}
 	}
 	if !strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
 		return modelcore.Response{}, modelcore.ErrUnsupported

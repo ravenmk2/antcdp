@@ -145,6 +145,7 @@ func (m *executionModel) Generate(ctx context.Context, _ []*schema.Message, _ ..
 	// The prepared request is the source of truth. Framework message conversion
 	// and dynamic middleware must never replace native history or reorder tools.
 	step := m.prepared
+	imageRepaired := false
 	for attempt := 1; attempt <= m.maxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -190,6 +191,26 @@ func (m *executionModel) Generate(ctx context.Context, _ []*schema.Message, _ ..
 			return nil, commit.Failure
 		}
 		if callErr != nil {
+			if errors.Is(callErr, modelcore.ErrImageFileRejected) && !streamStarted && !imageRepaired && int(step.Step) < m.maxSteps {
+				if repair, ok := m.hooks.(interface {
+					RepairImageFiles(context.Context, agentcore.PreparedStep) (bool, error)
+				}); ok {
+					repaired, err := repair.RepairImageFiles(ctx, step)
+					if err != nil {
+						return nil, err
+					}
+					if repaired {
+						step, err = m.hooks.PrepareStep(ctx, m.ref, step.Step+1)
+						if err != nil {
+							return nil, err
+						}
+						m.prepared = step
+						imageRepaired = true
+						attempt = 0
+						continue
+					}
+				}
+			}
 			if !commit.Retry || attempt == m.maxAttempts {
 				return nil, callErr
 			}

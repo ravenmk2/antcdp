@@ -26,6 +26,12 @@ type SurfaceManifest struct {
 	SchemaVersion int            `json:"schema_version"`
 	Revision      Version        `json:"revision"`
 	Entries       []SurfaceEntry `json:"entries"`
+	ImageOffloads []ImageOffload `json:"image_offloads,omitempty"`
+}
+type ImageOffload struct {
+	Seq    Seq    `json:"seq"`
+	Index  int    `json:"index"`
+	SHA256 string `json:"sha256"`
 }
 type HistoryFact struct {
 	Seq           Seq
@@ -84,6 +90,13 @@ func BuildSurface(manifest SurfaceManifest, facts map[Seq]HistoryFact) ([]modelc
 				return nil, reject("SURFACE_INVALID")
 			}
 			selected[seq] = true
+			if f.Message != nil {
+				message, err := ProjectImages(*f.Message, seq, manifest.ImageOffloads)
+				if err != nil {
+					return nil, err
+				}
+				f.Message = &message
+			}
 			group = append(group, f)
 		}
 		switch entry.Kind {
@@ -232,6 +245,19 @@ func ApplyReplacement(manifest SurfaceManifest, r Replacement) (SurfaceManifest,
 	items = append(items, SurfaceEntry{Kind: "summary", Sequences: []Seq{r.SummarySeq}})
 	items = append(items, manifest.Entries[r.Last+1:]...)
 	manifest.Entries = items
+	visible := map[Seq]bool{}
+	for _, entry := range items {
+		for _, seq := range entry.Sequences {
+			visible[seq] = true
+		}
+	}
+	offloads := []ImageOffload{}
+	for _, target := range manifest.ImageOffloads {
+		if visible[target.Seq] {
+			offloads = append(offloads, target)
+		}
+	}
+	manifest.ImageOffloads = offloads
 	manifest.Revision++
 	return manifest, nil
 }

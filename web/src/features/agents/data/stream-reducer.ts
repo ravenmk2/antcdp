@@ -34,6 +34,7 @@ export const eventTypes: readonly EventType[] = [
   "assistant/message",
   "assistant/attempt",
   "model/retry-started",
+  "image/offload",
   "tool/call",
   "tool/result",
   "tool/reconciled",

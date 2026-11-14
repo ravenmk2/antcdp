@@ -780,7 +780,7 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 					if file.Purpose != "tool_image" || !isImage(file.MediaType) || json.Unmarshal(file.MediaProperties, &dimensions) != nil || dimensions.Width < 1 || dimensions.Height < 1 {
 						return integrity()
 					}
-					images = []modelcore.ImagePart{{MIME: file.MediaType, ContentSHA256: hexHash(file.SHA256), Origin: "tool_image"}}
+					images = []modelcore.ImagePart{sourceImagePart(file, file.SHA256, "tool_image")}
 					imageMetadata = map[string]any{"path": "/data/" + *item.SourcePath, "media_type": file.MediaType, "width": dimensions.Width, "height": dimensions.Height, "size_bytes": strconv.FormatUint(*file.SizeBytes, 10), "sha256": hexHash(file.SHA256)}
 				} else {
 					source, _ := json.Marshal(ArtifactSource{ComputerID: op.ComputerID, BindingID: op.BindingID, BackendGeneration: op.BackendGeneration, RuntimeGeneration: op.RuntimeGeneration, StorageGeneration: op.StorageGeneration, VolumeID: op.VolumeID, Path: "/data/" + *item.SourcePath})

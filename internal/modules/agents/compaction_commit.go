@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -67,6 +69,23 @@ func (s *Service) compactionExecution(tx identity.Tx, r Repository, st StateRepo
 }
 
 func (s *Service) Summarize(ctx context.Context, record agentcore.CompactionRecord, request modelcore.Request) (modelcore.Response, error) {
+	// File repair is a second persisted model call, never a hidden replay of a
+	// frozen attempt. Its budget and deadline remain those of this compaction.
+	for attempt := uint64(1); attempt <= 2; attempt++ {
+		copyRequest := request
+		copyRequest.Messages = slices.Clone(request.Messages)
+		for i := range copyRequest.Messages {
+			copyRequest.Messages[i].Images = slices.Clone(request.Messages[i].Images)
+		}
+		response, err := s.summarizeImageAttempt(ctx, record, copyRequest, attempt)
+		if !errors.Is(err, modelcore.ErrImageFileRejected) || attempt == 2 || ctx.Err() != nil {
+			return response, err
+		}
+	}
+	return modelcore.Response{}, integrity()
+}
+
+func (s *Service) summarizeImageAttempt(ctx context.Context, record agentcore.CompactionRecord, request modelcore.Request, attempt uint64) (modelcore.Response, error) {
 	var response modelcore.Response
 	if s.RuntimeModels == nil || s.Tokens == nil {
 		return response, unavailable()
@@ -76,6 +95,19 @@ func (s *Service) Summarize(ctx context.Context, record agentcore.CompactionReco
 	var epoch string
 	var fence uint64
 	e := s.background(ctx, func(tx identity.Tx, r Repository, st StateRepository) error {
+		x, _, err := s.compactionExecution(tx, r, st, record)
+		if err == nil {
+			frozen = x.Execution.Model
+		}
+		return err
+	})
+	if e != nil {
+		return response, e
+	}
+	if e = s.prepareImages(ctx, frozen, record.Request.Ref, &record, &request); e != nil {
+		return response, e
+	}
+	e = s.background(ctx, func(tx identity.Tx, r Repository, st StateRepository) error {
 		x, row, e := s.compactionExecution(tx, r, st, record)
 		if e != nil {
 			return e
@@ -84,7 +116,7 @@ func (s *Service) Summarize(ctx context.Context, record agentcore.CompactionReco
 		if e != nil {
 			return e
 		}
-		if existing != nil {
+		if attempt == 1 && existing != nil || attempt == 2 && (existing == nil || existing.AttemptNo != 1 || existing.Status != "failed" || existing.ErrorCode == nil || *existing.ErrorCode != "MODEL_IMAGE_FILE_REJECTED") {
 			return httpx.E(409, "ATTEMPT_ALREADY_STARTED", "压缩模型请求已登记，不能自动重发")
 		}
 		frozen = x.Execution.Model
@@ -119,7 +151,7 @@ func (s *Service) Summarize(ctx context.Context, record agentcore.CompactionReco
 		if e != nil {
 			return e
 		}
-		call := &ModelCallRow{SessionID: row.SessionID, RunID: row.RunID, CompactionID: &row.ID, Purpose: "compaction", Status: "running", ProviderID: uint64(frozen.ProviderID), ModelDefinitionID: uint64(frozen.DefinitionID), Protocol: string(frozen.Protocol), RequestedModelID: frozen.RemoteModelID, Thinking: thinking, RequestConfig: config, SurfaceManifest: manifest, RequestHash: digest, CapabilitySnapshot: caps, ExecutorEpoch: row.ExecutorEpoch, FenceVersion: row.FenceVersion, UsageCompleteness: "unknown", CreatedAt: now, StartedAt: &now, DeadlineAt: row.DeadlineAt}
+		call := &ModelCallRow{SessionID: row.SessionID, RunID: row.RunID, CompactionID: &row.ID, Purpose: "compaction", AttemptNo: attempt, Status: "running", ProviderID: uint64(frozen.ProviderID), ModelDefinitionID: uint64(frozen.DefinitionID), Protocol: string(frozen.Protocol), RequestedModelID: frozen.RemoteModelID, Thinking: thinking, RequestConfig: config, SurfaceManifest: manifest, RequestHash: digest, CapabilitySnapshot: caps, ExecutorEpoch: row.ExecutorEpoch, FenceVersion: row.FenceVersion, UsageCompleteness: "unknown", CreatedAt: now, StartedAt: &now, DeadlineAt: row.DeadlineAt}
 		if x.Root != nil {
 			call.RootRunID = &x.Root.ID
 			l, e := ledger(x.Root)
@@ -153,19 +185,6 @@ func (s *Service) Summarize(ctx context.Context, record agentcore.CompactionReco
 	if e != nil {
 		return response, e
 	}
-	for i := range request.Messages {
-		for j := range request.Messages[i].Images {
-			part := &request.Messages[i].Images[j]
-			if record.Request.Ref != nil {
-				part.DataBase64, e = s.hydrateImage(ctx, *record.Request.Ref, *part)
-			} else {
-				part.DataBase64, e = s.hydrateCompactionImage(ctx, record, *part)
-			}
-			if e != nil {
-				return response, e
-			}
-		}
-	}
 	client, e := s.RuntimeModels.Open(ctx, frozen)
 	if e == nil {
 		response, e = client.Generate(ctx, request, nil)
@@ -190,6 +209,12 @@ func (s *Service) Summarize(ctx context.Context, record agentcore.CompactionReco
 		if e != nil {
 			call.Status = "failed"
 			reason := "COMPACTION_MODEL_FAILED"
+			if errors.Is(e, modelcore.ErrImageFileRejected) {
+				reason = "MODEL_IMAGE_FILE_REJECTED"
+				if err = invalidateImageFiles(st, request); err != nil {
+					return err
+				}
+			}
 			call.ErrorCode = &reason
 		}
 		if response.ReturnedModel != "" {
@@ -444,35 +469,3 @@ func (s *Service) Fail(ctx context.Context, failure agentcore.CompactionFailure)
 
 var _ agentcore.CompactionStore = (*Service)(nil)
 var _ agentcore.SummaryCaller = (*Service)(nil)
-
-func (s *Service) hydrateCompactionImage(ctx context.Context, record agentcore.CompactionRecord, part modelcore.ImagePart) (string, error) {
-	if s.Files == nil {
-		return "", unavailable()
-	}
-	hash, e := hex.DecodeString(part.ContentSHA256)
-	if e != nil || len(hash) != 32 {
-		return "", integrity()
-	}
-	var file *FileRow
-	var lease *ResourceReferenceRow
-	e = s.background(ctx, func(tx identity.Tx, r Repository, st StateRepository) error {
-		x, _, e := s.compactionExecution(tx, r, st, record)
-		if e != nil {
-			return e
-		}
-		file, e = st.FileByHash(x.RootSession.ID, hash)
-		if e != nil {
-			return e
-		}
-		if file == nil || file.MediaType != part.MIME || !isImage(file.MediaType) || file.SizeBytes == nil || *file.SizeBytes > modelcore.MaxImageBytes {
-			return httpx.E(409, "FILE_UNAVAILABLE", "图像文件不可用")
-		}
-		now := time.Now().UTC()
-		lease = &ResourceReferenceRow{HolderKind: "download", HolderID: NewStorageKey(), ResourceKind: "file", ResourceID: file.ID, State: "active", ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, UpdatedAt: now}
-		return st.InsertResourceReference(lease)
-	})
-	if e != nil {
-		return "", e
-	}
-	return s.readImageBytes(ctx, file, lease.ID)
-}

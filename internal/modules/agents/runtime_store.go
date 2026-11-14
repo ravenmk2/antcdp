@@ -263,7 +263,7 @@ func (s *Service) ClaimRoot(ctx context.Context, request agentcore.ClaimRequest)
 				return integrity()
 			}
 			if isImage(file.MediaType) {
-				message.Images = append(message.Images, modelcore.ImagePart{MIME: file.MediaType, ContentSHA256: hexHash(ref.SourceSHA256)})
+				message.Images = append(message.Images, sourceImagePart(file, ref.SourceSHA256, ""))
 			}
 		}
 		seq, e := appendEvent(st, v, &row.ID, "input/message", "input-message:"+strconv.FormatUint(input.ID, 10), inputMessageData(view), &StoredEvent{Message: &message}, now)

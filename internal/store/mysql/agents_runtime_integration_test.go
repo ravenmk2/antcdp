@@ -50,6 +50,7 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 	t.Run("model_retry", func(t *testing.T) { runtimeModelRetry(t, f, agent.ID) })
 	t.Run("reconciliation_context", func(t *testing.T) { runtimeReconciliationContext(t, f, agent.ID) })
 	t.Run("thinking_prefix", func(t *testing.T) { runtimeThinkingPrefix(t, f) })
+	t.Run("image_files", func(t *testing.T) { runtimeImageFiles(t, f) })
 	t.Run("tool_and_question_lifecycle", func(t *testing.T) { runtimeToolsAndQuestions(t, f, agent.ID) })
 	t.Run("approval_rechecks_next_turn_permission", func(t *testing.T) { runtimeApproval(t, f, agent.ID) })
 	t.Run("child_atomic_result_and_recovery", func(t *testing.T) { runtimeChildren(t, f, agent.ID) })

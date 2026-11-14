@@ -25,6 +25,18 @@ type PersistentHooks struct {
 	Hub            *Hub
 	AttemptTimeout time.Duration
 	Estimate       func(modelcore.Request) (Budget, error)
+	RepairImages   func(context.Context, PreparedStep) error
+}
+
+func (h *PersistentHooks) RepairImageFiles(ctx context.Context, step PreparedStep) (bool, error) {
+	if h.RepairImages == nil {
+		return false, nil
+	}
+	if step.Ref != h.Execution.Ref {
+		return false, invalid("image_repair")
+	}
+	err := h.RepairImages(ctx, step)
+	return err == nil, err
 }
 
 func (h *PersistentHooks) PrepareStep(ctx context.Context, ref ExecutionRef, step uint32) (PreparedStep, error) {

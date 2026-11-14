@@ -15,8 +15,8 @@ type SummaryCaller interface {
 	Summarize(context.Context, CompactionRecord, modelcore.Request) (modelcore.Response, error)
 }
 
-// Compactor invokes one visible summary request through a host budget/attempt
-// port. The store revalidates source revision/hash under the Session lock and
+// Compactor invokes a summary through a host budget/attempt port. The host
+// may perform a bounded file-reference repair as a separately recorded call. The store revalidates source revision/hash under the Session lock and
 // assigns the new summary's event sequence atomically with its replacement.
 type Compactor struct {
 	Store  CompactionStore

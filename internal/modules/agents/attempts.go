@@ -19,7 +19,13 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
+type attemptImage struct {
+	Message int                   `json:"message"`
+	Parts   []modelcore.ImagePart `json:"parts"`
+}
+
 type attemptSnapshot struct {
+	Images        []attemptImage             `json:"images,omitempty"`
 	SchemaVersion int                        `json:"schema_version"`
 	Model         string                     `json:"model"`
 	Protocol      modelcore.Protocol         `json:"protocol"`
@@ -48,6 +54,11 @@ func snapshotRequest(request modelcore.Request, model agentcore.LockedModel, too
 		config.System = append(config.System, message)
 	}
 	config.Suffix = append(config.Suffix, request.Messages[len(request.Messages)-suffix:]...)
+	for i, message := range request.Messages {
+		if len(message.Images) > 0 {
+			config.Images = append(config.Images, attemptImage{Message: i, Parts: slices.Clone(message.Images)})
+		}
+	}
 	var e error
 	config.SystemHash, e = agentcore.ContentHash(config.System)
 	return config, e
@@ -231,6 +242,9 @@ func modelOutcomeReason(out agentcore.AttemptOutcome) string {
 	}
 	if errors.Is(out.Err, modelcore.ErrAuthenticationFailed) {
 		return "MODEL_AUTHENTICATION_FAILED"
+	}
+	if errors.Is(out.Err, modelcore.ErrImageFileRejected) {
+		return "MODEL_IMAGE_FILE_REJECTED"
 	}
 	if errors.Is(out.Err, modelcore.ErrRequestRejected) {
 		return "MODEL_REQUEST_REJECTED"

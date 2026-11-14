@@ -234,6 +234,7 @@ type Service struct {
 	ManagementOperation func(context.Context, string, uint64) (*Result, error)
 	fileReleaseMu       sync.Mutex
 	pendingFileReleases map[uint64]bool
+	imageMemory         imageMemory
 }
 type Repository interface {
 	Definitions(Query) ([]Definition, int, error)

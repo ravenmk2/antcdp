@@ -283,3 +283,21 @@ func TestThinkingPrefixClientPersistsActualSentPrefix(t *testing.T) {
 		})
 	}
 }
+
+func TestRemoteImagePrefixStableUntilReferenceChanges(t *testing.T) {
+	request := prefixRequest()
+	request.Messages[1].Images = []modelcore.ImagePart{{MIME: "image/png", ContentSHA256: strings.Repeat("a", 64), FileID: "file-stable", FileScope: strings.Repeat("b", 64), FileStyle: "messages"}}
+	reply := prefixReply(t, request, "image", false)
+	request.Messages = append(request.Messages, reply)
+	raw, before := boundPrefix(t, request)
+	assertThinking(t, raw, "image", true)
+	request.Messages[1].Images[0].Variant = "metadata-only"
+	raw, after := boundPrefix(t, request)
+	if before != after {
+		t.Fatal("local image metadata changed wire prefix")
+	}
+	assertThinking(t, raw, "image", true)
+	request.Messages[1].Images[0].FileID = "file-replaced"
+	raw, _ = boundPrefix(t, request)
+	assertThinking(t, raw, "image", false)
+}

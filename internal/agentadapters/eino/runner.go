@@ -219,7 +219,7 @@ func fromFramework(message *schema.Message) (modelcore.Message, error) {
 			original.Images = append([]modelcore.ImagePart(nil), typed...)
 		}
 		for _, image := range original.Images {
-			if image.DataBase64 == "" {
+			if image.DataBase64 == "" && image.FileID == "" {
 				return modelcore.Message{}, modelcore.ErrInvalidRequest
 			}
 		}

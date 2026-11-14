@@ -135,6 +135,7 @@ export interface EventPayloads {
       stage: "request" | "stream";
     } | null;
   };
+  "image/offload": { count: number };
   "model/retry-started": {
     attempt_id: string;
     step_no: number;

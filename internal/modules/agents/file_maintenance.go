@@ -134,5 +134,5 @@ func (s *Service) ProcessFileMaintenance(ctx context.Context, limit int) error {
 			return e
 		}
 	}
-	return nil
+	return s.ProcessImageCacheMaintenance(ctx, limit)
 }

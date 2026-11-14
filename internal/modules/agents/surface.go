@@ -31,6 +31,7 @@ func loadSurface(st StateRepository, v *SessionRow) (agentcore.SurfaceManifest, 
 				continue
 			}
 			seq := agentcore.Seq(row.Seq)
+			m.ImageOffloads = append(m.ImageOffloads, f.ImageOffloads...)
 			fact := agentcore.HistoryFact{Seq: seq, Kind: row.EventType, SchemaVersion: 1, Message: f.Message, Context: f.Context, ToolCallID: f.ToolCallID, Ordinal: f.Ordinal, ModelCallID: f.ModelCallID, Interrupted: f.Interrupted, PartialReason: f.PartialReason}
 			if f.Message == nil && f.Context == nil {
 				continue

@@ -24,6 +24,7 @@ type StoredEvent struct {
 	Interrupted   bool                       `json:"interrupted,omitempty"`
 	PartialReason string                     `json:"partial_reason,omitempty"`
 	Surface       *agentcore.SurfaceManifest `json:"surface,omitempty"`
+	ImageOffloads []agentcore.ImageOffload   `json:"image_offloads,omitempty"`
 	// Retry failures are observable without changing model history. Retained
 	// interrupted or generation-limited text is explicitly admitted instead.
 	ExcludeFromContext bool        `json:"exclude_from_context,omitempty"`
@@ -66,7 +67,7 @@ func appendEvent(st StateRepository, session *SessionRow, runID *uint64, kind, k
 	session.LastSeq = seq
 	session.ProjectionSeq = seq
 	session.LastActivityAt = now
-	if !stored.ExcludeFromContext && (stored.Message != nil || stored.Context != nil) {
+	if !stored.ExcludeFromContext && (stored.Message != nil || stored.Context != nil || len(stored.ImageOffloads) > 0) {
 		session.SurfaceRevision++
 	}
 	return seq, nil

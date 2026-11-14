@@ -218,7 +218,7 @@ func encodeMessage(protocol modelcore.Protocol, message modelcore.Message) (json
 				blocks = append(blocks, map[string]string{"type": "text", "text": message.Content})
 			}
 			for _, image := range message.Images {
-				blocks = append(blocks, map[string]any{"type": "image_url", "image_url": map[string]string{"url": "data:" + image.MIME + ";base64," + image.DataBase64}})
+				blocks = append(blocks, imageContent(protocol, image))
 			}
 			msg["content"] = blocks
 		}
@@ -254,7 +254,7 @@ func encodeMessage(protocol modelcore.Protocol, message modelcore.Message) (json
 			if len(message.Images) > 0 {
 				content := []any{map[string]string{"type": "text", "text": message.Content}}
 				for _, image := range message.Images {
-					content = append(content, map[string]any{"type": "image", "source": map[string]string{"type": "base64", "media_type": image.MIME, "data": image.DataBase64}})
+					content = append(content, imageContent(protocol, image))
 				}
 				resultContent = content
 			}
@@ -267,7 +267,7 @@ func encodeMessage(protocol modelcore.Protocol, message modelcore.Message) (json
 				blocks = append(blocks, map[string]string{"type": "text", "text": message.Content})
 			}
 			for _, image := range message.Images {
-				blocks = append(blocks, map[string]any{"type": "image", "source": map[string]string{"type": "base64", "media_type": image.MIME, "data": image.DataBase64}})
+				blocks = append(blocks, imageContent(protocol, image))
 			}
 			for _, call := range message.ToolCalls {
 				if err := validateCall(call); err != nil {
@@ -314,6 +314,18 @@ func validateImage(image modelcore.ImagePart) error {
 	if image.MIME != "image/png" && image.MIME != "image/jpeg" && image.MIME != "image/webp" {
 		return modelcore.ErrInvalidRequest
 	}
+	if hash, err := hex.DecodeString(image.ContentSHA256); err != nil || len(hash) != 32 {
+		return modelcore.ErrInvalidRequest
+	}
+	if image.FileID != "" {
+		if !imageFileID.MatchString(image.FileID) || len(image.FileScope) != 64 || len(image.ContentSHA256) != 64 || image.DataBase64 != "" || (image.FileStyle != "deepseek" && image.FileStyle != "messages") {
+			return modelcore.ErrInvalidRequest
+		}
+		return nil
+	}
+	if image.MIME != "image/png" && image.MIME != "image/jpeg" && image.MIME != "image/webp" {
+		return modelcore.ErrInvalidRequest
+	}
 	if len(image.DataBase64) == 0 || len(image.DataBase64) > base64.StdEncoding.EncodedLen(modelcore.MaxImageBytes) || len(image.ContentSHA256) != 64 {
 		return modelcore.ErrInvalidRequest
 	}
@@ -324,6 +336,19 @@ func validateImage(image modelcore.ImagePart) error {
 		return modelcore.ErrInvalidRequest
 	}
 	return nil
+}
+
+func imageContent(protocol modelcore.Protocol, image modelcore.ImagePart) any {
+	if image.FileID != "" {
+		if protocol == modelcore.ChatCompletions {
+			return map[string]string{"type": "file", "file_id": image.FileID}
+		}
+		return map[string]any{"type": "image", "source": map[string]string{"type": "file", "file_id": image.FileID}}
+	}
+	if protocol == modelcore.ChatCompletions {
+		return map[string]any{"type": "image_url", "image_url": map[string]string{"url": "data:" + image.MIME + ";base64," + image.DataBase64}}
+	}
+	return map[string]any{"type": "image", "source": map[string]string{"type": "base64", "media_type": image.MIME, "data": image.DataBase64}}
 }
 
 func nativeEnvelopeKey(key string) bool {
