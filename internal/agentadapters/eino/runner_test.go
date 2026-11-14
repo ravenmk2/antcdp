@@ -48,18 +48,22 @@ func TestADKLoopCommitsBeforeDispatchAndPreservesNativeHistory(t *testing.T) {
 				native = json.RawMessage(`{"role":"assistant","content":[{"type":"thinking","thinking":"keep exactly","signature":"opaque"},{"type":"tool_use","id":"call-1","name":"echo","input":{"value":"OK"}}]}`)
 			}
 			var order []string
+			prefix := ""
+			if protocol == modelcore.AnthropicMessages {
+				prefix = "test-persisted-prefix"
+			}
 			client := &scriptedClient{invoke: func(_ context.Context, step int, request modelcore.Request, emit modelcore.Emit) (modelcore.Response, error) {
 				order = append(order, "model")
 				if step == 1 {
 					if err := emit(modelcore.Delta{Kind: "reasoning", BlockIndex: 0, Text: "keep exactly"}); err != nil {
 						return modelcore.Response{}, err
 					}
-					return modelcore.Response{Message: modelcore.Message{Role: "assistant", Reasoning: "keep exactly", ToolCalls: []modelcore.ToolCall{{ID: "call-1", Name: "echo", Arguments: `{"value":"OK"}`}}, NativeProtocol: protocol, Native: native}}, nil
+					return modelcore.Response{Message: modelcore.Message{Role: "assistant", Reasoning: "keep exactly", ToolCalls: []modelcore.ToolCall{{ID: "call-1", Name: "echo", Arguments: `{"value":"OK"}`}}, NativeProtocol: protocol, Native: native, PrefixDigest: prefix}}, nil
 				}
 				if len(request.Messages) != 3 {
 					t.Fatalf("history length %d", len(request.Messages))
 				}
-				if !reflect.DeepEqual(request.Messages[1].Native, native) || request.Messages[1].NativeProtocol != protocol {
+				if !reflect.DeepEqual(request.Messages[1].Native, native) || request.Messages[1].NativeProtocol != protocol || request.Messages[1].PrefixDigest != prefix {
 					t.Fatalf("native history was rewritten: %s", request.Messages[1].Native)
 				}
 				if request.Messages[2].Role != "tool" || request.Messages[2].ToolCallID != "call-1" || request.Messages[2].Content != "OK" {

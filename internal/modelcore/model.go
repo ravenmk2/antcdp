@@ -79,7 +79,10 @@ type Message struct {
 	ToolCallID     string          `json:"tool_call_id,omitempty"`
 	NativeProtocol Protocol        `json:"native_protocol,omitempty"`
 	Native         json.RawMessage `json:"native,omitempty"`
-	Images         []ImagePart     `json:"images,omitempty"`
+	// PrefixDigest binds Anthropic signed thinking to its sent request prefix.
+	// It is local replay metadata, never a provider message field.
+	PrefixDigest string      `json:"prefix_digest,omitempty"`
+	Images       []ImagePart `json:"images,omitempty"`
 }
 
 // ImagePart is hydrated by the authorized host from a verified platform file.

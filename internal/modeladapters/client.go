@@ -171,7 +171,7 @@ func (c *Client) Generate(ctx context.Context, input modelcore.Request, emit mod
 	if input.Protocol != c.config.Protocol {
 		return modelcore.Response{}, modelcore.ErrUnsupported
 	}
-	body, err := encodeRequest(c.config.Provider, input)
+	body, prefix, err := encodeBoundRequest(c.config.Provider, input)
 	if err != nil {
 		return modelcore.Response{}, err
 	}
@@ -207,7 +207,11 @@ func (c *Client) Generate(ctx context.Context, input modelcore.Request, emit mod
 	if input.Protocol == modelcore.ChatCompletions {
 		return decodeChat(ctx, resp.Body, emit)
 	}
-	return decodeMessages(ctx, resp.Body, emit)
+	response, err := decodeMessages(ctx, resp.Body, emit)
+	if err == nil {
+		response.Message.PrefixDigest = prefix
+	}
+	return response, err
 }
 
 type DiscoveredModel struct {

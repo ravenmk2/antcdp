@@ -13,6 +13,11 @@ import (
 )
 
 func encodeRequest(provider modelcore.ProviderType, input modelcore.Request) ([]byte, error) {
+	body, _, err := encodeBoundRequest(provider, input)
+	return body, err
+}
+
+func encodeUnboundRequest(provider modelcore.ProviderType, input modelcore.Request) ([]byte, error) {
 	if input.Model == "" || len(input.Model) > 255 || len(input.Messages) == 0 {
 		return nil, modelcore.ErrInvalidRequest
 	}

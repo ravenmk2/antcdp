@@ -49,6 +49,7 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 	t.Run("turn_lifecycle", func(t *testing.T) { runtimeTurnLifecycle(t, f, agent.ID) })
 	t.Run("model_retry", func(t *testing.T) { runtimeModelRetry(t, f, agent.ID) })
 	t.Run("reconciliation_context", func(t *testing.T) { runtimeReconciliationContext(t, f, agent.ID) })
+	t.Run("thinking_prefix", func(t *testing.T) { runtimeThinkingPrefix(t, f) })
 	t.Run("tool_and_question_lifecycle", func(t *testing.T) { runtimeToolsAndQuestions(t, f, agent.ID) })
 	t.Run("approval_rechecks_next_turn_permission", func(t *testing.T) { runtimeApproval(t, f, agent.ID) })
 	t.Run("child_atomic_result_and_recovery", func(t *testing.T) { runtimeChildren(t, f, agent.ID) })
@@ -93,6 +94,11 @@ func runtimeTestAgent(t *testing.T, f *agentIntegrationFixture) *a.Definition {
 	if e := f.Store.db.GetContext(f.Context, &modelID, "SELECT id FROM model_definition WHERE model_id='agent-test' LIMIT 1"); e != nil {
 		t.Fatal(e)
 	}
+	return runtimeTestAgentModel(t, f, modelID)
+}
+
+func runtimeTestAgentModel(t *testing.T, f *agentIntegrationFixture, modelID uint64) *a.Definition {
+	t.Helper()
 	created, e := f.Agents.CreateDefinition(f.Context, f.AdminToken, cryptox.ID(), a.DefinitionCreate{Name: "运行事务测试", Mode: "interactive", ScopeKind: "platform"})
 	if e != nil {
 		t.Fatal(e)
