@@ -4,7 +4,9 @@
 
 ## 源码入口
 
-- [业务与适配器](../../../internal/modules/webaccess)
+- [提供商管理](../../../internal/modules/webaccess)
+- [运行契约与路由](../../../internal/webaccess)
+- [提供商与网页读取适配](../../../internal/webaccessadapters)
 - [HTTP 装配](../../../internal/server/web_access.go)
 - [持久化与诊断](../../../internal/store/mysql/web_access.go)
 - [前端功能](../../../web/src/areas/console/pages/web-access)

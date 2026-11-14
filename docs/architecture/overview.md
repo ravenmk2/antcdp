@@ -7,16 +7,16 @@ AntCDP 采用模块化单体：一个 Go 进程、一个 MySQL 数据库、一�
 | 层次 | 当前选择 | 边界 |
 | --- | --- | --- |
 | 后端 | Go、Gin | HTTP 层处理协议和认证上下文，业务规则归所属模块 |
-| 存储 | MySQL 8.x、InnoDB、utf8mb4 | 支持 8.0.17 起的 8.x；不承诺 MariaDB 或其他数据库兼容 |
+| 存储 | MySQL、InnoDB、utf8mb4 | 支持范围见[数据库约定](../database/README.md#存储规则)；不承诺 MariaDB 或其他数据库兼容 |
 | 数据访问 | database/sql、go-sql-driver/mysql、sqlx | 手写 SQL、显式事务；驱动句柄不进入模块接口 |
 | 迁移 | Goose、go:embed | 单一初始基线及后续增量迁移；无 ORM 自动改表 |
-| 前端 | React 19、TypeScript 7、Vite、React Router、TanStack Query | 按功能装配页面，通过同源 `/api/v1` 访问服务；查询与 Mutation 分开管理重试 |
-| UI | Base UI、本地组件、Tailwind CSS 4、TanStack Table、Lucide、Zod | 基础组件和平台组合共享，业务组件归各模块；表格逻辑、图标与校验各司其职 |
+| 前端 | React、TypeScript、Vite、React Router、TanStack Query | 按功能装配页面，通过同源 `/api/v1` 访问服务；查询与 Mutation 分开管理重试 |
+| UI | Base UI、本地组件、Tailwind CSS、TanStack Table、Lucide、Zod | 基础组件和平台组合共享，业务组件归各模块；表格逻辑、图标与校验各司其职 |
 | 身份 | bcrypt、数据库会话、HttpOnly Cookie、CSRF | 不使用 JWT 或 Redis；权限由服务端校验 |
 | 文件 | 本地目录与小范围存储接口 | 头像、业务图标、智能体文件及临时文件；无对象存储适配 |
 | 日志 | log/slog | 结构化运行日志与业务审计分离，不记录秘密 |
 
-依赖版本以 `go.mod/go.sum` 和 `web/package-lock.json` 为准。构建先生成 `web/dist/`，再将 SPA 与 SQL 迁移嵌入二进制；运行容器不包含 Node、Go 工具链或源码。默认构建使用 CGO_ENABLED=0。采用理由见 [技术决策](decisions.md)。
+依赖及工具链版本以 [go.mod](../../go.mod)、[web/package.json](../../web/package.json) 和 [web/package-lock.json](../../web/package-lock.json) 为准。构建先生成 `web/dist/`，再将 SPA 与 SQL 迁移嵌入二进制；运行容器不包含 Node、Go 工具链或源码。默认构建使用 CGO_ENABLED=0。采用理由见 [技术决策](decisions.md)。
 
 ## 运行结构
 
@@ -104,7 +104,7 @@ scripts/                   # 构建与验证
 
 用户密码使用 bcrypt，与系统主密钥分离。会话数据库只保存随机令牌的 SHA-256，校验账号状态、auth_version、撤销及过期时间；完整规则见 [身份与权限](../domains/platform/identity.md)。同源写操作受 CSRF 保护，代理信任由部署配置限定。
 
-32 字节主密钥保存在私有数据目录，通过用途派生和资源绑定 AAD 加密配置及外部秘密；普通 API 不读取秘密。文件先暂存，事务管理元数据和绑定，回收确认没有有效引用。自动密钥轮换、KMS 和对象存储尚未实现。
+32 字节主密钥保存在私有数据目录，通过用途派生和资源绑定 AAD 加密配置及外部秘密；普通 API 不读取秘密。文件先暂存，事务管理元数据和绑定，回收确认没有有效引用。主密钥与数据目录的恢复要求见[运行配置](../operations/configuration.md)和[部署文档](../operations/deployment.md)。
 
 安装、迁移、种子事务和文件完成标记分步执行；MySQL DDL 不具备整次安装回滚能力。serve 只检查版本和结构，db migrate 是显式维护命令。安装身份及完整数据目录必须与数据库匹配，详见 [部署与维护](../operations/deployment.md)。
 
@@ -112,4 +112,4 @@ scripts/                   # 构建与验证
 
 公共装配与区域代码分离；控制台、工作区和个人中心共享身份、请求协议与业务能力，统一构建为同源 SPA。路由守卫不能替代 API 授权。技术栈、工程边界和开发方法见[前端文档](../development/frontend.md)。
 
-受控 KV 仅保存低频配置；项目、仓库、标签、凭证和智能体执行等实体拥有独立表。Webhook 只验证接收，审计不是队列。通用智能体在同仓库同 Go module 内保持依赖独立，由 `app` 装配平台授权、MySQL、模型、工具和事件端口，不引入独立执行服务。外部登录、其他存储引擎、通用调度、Graph 工作流及业务触发接入尚未实现；扩展要求见 [扩展边界](extensibility.md)。
+受控 KV 仅保存低频配置；项目、仓库、标签、凭证和智能体执行等实体拥有独立表。Webhook 只验证接收，审计不是队列。通用智能体在同仓库同 Go module 内保持依赖独立，由 `app` 装配平台授权、MySQL、模型、工具和事件端口，不引入独立执行服务。扩展要求见[扩展边界](extensibility.md)。

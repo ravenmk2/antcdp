@@ -4,9 +4,9 @@
 
 ## 技术栈与目录
 
-当前技术栈为 React 19、TypeScript 7、Vite、Tailwind CSS 4、React Router、TanStack Query、TanStack Table、Base UI、Lucide 与 Zod。Markdown、代码编辑、高亮与图形相关依赖以 `web/package.json` 和锁文件为准。源自 shadcn/ui 的本地组件保留来源与 MIT 许可。
+当前技术栈为 React、TypeScript、Vite、Tailwind CSS、React Router、TanStack Query、TanStack Table、Base UI、Lucide 与 Zod。完整依赖声明见 [web/package.json](../../web/package.json)，版本由 [web/package-lock.json](../../web/package-lock.json) 锁定。源自 shadcn/ui 的本地组件保留来源与 MIT 许可。
 
-TypeScript 7 的原生编译器通过 `@typescript/native` 提供 `tsc`。由于 TypeScript 7.0 不提供旧编译器 API，`typescript` 别名使用 `@typescript/typescript6`，供 typescript-eslint 调用；业务源码始终通过 TS 7 strict 检查。两个编译器的版本均锁定在 `web/package-lock.json`。
+`@typescript/native` 提供业务源码 strict 检查使用的原生 `tsc`；`typescript` 别名提供 typescript-eslint 所需的兼容编译器 API。两者职责不同，调整依赖时须同时验证类型检查与 ESLint，具体别名映射以依赖声明为准。
 
 ```text
 web/src/

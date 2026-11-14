@@ -1,61 +1,6 @@
--- 模型、网络检索与智能体结构阅读副本；实际安装与升级执行嵌入式 Goose 迁移。
+-- 智能体、运行与文件结构阅读副本；实际安装与升级执行嵌入式 Goose 迁移。
 -- 仅用于结构评审或隔离空库验证，不导入现有安装。
 -- 不含种子或升级数据修正；通用约定见 ../README.md。
-
--- 模型管理
-
-CREATE TABLE `model_provider` (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    icon_key VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
-    description VARCHAR(1000) NOT NULL DEFAULT '',
-    provider_type VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    base_url VARCHAR(2048) NOT NULL,
-    auth_method VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    identity_config JSON NOT NULL,
-    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    config JSON NOT NULL,
-    config_schema_version INT UNSIGNED NOT NULL DEFAULT 1,
-    secret_ciphertext BLOB NULL,
-    secret_format_version INT UNSIGNED NULL,
-    secret_key_version VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
-    secret_revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    config_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    created_by_user_id BIGINT UNSIGNED NOT NULL,
-    created_at DATETIME(3) NOT NULL,
-    updated_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_model_provider_code (code),
-    UNIQUE KEY uq_model_provider_name (name),
-    KEY idx_model_provider_enabled (enabled, id)
-) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-CREATE TABLE `model_definition` (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    provider_id BIGINT UNSIGNED NOT NULL,
-    model_id VARCHAR(255) COLLATE utf8mb4_0900_bin NOT NULL COMMENT '供应商模型标识；平台主键为 id',
-    name VARCHAR(100) NOT NULL,
-    icon_key VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
-    description VARCHAR(1000) NOT NULL DEFAULT '',
-    protocol VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    capabilities JSON NOT NULL,
-    capability_schema_version INT UNSIGNED NOT NULL DEFAULT 1,
-    generation_defaults JSON NOT NULL,
-    thinking_options JSON NOT NULL COMMENT '系统档位解析后的 key/label/parameters；默认行为使用唯一 standard 选项',
-    context_window_tokens INT UNSIGNED NULL,
-    max_output_tokens INT UNSIGNED NULL,
-    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    config_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    created_by_user_id BIGINT UNSIGNED NOT NULL,
-    created_at DATETIME(3) NOT NULL,
-    updated_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_model_definition_route (provider_id, protocol, model_id),
-    KEY idx_model_definition_enabled (enabled, provider_id, id)
-) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- 智能体定义与绑定
 
@@ -138,7 +83,7 @@ CREATE TABLE `agent_tool_binding` (
     KEY idx_agent_tool_binding_current (agent_id, removed_at, id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
--- 技能库
+-- 技能库与绑定
 
 CREATE TABLE `agent_skill_binding` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -196,56 +141,7 @@ CREATE TABLE `agent_skill_version` (
     KEY idx_agent_skill_version_archive (archive_file_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-
--- 网络检索
-
--- 网络检索提供商：名称、类型、端点、专用认证及分能力最近诊断。
-CREATE TABLE `web_access_provider` (
-    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    description VARCHAR(1000) NOT NULL DEFAULT '',
-    provider_type VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    base_url VARCHAR(2048) NOT NULL,
-    auth_method VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    identity_config JSON NOT NULL,
-    supported_operations JSON NOT NULL,
-    enabled BOOLEAN NOT NULL DEFAULT TRUE,
-    config JSON NOT NULL,
-    config_schema_version INT UNSIGNED NOT NULL DEFAULT 1,
-    secret_ciphertext BLOB NULL,
-    secret_format_version INT UNSIGNED NULL,
-    secret_key_version VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
-    secret_revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    config_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    last_diagnostic JSON NULL,
-    last_diagnostic_at DATETIME(3) NULL,
-    created_by_user_id BIGINT UNSIGNED NOT NULL,
-    created_at DATETIME(3) NOT NULL,
-    updated_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (id),
-    UNIQUE KEY uq_web_access_provider_code (code),
-    UNIQUE KEY uq_web_access_provider_name (name),
-    KEY idx_web_access_provider_enabled (enabled, id)
-) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- 检索设置：全平台搜索与读取的执行顺序及调用限制。
-CREATE TABLE `web_access_setting` (
-    id TINYINT UNSIGNED NOT NULL,
-    search_routes JSON NOT NULL,
-    search_max_results SMALLINT UNSIGNED NOT NULL,
-    fetch_routes JSON NOT NULL,
-    fetch_max_bytes INT UNSIGNED NOT NULL,
-    fetch_timeout_seconds INT UNSIGNED NOT NULL,
-    fetch_max_redirects TINYINT UNSIGNED NOT NULL,
-    fetch_allowed_internal_hosts JSON NOT NULL,
-    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    updated_by_user_id BIGINT UNSIGNED NULL,
-    created_at DATETIME(3) NOT NULL,
-    updated_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- MCP 服务
 
 CREATE TABLE `agent_mcp_server` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -882,6 +778,8 @@ CREATE TABLE `agent_session_projection` (
   `updated_at` DATETIME(3) NOT NULL,
   PRIMARY KEY (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- 图像变体与提供商文件缓存
 
 CREATE TABLE `agent_image_variant` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

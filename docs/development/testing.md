@@ -59,7 +59,7 @@ await screen.findByRole("heading", { name: "确认信息" });
 
 存储测试接受 `antcdp_test` 或 `antcdp_test_` 前缀，HTTP 和结构测试要求 `antcdp_test_` 前缀。变量未设置时对应测试明确跳过。直接运行 Go 测试不会创建或删除数据库，完成后保留结构，再次运行应提供新的空测试库；统一开发入口的 `test-db` 则负责创建和清理本次专用测试库。凭据只通过受控本地环境或 CI 注入，不写入 Git 或普通日志。
 
-实库测试使用当前完整基线和独立空库，已有结构的测试数据库不可复用；部署验收环境还须同时重建配套应用数据，见[部署边界](../operations/deployment.md#数据库基线与安装边界)。
+实库测试使用当前完整基线和独立空库，已有结构的测试数据库不可复用。部署验收可复用结构兼容且安装身份一致的已有安装；只有明确重建安装时才同时重建配套应用数据，见[部署边界](../operations/deployment.md#数据库基线与安装边界)。
 
 ```sh
 go test -count=1 -v ./internal/store/mysql

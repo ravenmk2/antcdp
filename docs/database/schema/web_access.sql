@@ -1,0 +1,49 @@
+-- 网络检索结构阅读副本；实际安装与升级执行嵌入式 Goose 迁移。
+-- 仅用于结构评审或隔离空库验证，不导入现有安装。
+-- 不含种子或升级数据修正；通用约定见 ../README.md。
+
+CREATE TABLE `web_access_provider` (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description VARCHAR(1000) NOT NULL DEFAULT '',
+    provider_type VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    base_url VARCHAR(2048) NOT NULL,
+    auth_method VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    identity_config JSON NOT NULL,
+    supported_operations JSON NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    config JSON NOT NULL,
+    config_schema_version INT UNSIGNED NOT NULL DEFAULT 1,
+    secret_ciphertext BLOB NULL,
+    secret_format_version INT UNSIGNED NULL,
+    secret_key_version VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    secret_revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    config_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    last_diagnostic JSON NULL,
+    last_diagnostic_at DATETIME(3) NULL,
+    created_by_user_id BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_web_access_provider_code (code),
+    UNIQUE KEY uq_web_access_provider_name (name),
+    KEY idx_web_access_provider_enabled (enabled, id)
+) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `web_access_setting` (
+    id TINYINT UNSIGNED NOT NULL,
+    search_routes JSON NOT NULL,
+    search_max_results SMALLINT UNSIGNED NOT NULL,
+    fetch_routes JSON NOT NULL,
+    fetch_max_bytes INT UNSIGNED NOT NULL,
+    fetch_timeout_seconds INT UNSIGNED NOT NULL,
+    fetch_max_redirects TINYINT UNSIGNED NOT NULL,
+    fetch_allowed_internal_hosts JSON NOT NULL,
+    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    updated_by_user_id BIGINT UNSIGNED NULL,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

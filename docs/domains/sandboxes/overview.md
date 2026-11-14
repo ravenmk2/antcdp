@@ -5,7 +5,9 @@
 ## 源码入口
 
 - [平台宿主](../../../internal/modules/agents)
-- [沙箱适配](../../../internal/agentadapters)
+- [沙箱契约](../../../internal/sandboxcore)
+- [OpenSandbox 适配](../../../internal/sandboxadapters/opensandbox)
+- [可信工作文件协议与实现](../../../internal/workspacefs)
 - [HTTP 装配](../../../internal/server/agents_cloud.go)
 - [工作文件入口](../../../internal/server/agents_sandbox_files.go)
 
