@@ -85,7 +85,6 @@ export function conversationPresentation(
     if (record.event_type === "artifact/retained") continue;
     if (record.event_type === "assistant/attempt") {
       if (
-        !record.data.retry &&
         !record.data.content.some(
           (block) =>
             block.type === "file_reference" ||

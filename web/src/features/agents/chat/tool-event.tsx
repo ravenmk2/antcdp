@@ -49,7 +49,8 @@ export function ToolEvent({
   status: liveStatus,
   question,
   sessionId,
-}: ToolNode & { sessionId: string }) {
+  onIssue,
+}: ToolNode & { sessionId: string; onIssue?: () => void }) {
   const [opened, setOpen] = useState<boolean | null>(null);
   const pendingQuestion = Boolean(
     question &&
@@ -176,19 +177,30 @@ export function ToolEvent({
         active={Boolean(running) && !pendingQuestion}
         trailing={
           failed ? (
-            <StatusHint
-              label="工具调用失败原因"
-              icon={<X aria-hidden="true" />}
-              danger
-            >
-              {[
-                label,
-                result?.data.outcome.reason &&
-                  runtimeReason(result.data.outcome.reason),
-              ]
-                .filter(Boolean)
-                .join("\n")}
-            </StatusHint>
+            onIssue ? (
+              <button
+                type="button"
+                className="agent-tool-issue"
+                aria-label="查看本轮工具异常"
+                onClick={onIssue}
+              >
+                <X aria-hidden="true" />
+              </button>
+            ) : (
+              <StatusHint
+                label="工具调用失败原因"
+                icon={<X aria-hidden="true" />}
+                danger
+              >
+                {[
+                  label,
+                  result?.data.outcome.reason &&
+                    runtimeReason(result.data.outcome.reason),
+                ]
+                  .filter(Boolean)
+                  .join("\n")}
+              </StatusHint>
+            )
           ) : undefined
         }
         icon={
@@ -219,7 +231,7 @@ export function ToolEvent({
           ) : (
             <span title={typeof hint === "string" ? hint : undefined}>
               {typeof hint === "string" ? hint : label}
-              {typeof hint === "string" && (attention || running)
+              {typeof hint === "string" && (running || (attention && !onIssue))
                 ? ` · ${label}`
                 : ""}
             </span>
@@ -309,9 +321,11 @@ export function ToolEvent({
               <SandboxExecutionResult
                 execution={execution}
                 verifiedStatus={verifiedStatus}
+                diagnosticsInHeader={Boolean(onIssue)}
               />
             )}
-            {!reconciliation &&
+            {!onIssue &&
+              !reconciliation &&
               result?.data.outcome.certainty === "unknown" &&
               execution?.state !== "outcome_unknown" && (
                 <StatusNote label="结果待核实">

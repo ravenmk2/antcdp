@@ -1,5 +1,5 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
-import { Waypoints, Check, Bot } from "lucide-react";
+import { Waypoints, Bot } from "lucide-react";
 import { useSession } from "@/app/auth";
 import { ChatCopyButton as CopyButton } from "./controls";
 import type { ActiveAttempt, DurableRecord } from "@/types/agent-events";
@@ -17,8 +17,8 @@ import {
   type PresentedNode,
   type PresentedProcess,
 } from "../data/conversation-presentation";
-import { runtimeReason, runDiagnosticReasons } from "../data/runtime-reasons";
-import { StatusHint, StatusNote } from "./status-hint";
+import { turnIssues } from "../data/turn-issues";
+import { TurnIssues } from "./turn-issues";
 import { MessageContent, FileReference } from "./content";
 import { ToolEvent, builtinToolNames } from "./tool-event";
 import { ChatDisclosure } from "./disclosure";
@@ -27,8 +27,6 @@ import { questionReplyText } from "./question-content";
 import { TurnUsage } from "./turn-usage";
 import { ArtifactCards } from "./artifact-cards";
 import { turnDeliverables } from "../data/turn-deliverables";
-import { modelRetryStates, type RetryState } from "../data/model-retries";
-import { ModelRetry } from "./model-retry";
 import {
   DisclosureContent,
   DisclosureChevron,
@@ -64,12 +62,12 @@ export function ConversationTimeline({
     () => conversationTurns(records, nodes),
     [records, nodes],
   );
-  const diagnosticReasons = useMemo(
-    () => runDiagnosticReasons(records),
-    [records],
-  );
+  const issues = useMemo(() => turnIssues(records, nodes), [records, nodes]);
+  const [diagnostic, setDiagnostic] = useState<{
+    runId: string;
+    issueId?: string;
+  } | null>(null);
   const artifacts = useMemo(() => turnDeliverables(records), [records]);
-  const retries = useMemo(() => modelRetryStates(records), [records]);
   const closingReplies = useMemo(() => {
     const lastReplies = new Map<
       string,
@@ -168,7 +166,6 @@ export function ConversationTimeline({
           node.record.event_type,
         ) &&
         (node.record.event_type !== "assistant/attempt" ||
-          node.record.data.retry ||
           node.record.data.content.some(
             (block) =>
               block.type === "file_reference" ||
@@ -184,7 +181,11 @@ export function ConversationTimeline({
   const turnExpanded = (turn?: ConversationTurn) =>
     !turn?.foldable ||
     !foldableTurns.has(turn.id) ||
-    (opened.get(turn.id) ?? (turn.attention || turn.id === latestTurnId));
+    (opened.get(turn.id) ??
+      (turn.id === latestTurnId ||
+        Boolean(
+          issues.get(turn.id)?.some((issue) => issue.state === "pending"),
+        )));
   const turnHeader = (turn?: ConversationTurn) => {
     if (!turn) return null;
     const foldable = turn.foldable && foldableTurns.has(turn.id);
@@ -202,10 +203,8 @@ export function ConversationTimeline({
           )
         : null;
     return (
-      <>
-        {!turn.end && turn.startedAt && (
-          <WorkingTime startedAt={turn.startedAt} />
-        )}
+      <div className="agent-turn-heading">
+        {!turn.end && <WorkingTime startedAt={turn.startedAt} />}
         {turn.end && (
           <button
             type="button"
@@ -242,7 +241,21 @@ export function ConversationTimeline({
             )}
           </button>
         )}
-      </>
+        {Boolean(issues.get(turn.id)?.length) && (
+          <div className="agent-turn-issues" data-foldable={foldable}>
+            <TurnIssues
+              issues={issues.get(turn.id)!}
+              open={diagnostic?.runId === turn.id}
+              selected={
+                diagnostic?.runId === turn.id ? diagnostic.issueId : undefined
+              }
+              onOpenChange={(open) =>
+                setDiagnostic(open ? { runId: turn.id } : null)
+              }
+            />
+          </div>
+        )}
+      </div>
     );
   };
   const items: (
@@ -288,7 +301,13 @@ export function ConversationTimeline({
                     node={node}
                     sessionId={sessionId}
                     historical={Boolean(turn?.end)}
-                    retries={retries}
+                    onIssue={(toolId) => {
+                      if (turn)
+                        setDiagnostic({
+                          runId: turn.id,
+                          issueId: `tool:${toolId}`,
+                        });
+                    }}
                   />
                 </div>
               </DisclosureContent>
@@ -328,11 +347,6 @@ export function ConversationTimeline({
                   attempt={draft}
                   sessionId={sessionId}
                   latest={record?.seq === latestReply}
-                  retryState={
-                    record?.event_type === "assistant/attempt"
-                      ? retries.get(record.data.attempt_id)
-                      : undefined
-                  }
                 />
               </DisclosureContent>
             </Fragment>
@@ -416,15 +430,8 @@ export function ConversationTimeline({
                   )}
                 </div>
               )}
-              <VisibleResult
-                record={record}
-                reasons={
-                  diagnosticReasons.get(record.run_id ?? record.data.run_id) ??
-                  []
-                }
-                settled={node.settled ?? false}
-                onVisible={onVisibleResult}
-              />
+              {!turns.get(runId)?.firstNode && turnHeader(turns.get(runId))}
+              <VisibleResult record={record} onVisible={onVisibleResult} />
             </Fragment>
           );
         }
@@ -444,6 +451,13 @@ export function ConversationTimeline({
           );
         return null;
       })}
+      {[...turns.values()]
+        .filter(
+          (turn) => !turn.end && !turn.firstNode && issues.get(turn.id)?.length,
+        )
+        .map((turn) => (
+          <Fragment key={`pending:${turn.id}`}>{turnHeader(turn)}</Fragment>
+        ))}
     </div>
   );
 }
@@ -509,7 +523,6 @@ const AssistantMessage = memo(function AssistantMessage({
   attempt,
   sessionId,
   latest = false,
-  retryState,
   anchor,
 }: {
   record?: Extract<
@@ -519,7 +532,6 @@ const AssistantMessage = memo(function AssistantMessage({
   attempt?: ActiveAttempt;
   sessionId: string;
   latest?: boolean;
-  retryState?: RetryState;
   anchor?: string;
 }) {
   const incomplete = record?.event_type === "assistant/attempt";
@@ -529,7 +541,6 @@ const AssistantMessage = memo(function AssistantMessage({
     [];
   if (
     incomplete &&
-    !record.data.retry &&
     !blocks.some(
       (block) =>
         block.type === "file_reference" ||
@@ -547,15 +558,7 @@ const AssistantMessage = memo(function AssistantMessage({
         anchor ?? record?.seq ?? `attempt:${attempt?.attempt_id}`
       }
     >
-      {incomplete && record.data.retry && (
-        <ModelRetry record={record} state={retryState} />
-      )}
-      {incomplete && !record.data.retry && (
-        <StatusNote label="未完成">
-          {runtimeReason(record.data.reason_code) ||
-            "本次尝试没有完整结束，已生成的内容仍保留。"}
-        </StatusNote>
-      )}
+      {incomplete && <span className="agent-incomplete-label">未完成</span>}
       <MessageContent
         blocks={blocks.filter((block) => block.type !== "tool_reference")}
         sessionId={sessionId}
@@ -626,14 +629,20 @@ const ProcessGroup = memo(function ProcessGroup({
   node,
   sessionId,
   historical,
-  retries,
+  onIssue,
 }: {
   node: PresentedProcess;
   sessionId: string;
   historical: boolean;
-  retries: Map<string, RetryState>;
+  onIssue: (toolId: string) => void;
 }) {
-  const attention = node.tools.some(toolNeedsAttention);
+  const attention = node.tools.some(
+    (tool) =>
+      toolNeedsAttention(tool) &&
+      (!historical ||
+        (tool.result?.data.outcome.certainty === "unknown" &&
+          !tool.reconciliation)),
+  );
   const [opened, setOpened] = useState<boolean | null>(null);
   const live = node.entries.some(
     (entry) => entry.kind === "assistant" && entry.attempt,
@@ -665,11 +674,6 @@ const ProcessGroup = memo(function ProcessGroup({
           anchor={`${node.id}:${entry.id}`}
           record={entry.record}
           attempt={entry.attempt}
-          retryState={
-            entry.record?.event_type === "assistant/attempt"
-              ? retries.get(entry.record.data.attempt_id)
-              : undefined
-          }
           sessionId={sessionId}
         />
       );
@@ -683,6 +687,7 @@ const ProcessGroup = memo(function ProcessGroup({
         reconciliation={tool.reconciliation}
         status={tool.status}
         question={tool.question}
+        onIssue={() => onIssue(tool.id)}
         sessionId={sessionId}
       />
     );
@@ -728,13 +733,9 @@ const ProcessGroup = memo(function ProcessGroup({
 
 function VisibleResult({
   record,
-  reasons,
-  settled,
   onVisible,
 }: {
   record: Extract<DurableRecord, { event_type: "run/ended" }>;
-  reasons: string[];
-  settled: boolean;
   onVisible?: (
     record: Extract<DurableRecord, { event_type: "run/ended" }>,
   ) => void;
@@ -778,35 +779,7 @@ function VisibleResult({
       ref={element}
       data-message-anchor={record.seq}
       className="agent-turn-result"
-      data-success={
-        record.data.status === "succeeded" &&
-        (settled ||
-          ["settled", "none"].includes(record.data.physical_activity_state))
-      }
-    >
-      {record.data.status === "succeeded" ? (
-        <Check className="size-3.5" aria-hidden />
-      ) : (
-        <StatusHint label={`${runStatusNames[record.data.status]}原因`}>
-          {reasons.join("\n") ||
-            runtimeReason(record.data.reason_code) ||
-            "本次任务已结束"}
-        </StatusHint>
-      )}
-      <span>{runStatusNames[record.data.status]}</span>
-      <time title={new Date(record.data.finished_at).toLocaleString()}>
-        {new Date(record.data.finished_at).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        })}
-      </time>
-      {!settled &&
-        record.data.physical_activity_state !== "settled" &&
-        record.data.physical_activity_state !== "none" && (
-          <StatusNote label="环境活动仍需核实">
-            本轮任务已结束，但工作环境中的活动尚未全部确认结束。请先核实进程状态，再决定是否重复执行。
-          </StatusNote>
-        )}
-    </div>
+      aria-hidden="true"
+    />
   );
 }

@@ -1,0 +1,133 @@
+.trigger,
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--chat-process, var(--muted));
+  cursor: pointer;
+}
+.trigger svg,
+.close svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.6;
+}
+.trigger[data-tone="failed"] {
+  color: var(--danger);
+}
+.trigger[data-tone="pending"] {
+  color: var(--warning);
+}
+.trigger:hover,
+.trigger[data-popup-open],
+.close:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.trigger:focus-visible,
+.close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.positioner {
+  z-index: 80;
+}
+.popup,
+.tooltip {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 30px rgb(0 0 0 / 10%);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto,
+    "Noto Sans", Ubuntu, Cantarell, "Helvetica Neue", sans-serif, Arial,
+    "PingFang SC", "Source Han Sans SC", "Microsoft YaHei UI",
+    "Microsoft YaHei", "Noto Sans CJK SC";
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 120ms,
+    transform 120ms;
+}
+.popup {
+  width: min(380px, calc(100vw - 24px));
+  border-radius: 12px;
+  outline: none;
+}
+.popup[data-starting-style],
+.popup[data-ending-style],
+.tooltip[data-starting-style],
+.tooltip[data-ending-style] {
+  opacity: 0;
+  transform: translateY(-3px);
+}
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px 8px;
+}
+.heading h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.items {
+  padding: 0 14px 8px;
+  max-height: min(420px, 65vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.item {
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.item[data-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.source {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.summary {
+  margin: 3px 0;
+  font-weight: 500;
+}
+.item[data-tone="failed"] .summary {
+  color: var(--danger);
+}
+.item[data-tone="pending"] .summary {
+  color: var(--warning);
+}
+.reason {
+  margin: 4px 0 0;
+  color: var(--muted);
+  white-space: pre-line;
+}
+.tooltip {
+  max-width: min(320px, calc(100vw - 24px));
+  border-radius: 8px;
+  padding: 8px 11px;
+}
+.tooltip span {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.tooltip p {
+  margin: 4px 0;
+}

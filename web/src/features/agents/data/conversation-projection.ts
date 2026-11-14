@@ -319,6 +319,8 @@ export function conversationTurns(
       turn.startedAt = record.occurred_at;
     if (record.event_type === "run/ended") turn.end = record;
     if (
+      record.event_type === "assistant/attempt" ||
+      record.event_type === "compaction/end" ||
       record.event_type === "run/started" ||
       record.event_type === "run/ended"
     )

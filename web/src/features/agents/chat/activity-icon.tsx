@@ -1,4 +1,4 @@
-import { MessageCircleQuestion, Wrench } from "lucide-react";
+import { List, MessageCircleQuestion, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
 import styles from "./activity-icon.module.css";
 
@@ -147,8 +147,10 @@ export function ActivityIcon({
     );
   }
   const Icon =
-    name === "question" || name === "ask_user_question"
-      ? MessageCircleQuestion
-      : Wrench;
+    name === "update_plan"
+      ? List
+      : name === "question" || name === "ask_user_question"
+        ? MessageCircleQuestion
+        : Wrench;
   return <Icon aria-hidden="true" className={className} />;
 }

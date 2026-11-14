@@ -19,9 +19,11 @@ export function executionStatus(execution: SandboxExecution): string {
 export function SandboxExecutionResult({
   execution,
   verifiedStatus,
+  diagnosticsInHeader = false,
 }: {
   execution: SandboxExecution;
   verifiedStatus?: string;
+  diagnosticsInHeader?: boolean;
 }) {
   return (
     <section className="agent-terminal" aria-label="命令执行结果">
@@ -33,16 +35,20 @@ export function SandboxExecutionResult({
         <span>{verifiedStatus ?? executionStatus(execution)}</span>
       </div>
       <ToolCode source={execution.command} title="命令" language="bash" />
-      {!verifiedStatus && execution.state === "cancel_requested" && (
-        <StatusNote label="停止待确认">
-          停止请求已发出，尚未确认进程退出。
-        </StatusNote>
-      )}
-      {!verifiedStatus && execution.state === "outcome_unknown" && (
-        <StatusNote label="结果待核实">
-          尚未确认实际执行结果，云电脑占用继续保留。不能认为命令未执行。
-        </StatusNote>
-      )}
+      {!diagnosticsInHeader &&
+        !verifiedStatus &&
+        execution.state === "cancel_requested" && (
+          <StatusNote label="停止待确认">
+            停止请求已发出，尚未确认进程退出。
+          </StatusNote>
+        )}
+      {!diagnosticsInHeader &&
+        !verifiedStatus &&
+        execution.state === "outcome_unknown" && (
+          <StatusNote label="结果待核实">
+            尚未确认实际执行结果，云电脑占用继续保留。不能认为命令未执行。
+          </StatusNote>
+        )}
       {execution.stdout && (
         <ToolCode source={execution.stdout} title="标准输出" />
       )}

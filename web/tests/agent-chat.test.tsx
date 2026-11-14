@@ -366,7 +366,7 @@ it("consolidates an empty failed attempt into an accessible result hint without 
   expect(
     screen.queryByText(runtimeReason("MODEL_CONNECTION_FAILED")),
   ).not.toBeInTheDocument();
-  const hint = screen.getByRole("button", { name: "失败原因" });
+  const hint = screen.getByRole("button", { name: "本轮异常 · 1 项" });
   await user.tab();
   expect(hint).toHaveFocus();
   expect(await screen.findByRole("tooltip")).toHaveTextContent(
@@ -374,13 +374,13 @@ it("consolidates an empty failed attempt into an accessible result hint without 
   );
   await user.keyboard("{Escape}");
   await user.click(hint);
-  const tooltip = await screen.findByRole("tooltip");
-  expect(tooltip).toHaveTextContent(runtimeReason("MODEL_CONNECTION_FAILED"));
-  expect(tooltip).not.toHaveTextContent("执行失败，可查看");
-  expect(hint).toHaveAttribute("aria-describedby", tooltip.id);
+  const dialog = await screen.findByRole("dialog", { name: "本轮异常" });
+  expect(dialog).toHaveTextContent(runtimeReason("MODEL_CONNECTION_FAILED"));
+  expect(dialog).not.toHaveTextContent("执行失败，可查看");
+  expect(container.querySelector(".agent-turn-result button")).toBeNull();
   await user.keyboard("{Escape}");
   await waitFor(() =>
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument(),
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
 });
 
@@ -397,6 +397,96 @@ it("keeps partial generated text with a compact unfinished marker", () => {
   expect(
     screen.queryByText(runtimeReason("MODEL_CONNECTION_FAILED")),
   ).not.toBeInTheDocument();
+});
+
+it("keeps the diagnostic beside the duration and independent of the process fold", async () => {
+  const history = failedHistory("折叠内的部分内容");
+  const end = history[1] as Extract<DurableRecord, { event_type: "run/ended" }>;
+  history[1] = {
+    ...end,
+    data: { ...end.data, status: "cancelled", reason_code: "user_stopped" },
+  };
+  const { user } = mount(
+    <ConversationTimeline records={history} sessionId="10" attempt={null} />,
+  );
+  const fold = screen.getByRole("button", { name: "已取消 · 执行过程" });
+  expect(fold).toHaveTextContent("已取消");
+  const hint = screen.getByRole("button", { name: /本轮过程记录/ });
+  expect(hint.closest(".agent-turn-heading")).toBe(fold.parentElement);
+  await user.click(hint);
+  expect(await screen.findByRole("dialog")).toHaveTextContent("操作者已停止");
+  expect(fold).toHaveAttribute("aria-expanded", "true");
+  await user.keyboard("{Escape}");
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(hint).toHaveFocus();
+  await user.click(fold);
+  expect(fold).toHaveAttribute("aria-expanded", "false");
+  await user.click(hint);
+  expect(await screen.findByRole("dialog")).toHaveTextContent(
+    runtimeReason("MODEL_CONNECTION_FAILED"),
+  );
+  expect(fold).toHaveAttribute("aria-expanded", "false");
+});
+
+it("opens the same turn diagnostic from a failed tool marker", async () => {
+  const call: Extract<DurableRecord, { event_type: "tool/call" }> = {
+    ...records[0],
+    seq: "5",
+    event_type: "tool/call",
+    data: {
+      tool_call_id: "t1",
+      tool_key: "read_file",
+      mcp_server_id: null,
+      mcp_binding_id: null,
+      mcp_tool_name: null,
+      arguments: { path: "missing.txt" },
+      arguments_hash: "hash",
+      execution_class: "read_only",
+      policy: "allow",
+    },
+  };
+  const result: Extract<DurableRecord, { event_type: "tool/result" }> = {
+    ...call,
+    seq: "6",
+    event_type: "tool/result",
+    data: {
+      tool_call_id: "t1",
+      status: "failed",
+      executed: false,
+      content: [],
+      truncated: false,
+      outcome: { certainty: "known", reason: "workspace_unavailable" },
+    },
+  };
+  const end = records[2] as Extract<DurableRecord, { event_type: "run/ended" }>;
+  const { user } = mount(
+    <ConversationTimeline
+      records={[
+        call,
+        result,
+        {
+          ...end,
+          seq: "7",
+          data: {
+            ...end.data,
+            status: "failed",
+            reason_code: "EXECUTION_FAILED",
+          },
+        },
+      ]}
+      sessionId="10"
+      attempt={null}
+    />,
+  );
+  await user.click(screen.getByRole("button", { name: "已使用工具 1 次" }));
+  await user.click(screen.getByRole("button", { name: "查看本轮工具异常" }));
+  const dialog = await screen.findByRole("dialog", { name: "本轮异常" });
+  expect(dialog).toHaveTextContent("读取文件");
+  expect(dialog).toHaveTextContent("工作空间当前不可用");
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "工具调用失败原因" })).toBeNull();
 });
 
 it("does not attribute recovered attempts or another run's failures to the final result", () => {
@@ -570,7 +660,9 @@ it.each([false, true])(
     mount(
       <ConversationTimeline records={history} sessionId="10" attempt={null} />,
     );
-    expect(screen.queryByText("环境活动仍需核实") !== null).toBe(!settled);
+    expect(
+      screen.queryByRole("button", { name: "本轮异常 · 1 项" }) !== null,
+    ).toBe(!settled);
   },
 );
 
@@ -1656,8 +1748,10 @@ it("shows retry progress without a partial message and keeps the recovered final
     },
   );
   const user = userEvent.setup();
-  expect(screen.getByRole("button", { name: "等待重试 1/5" })).toBeVisible();
-  expect(container.querySelector(".agent-run-activity-slot")).toBeNull();
+  const hint = screen.getByRole("button", { name: "本轮异常 · 1 项" });
+  expect(container.querySelector(".agent-message-assistant")).toBeNull();
+  await user.click(hint);
+  expect(await screen.findByRole("dialog")).toHaveTextContent("等待重试 · 1/5");
   rerender(
     <ConversationTimeline
       records={[...history, started]}
@@ -1665,10 +1759,8 @@ it("shows retry progress without a partial message and keeps the recovered final
       attempt={null}
     />,
   );
-  await user.click(screen.getByRole("button", { name: "正在重试 1/5" }));
-  expect(await screen.findByRole("tooltip")).toHaveTextContent(
-    "之前完成的工具不会重新执行",
-  );
+  expect(await screen.findByRole("dialog")).toHaveTextContent("正在重试 · 1/5");
+  // The popup updates in place as the header moves to the completed turn.
   rerender(
     <ConversationTimeline
       records={[...history, started, reply, end]}
@@ -1676,15 +1768,15 @@ it("shows retry progress without a partial message and keeps the recovered final
       attempt={null}
     />,
   );
-  expect(screen.getByRole("button", { name: "重试已恢复 1/5" })).toBeVisible();
-  const final = screen.getByText("重试后完成任务。");
-  await user.click(screen.getByRole("button", { name: "已完成 · 执行过程" }));
+  const recovered = screen.getByRole("button", { name: "本轮过程记录 · 1 项" });
+  expect(recovered).toBeVisible();
+  if (!screen.queryByRole("dialog")) await user.click(recovered);
+  expect(await screen.findByRole("dialog")).toHaveTextContent("模型响应已恢复");
+  expect(screen.getByText("重试后完成任务。")).toBeVisible();
   expect(
-    screen.getByRole("button", { name: "重试已恢复 1/5", hidden: true }),
-  ).not.toBeVisible();
-  expect(final).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "已完成 · 执行过程" }));
-  expect(screen.getByRole("button", { name: "重试已恢复 1/5" })).toBeVisible();
+    screen.getByRole("button", { name: "已完成 · 执行过程" }),
+  ).toBeDisabled();
+  expect(container.querySelector(".agent-process-steps")).toBeNull();
 });
 
 it("keeps live reasoning mounted through tools and finalization, and the final text outside every process fold", async () => {
