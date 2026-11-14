@@ -1,0 +1,13 @@
+.retry {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  color: var(--chat-muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+.count {
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}

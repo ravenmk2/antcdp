@@ -1,0 +1,128 @@
+--- a/components/execd/pkg/web/router.go
++++ b/components/execd/pkg/web/router.go
+@@ -15,6 +15,7 @@
+ package web
+ 
+ import (
++	"crypto/subtle"
+ 	"net/http"
+ 
+ 	"github.com/gin-gonic/gin"
+@@ -190,11 +191,21 @@
+ // accessTokenMiddleware guards API entrypoints. Once a RuntimeBinding with
+ // a token hash is applied (/internal/init is authoritative), request tokens
+ // are verified against the hash; before that, the legacy container-env
+-// token applies. /internal/init, /ready, and /ping are always reachable
+-// without the token.
++// token applies. Only /ready and /ping remain reachable without the token.
++// Initialization requires the original legacy token when one is configured.
+ func accessTokenMiddleware(legacyToken string) gin.HandlerFunc {
+ 	return func(ctx *gin.Context) {
+-		if _, preInit := preInitPaths[ctx.FullPath()]; preInit {
++		if ctx.FullPath() == "/ping" || ctx.FullPath() == "/ready" {
++			ctx.Next()
++			return
++		}
++		// Deployment security patch: initialization must not replace the
++		// authentication binding without the original control-plane credential.
++		if ctx.FullPath() == "/internal/init" && legacyToken != "" {
++			if subtle.ConstantTimeCompare([]byte(ctx.GetHeader(model.ApiAccessTokenHeader)), []byte(legacyToken)) != 1 {
++				abortUnauthorized(ctx)
++				return
++			}
+ 			ctx.Next()
+ 			return
+ 		}
+@@ -221,7 +232,7 @@
+ 		}
+ 
+ 		requestedToken := ctx.GetHeader(model.ApiAccessTokenHeader)
+-		if requestedToken == "" || requestedToken != legacyToken {
++		if requestedToken == "" || subtle.ConstantTimeCompare([]byte(requestedToken), []byte(legacyToken)) != 1 {
+ 			abortUnauthorized(ctx)
+ 			return
+ 		}
+--- a/components/execd/pkg/web/router_test.go
++++ b/components/execd/pkg/web/router_test.go
+@@ -103,10 +103,12 @@
+ 	})
+ 	r := newMiddlewareTestRouter(t, "legacy-token")
+ 
+-	// /ping, /ready, /internal/init stay reachable without the API token.
++	// Only liveness and readiness stay public; initialization remains authenticated.
+ 	require.Equal(t, http.StatusOK, doRequest(t, r, http.MethodGet, "/ping", "").Code)
+ 	require.Equal(t, http.StatusOK, doRequest(t, r, http.MethodGet, "/ready", "").Code)
+-	require.Equal(t, http.StatusOK, doRequest(t, r, http.MethodPost, "/internal/init", "").Code)
++	require.Equal(t, http.StatusUnauthorized, doRequest(t, r, http.MethodPost, "/internal/init", "").Code)
++	require.Equal(t, http.StatusUnauthorized, doRequest(t, r, http.MethodPost, "/internal/init", "rotated-token").Code)
++	require.Equal(t, http.StatusOK, doRequest(t, r, http.MethodPost, "/internal/init", "legacy-token").Code)
+ }
+ 
+ // withManager installs a fresh runtime-init manager with the given ready
+--- a/components/execd/pkg/runtime/command_argv.go
++++ b/components/execd/pkg/runtime/command_argv.go
+@@ -55,7 +55,7 @@
+ 		return nil, err
+ 	}
+ 	// Derive PWD from cwd before applying explicit overrides.
+-	env := mergeEnvs((&exec.Cmd{Dir: cwd}).Environ(), overrides)
++	env := filterEnvBlacklist(mergeEnvs((&exec.Cmd{Dir: cwd}).Environ(), overrides))
+ 	var cmd *exec.Cmd
+ 	if request.Argv != nil {
+ 		cmd = nativeCommand(ctx, request.Argv, cwd, env)
+--- /dev/null
++++ b/components/execd/pkg/runtime/command_env_security_test.go
+@@ -0,0 +1,53 @@
++package runtime
++
++import (
++	"context"
++	"os"
++	"strings"
++	"testing"
++)
++
++// Credentials must be absent even with hardening disabled. Filtering the
++// final merge also prevents request or binding overrides from reintroducing
++// a control-plane token into trusted helpers or ordinary workload processes.
++func TestPrepareCommandStripsControlCredentials(t *testing.T) {
++	t.Setenv("EXECD_ACCESS_TOKEN", "private-fixture-control-token")
++	t.Setenv("ANTCDP_TEST_ORDINARY_BASE", "base-kept")
++	executable, err := os.Executable()
++	if err != nil {
++		t.Fatal("test executable unavailable")
++	}
++	for _, override := range []bool{false, true} {
++		name := "base_environment"
++		envs := map[string]string{"ANTCDP_TEST_ORDINARY_OVERRIDE": "override-kept"}
++		if override {
++			name = "request_override"
++			envs["EXECD_ACCESS_TOKEN"] = "private-fixture-override-token"
++		}
++		t.Run(name, func(t *testing.T) {
++			cmd, err := prepareCommand(context.Background(), &ExecuteCodeRequest{Argv: []string{executable}, Cwd: t.TempDir(), Envs: envs})
++			if err != nil {
++				t.Fatal("command preparation failed")
++			}
++			base, extra := false, false
++			for _, value := range cmd.Env {
++				key, data, ok := strings.Cut(value, "=")
++				if !ok {
++					continue
++				}
++				if strings.EqualFold(key, "EXECD_ACCESS_TOKEN") {
++					t.Fatal("control credential escaped final environment filter")
++				}
++				if key == "ANTCDP_TEST_ORDINARY_BASE" && data == "base-kept" {
++					base = true
++				}
++				if key == "ANTCDP_TEST_ORDINARY_OVERRIDE" && data == "override-kept" {
++					extra = true
++				}
++			}
++			if !base || !extra {
++				t.Fatal("ordinary process environment was lost")
++			}
++		})
++	}
++}

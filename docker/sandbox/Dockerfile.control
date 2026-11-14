@@ -1,0 +1,5 @@
+ARG EXECD_BASE_IMAGE
+FROM ${EXECD_BASE_IMAGE}
+LABEL org.antcdp.component="execution-control"
+COPY --chmod=0555 execd /execd
+COPY --chmod=0444 EXECD-LICENSE /antcdp-licenses/EXECD-LICENSE

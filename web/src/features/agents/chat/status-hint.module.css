@@ -1,0 +1,68 @@
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.trigger:hover,
+.trigger[data-popup-open] {
+  background: color-mix(in srgb, currentColor 7%, transparent);
+}
+.trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.trigger[data-danger="true"] {
+  color: var(--danger);
+}
+.trigger svg {
+  width: 14px;
+  height: 14px;
+}
+.positioner {
+  z-index: 80;
+}
+.popup {
+  max-width: min(340px, calc(100vw - 24px));
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 4px 18px rgb(0 0 0 / 8%);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto,
+    "Noto Sans", Ubuntu, Cantarell, "Helvetica Neue", sans-serif, Arial,
+    "PingFang SC", "Source Han Sans SC", "Microsoft YaHei UI",
+    "Microsoft YaHei", "Noto Sans CJK SC";
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 120ms,
+    transform 120ms;
+}
+.popup[data-starting-style],
+.popup[data-ending-style] {
+  opacity: 0;
+  transform: translateY(2px);
+}
+.note {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 22px;
+  color: var(--chat-muted, var(--muted));
+}

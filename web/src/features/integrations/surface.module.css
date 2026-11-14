@@ -1,0 +1,14 @@
+@layer components {
+  .scope :global(.service-type-card:has(input:focus-visible)) {
+    outline: 1px dashed var(--accent);
+    outline-offset: -4px;
+  }
+  .scope :global(.service-type-card > input:focus) {
+    box-shadow: none;
+  }
+  @media (forced-colors: active) {
+    .scope :global(.service-type-card:has(input:focus-visible)) {
+      outline-color: Highlight;
+    }
+  }
+}

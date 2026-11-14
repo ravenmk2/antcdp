@@ -1,0 +1,6 @@
+GitLab, Jenkins, MySQL, PostgreSQL, Redis, RabbitMQ, MongoDB, Elasticsearch: https://github.com/simple-icons/simple-icons (CC0 collection; brand marks remain their owners).
+OpenObserve: https://openobserve.ai/favicon.svg
+Nacos: https://nacos.io/favicon.ico
+Icons identify external services. Service availability is determined by the capability registry.
+
+Display adaptation: GitLab #FC6D26, Jenkins #D24939, Elasticsearch #168B83, MySQL #4479A1, PostgreSQL #4169A1 use solid fills; OpenObserve retains its original colors. These display colors are not a claim of official brand palette compliance.

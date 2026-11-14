@@ -1,0 +1,393 @@
+--- a/server/opensandbox_server/config.py
++++ b/server/opensandbox_server/config.py
+@@ -11,6 +11,8 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++#
++# Modified by AntCDP for its dedicated Docker/proxy Server build.
+ 
+ """
+ Application configuration management for sandbox server.
+@@ -854,9 +856,13 @@
+ class DockerConfig(BaseModel):
+     """Docker runtime specific settings."""
+ 
+-    network_mode: str = Field(
+-        default="host",
+-        description="Docker network mode for sandbox containers (host, bridge, or a custom user-defined network name).",
++    network_mode: Literal["bridge"] = Field(
++        default="bridge",
++        description="AntCDP proxy server requires bridge workload networking; host workloads bypass port isolation.",
++    )
++    publish_host: str = Field(
++        default="127.0.0.1",
++        description="IPv4 loopback address for every published sandbox and egress port. The Server itself must use host networking.",
+     )
+     api_timeout: Optional[int] = Field(
+         default=None,
+@@ -942,6 +948,14 @@
+             "volumes. Useful for mounting a private CA certificate into all sandboxes."
+         ),
+     )
++
++    @field_validator("publish_host")
++    @classmethod
++    def validate_publish_host(cls, value: str) -> str:
++        address = ipaddress.ip_address(value)
++        if address.version != 4 or not address.is_loopback:
++            raise ValueError("AntCDP proxy server requires docker.publish_host to be an IPv4 loopback address.")
++        return str(address)
+ 
+     @model_validator(mode="after")
+     def validate_port_range(self) -> "DockerConfig":
+@@ -1046,6 +1060,8 @@
+     )
+     @model_validator(mode="after")
+     def validate_runtime_blocks(self) -> "AppConfig":
++        if self.runtime.type != "docker":
++            raise ValueError("This AntCDP Server image supports only runtime.type = 'docker'.")
+         if self.runtime.type == "docker":
+             if self.kubernetes is not None:
+                 raise ValueError("Kubernetes block must be omitted when runtime.type = 'docker'.")
+--- a/server/opensandbox_server/services/constants.py
++++ b/server/opensandbox_server/services/constants.py
+@@ -11,31 +11,35 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++#
++# Modified by AntCDP for its dedicated Docker/proxy Server build.
+ 
+ """Shared constants for sandbox services."""
+ 
+ from opensandbox_server.constants import OPENSANDBOX_LIFECYCLE
+ 
+-RESERVED_LABEL_PREFIX = "opensandbox.io/"
++RESERVED_LABEL_PREFIX = "io.antcdp.sandbox/"
++# Reject both namespaces: old-server labels must never be injected by a client.
++RESERVED_LABEL_PREFIXES = (RESERVED_LABEL_PREFIX, "opensandbox.io/")
+ 
+-SANDBOX_ID_LABEL = "opensandbox.io/id"
+-SANDBOX_EXPIRES_AT_LABEL = "opensandbox.io/expires-at"
+-SANDBOX_MANUAL_CLEANUP_LABEL = "opensandbox.io/manual-cleanup"
+-SANDBOX_PLATFORM_OS_LABEL = "opensandbox.io/platform-os"
+-SANDBOX_PLATFORM_ARCH_LABEL = "opensandbox.io/platform-arch"
+-SANDBOX_SNAPSHOT_ID_LABEL = "opensandbox.io/snapshot-id"
++SANDBOX_ID_LABEL = "io.antcdp.sandbox/id"
++SANDBOX_EXPIRES_AT_LABEL = "io.antcdp.sandbox/expires-at"
++SANDBOX_MANUAL_CLEANUP_LABEL = "io.antcdp.sandbox/manual-cleanup"
++SANDBOX_PLATFORM_OS_LABEL = "io.antcdp.sandbox/platform-os"
++SANDBOX_PLATFORM_ARCH_LABEL = "io.antcdp.sandbox/platform-arch"
++SANDBOX_SNAPSHOT_ID_LABEL = "io.antcdp.sandbox/snapshot-id"
+ # Host-mapped ports recorded on containers (bridge mode).
+ SANDBOX_EMBEDDING_PROXY_PORT_LABEL = (
+-    "opensandbox.io/embedding-proxy-port"  # maps container 44772 -> host port
++    "io.antcdp.sandbox/embedding-proxy-port"  # maps container 44772 -> host port
+ )
+-SANDBOX_HTTP_PORT_LABEL = "opensandbox.io/http-port"  # maps container 8080 -> host port
+-SANDBOX_OSSFS_MOUNTS_LABEL = "opensandbox.io/ossfs-mounts"
+-SANDBOX_MANAGED_VOLUMES_LABEL = "opensandbox.io/volume-managed-by"
++SANDBOX_HTTP_PORT_LABEL = "io.antcdp.sandbox/http-port"  # maps container 8080 -> host port
++SANDBOX_OSSFS_MOUNTS_LABEL = "io.antcdp.sandbox/ossfs-mounts"
++SANDBOX_MANAGED_VOLUMES_LABEL = "io.antcdp.sandbox/volume-managed-by"
+ OPEN_SANDBOX_INGRESS_HEADER = "OpenSandbox-Ingress-To"
+ OPEN_SANDBOX_EGRESS_AUTH_HEADER = "OPENSANDBOX-EGRESS-AUTH"
+-SANDBOX_EGRESS_AUTH_TOKEN_METADATA_KEY = "opensandbox.io/egress-auth-token"
++SANDBOX_EGRESS_AUTH_TOKEN_METADATA_KEY = "io.antcdp.sandbox/egress-auth-token"
+ OPEN_SANDBOX_SECURE_ACCESS_HEADER = "OpenSandbox-Secure-Access"
+-SANDBOX_SECURE_ACCESS_TOKEN_METADATA_KEY = "opensandbox.io/secure-access-token"
++SANDBOX_SECURE_ACCESS_TOKEN_METADATA_KEY = "io.antcdp.sandbox/secure-access-token"
+ 
+ # Environment variable name for passing network policy to egress sidecar
+ EGRESS_RULES_ENV = "OPENSANDBOX_EGRESS_RULES"
+@@ -154,6 +158,7 @@
+ 
+ __all__ = [
+     "RESERVED_LABEL_PREFIX",
++    "RESERVED_LABEL_PREFIXES",
+     "SANDBOX_ID_LABEL",
+     "SANDBOX_EXPIRES_AT_LABEL",
+     "SANDBOX_MANUAL_CLEANUP_LABEL",
+--- a/server/opensandbox_server/extensions/keys.py
++++ b/server/opensandbox_server/extensions/keys.py
+@@ -11,12 +11,14 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++#
++# Modified by AntCDP for its dedicated Docker/proxy Server build.
+ 
+ """Well-known CreateSandboxRequest.extensions keys and workload storage keys."""
+ 
+ # access.renew.extend.seconds extension key (annotation-based)
+ ACCESS_RENEW_EXTEND_SECONDS_KEY = "access.renew.extend.seconds"
+-ACCESS_RENEW_EXTEND_SECONDS_METADATA_KEY = "opensandbox.io/access-renew-extend-seconds"
++ACCESS_RENEW_EXTEND_SECONDS_METADATA_KEY = "io.antcdp.sandbox/access-renew-extend-seconds"
+ 
+ # bootstrap.execd.isolation extension key
+ # When set to "enable", the sandbox container receives CAP_SYS_ADMIN so that
+@@ -31,4 +33,4 @@
+ # User-specified extension keys starting with EXTENSIONS_ANNOTATION_PREFIX
+ # are automatically propagated to Pod annotations with ANNOTATION_METADATA_PREFIX
+ EXTENSIONS_ANNOTATION_PREFIX = "opensandbox.extensions."
+-ANNOTATION_METADATA_PREFIX = "opensandbox.io/extensions."
+\ No newline at end of file
++ANNOTATION_METADATA_PREFIX = "io.antcdp.sandbox/extensions."
+\ No newline at end of file
+--- a/server/opensandbox_server/services/validators.py
++++ b/server/opensandbox_server/services/validators.py
+@@ -11,6 +11,8 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++#
++# Modified by AntCDP for its dedicated Docker/proxy Server build.
+ 
+ """
+ Shared validation helpers for container-based sandbox services.
+@@ -28,7 +30,7 @@
+ 
+ from fastapi import HTTPException, status
+ 
+-from opensandbox_server.services.constants import RESERVED_LABEL_PREFIX, SandboxErrorCodes
++from opensandbox_server.services.constants import RESERVED_LABEL_PREFIXES, SandboxErrorCodes
+ 
+ if TYPE_CHECKING:
+     from opensandbox_server.api.schema import CredentialProxyConfig, NetworkPolicy, OSSFS, PlatformSpec, Volume
+@@ -107,13 +109,13 @@
+     if not metadata:
+         return
+     for key, value in metadata.items():
+-        if key.startswith(RESERVED_LABEL_PREFIX):
++        if key.startswith(RESERVED_LABEL_PREFIXES):
+             raise HTTPException(
+                 status_code=status.HTTP_400_BAD_REQUEST,
+                 detail={
+                     "code": SandboxErrorCodes.INVALID_METADATA_LABEL,
+                     "message": (
+-                        f"Metadata key '{key}' uses the reserved prefix '{RESERVED_LABEL_PREFIX}'. "
++                        f"Metadata key '{key}' uses a reserved prefix managed by the system. "
+                         "Keys under this prefix are managed by the system and cannot be set via metadata."
+                     ),
+                 },
+--- a/server/opensandbox_server/services/sandbox_service.py
++++ b/server/opensandbox_server/services/sandbox_service.py
+@@ -11,6 +11,8 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++#
++# Modified by AntCDP for its dedicated Docker/proxy Server build.
+ 
+ """
+ Sandbox service layer for business logic.
+@@ -35,6 +37,7 @@
+     RenewSandboxExpirationResponse,
+     Sandbox,
+ )
++from opensandbox_server.services.constants import RESERVED_LABEL_PREFIXES
+ from opensandbox_server.services.diagnostics import DiagnosticResult
+ from opensandbox_server.services.validators import ensure_valid_port
+ 
+@@ -218,7 +221,7 @@
+ 
+     @staticmethod
+     def _is_system_label(key: str) -> bool:
+-        return key.startswith("opensandbox.io/")
++        return key.startswith(RESERVED_LABEL_PREFIXES)
+ 
+     @staticmethod
+     def _apply_metadata_patch(labels: dict, patch: dict) -> dict:
+@@ -232,7 +235,7 @@
+                     status_code=400,
+                     detail={
+                         "code": "INVALID_METADATA_LABEL",
+-                        "message": f"Metadata key '{key}' is reserved (opensandbox.io/ prefix).",
++                        "message": f"Metadata key '{key}' uses a reserved prefix managed by the system.",
+                     },
+                 )
+ 
+--- a/server/opensandbox_server/services/docker/metadata.py
++++ b/server/opensandbox_server/services/docker/metadata.py
+@@ -11,6 +11,8 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++#
++# Modified by AntCDP for its dedicated Docker/proxy Server build.
+ 
+ """Per-sandbox file-backed metadata store for Docker.
+ 
+@@ -27,10 +29,12 @@
+ from datetime import datetime
+ from pathlib import Path
+ 
++from opensandbox_server.services.constants import RESERVED_LABEL_PREFIXES
++
+ logger = logging.getLogger(__name__)
+ 
+ _NON_USER_LABEL_PREFIXES = (
+-    "opensandbox.io/",
++    *RESERVED_LABEL_PREFIXES,
+     "org.opencontainers.image.",
+     "com.docker.",
+     "desktop.docker.",
+@@ -68,7 +72,7 @@
+         if path.exists():
+             overrides = self._read_file(path)
+             if overrides is not None:
+-                return overrides or None
++                return _extract_user_labels(overrides) or None
+         return _extract_user_labels(container_labels) or None
+ 
+     def patch(
+--- a/server/opensandbox_server/services/docker/port_allocator.py
++++ b/server/opensandbox_server/services/docker/port_allocator.py
+@@ -11,6 +11,8 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++#
++# Modified by AntCDP for its dedicated Docker/proxy Server build.
+ 
+ from __future__ import annotations
+ 
+@@ -22,7 +24,7 @@
+ 
+ from opensandbox_server.services.constants import SandboxErrorCodes
+ 
+-DOCKER_PUBLISH_HOST = "0.0.0.0"
++DOCKER_PUBLISH_HOST = "127.0.0.1"
+ # The probe is a short-lived availability check and must match Docker's
+ # publish scope; probing only localhost can miss ports bound on other host
+ # interfaces that Docker would later fail to publish.
+@@ -55,6 +57,7 @@
+     min_port: int = 40000,
+     max_port: int = 60000,
+     attempts: int = 50,
++    publish_host: str = DOCKER_PUBLISH_HOST,
+ ) -> Optional[int]:
+     """Find an available TCP port on the host within the given range."""
+     for _ in range(attempts):
+@@ -65,7 +68,7 @@
+                 # This does not listen for or accept connections; it mirrors the
+                 # later Docker publish binding to catch host-wide port conflicts.
+                 # codeql[py/bind-socket-all-network-interfaces]
+-                sock.bind((PORT_PROBE_HOST, port))
++                sock.bind((publish_host, port))
+             except OSError:
+                 continue
+             return port
+@@ -76,13 +79,14 @@
+     container_ports: list[str],
+     min_port: int = 40000,
+     max_port: int = 60000,
++    publish_host: str = DOCKER_PUBLISH_HOST,
+ ) -> Dict[str, tuple[str, int]]:
+     """Allocate distinct random host ports for each container port spec."""
+     allocated_ports: set[int] = set()
+     bindings: Dict[str, tuple[str, int]] = {}
+     for container_port in container_ports:
+         while True:
+-            host_port = allocate_host_port(min_port=min_port, max_port=max_port)
++            host_port = allocate_host_port(min_port=min_port, max_port=max_port, publish_host=publish_host)
+             if host_port is None:
+                 raise HTTPException(
+                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+@@ -93,6 +97,6 @@
+                 )
+             if host_port not in allocated_ports:
+                 allocated_ports.add(host_port)
+-                bindings[container_port] = (DOCKER_PUBLISH_HOST, host_port)
++                bindings[container_port] = (publish_host, host_port)
+                 break
+     return bindings
+--- a/server/opensandbox_server/services/docker/docker_service.py
++++ b/server/opensandbox_server/services/docker/docker_service.py
+@@ -11,6 +11,8 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++#
++# Modified by AntCDP for its dedicated Docker/proxy Server build.
+ 
+ """
+ Docker-based implementation of SandboxService.
+@@ -813,7 +815,7 @@
+ 
+                 egress_token = generate_egress_token()
+                 labels[SANDBOX_EGRESS_AUTH_TOKEN_METADATA_KEY] = egress_token
+-                sidecar_port_bindings = allocate_port_bindings([*exposed_ports, "18080"], min_port=self.app_config.docker.port_range_min, max_port=self.app_config.docker.port_range_max)
++                sidecar_port_bindings = allocate_port_bindings([*exposed_ports, "18080"], min_port=self.app_config.docker.port_range_min, max_port=self.app_config.docker.port_range_max, publish_host=self.app_config.docker.publish_host)
+                 host_execd_port = sidecar_port_bindings["44772"][1]
+                 host_http_port = sidecar_port_bindings["8080"][1]
+                 egress_api_binding = sidecar_port_bindings.get("18080")
+@@ -856,7 +858,7 @@
+                     gpu_count=effective_gpu_count,
+                 )
+                 if self.network_mode != HOST_NETWORK_MODE:
+-                    port_bindings = allocate_port_bindings(exposed_ports, min_port=self.app_config.docker.port_range_min, max_port=self.app_config.docker.port_range_max)
++                    port_bindings = allocate_port_bindings(exposed_ports, min_port=self.app_config.docker.port_range_min, max_port=self.app_config.docker.port_range_max, publish_host=self.app_config.docker.publish_host)
+                     host_execd_port = port_bindings["44772"][1]
+                     host_http_port = port_bindings["8080"][1]
+                     host_config_kwargs["port_bindings"] = normalize_port_bindings(port_bindings)
+@@ -1254,7 +1256,7 @@
+                     status_code=400,
+                     detail={
+                         "code": "INVALID_METADATA_LABEL",
+-                        "message": f"Metadata key '{key}' is reserved (opensandbox.io/ prefix).",
++                        "message": f"Metadata key '{key}' uses a reserved prefix managed by the system.",
+                     },
+                 )
+ 
+--- a/server/opensandbox_server/services/docker/networking.py
++++ b/server/opensandbox_server/services/docker/networking.py
+@@ -11,6 +11,8 @@
+ # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ # See the License for the specific language governing permissions and
+ # limitations under the License.
++#
++# Modified by AntCDP for its dedicated Docker/proxy Server build.
+ 
+ """
+ Network management mixin for Docker sandboxes.
+@@ -83,7 +85,7 @@
+ 
+ HOST_NETWORK_MODE = "host"
+ BRIDGE_NETWORK_MODE = "bridge"
+-EGRESS_SIDECAR_LABEL = "opensandbox.io/egress-sidecar-for"
++EGRESS_SIDECAR_LABEL = "io.antcdp.sandbox/egress-sidecar-for"
+ 
+ 
+ class DockerNetworkingMixin:
+@@ -335,15 +337,9 @@
+         This intentionally does not use ``server.eip`` because the proxy target must be reachable
+         from the server process itself, even in deployments without hairpin access to the public EIP.
+         """
+-        host_cfg = (self.app_config.server.host or "").strip()
+-        host_key = host_cfg.lower()
+-        if host_key in {"", "0.0.0.0", "::"}:
+-            if _running_inside_docker_container():
+-                host_ip = self._get_docker_host_ip()
+-                if host_ip:
+-                    return host_ip
+-            return "127.0.0.1"
+-        return host_cfg
++        # Control-plane binding is independent of the sandbox data-plane target.
++        host_ip = self._get_docker_host_ip()
++        return host_ip or self.app_config.docker.publish_host
+ 
+     def _resolve_internal_endpoint(self, container, port: int) -> Endpoint:
+         """Return the internal endpoint used when bypassing host mapping."""
+@@ -424,8 +420,8 @@
+                     sidecar_env.append(f"{key}={value}")
+ 
+         sidecar_port_bindings: dict[str, tuple[str, int]] = {
+-            "44772": ("0.0.0.0", host_execd_port),
+-            "8080": ("0.0.0.0", host_http_port),
++            "44772": (self.app_config.docker.publish_host, host_execd_port),
++            "8080": (self.app_config.docker.publish_host, host_http_port),
+         }
+         if extra_port_bindings:
+             sidecar_port_bindings.update(extra_port_bindings)

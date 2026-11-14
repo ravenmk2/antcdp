@@ -1,0 +1,42 @@
+.connection {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 24px;
+}
+.loading {
+  flex: 1;
+  min-height: 0;
+  padding: 84px 36px 32px;
+}
+.skeleton {
+  max-width: 752px;
+  margin: auto;
+  display: grid;
+  gap: 16px;
+  animation: reveal 180ms 180ms both;
+}
+.skeleton span {
+  height: 10px;
+  border-radius: 6px;
+  background: var(--chat-divider, rgb(128 128 128 / 9%));
+}
+.skeleton span:first-child {
+  width: 36%;
+}
+.skeleton span:nth-child(2) {
+  width: 74%;
+}
+.skeleton span:last-child {
+  width: 57%;
+}
+@keyframes reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

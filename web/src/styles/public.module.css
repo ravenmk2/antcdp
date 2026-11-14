@@ -1,0 +1,232 @@
+@layer theme, base, components, utilities;
+
+.scope {
+  --font-code:
+    ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, Menlo, Monaco,
+    "Liberation Mono", "DejaVu Sans Mono", "MiSans", monospace;
+  --font-body:
+    "MiSans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  color-scheme: light;
+  --accent: #1783ff;
+  --accent-hover: #0874ee;
+  --accent-soft: #e7f1ff;
+  --accent-soft-strong: #d5e7ff;
+  --on-accent: #fff;
+  --on-danger: #fff;
+  --canvas: #fff;
+  --surface: #fff;
+  --surface-subtle: #fafafa;
+  --surface-hover: #ebebeb;
+  --table-row-hover: #f5f5f5;
+  --segmented-track: #e5e5e5;
+  --segmented-selected: #fff;
+  --sidebar: #f5f5f5;
+  --navigation-text: #000;
+  --sidebar-selected: #e5e5e5;
+  --text: #262626;
+  --text-soft: #4b4b4b;
+  --muted: #666;
+  --faint: #949494;
+  --border: #d6d6d6;
+  --border-subtle: #e5e5e5;
+  --border-strong: var(--border);
+  --success: #236b47;
+  --success-soft: #eaf5ee;
+  --warning: #865b17;
+  --warning-soft: #fbf2df;
+  --danger: #c9372c;
+  --danger-soft: #fdeceb;
+  --info: #1783ff;
+  --info-soft: #e7f1ff;
+  --star: #eab308;
+  --control-radius: 8px;
+  --compact-control-radius: 6px;
+  --panel-radius: 10px;
+  --dialog-radius: 12px;
+  --control-shadow: 0 0 transparent;
+  --floating-shadow: 0 6px 20px rgb(23 32 44 / 10%);
+  --shadow-sm: 0 1px 2px rgb(23 32 44 / 4%), 0 1px 5px rgb(23 32 44 / 3%);
+  --shadow-lg: 0 24px 70px rgb(23 32 44 / 18%);
+  --sidebar-width: 252px;
+}
+:global(.dark) .scope {
+  color-scheme: dark;
+  --accent: #1783ff;
+  --accent-hover: #2e90ff;
+  --accent-soft: #18324e;
+  --accent-soft-strong: #244363;
+  --on-accent: #fff;
+  --on-danger: #3e2226;
+  --canvas: #1c1c1c;
+  --surface: #242424;
+  --surface-subtle: #202020;
+  --surface-hover: #2d2d2d;
+  --table-row-hover: #2d2d2d;
+  --segmented-track: #171717;
+  --segmented-selected: #3b3b3b;
+  --sidebar: #171717;
+  --navigation-text: #fff;
+  --sidebar-selected: #18324e;
+  --text: #e8e8e8;
+  --text-soft: #c7c7c7;
+  --muted: #aaa;
+  --faint: #777;
+  --border: #444;
+  --border-subtle: #333;
+  --border-strong: var(--border);
+  --success: #8ed4ab;
+  --success-soft: #243b30;
+  --warning: #e3bd77;
+  --warning-soft: #3b3325;
+  --danger: #fda4a4;
+  --danger-soft: #3e2226;
+  --info: #1783ff;
+  --info-soft: #18324e;
+  --star: #fcd34d;
+  --floating-shadow: 0 6px 20px rgb(0 0 0 / 30%);
+  --shadow-sm: 0 1px 3px rgb(0 0 0 / 18%);
+  --shadow-lg: 0 24px 70px rgb(0 0 0 / 45%);
+}
+@layer components {
+  .scope :global(.page) {
+    width: min(1540px, 100%);
+    margin: 0 auto;
+    padding: 28px 32px 56px;
+  }
+  .scope :global(.auth-page) {
+    --control-radius: 10px;
+    --compact-control-radius: 8px;
+    --panel-radius: 10px;
+    --control-shadow:
+      0 1px 3px 0 rgb(0 0 0 / 10%), 0 1px 2px -1px rgb(0 0 0 / 10%);
+    display: grid;
+    min-height: 100dvh;
+    place-items: center;
+    padding: 36px 24px;
+    background: var(--canvas);
+  }
+  .scope :global(.auth-page .panel) {
+    box-shadow: var(--shadow-sm);
+  }
+  .scope :global(.auth-dialog) {
+    display: grid;
+    width: min(960px, 100%);
+    min-height: 580px;
+    grid-template-columns: minmax(300px, 0.88fr) minmax(420px, 1.12fr);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+  }
+  .scope :global(.auth-visual) {
+    position: relative;
+    overflow: hidden;
+    padding: 30px;
+    background-color: #12355b;
+    background-image: radial-gradient(
+      circle at 85% 12%,
+      rgb(147 197 253 / 12%),
+      transparent 34%
+    );
+    color: #fff;
+  }
+  .scope :global(.auth-visual::before),
+  .scope :global(.auth-visual::after) {
+    position: absolute;
+    border: 1px solid rgb(147 197 253 / 16%);
+    border-radius: 50%;
+    content: "";
+  }
+  .scope :global(.auth-visual::before) {
+    width: 390px;
+    height: 390px;
+    top: -170px;
+    right: -230px;
+    box-shadow: 0 0 0 75px rgb(147 197 253 / 4%);
+  }
+  .scope :global(.auth-visual::after) {
+    width: 240px;
+    height: 240px;
+    bottom: -130px;
+    left: -130px;
+    box-shadow: 0 0 0 65px rgb(147 197 253 / 4%);
+  }
+  .scope :global(.auth-form) {
+    position: relative;
+    display: grid;
+    align-content: center;
+    padding: 50px 44px 36px;
+  }
+  .scope :global(.setup-page) {
+    min-height: 100dvh;
+    background: var(--canvas);
+  }
+  .scope :global(.setup-shell) {
+    width: min(1080px, calc(100% - 48px));
+    margin: 0 auto;
+    padding: 34px 0 60px;
+  }
+  .scope :global(.setup-panel-header) {
+    display: flex;
+    align-items: center;
+    gap: 40px;
+    margin: 0 32px;
+    padding: 24px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .scope :global(.setup-panel-header .wizard-steps) {
+    flex: 1;
+    min-width: 0;
+  }
+  .scope :global(.setup-panel-header .wizard-step) {
+    white-space: nowrap;
+  }
+  .scope :global(.setup-panel-header .wizard-step:last-child) {
+    flex: 0 0 auto;
+  }
+  .scope :global(.setup-panel-body) {
+    padding: 28px 32px 32px;
+  }
+  .scope :global(.setup-panel .form-grid) {
+    column-gap: 24px;
+    row-gap: 20px;
+  }
+  .scope :global(.setup-panel .form-actions) {
+    margin-top: 28px;
+    padding-top: 20px;
+  }
+  @media (max-width: 800px) {
+    .scope :global(.setup-panel-header) {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 20px;
+    }
+  }
+}
+
+@media (max-width: 1100px) {
+  .scope :global(.page) {
+    padding-inline: 24px;
+  }
+}
+@media (max-width: 820px) {
+  .scope :global(.page) {
+    padding: 22px 16px 44px;
+  }
+  .scope :global(.auth-dialog) {
+    min-height: 0;
+    max-width: 480px;
+    grid-template-columns: 1fr;
+  }
+  .scope :global(.auth-visual) {
+    display: none;
+  }
+  .scope :global(.auth-form) {
+    padding: 50px 28px 32px;
+  }
+  .scope :global(.wizard-step span:not(.wizard-index)) {
+    display: none;
+  }
+}

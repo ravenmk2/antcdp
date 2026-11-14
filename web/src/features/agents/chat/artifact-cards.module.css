@@ -1,0 +1,148 @@
+.root {
+  min-width: 0;
+  container-type: inline-size;
+  margin: 4px 0 10px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr));
+  gap: 10px;
+}
+.card {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  min-width: 0;
+  min-height: 92px;
+  padding: 14px;
+  border: 1px solid var(--chat-divider);
+  border-radius: 13px;
+  background: var(--chat-composer);
+  color: var(--chat-ink);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background 140ms,
+    border-color 140ms,
+    box-shadow 140ms;
+}
+.card:hover {
+  background: color-mix(in srgb, var(--chat-composer) 96%, var(--chat-primary));
+  border-color: color-mix(
+    in srgb,
+    var(--chat-primary) 30%,
+    var(--chat-divider)
+  );
+  box-shadow: 0 3px 12px rgb(0 0 0 / 3%);
+}
+.card:focus-visible,
+.toggle:focus-visible {
+  outline: 2px solid var(--chat-primary);
+  outline-offset: 3px;
+}
+.icon {
+  --file-color: #718096;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 50px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  color: var(--file-color);
+  background: color-mix(in srgb, var(--file-color) 9%, transparent);
+}
+.icon[data-tone="blue"] {
+  --file-color: #4686d9;
+}
+.icon[data-tone="red"] {
+  --file-color: #d96b62;
+}
+.icon[data-tone="green"] {
+  --file-color: #369879;
+}
+.icon[data-tone="orange"] {
+  --file-color: #cd8945;
+}
+.icon[data-tone="violet"] {
+  --file-color: #8b79ca;
+}
+.icon svg {
+  width: 26px;
+  height: 30px;
+  stroke-width: 1.5;
+}
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.description {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--chat-process);
+}
+.meta {
+  display: flex;
+  gap: 5px;
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--chat-muted);
+}
+.meta > :first-child {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.arrow {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--chat-muted);
+  opacity: 0.5;
+  transition:
+    opacity 140ms,
+    transform 140ms;
+}
+.card:hover .arrow,
+.card:focus-visible .arrow {
+  opacity: 1;
+  transform: translate(1px, -1px);
+}
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 10px auto 0;
+  padding: 3px 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--chat-muted);
+  font: inherit;
+  font-size: 12px;
+  line-height: 20px;
+  cursor: pointer;
+}
+.toggle:hover {
+  background: var(--chat-hover);
+  color: var(--chat-process);
+}
+.toggle svg {
+  width: 13px;
+  height: 13px;
+}

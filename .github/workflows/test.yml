@@ -1,0 +1,145 @@
+# .github/workflows/test.yml
+name: Test
+
+on:
+  push:
+    branches: [master, main, dev, develop]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/build-web
+
+      - name: Check frontend lint, tests and root assets
+        run: node scripts/check-web.mjs
+
+      - name: Test scripts on Linux
+        run: node --test scripts/*.test.mjs
+
+      - name: Share verified frontend
+        id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-dist
+          path: web/dist/
+          if-no-files-found: error
+          overwrite: true
+
+  go:
+    needs: frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.frontend.outputs.artifact-id }}
+          path: web/dist
+
+      - uses: ./.github/actions/check-go
+
+  test:
+    needs: frontend
+    strategy:
+      matrix:
+        os:
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      CGO_ENABLED: 0
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.frontend.outputs.artifact-id }}
+          path: web/dist
+
+      - name: Test development, font and workflow scripts
+        run: node --test scripts/*.test.mjs
+
+      - run: go vet ./...
+
+      - run: go test ./...
+
+  mysql:
+    needs: frontend
+    # Each version runs in a separate CI job with its own temporary MySQL service.
+    # This matrix does not provision multiple databases for an application deployment.
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ["8.0", "8.4"]
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:${{ matrix.version }}
+        env:
+          MYSQL_DATABASE: antcdp_test
+          MYSQL_USER: antcdp_test
+          MYSQL_PASSWORD: integration-test-only
+          MYSQL_ROOT_PASSWORD: integration-root-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    env:
+      # Test-only schemas isolate mutable fixtures and destructive migration checks.
+      # A normal installation uses one application schema; these are not deployment settings.
+      ANTCDP_TEST_MYSQL_DSN: antcdp_test:integration-test-only@tcp(127.0.0.1:3306)/antcdp_test
+      ANTCDP_TEST_HTTP_MYSQL_DSN: antcdp_test:integration-test-only@tcp(127.0.0.1:3306)/antcdp_test_http
+
+      ANTCDP_TEST_SCHEMA_MYSQL_DSN: antcdp_test:integration-test-only@tcp(127.0.0.1:3306)/antcdp_test_schema
+      ANTCDP_TEST_MODELS_MYSQL_DSN: antcdp_test:integration-test-only@tcp(127.0.0.1:3306)/antcdp_test_models
+      ANTCDP_TEST_AGENTS_MYSQL_DSN: antcdp_test:integration-test-only@tcp(127.0.0.1:3306)/antcdp_test_agents
+      ANTCDP_TEST_CLOUD_MYSQL_DSN: antcdp_test:integration-test-only@tcp(127.0.0.1:3306)/antcdp_test_cloud
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.frontend.outputs.artifact-id }}
+          path: web/dist
+
+      - name: Prepare isolated lifecycle and migration test schemas
+        run: >-
+          docker exec -e MYSQL_PWD=integration-root-only ${{ job.services.mysql.id }}
+          mysql --user=root -e "CREATE DATABASE antcdp_test_http CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+          GRANT ALL PRIVILEGES ON antcdp_test_http.* TO 'antcdp_test'@'%';
+          CREATE DATABASE antcdp_test_schema CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+          GRANT ALL PRIVILEGES ON antcdp_test_schema.* TO 'antcdp_test'@'%';
+          CREATE DATABASE antcdp_test_models CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+          GRANT ALL PRIVILEGES ON antcdp_test_models.* TO 'antcdp_test'@'%';
+          CREATE DATABASE antcdp_test_agents CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+          GRANT ALL PRIVILEGES ON antcdp_test_agents.* TO 'antcdp_test'@'%';
+          CREATE DATABASE antcdp_test_cloud CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+          GRANT ALL PRIVILEGES ON antcdp_test_cloud.* TO 'antcdp_test'@'%';"
+
+      - name: Test MySQL installation, authentication and management
+        run: go test -race -count=1 -v ./internal/store/mysql

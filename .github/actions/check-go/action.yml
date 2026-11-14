@@ -1,0 +1,21 @@
+name: Check Go
+description: Set up Go and run unit tests, vet and the shared lint version
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v7
+      with:
+        go-version-file: go.mod
+    - name: Go unit tests
+      shell: bash
+      run: go test ./...
+    - name: Go vet
+      shell: bash
+      run: go vet ./...
+    - uses: golangci/golangci-lint-action@v9
+      with:
+        version: v2.13.2
+        args: --config=.golangci.yml
+    - name: Verify lint configuration
+      shell: bash
+      run: golangci-lint config verify
