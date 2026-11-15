@@ -168,7 +168,8 @@ export function useScrollFollow() {
     };
     // Both the transcript and its available viewport can change independently.
     const observer = new ResizeObserver(schedule);
-    observer.observe(body);
+    // Includes the trailing space reserved for the floating composer.
+    observer.observe(body, { box: "border-box" });
     observer.observe(viewport);
     viewport.addEventListener("scroll", onScroll, { passive: true });
     viewport.addEventListener("wheel", onWheel, { passive: true });

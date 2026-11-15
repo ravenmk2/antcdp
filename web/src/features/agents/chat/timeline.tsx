@@ -769,15 +769,22 @@ function VisibleResult({
   useEffect(() => {
     const node = element.current;
     if (!node || !watching) return;
+    const scroll = node.closest(".agent-chat-scroll");
+    const footer = scroll?.parentElement?.querySelector(".agent-chat-footer");
     const check = () => {
       const box = node.getBoundingClientRect();
-      const clip = node.closest(".agent-chat-scroll")?.getBoundingClientRect();
+      const clip = scroll?.getBoundingClientRect();
+      const visibleBottom = Math.min(
+        clip?.bottom ?? window.innerHeight,
+        footer?.getBoundingClientRect().top ?? window.innerHeight,
+      );
       if (
         document.visibilityState === "visible" &&
         document.hasFocus() &&
         box.top >= 0 &&
         box.bottom <= window.innerHeight &&
-        (!clip || (box.top >= clip.top && box.bottom <= clip.bottom))
+        (!clip || box.top >= clip.top) &&
+        box.bottom <= visibleBottom
       )
         callback.current?.(record);
     };
@@ -788,10 +795,16 @@ function VisibleResult({
       { threshold: 1 },
     );
     observer.observe(node);
+    // IntersectionObserver cannot see a floating composer covering the result.
+    const dockObserver = new ResizeObserver(check);
+    if (footer) dockObserver.observe(footer);
+    scroll?.addEventListener("scroll", check, { passive: true });
     document.addEventListener("visibilitychange", check);
     window.addEventListener("focus", check);
     return () => {
       observer.disconnect();
+      dockObserver.disconnect();
+      scroll?.removeEventListener("scroll", check);
       document.removeEventListener("visibilitychange", check);
       window.removeEventListener("focus", check);
     };

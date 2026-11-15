@@ -20,6 +20,7 @@ describe("History routes", () => {
       "/admin/agent-usage?tab=runs",
       "/agents/sessions/31",
       "/agents",
+      "/agent-catalog",
       "/cloud-computer",
       "/admin/cloud-computers",
       "/admin/cloud-computers/settings",

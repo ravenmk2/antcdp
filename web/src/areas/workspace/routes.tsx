@@ -54,6 +54,16 @@ const RemoteHostsPage = lazy(() =>
   })),
 );
 const Root = lazy(() => import("./root"));
+const ConversationsPage = lazy(() =>
+  import("./pages/conversations-page").then((m) => ({
+    default: m.ConversationsPage,
+  })),
+);
+const AgentDirectory = lazy(() =>
+  import("./pages/conversations-page").then((m) => ({
+    default: m.AgentDirectory,
+  })),
+);
 export const workspaceRoutes: RouteObject[] = [
   {
     element: (
@@ -66,7 +76,8 @@ export const workspaceRoutes: RouteObject[] = [
       { index: true, element: <Navigate to="/home" replace /> },
       { path: "home", element: <HomePage /> },
       { path: "cloud-computer", element: <PersonalCloudComputerPage /> },
-      { path: "agents", element: <Navigate to="/home" replace /> },
+      { path: "agents", element: <ConversationsPage /> },
+      { path: "agent-catalog", element: <AgentDirectory /> },
       { path: "agents/sessions/:sessionId", element: <AgentSessionPage /> },
       { path: "projects", element: <WorkspaceProjectList /> },
       { path: "teams", element: <WorkspaceTeamList /> },

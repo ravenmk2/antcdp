@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router";
 import { Bot, ChevronDown, LockKeyhole, Sparkles } from "lucide-react";
 import { Button } from "@/components/button";
+import { Drawer, OverlayCancelButton } from "@/components/overlays";
 import { Field, Select } from "@/components/fields";
 import {
   AsyncBoundary,
@@ -24,6 +25,7 @@ import {
 } from "../data/agent-runtime";
 import { ResourcePicker } from "@/features/agents/resources/resource-picker";
 import { ChatComposer } from "./composer";
+import { useComposerInset } from "./use-composer-inset";
 
 export function NewConversation({
   service = false,
@@ -33,24 +35,27 @@ export function NewConversation({
   agentId?: string;
 }) {
   const cache = useQueryClient();
+  const composerInset = useComposerInset();
   const [params] = useSearchParams(),
     navigate = useNavigate();
-  const id = service ? `new:service:${agentId}` : "new:interactive";
+  const routeAgent = agentId || params.get("agent") || "";
+  const id = service
+    ? `new:service:${agentId}`
+    : `new:interactive:${routeAgent || "default"}`;
   const { state: draft, draft: editor } = useConversationDraft(id),
     send = useConversationSend(id);
   const [picking, setPicking] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const fixedAgent = !service && Boolean(agentId);
   const catalog = useApiQuery<(CatalogAgent | AgentSummary)[]>(
     ["agent-start-catalog", service],
     service
       ? `${agentAdminRoot}/definitions?agent_type=service&enabled=true&page=1&page_size=20`
       : `${agentRoot}/catalog?page=1&page_size=20`,
+    { enabled: !fixedAgent },
   );
   const requested =
-    agentId ||
-    draft.agentId ||
-    params.get("agent") ||
-    catalog.data?.data[0]?.id ||
-    "";
+    routeAgent || draft.agentId || catalog.data?.data[0]?.id || "";
   const agent = useApiQuery<CatalogAgent | AgentDefinition>(
     ["agent-start-detail", service, requested],
     service
@@ -109,6 +114,100 @@ export function NewConversation({
         : `/agents/sessions/${sessionId}`,
     );
   };
+  const selectionFields = (
+    <>
+      <Field label="模型" className="agent-start-field">
+        <Select
+          disabled={locked || !selected}
+          value={selected?.binding_id ?? ""}
+          onValueChange={(modelId) => editor.patch({ modelId, thinking: "" })}
+        >
+          {modelOptions?.map((model) => (
+            <option key={model.binding_id} value={model.binding_id}>
+              {model.display_name} · {model.provider_label}
+            </option>
+          ))}
+        </Select>
+      </Field>
+      {(selected?.thinking_options.length ?? 0) > 1 && (
+        <Field label="思考模式" className="agent-start-field">
+          <Select
+            disabled={locked || !thinking}
+            value={thinking ?? ""}
+            onValueChange={(value) => editor.patch({ thinking: value })}
+          >
+            {selected?.thinking_options.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      )}
+    </>
+  );
+  if (fixedAgent)
+    return (
+      <div className="agent-chat-page">
+        <h1 className="sr-only">新对话</h1>
+        <div className="agent-conversation-frame" data-side-actions="true">
+          <aside className="agent-chat-actions-sidebar" aria-hidden />
+          <div className="agent-chat-body">
+            <section className="agent-chat-primary" aria-label="新对话">
+              <div className="agent-chat-scroll" aria-label="对话内容" />
+              <footer className="agent-chat-footer" ref={composerInset}>
+                <div className="agent-chat-content">
+                  <AsyncBoundary
+                    loading={agent.isPending}
+                    error={agent.error}
+                    onRetry={() => agent.refetch()}
+                  >
+                    {value && !available && (
+                      <Notice tone="warning">当前智能体暂不可开始会话。</Notice>
+                    )}
+                    <ChatComposer
+                      id={id}
+                      target={target}
+                      disabled={!available || !selected || !thinking}
+                      onAccepted={openSession}
+                      onOpenSession={openSession}
+                      settings={
+                        <button
+                          type="button"
+                          className="agent-composer-model"
+                          aria-label="模型与思考模式"
+                          title="模型与思考模式"
+                          disabled={locked || !selected}
+                          onClick={() => setSettingsOpen(true)}
+                        >
+                          <span className="truncate">
+                            {selected?.display_name}
+                            {thinking &&
+                              ` · ${selected?.thinking_options.find((option) => option.key === thinking)?.label ?? thinking}`}
+                          </span>
+                          <ChevronDown className="size-3" />
+                        </button>
+                      }
+                    />
+                  </AsyncBoundary>
+                </div>
+              </footer>
+            </section>
+          </div>
+        </div>
+        <Drawer
+          open={settingsOpen}
+          title="会话设置"
+          onClose={() => setSettingsOpen(false)}
+          footer={<OverlayCancelButton>完成</OverlayCancelButton>}
+        >
+          <div className="space-y-5">
+            {selectionFields}
+            <p className="text-xs text-muted">开始后模型与思考模式不可更改。</p>
+          </div>
+        </Drawer>
+      </div>
+    );
   return (
     <section className="agent-start-panel" aria-label="开始新对话">
       <header className="agent-start-heading">
@@ -116,11 +215,15 @@ export function NewConversation({
           <Sparkles className="size-5" />
         </span>
         <div>
-          {service ? <h1>调试服务型智能体</h1> : <h2>开始一段对话</h2>}
+          {service ? (
+            <h1>调试服务型智能体</h1>
+          ) : (
+            <h1>{value?.name ?? "新对话"}</h1>
+          )}
           <p>
             {service
               ? "使用专属机器人和其云电脑池执行，权限来自机器人账号。"
-              : "选择智能体，描述这次需要完成的工作。"}
+              : value?.description || "描述这次需要完成的工作。"}
           </p>
         </div>
       </header>
@@ -147,58 +250,29 @@ export function NewConversation({
               onOpenSession={openSession}
             >
               <div className="agent-start-options">
-                <div className="agent-start-field">
-                  <p>智能体</p>
-                  <Button
-                    className="agent-start-selector"
-                    contentClassName="w-full min-w-0 justify-between"
-                    variant="outline"
-                    aria-label={`选择智能体，${value?.name ?? "尚未选择"}`}
-                    title={value?.name}
-                    disabled={locked || Boolean(agentId)}
-                    onClick={() => setPicking(true)}
-                  >
-                    <span className="flex min-w-0 items-center gap-2">
-                      <Bot className="size-4 shrink-0" />
-                      <span className="truncate">
-                        {value?.name ?? "选择智能体"}
-                      </span>
-                    </span>
-                    <ChevronDown className="size-4" />
-                  </Button>
-                </div>
-                <Field label="模型" className="agent-start-field">
-                  <Select
-                    disabled={locked || !selected}
-                    value={selected?.binding_id ?? ""}
-                    onValueChange={(modelId) =>
-                      editor.patch({ modelId, thinking: "" })
-                    }
-                  >
-                    {modelOptions?.map((model) => (
-                      <option key={model.binding_id} value={model.binding_id}>
-                        {model.display_name} · {model.provider_label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                {(selected?.thinking_options.length ?? 0) > 1 && (
-                  <Field label="思考模式" className="agent-start-field">
-                    <Select
-                      disabled={locked || !thinking}
-                      value={thinking ?? ""}
-                      onValueChange={(value) =>
-                        editor.patch({ thinking: value })
-                      }
+                {(!agentId || service) && (
+                  <div className="agent-start-field">
+                    <p>智能体</p>
+                    <Button
+                      className="agent-start-selector"
+                      contentClassName="w-full min-w-0 justify-between"
+                      variant="outline"
+                      aria-label={`选择智能体，${value?.name ?? "尚未选择"}`}
+                      title={value?.name}
+                      disabled={locked || Boolean(agentId)}
+                      onClick={() => setPicking(true)}
                     >
-                      {selected?.thinking_options.map((option) => (
-                        <option key={option.key} value={option.key}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Bot className="size-4 shrink-0" />
+                        <span className="truncate">
+                          {value?.name ?? "选择智能体"}
+                        </span>
+                      </span>
+                      <ChevronDown className="size-4" />
+                    </Button>
+                  </div>
                 )}
+                {selectionFields}
               </div>
             </ChatComposer>
             <ErrorNotice error={agent.error || options.error} />

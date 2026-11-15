@@ -61,6 +61,7 @@ import {
   useSubmissionPresentation,
 } from "../data/agent-runtime";
 import { visibleAttempt } from "../data/stream-reducer";
+import { useSessionHeading } from "./navigation-context";
 import { ChatComposer } from "./composer";
 import { ContextUsage } from "./context-usage";
 import { InteractionCard } from "./interactions";
@@ -71,6 +72,7 @@ import { SessionSettings } from "./session-settings";
 import { SessionWorkspace } from "./session-workspace";
 import { ConversationTimeline } from "./timeline";
 import { useScrollFollow } from "./use-scroll-follow";
+import { useComposerInset } from "./use-composer-inset";
 import { ConnectionHint, ConversationLoading } from "./run-activity";
 
 export function Conversation({
@@ -78,13 +80,16 @@ export function Conversation({
   sessionId,
   service,
   expectedAgentId,
+  sideActions = false,
 }: {
   Header: ComponentType<{ children: ReactNode }>;
   sessionId: string;
   service: boolean;
   expectedAgentId?: string;
+  sideActions?: boolean;
 }) {
   const cache = useQueryClient();
+  const composerInset = useComposerInset();
   const { state, observation, connection } = useConversationStream(sessionId);
   const submissions = useSubmissionPresentation(sessionId, state.records);
   const revoked = state.reason === "access_revoked";
@@ -128,6 +133,7 @@ export function Conversation({
   const detail = query.data?.data;
   const snapshot = state.snapshot;
   const config = snapshot?.configuration ?? detail?.configuration;
+  useSessionHeading(sideActions ? config : undefined, service);
   const permissions = snapshot?.permissions ?? detail?.permissions;
   const activeRunId = snapshot ? snapshot.run_id : detail?.state.active_run_id;
   const activeStatus = snapshot
@@ -486,7 +492,7 @@ export function Conversation({
           当前会话的访问权限已撤销，已停止观察并清除内容。
         </Notice>
         <Button
-          render={<Link to={service ? "/admin/agents" : "/home"}>返回</Link>}
+          render={<Link to={service ? "/admin/agents" : "/agents"}>返回</Link>}
           nativeButton={false}
           role="link"
           variant="outline"
@@ -521,434 +527,482 @@ export function Conversation({
       >
         {detail && config && permissions && (
           <>
-            <Header>
-              <div className="agent-chat-heading">
-                <div className="agent-chat-title-line">
-                  <h1 title={config.title}>{config.title}</h1>
-                  {service && <StatusBadge tone="info">机器人执行</StatusBadge>}
-                  {archived && <StatusBadge>已归档</StatusBadge>}
+            <div
+              className="agent-conversation-frame"
+              data-side-actions={sideActions}
+            >
+              <Header>
+                <div className={sideActions ? "sr-only" : "agent-chat-heading"}>
+                  <div className="agent-chat-title-line">
+                    <h1 title={config.title}>{config.title}</h1>
+                    {service && (
+                      <StatusBadge tone="info">机器人执行</StatusBadge>
+                    )}
+                    {archived && <StatusBadge>已归档</StatusBadge>}
+                  </div>
+                  <div className="agent-chat-subline">
+                    {activeStatus && (
+                      <StatusBadge tone="info">
+                        {runStatusNames[activeStatus]}
+                      </StatusBadge>
+                    )}
+                  </div>
                 </div>
-                <div className="agent-chat-subline">
-                  {activeStatus && (
-                    <StatusBadge tone="info">
-                      {runStatusNames[activeStatus]}
-                    </StatusBadge>
-                  )}
-                </div>
-              </div>
-              <div className="agent-chat-header-actions">
-                <ConnectionHint connection={connection} phase={state.phase} />
-                {root && <SessionPin sessionId={sessionId} />}
-                <RowActions label="会话">
-                  {root && (
-                    <RowAction
-                      icon={<ListOrdered />}
-                      onSelect={() => setQueueExpanded(true)}
-                    >
-                      待处理输入 {pendingInputs}
-                    </RowAction>
-                  )}
-                  <RowAction
-                    icon={<FolderOpen />}
-                    onSelect={() => setPanel("files")}
-                  >
-                    附件与成果
-                  </RowAction>
-                  <RowAction
-                    icon={<History />}
-                    onSelect={() => setPanel("runs")}
-                  >
-                    运行记录
-                  </RowAction>
-                  <RowAction
-                    icon={<MessageCircleQuestion />}
-                    onSelect={() => setPanel("interactions")}
-                  >
-                    问题与审批记录
-                  </RowAction>
-                  {root && permissions.manage && (
+                <div className="agent-chat-header-actions">
+                  <ConnectionHint connection={connection} phase={state.phase} />
+                  {root && <SessionPin sessionId={sessionId} />}
+                  {sideActions && (
                     <>
-                      <RowActionSeparator />
-                      <RowAction
-                        icon={<Settings />}
-                        disabled={action.pending || action.uncertain}
-                        onSelect={() => setPanel("settings")}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="附件与成果"
+                        title="附件与成果"
+                        onClick={() => setPanel("files")}
                       >
-                        会话设置
-                      </RowAction>
-                      {!archived && (
-                        <>
-                          <RowAction
-                            icon={<Settings />}
-                            disabled={
-                              action.pending ||
-                              action.uncertain ||
-                              state.throughSeq === "0"
-                            }
-                            onSelect={() => control("title/refresh")}
-                          >
-                            重新自动命名
-                          </RowAction>
-                          <RowAction
-                            icon={<Minimize2 />}
-                            disabled={
-                              Boolean(activeRunId) ||
-                              pendingInputs > 0 ||
-                              action.pending ||
-                              action.uncertain
-                            }
-                            onSelect={() => setConfirm("compact")}
-                          >
-                            压缩上下文
-                          </RowAction>
-                          <RowAction
-                            icon={<Archive />}
-                            disabled={
-                              Boolean(activeRunId) ||
-                              action.pending ||
-                              action.uncertain ||
-                              !configuration.data
-                            }
-                            onSelect={() => setConfirm("archive")}
-                          >
-                            归档会话
-                          </RowAction>
-                        </>
-                      )}
+                        <FolderOpen />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="运行记录"
+                        title="运行记录"
+                        onClick={() => setPanel("runs")}
+                      >
+                        <History />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="问题与审批记录"
+                        title="问题与审批记录"
+                        onClick={() => setPanel("interactions")}
+                      >
+                        <MessageCircleQuestion />
+                      </Button>
                     </>
                   )}
-                </RowActions>
-                <Button
-                  ref={workspaceToggle}
-                  variant="ghost"
-                  size="icon"
-                  aria-label={
-                    workspaceOpen ? "收起会话工作区" : "打开会话工作区"
-                  }
-                  title={workspaceOpen ? "收起会话工作区" : "打开会话工作区"}
-                  aria-expanded={workspaceOpen}
-                  aria-controls="session-workspace"
-                  className={
-                    workspaceOpen ? "agent-workspace-toggle-active" : ""
-                  }
-                  onClick={() => setWorkspaceOpen(!workspaceOpen)}
-                >
-                  <PanelRight />
-                </Button>
-              </div>
-            </Header>
-            <div
-              className="agent-chat-body"
-              data-workspace-open={workspaceOpen}
-            >
-              <main className="agent-chat-primary">
-                <div
-                  className="agent-chat-scroll"
-                  ref={scroll}
-                  onClickCapture={(event) => {
-                    if (
-                      !(event.target instanceof Element) ||
-                      !event.target.closest(
-                        "summary, .agent-turn-control, .agent-disclosure-trigger, .agent-artifact-toggle",
-                      )
-                    )
-                      return;
-                    pauseFollowing();
-                  }}
-                >
-                  <div className="agent-chat-content space-y-5" ref={content}>
-                    {!state.records.length && state.phase !== "live" && (
-                      <ConversationLoading />
+                  <RowActions label="会话">
+                    {root && (
+                      <RowAction
+                        icon={<ListOrdered />}
+                        onSelect={() => setQueueExpanded(true)}
+                      >
+                        待处理输入 {pendingInputs}
+                      </RowAction>
                     )}
-                    {state.hasMore && (
-                      <div className="text-center">
+                    {!sideActions && (
+                      <>
+                        <RowAction
+                          icon={<FolderOpen />}
+                          onSelect={() => setPanel("files")}
+                        >
+                          附件与成果
+                        </RowAction>
+                        <RowAction
+                          icon={<History />}
+                          onSelect={() => setPanel("runs")}
+                        >
+                          运行记录
+                        </RowAction>
+                        <RowAction
+                          icon={<MessageCircleQuestion />}
+                          onSelect={() => setPanel("interactions")}
+                        >
+                          问题与审批记录
+                        </RowAction>
+                      </>
+                    )}
+                    {root && permissions.manage && (
+                      <>
+                        <RowActionSeparator />
+                        <RowAction
+                          icon={<Settings />}
+                          disabled={action.pending || action.uncertain}
+                          onSelect={() => setPanel("settings")}
+                        >
+                          会话设置
+                        </RowAction>
+                        {!archived && (
+                          <>
+                            <RowAction
+                              icon={<Settings />}
+                              disabled={
+                                action.pending ||
+                                action.uncertain ||
+                                state.throughSeq === "0"
+                              }
+                              onSelect={() => control("title/refresh")}
+                            >
+                              重新自动命名
+                            </RowAction>
+                            <RowAction
+                              icon={<Minimize2 />}
+                              disabled={
+                                Boolean(activeRunId) ||
+                                pendingInputs > 0 ||
+                                action.pending ||
+                                action.uncertain
+                              }
+                              onSelect={() => setConfirm("compact")}
+                            >
+                              压缩上下文
+                            </RowAction>
+                            <RowAction
+                              icon={<Archive />}
+                              disabled={
+                                Boolean(activeRunId) ||
+                                action.pending ||
+                                action.uncertain ||
+                                !configuration.data
+                              }
+                              onSelect={() => setConfirm("archive")}
+                            >
+                              归档会话
+                            </RowAction>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </RowActions>
+                  <Button
+                    ref={workspaceToggle}
+                    variant="ghost"
+                    size="icon"
+                    aria-label={
+                      workspaceOpen ? "收起会话工作区" : "打开会话工作区"
+                    }
+                    title={workspaceOpen ? "收起会话工作区" : "打开会话工作区"}
+                    aria-expanded={workspaceOpen}
+                    aria-controls="session-workspace"
+                    className={
+                      workspaceOpen ? "agent-workspace-toggle-active" : ""
+                    }
+                    onClick={() => setWorkspaceOpen(!workspaceOpen)}
+                  >
+                    <PanelRight />
+                  </Button>
+                </div>
+              </Header>
+              <div
+                className="agent-chat-body"
+                data-workspace-open={workspaceOpen}
+              >
+                <main className="agent-chat-primary">
+                  <div
+                    className="agent-chat-scroll"
+                    ref={scroll}
+                    onClickCapture={(event) => {
+                      if (
+                        !(event.target instanceof Element) ||
+                        !event.target.closest(
+                          "summary, .agent-turn-control, .agent-disclosure-trigger, .agent-artifact-toggle",
+                        )
+                      )
+                        return;
+                      pauseFollowing();
+                    }}
+                  >
+                    <div className="agent-chat-content space-y-5" ref={content}>
+                      {!state.records.length && state.phase !== "live" && (
+                        <ConversationLoading />
+                      )}
+                      {state.hasMore && (
+                        <div className="text-center">
+                          <Button
+                            variant="outline"
+                            pending={historyPending}
+                            onClick={() => void loadHistory()}
+                          >
+                            加载更早记录
+                          </Button>
+                        </div>
+                      )}
+                      <ErrorNotice error={historyError} />
+                      <ErrorNotice error={viewError} />
+                      {Boolean(viewError) && (
                         <Button
                           variant="outline"
-                          pending={historyPending}
-                          onClick={() => void loadHistory()}
+                          onClick={() => void flushViewed()}
                         >
-                          加载更早记录
+                          重试保存查看位置
+                        </Button>
+                      )}
+                      {!state.records.length &&
+                        !submissions.visible.length &&
+                        state.phase === "live" && (
+                          <EmptyState
+                            title="开始这段对话"
+                            description="描述任务，或添加需要一起分析的文件。"
+                          />
+                        )}
+                      <ConversationTimeline
+                        records={state.records}
+                        submissions={submissions.visible}
+                        sessionId={sessionId}
+                        attempt={visibleAttempt(state)}
+                        service={service}
+                        onVisibleResult={root ? markViewed : undefined}
+                      />
+                      {operation && (
+                        <ResourceOperation
+                          domain={agentRoot}
+                          id={operation}
+                          title="上下文压缩"
+                          onClose={() => setOperation(null)}
+                        />
+                      )}
+                      {action.recovery}
+                      {configurationRecovery}
+                    </div>
+                  </div>
+                  <footer className="agent-chat-footer" ref={composerInset}>
+                    {!following && (
+                      <div className="agent-jump-latest">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          aria-label="回到最新消息"
+                          title="回到最新消息"
+                          onClick={scrollToBottom}
+                        >
+                          <ArrowDown />
                         </Button>
                       </div>
                     )}
-                    <ErrorNotice error={historyError} />
-                    <ErrorNotice error={viewError} />
-                    {Boolean(viewError) && (
-                      <Button
-                        variant="outline"
-                        onClick={() => void flushViewed()}
-                      >
-                        重试保存查看位置
-                      </Button>
-                    )}
-                    {!state.records.length &&
-                      !submissions.visible.length &&
-                      state.phase === "live" && (
-                        <EmptyState
-                          title="开始这段对话"
-                          description="描述任务，或添加需要一起分析的文件。"
-                        />
+                    <div className="agent-chat-content agent-chat-dock">
+                      {(archived || !root) && (
+                        <ContextUsage sessionId={sessionId} />
                       )}
-                    <ConversationTimeline
-                      records={state.records}
-                      submissions={submissions.visible}
-                      sessionId={sessionId}
-                      attempt={visibleAttempt(state)}
-                      service={service}
-                      onVisibleResult={root ? markViewed : undefined}
-                    />
-                    {operation && (
-                      <ResourceOperation
-                        domain={agentRoot}
-                        id={operation}
-                        title="上下文压缩"
-                        onClose={() => setOperation(null)}
-                      />
-                    )}
-                    {action.recovery}
-                    {configurationRecovery}
-                  </div>
-                </div>
-                <footer className="agent-chat-footer">
-                  {!following && (
-                    <div className="agent-jump-latest">
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        aria-label="回到最新消息"
-                        title="回到最新消息"
-                        onClick={scrollToBottom}
-                      >
-                        <ArrowDown />
-                      </Button>
-                    </div>
-                  )}
-                  <div className="agent-chat-content agent-chat-dock">
-                    {(archived || !root) && (
-                      <ContextUsage sessionId={sessionId} />
-                    )}
-                    {!archived &&
-                      (waiting.length > 0 ||
-                        detail.state.pending_interaction_count > 0 ||
-                        snapshot?.interactions_truncated) && (
-                        <div className="agent-pending-interactions">
-                          {(waiting.length > 1 ||
-                            detail.state.pending_interaction_count > 1 ||
-                            snapshot?.interactions_truncated) && (
-                            <div className="agent-interaction-switcher">
-                              <span>
-                                待处理问题与审批 ·{" "}
-                                {Math.max(
-                                  waiting.length,
-                                  detail.state.pending_interaction_count,
-                                )}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setPanel("interactions")}
-                              >
-                                查看全部问题与审批
-                              </button>
-                            </div>
-                          )}
-                          {waiting.slice(0, 1).map((item) => (
-                            <InteractionCard
-                              key={item.id}
-                              id={item.id}
-                              sessionId={sessionId}
-                              status={item.status}
-                              canAnswer={permissions.answer}
-                              canApprove={permissions.approve && !service}
-                              archived={archived}
-                              onChanged={refresh}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    <div className="agent-queue-panel">
-                      {root &&
-                        (queueOpen ||
-                          queuedInputs > 0 ||
-                          queuePaused ||
-                          (!activeRunId &&
-                            !handingOff &&
-                            !submissions.visible.length &&
-                            detail.view_state?.latest_result &&
-                            ["failed", "cancelled", "interrupted"].includes(
-                              detail.view_state.latest_result.status,
-                            ))) && (
-                          <div className="agent-chat-queuebar">
-                            <div className="flex min-w-0 flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                className="agent-queue-toggle"
-                                onClick={() => setQueueExpanded(!queueOpen)}
-                                aria-expanded={queueOpen}
-                                aria-controls="chat-pending-inputs"
-                              >
-                                <ListOrdered className="size-4" />
-                                待处理输入{" "}
-                                <span className="agent-queue-count">
-                                  {queuedInputs}
+                      {!archived &&
+                        (waiting.length > 0 ||
+                          detail.state.pending_interaction_count > 0 ||
+                          snapshot?.interactions_truncated) && (
+                          <div className="agent-pending-interactions">
+                            {(waiting.length > 1 ||
+                              detail.state.pending_interaction_count > 1 ||
+                              snapshot?.interactions_truncated) && (
+                              <div className="agent-interaction-switcher">
+                                <span>
+                                  待处理问题与审批 ·{" "}
+                                  {Math.max(
+                                    waiting.length,
+                                    detail.state.pending_interaction_count,
+                                  )}
                                 </span>
-                                {queuePaused && !archived ? " · 已暂停" : ""}
-                              </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setPanel("interactions")}
+                                >
+                                  查看全部问题与审批
+                                </button>
+                              </div>
+                            )}
+                            {waiting.slice(0, 1).map((item) => (
+                              <InteractionCard
+                                key={item.id}
+                                id={item.id}
+                                sessionId={sessionId}
+                                status={item.status}
+                                canAnswer={permissions.answer}
+                                canApprove={permissions.approve && !service}
+                                archived={archived}
+                                onChanged={refresh}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      <div className="agent-queue-panel">
+                        {root &&
+                          (queueOpen ||
+                            queuedInputs > 0 ||
+                            queuePaused ||
+                            (!activeRunId &&
+                              !handingOff &&
+                              !submissions.visible.length &&
+                              detail.view_state?.latest_result &&
+                              ["failed", "cancelled", "interrupted"].includes(
+                                detail.view_state.latest_result.status,
+                              ))) && (
+                            <div className="agent-chat-queuebar">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <button
+                                  type="button"
+                                  className="agent-queue-toggle"
+                                  onClick={() => setQueueExpanded(!queueOpen)}
+                                  aria-expanded={queueOpen}
+                                  aria-controls="chat-pending-inputs"
+                                >
+                                  <ListOrdered className="size-4" />
+                                  待处理输入{" "}
+                                  <span className="agent-queue-count">
+                                    {queuedInputs}
+                                  </span>
+                                  {queuePaused && !archived ? " · 已暂停" : ""}
+                                </button>
+                                {permissions.control &&
+                                  queuePaused &&
+                                  !archived && (
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={
+                                        action.pending || action.uncertain
+                                      }
+                                      onClick={() => control("resume")}
+                                    >
+                                      恢复队列
+                                    </Button>
+                                  )}
+                              </div>
                               {permissions.control &&
-                                queuePaused &&
-                                !archived && (
+                                !activeRunId &&
+                                !handingOff &&
+                                !submissions.visible.length &&
+                                !archived &&
+                                detail.view_state?.latest_result &&
+                                ["failed", "cancelled", "interrupted"].includes(
+                                  detail.view_state.latest_result.status,
+                                ) && (
                                   <Button
                                     variant="outline"
                                     size="sm"
                                     disabled={
                                       action.pending || action.uncertain
                                     }
-                                    onClick={() => control("resume")}
+                                    onClick={() => control("retry")}
                                   >
-                                    恢复队列
+                                    继续上次任务
                                   </Button>
                                 )}
                             </div>
-                            {permissions.control &&
-                              !activeRunId &&
-                              !handingOff &&
-                              !submissions.visible.length &&
-                              !archived &&
-                              detail.view_state?.latest_result &&
-                              ["failed", "cancelled", "interrupted"].includes(
-                                detail.view_state.latest_result.status,
-                              ) && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={action.pending || action.uncertain}
-                                  onClick={() => control("retry")}
-                                >
-                                  继续上次任务
-                                </Button>
-                              )}
+                          )}
+                        {root && queueOpen && (
+                          <div id="chat-pending-inputs">
+                            <QueuePanel
+                              excludedIds={hiddenQueueInputs}
+                              inline
+                              sessionId={sessionId}
+                              archived={archived}
+                              canControl={permissions.control}
+                              onChanged={refresh}
+                              onClose={() => setQueueExpanded(false)}
+                            />
                           </div>
                         )}
-                      {root && queueOpen && (
-                        <div id="chat-pending-inputs">
-                          <QueuePanel
-                            excludedIds={hiddenQueueInputs}
-                            inline
-                            sessionId={sessionId}
-                            archived={archived}
-                            canControl={permissions.control}
-                            onChanged={refresh}
-                            onClose={() => setQueueExpanded(false)}
-                          />
+                      </div>
+                      {archived ? (
+                        <div className="agent-chat-readonly">
+                          <div>
+                            <strong>会话已归档</strong>
+                            <p>
+                              历史与文件保留。恢复后可以发送新消息，旧输入和问题不会重新执行。
+                            </p>
+                          </div>
+                          {root && permissions.manage && (
+                            <Button
+                              variant="outline"
+                              disabled={
+                                action.pending ||
+                                action.uncertain ||
+                                !configuration.data
+                              }
+                              onClick={() => control("restore")}
+                            >
+                              <RotateCcw />
+                              恢复会话
+                            </Button>
+                          )}
                         </div>
+                      ) : !root ? (
+                        <Notice>
+                          临时子任务只读；输入、停止和需要人的交互由主会话处理。
+                        </Notice>
+                      ) : (
+                        <ChatComposer
+                          id={`session:${sessionId}`}
+                          target={{
+                            id: sessionId,
+                            selection_hash:
+                              detail.selection.model_selection_hash,
+                          }}
+                          disabled={
+                            !permissions.submit ||
+                            !detail.selection.availability.available
+                          }
+                          queuePaused={queuePaused}
+                          running={Boolean(activeRunId)}
+                          hasQueuedInputs={
+                            pendingInputs > 0 || submissions.visible.length > 0
+                          }
+                          onAccepted={refresh}
+                          settings={
+                            <>
+                              <ContextUsage sessionId={sessionId} />
+                              <button
+                                type="button"
+                                className="agent-composer-model"
+                                disabled={!permissions.manage}
+                                onClick={() => setPanel("settings")}
+                                title={`${detail.selection.model_name} · ${detail.selection.thinking_label}${detail.selection.locked ? " · 模型已锁定" : ""}`}
+                              >
+                                <span className="truncate">
+                                  {detail.selection.model_name} ·{" "}
+                                  {detail.selection.thinking_label}
+                                </span>
+                                {detail.selection.locked && (
+                                  <LockKeyhole className="size-3" />
+                                )}
+                              </button>
+                            </>
+                          }
+                          footerLeading={
+                            detail.state.agent_access_available ? undefined : (
+                              <span
+                                role="status"
+                                className="text-xs text-muted"
+                              >
+                                当前已无此智能体的使用权限。
+                              </span>
+                            )
+                          }
+                          primaryAction={
+                            permissions.control && activeRunId ? (
+                              <button
+                                type="button"
+                                aria-busy={action.pending}
+                                className="agent-send-button agent-stop-button"
+                                aria-label="停止任务"
+                                title="停止任务"
+                                disabled={action.uncertain || action.pending}
+                                onClick={() => control("stop")}
+                              >
+                                <Square className="size-3.5" />
+                              </button>
+                            ) : undefined
+                          }
+                        />
                       )}
                     </div>
-                    {archived ? (
-                      <div className="agent-chat-readonly">
-                        <div>
-                          <strong>会话已归档</strong>
-                          <p>
-                            历史与文件保留。恢复后可以发送新消息，旧输入和问题不会重新执行。
-                          </p>
-                        </div>
-                        {root && permissions.manage && (
-                          <Button
-                            variant="outline"
-                            disabled={
-                              action.pending ||
-                              action.uncertain ||
-                              !configuration.data
-                            }
-                            onClick={() => control("restore")}
-                          >
-                            <RotateCcw />
-                            恢复会话
-                          </Button>
-                        )}
-                      </div>
-                    ) : !root ? (
-                      <Notice>
-                        临时子任务只读；输入、停止和需要人的交互由主会话处理。
-                      </Notice>
-                    ) : (
-                      <ChatComposer
-                        id={`session:${sessionId}`}
-                        target={{
-                          id: sessionId,
-                          selection_hash: detail.selection.model_selection_hash,
-                        }}
-                        disabled={
-                          !permissions.submit ||
-                          !detail.selection.availability.available
-                        }
-                        queuePaused={queuePaused}
-                        running={Boolean(activeRunId)}
-                        hasQueuedInputs={
-                          pendingInputs > 0 || submissions.visible.length > 0
-                        }
-                        onAccepted={refresh}
-                        settings={
-                          <>
-                            <ContextUsage sessionId={sessionId} />
-                            <button
-                              type="button"
-                              className="agent-composer-model"
-                              disabled={!permissions.manage}
-                              onClick={() => setPanel("settings")}
-                              title={`${detail.selection.model_name} · ${detail.selection.thinking_label}${detail.selection.locked ? " · 模型已锁定" : ""}`}
-                            >
-                              <span className="truncate">
-                                {detail.selection.model_name} ·{" "}
-                                {detail.selection.thinking_label}
-                              </span>
-                              {detail.selection.locked && (
-                                <LockKeyhole className="size-3" />
-                              )}
-                            </button>
-                          </>
-                        }
-                        footerLeading={
-                          detail.state.agent_access_available ? undefined : (
-                            <span role="status" className="text-xs text-muted">
-                              当前已无此智能体的使用权限。
-                            </span>
-                          )
-                        }
-                        primaryAction={
-                          permissions.control && activeRunId ? (
-                            <button
-                              type="button"
-                              aria-busy={action.pending}
-                              className="agent-send-button agent-stop-button"
-                              aria-label="停止任务"
-                              title="停止任务"
-                              disabled={action.uncertain || action.pending}
-                              onClick={() => control("stop")}
-                            >
-                              <Square className="size-3.5" />
-                            </button>
-                          ) : undefined
-                        }
-                      />
-                    )}
-                  </div>
-                </footer>
-              </main>
-              {workspaceOpen && (
-                <SessionWorkspace
-                  session={{ ...detail, configuration: config }}
-                  conversation={snapshot?.conversation}
-                  records={state.records}
-                  activeRunId={activeRunId}
-                  activeStatus={activeStatus}
-                  readonly={archived || !root || !permissions.manage}
-                  onClose={() => {
-                    setWorkspaceOpen(false);
-                    workspaceToggle.current?.focus();
-                  }}
-                  onRuns={() => setPanel("runs")}
-                  onFiles={() => setPanel("files")}
-                />
-              )}
+                  </footer>
+                </main>
+                {workspaceOpen && (
+                  <SessionWorkspace
+                    session={{ ...detail, configuration: config }}
+                    conversation={snapshot?.conversation}
+                    records={state.records}
+                    activeRunId={activeRunId}
+                    activeStatus={activeStatus}
+                    readonly={archived || !root || !permissions.manage}
+                    onClose={() => {
+                      setWorkspaceOpen(false);
+                      workspaceToggle.current?.focus();
+                    }}
+                    onRuns={() => setPanel("runs")}
+                    onFiles={() => setPanel("files")}
+                  />
+                )}
+              </div>
             </div>
             {panel === "files" && (
               <SessionFiles

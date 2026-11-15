@@ -32,7 +32,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-it.each(["/home", "/admin"])(
+it.each(["/admin"])(
   "collapses group labels without a sidebar shortcut manager at %s",
   async (route) => {
     localStorage.setItem("antcdp.sidebar-collapsed", "true");
@@ -50,19 +50,10 @@ it.each(["/home", "/admin"])(
       screen.queryByRole("button", { name: "管理关注项目" }),
     ).not.toBeInTheDocument();
     const labels = container.querySelectorAll(".sidebar-navigation .nav-label");
-    if (route === "/home") {
-      expect(screen.getByRole("link", { name: "新建对话" })).toBeVisible();
-      expect(screen.getByRole("button", { name: /^搜索会话$/ })).toBeVisible();
-      expect(
-        screen.getByRole("button", { name: "浏览会话历史" }),
-      ).toBeVisible();
-      expect(screen.getByRole("link", { name: "我的项目" })).toBeVisible();
-    } else {
-      expect(screen.getByRole("button", { name: "平台管理" })).toBeVisible();
-      expect(
-        screen.queryByRole("link", { name: "系统概览" }),
-      ).not.toBeInTheDocument();
-    }
+    expect(screen.getByRole("button", { name: "平台管理" })).toBeVisible();
+    expect(
+      screen.queryByRole("link", { name: "系统概览" }),
+    ).not.toBeInTheDocument();
     for (const label of labels) {
       expect(label).toHaveAttribute("aria-hidden", "true");
     }

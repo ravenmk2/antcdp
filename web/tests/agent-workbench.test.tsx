@@ -1,13 +1,18 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createMemoryRouter, RouterProvider } from "react-router";
-import { beforeEach, expect, it, vi } from "vitest";
+import { createMemoryRouter, RouterProvider, Outlet } from "react-router";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { request } from "@/api/client";
 import { NavigationGuardProvider } from "@/components/navigation-guard";
 import { Workbench } from "@/areas/workspace/pages/workbench";
+import {
+  ConversationsPage,
+  AgentDirectory,
+} from "@/areas/workspace/pages/conversations-page";
+import { ConversationSidebar } from "@/features/agents/chat/conversation-sidebar";
 import { AgentRuntimeProvider } from "@/features/agents/data/agent-runtime";
-import type { AttentionItem, CatalogAgent } from "@/types/agents";
+import type { CatalogAgent } from "@/types/agents";
 
 vi.mock("@/api/client", async (original) => ({
   ...(await original<typeof import("@/api/client")>()),
@@ -17,8 +22,8 @@ vi.mock("@/app/auth", () => ({
   useSession: () => ({ user: { id: "1", role: "admin" } }),
 }));
 const mock = vi.mocked(request);
-const time = "2026-11-09T01:00:00Z";
 const agent: CatalogAgent = {
+  favorited: false,
   scope_kind: "platform",
   id: "1",
   name: "项目协作助手",
@@ -38,53 +43,61 @@ const agent: CatalogAgent = {
     },
   ],
 };
-const pending: AttentionItem[] = Array.from({ length: 3 }, (_, index) => ({
-  kind: "response_required",
-  session_id: String(index + 1),
-  agent_id: "1",
-  title: `需要补充排查信息 ${index + 1}`,
-  question_interaction_count: 1,
-  approval_interaction_count: 0,
-  first_response_at: time,
-  next_approval_expires_at: null,
-  last_activity_at: time,
-}));
-let failResponses = false;
-let selectedAgent = agent;
+
 const response = (data: unknown) => ({ data, status: 200, etag: "" });
+afterEach(() => vi.unstubAllGlobals());
+let favorited = false;
+let favoriteIds: string[] = [];
 beforeEach(() => {
-  failResponses = false;
-  selectedAgent = agent;
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  localStorage.clear();
+  favorited = false;
+  favoriteIds = Array.from({ length: 7 }, (_, i) => String(i + 1));
   mock.mockReset();
-  mock.mockImplementation(async (url) => {
-    if (url === "/workspace/attention-summary")
-      return response({
-        counts: {
-          response_required_sessions: 8,
-          result_unviewed_sessions: 0,
-        },
-        generated_at: time,
-      });
-    if (url.startsWith("/workspace/attention?")) {
-      const query = new URL(url, "http://local").searchParams;
-      if (failResponses && query.get("kind") === "response_required")
-        throw new Error("关注列表暂时无法读取");
+  mock.mockImplementation(async (url, options) => {
+    if (url === "/agents/favorites/1") {
+      if (options?.method === "DELETE")
+        favoriteIds = favoriteIds.filter((id) => id !== "1");
+      favorited = options?.method === "PUT";
+      return response({ agent_id: "1", favorited });
+    }
+    if (url.startsWith("/agents/favorites?"))
+      return response(
+        favoriteIds.map((id) => ({
+          ...agent,
+          id,
+          name: `收藏助手${id}`,
+          favorited: true,
+        })),
+      );
+    if (url.startsWith("/agents/catalog?"))
+      return response([{ ...agent, favorited }]);
+    if (url.startsWith("/agents/catalog/"))
+      return response({ ...agent, id: url.split("/").at(-1), favorited });
+    if (url.startsWith("/agents/sessions?")) {
+      const params = new URL(url, "http://local").searchParams;
+      const page = Number(params.get("page"));
       return {
-        ...response(query.get("kind") === "response_required" ? pending : []),
-        pagination: {
-          page: Number(query.get("page")),
-          page_size: Number(query.get("page_size")),
-          total: query.get("kind") === "response_required" ? 8 : 0,
-        },
+        ...response(
+          Array.from({ length: page === 1 ? 10 : 2 }, (_, i) => ({
+            id: String((page - 1) * 10 + i + 1),
+            title: `测试会话${(page - 1) * 10 + i + 1}`,
+            attention: {
+              question_interaction_count: 0,
+              approval_interaction_count: 0,
+              unviewed_run_count: 0,
+            },
+          })),
+        ),
+        pagination: { page, page_size: 10, total: 12 },
       };
     }
-    if (url === "/me/sidebar-shortcuts")
-      return response({
-        projects: { items: [], version: "1" },
-        teams: { items: [], version: "1" },
-      });
-    if (url.startsWith("/agents/catalog?")) return response([selectedAgent]);
-    if (url === "/agents/catalog/1") return response(selectedAgent);
     if (url === "/agents/capabilities")
       return response({
         limits: {
@@ -96,23 +109,28 @@ beforeEach(() => {
     throw new Error(`Unexpected request: ${url}`);
   });
 });
-function mount() {
+function mount(route = "/agent-catalog", sidebar = false) {
   const router = createMemoryRouter(
     [
       {
-        path: "/home",
         element: (
           <NavigationGuardProvider>
             <AgentRuntimeProvider>
-              <Workbench />
+              {sidebar ? <ConversationSidebar agentId="1" /> : <Outlet />}
             </AgentRuntimeProvider>
           </NavigationGuardProvider>
         ),
+        children: [
+          { path: "home", element: <Workbench /> },
+          { path: "agent-catalog", element: <AgentDirectory /> },
+          { path: "agents", element: <ConversationsPage /> },
+          { path: "agents/sessions/:id", element: <div>恢复的会话</div> },
+        ],
       },
     ],
-    { initialEntries: ["/home"] },
+    { initialEntries: [route] },
   );
-  return render(
+  render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -121,111 +139,209 @@ function mount() {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
+  return router;
 }
-
-it("starts a project agent without a project selector or project lookup", async () => {
-  selectedAgent = {
-    ...agent,
-    scope_kind: "project",
-  };
-  mount();
-  expect(
-    await screen.findByRole("button", { name: "选择智能体，项目协作助手" }),
-  ).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: /项目上下文/ }),
-  ).not.toBeInTheDocument();
-  expect(mock.mock.calls.some(([url]) => url.startsWith("/projects"))).toBe(
-    false,
+it("keeps the workbench as a decorative vector canvas without fetching business content", () => {
+  mount("/home");
+  expect(screen.getByLabelText("工作台").querySelector("svg")).toHaveAttribute(
+    "aria-hidden",
+    "true",
   );
-  await userEvent
-    .setup()
-    .type(
-      screen.getByRole("textbox", { name: "消息内容" }),
-      "请处理项目链接中的任务",
-    );
-  expect(screen.getByRole("button", { name: "开始对话" })).toBeEnabled();
+  expect(mock).not.toHaveBeenCalled();
 });
-
-it("keeps the real start composer beside two bounded attention previews without creating or viewing a session", async () => {
-  mount();
+it("opens an agent by its card and changes favorites without navigating or creating sessions", async () => {
+  const user = userEvent.setup();
+  const router = mount();
+  expect(await screen.findByRole("link", { name: agent.name })).toHaveAttribute(
+    "href",
+    "/agents?agent=1",
+  );
   expect(
-    await screen.findByRole("button", { name: "选择智能体，项目协作助手" }),
-  ).toBeEnabled();
-  expect(screen.getByRole("heading", { name: "工作台" })).toBeVisible();
-  expect(await screen.findByLabelText("待回应数量：8")).toHaveTextContent("8");
+    screen.queryByRole("button", { name: "开始对话" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: `收藏${agent.name}` }));
   expect(
-    screen.getAllByRole("link", { name: /需要补充排查信息/ }),
-  ).toHaveLength(3);
-  expect(screen.getByRole("button", { name: "开始对话" })).toBeDisabled();
-  for (const kind of ["response_required", "result_unviewed"]) {
-    expect(
-      mock.mock.calls.some(
-        ([url]) =>
-          url === `/workspace/attention?kind=${kind}&page=1&page_size=3`,
-      ),
-    ).toBe(true);
-  }
+    await screen.findByRole("button", { name: `取消收藏${agent.name}` }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(router.state.location.search).toBe("");
+  await user.click(screen.getByRole("link", { name: agent.name }));
   expect(
-    mock.mock.calls.every(
-      ([, options]) => !options?.method || options.method === "GET",
-    ),
-  ).toBe(true);
+    await screen.findByRole("textbox", { name: "消息内容" }),
+  ).toBeVisible();
+  expect(router.state.location.search).toBe("?agent=1");
   expect(
     mock.mock.calls.some(
-      ([url]) => url.includes("view-state") || url === "/agents/sessions",
+      ([url, options]) =>
+        url === "/agents/sessions" && options?.method === "POST",
     ),
   ).toBe(false);
 });
-
-it("opens the complete attention list and keeps its page size independent from the preview", async () => {
+it("isolates new conversation drafts by selected agent and restores each draft", async () => {
   const user = userEvent.setup();
-  mount();
-  const trigger = await screen.findByRole("button", { name: "查看全部待回应" });
-  await user.click(trigger);
-  const dialog = await screen.findByRole("dialog", { name: "待回应" });
+  const router = mount("/agents?agent=1");
+  await user.type(
+    await screen.findByRole("textbox", { name: "消息内容" }),
+    "第一位助手的草稿",
+  );
+  await act(() => router.navigate("/agents?agent=2"));
+  expect(await screen.findByRole("textbox", { name: "消息内容" })).toHaveValue(
+    "",
+  );
+  await user.type(
+    screen.getByRole("textbox", { name: "消息内容" }),
+    "第二位助手的草稿",
+  );
+  await act(() => router.navigate("/agents?agent=1"));
+  expect(await screen.findByRole("textbox", { name: "消息内容" })).toHaveValue(
+    "第一位助手的草稿",
+  );
+});
+it("shows five favorites and ten filtered sessions, with independent expansion", async () => {
+  const user = userEvent.setup();
+  mount("/agents?agent=1", true);
+  expect(
+    screen.queryByRole("link", { name: "收藏助手1" }),
+  ).not.toBeInTheDocument();
+  await user.click(
+    await screen.findByRole("button", { name: "选择智能体：收藏助手1" }),
+  );
+  await screen.findByRole("link", { name: "收藏助手1" });
+  expect(
+    screen.queryByRole("link", { name: "全部智能体" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("combobox", { name: "会话关注状态" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getAllByRole("link", { name: /收藏助手/ })).toHaveLength(5);
+  expect(
+    screen.queryByRole("link", { name: "收藏助手6" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "展开更多" }));
+  expect(screen.getAllByRole("link", { name: /收藏助手/ })).toHaveLength(7);
+  await user.click(screen.getByRole("button", { name: "收起收藏" }));
+  expect(screen.getAllByRole("link", { name: /收藏助手/ })).toHaveLength(5);
+  await user.keyboard("{Escape}");
+  await screen.findByRole("link", { name: "测试会话1" });
+  expect(screen.getAllByRole("link", { name: /测试会话/ })).toHaveLength(10);
+  await user.click(screen.getByRole("button", { name: "加载更多会话" }));
   await waitFor(() =>
-    expect(within(dialog).getByText("共 8 条")).toBeVisible(),
+    expect(screen.getAllByRole("link", { name: /测试会话/ })).toHaveLength(12),
   );
   expect(
-    mock.mock.calls.some(([url]) =>
-      url.includes("kind=response_required&page=1&page_size=20"),
-    ),
+    mock.mock.calls
+      .filter(([url]) => url.startsWith("/agents/sessions?"))
+      .every(
+        ([url]) => url.includes("agent_id=1") && url.includes("page_size=10"),
+      ),
   ).toBe(true);
-  await user.click(within(dialog).getByRole("combobox", { name: "每页条数" }));
-  await user.click(await screen.findByRole("option", { name: "50" }));
+  await user.click(screen.getByRole("button", { name: "搜索会话" }));
+  const dialog = await screen.findByRole("dialog", { name: "搜索个人会话" });
+  await user.click(
+    within(dialog).getByRole("button", { name: "搜索全部智能体的会话" }),
+  );
   await waitFor(() =>
     expect(
-      mock.mock.calls.some(([url]) =>
-        url.includes("kind=response_required&page=1&page_size=50"),
+      mock.mock.calls.some(
+        ([url]) =>
+          url.startsWith("/agents/sessions?") &&
+          !url.includes("agent_id=") &&
+          url.includes("page_size=20"),
       ),
     ).toBe(true),
   );
-  await user.keyboard("{Escape}");
-  await waitFor(() =>
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-  );
-  expect(trigger).toHaveFocus();
 });
 
-it("isolates one attention failure and preserves a usable composer and independent retry", async () => {
-  const user = userEvent.setup();
-  failResponses = true;
-  mount();
-  const retry = await screen.findByRole("button", { name: "重新读取待回应" });
-  expect(await screen.findByText("暂无待查看结果")).toBeVisible();
-  expect(screen.queryByText("没有待核实事项")).not.toBeInTheDocument();
-  await user.type(
-    screen.getByRole("textbox", { name: "消息内容" }),
-    "公开测试草稿",
+it("keeps an unvisited conversation entry blank and restores the last agent and session per user", async () => {
+  const router = mount("/agents");
+  expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+  expect(mock).not.toHaveBeenCalled();
+  localStorage.setItem(
+    "antcdp.workspace.last-conversation:2",
+    JSON.stringify({ agentId: "2", sessionId: "99" }),
   );
-  expect(screen.getByRole("button", { name: "开始对话" })).toBeEnabled();
-  failResponses = false;
-  await user.click(retry);
+  await act(() => router.navigate("/agents"));
+  expect(router.state.location.pathname).toBe("/agents");
+  localStorage.setItem(
+    "antcdp.workspace.last-conversation:1",
+    JSON.stringify({ agentId: "1", sessionId: "31" }),
+  );
+  await act(() => router.navigate("/agents"));
+  await screen.findByText("恢复的会话");
+  expect(router.state.location.pathname).toBe("/agents/sessions/31");
+  localStorage.setItem(
+    "antcdp.workspace.last-conversation:1",
+    JSON.stringify({ agentId: "1" }),
+  );
+  await act(() => router.navigate("/agents"));
   expect(
-    await screen.findByRole("link", { name: /需要补充排查信息 1/ }),
+    await screen.findByRole("textbox", { name: "消息内容" }),
   ).toBeVisible();
-  expect(screen.getByRole("textbox", { name: "消息内容" })).toHaveValue(
-    "公开测试草稿",
+  expect(router.state.location.search).toBe("?agent=1");
+});
+
+it("uses an empty conversation body and the regular footer composer for new conversations", async () => {
+  const user = userEvent.setup();
+  mount("/agents?agent=1");
+  const input = await screen.findByRole("textbox", { name: "消息内容" });
+  expect(input.closest(".agent-chat-footer")).not.toBeNull();
+  expect(screen.getByLabelText("对话内容")).toBeEmptyDOMElement();
+  expect(screen.queryByText("公开测试助手")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+  expect(
+    mock.mock.calls.some(([url]) => url.startsWith("/agents/catalog?")),
+  ).toBe(false);
+  await user.click(screen.getByRole("button", { name: "模型与思考模式" }));
+  const dialog = await screen.findByRole("dialog", { name: "会话设置" });
+  expect(within(dialog).getByRole("combobox", { name: "模型" })).toBeEnabled();
+  await user.click(within(dialog).getByRole("button", { name: "完成" }));
+  await user.type(input, "未提交的首条消息");
+  expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
+  expect(mock.mock.calls.some(([url]) => url === "/agents/sessions")).toBe(
+    false,
   );
+});
+
+it("shows an empty favorite hint and removes favorites through the item menu", async () => {
+  favoriteIds = ["1"];
+  const user = userEvent.setup();
+  const router = mount("/agents?agent=1", true);
+  await user.click(
+    await screen.findByRole("button", { name: "选择智能体：收藏助手1" }),
+  );
+  await screen.findByRole("link", { name: "收藏助手1" });
+  expect(
+    screen.queryByRole("heading", { name: "收藏的智能体" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /取消收藏/ }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "收藏助手1的操作" }));
+  await user.click(await screen.findByRole("menuitem", { name: "取消收藏" }));
+  expect(await screen.findByText("尚未收藏")).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: "收藏助手1" }),
+  ).not.toBeInTheDocument();
+  expect(router.state.location.search).toBe("?agent=1");
+  expect(
+    mock.mock.calls.some(
+      ([path, options]) =>
+        path === "/agents/favorites/1" && options?.method === "DELETE",
+    ),
+  ).toBe(true);
+});
+it("closes the agent selector on selection without resetting the current conversation", async () => {
+  const user = userEvent.setup();
+  const router = mount("/agents/sessions/31", true);
+  const trigger = await screen.findByRole("button", {
+    name: "选择智能体：收藏助手1",
+  });
+  await user.click(trigger);
+  await user.click(await screen.findByRole("link", { name: "收藏助手1" }));
+  expect(router.state.location.pathname).toBe("/agents/sessions/31");
+  expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await user.click(trigger);
+  await user.click(await screen.findByRole("link", { name: "收藏助手2" }));
+  expect(router.state.location.pathname).toBe("/agents");
+  expect(router.state.location.search).toBe("?agent=2");
+  expect(trigger).toHaveAttribute("aria-expanded", "false");
 });

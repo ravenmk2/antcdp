@@ -7,6 +7,7 @@ import { ResourceIcon } from "@/components/resource-icon";
 import type { Resource } from "@/types/collaboration";
 import { ResourceMetadata } from "@/features/collaboration/resource-detail";
 import type { WorkspaceProjectPage } from "@/areas/workspace/pages/workspace-navigation";
+import { ProjectSwitcher } from "./project-switcher";
 
 export function WorkspaceProjectFrame({
   project,
@@ -67,7 +68,12 @@ export function WorkspaceProjectFrame({
             project.summary ||
             `${project.member_count} 位成员 · ${project.can_manage ? "可管理项目" : "成员权限"}`
           }
-          actions={actions}
+          actions={
+            <>
+              <ProjectSwitcher project={project} compact={false} />
+              {actions}
+            </>
+          }
         />
       }
       navigation={

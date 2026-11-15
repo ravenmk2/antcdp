@@ -148,6 +148,7 @@ export interface ModelOption {
   }[];
 }
 export interface CatalogAgent {
+  favorited: boolean;
   scope_kind: AgentScope;
   id: string;
   name: string;
@@ -164,6 +165,11 @@ export interface StartOptions extends Pick<
 > {
   agent_id: string;
   scope_kind: AgentScope;
+}
+export interface AgentNavigationSummary {
+  id: string;
+  name: string;
+  favorited: boolean;
 }
 export interface CapabilityCatalog {
   limits: Record<

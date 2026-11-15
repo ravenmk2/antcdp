@@ -913,6 +913,43 @@ it("never marks a result from initial detail or subscription; only a visible for
     mock.mock.calls.find(([url]) => url.endsWith("/view-state"))?.[1]?.body,
   ).toEqual({ through_seq: "3" });
 });
+it("marks a result only after it scrolls clear of the floating composer", async () => {
+  const { container } = mount(<AgentSessionPage />);
+  await screen.findByText("已完成配置核对。");
+  const scroll = container.querySelector(".agent-chat-scroll")!;
+  const footer = container.querySelector(".agent-chat-footer")!;
+  const result = container.querySelector(".agent-turn-result")!;
+  let resultBottom = 650;
+  vi.spyOn(scroll, "getBoundingClientRect").mockReturnValue({
+    top: 0,
+    bottom: 800,
+  } as DOMRect);
+  vi.spyOn(footer, "getBoundingClientRect").mockReturnValue({
+    top: 600,
+  } as DOMRect);
+  vi.spyOn(result, "getBoundingClientRect").mockImplementation(
+    () => ({ top: resultBottom, bottom: resultBottom }) as DOMRect,
+  );
+  await act(async () => {
+    for (const callback of intersectionCallbacks)
+      callback(
+        [{ isIntersecting: true } as IntersectionObserverEntry],
+        {} as IntersectionObserver,
+      );
+  });
+  expect(
+    mock.mock.calls.filter(([url]) => url.endsWith("/view-state")),
+  ).toHaveLength(0);
+  resultBottom = 580;
+  await act(async () => {
+    scroll.dispatchEvent(new Event("scroll"));
+  });
+  await waitFor(() =>
+    expect(
+      mock.mock.calls.filter(([url]) => url.endsWith("/view-state")),
+    ).toHaveLength(1),
+  );
+});
 it.each([false, true])(
   "hands off an idle submission without a queue flash or duplicate bubble (event first: %s)",
   async (eventFirst) => {
@@ -1013,8 +1050,7 @@ it("keeps archived conversations and files read only, while restore remains expl
     screen.queryByRole("button", { name: "压缩上下文" }),
   ).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "恢复会话" })).toBeEnabled();
-  await user.click(screen.getByRole("button", { name: "会话的操作" }));
-  await user.click(await screen.findByRole("menuitem", { name: "附件与成果" }));
+  await user.click(screen.getByRole("button", { name: "附件与成果" }));
   expect(
     screen.queryByRole("button", { name: /删除|引用到消息/ }),
   ).not.toBeInTheDocument();

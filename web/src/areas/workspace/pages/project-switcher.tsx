@@ -56,7 +56,7 @@ export function ProjectSwitcher({
           <button
             className={cn(
               "project-switcher flex items-center gap-2 rounded-lg bg-surface-subtle text-left text-navigation hover:border-border-strong hover:bg-surface-hover",
-              "w-[calc(100%-24px)]",
+              "w-52 max-w-full px-3 py-2",
             )}
             aria-label={`切换项目，当前 ${project.name}`}
           >
@@ -78,8 +78,8 @@ export function ProjectSwitcher({
         }
       />
       <DropdownMenuContent
-        side="right"
-        align="start"
+        side="bottom"
+        align="end"
         className="w-80 overflow-hidden p-0"
       >
         <div className="border-b border-b-border-subtle p-2">

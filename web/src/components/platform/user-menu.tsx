@@ -105,13 +105,14 @@ export function UserMenu({
   const session = useSession();
   const { appearance, setAppearance } = useTheme();
   const [keyboardNavigation, setKeyboardNavigation] = useState(false);
+  const rail = area === "workspace" && compact;
   return (
-    <div className="border-t border-t-border-subtle p-3">
+    <div className={`border-t border-t-border-subtle ${rail ? "p-2" : "p-3"}`}>
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
           render={
             <button
-              className="sidebar-user flex w-full items-center gap-2 rounded-lg p-2 text-left text-navigation hover:bg-surface-hover"
+              className={`sidebar-user flex items-center rounded-lg text-left text-navigation hover:bg-surface-hover ${rail ? "mx-auto size-11 justify-center p-1.5" : "w-full gap-2 p-2"}`}
               aria-label={`用户菜单，${session.user.display_name}`}
               onKeyDownCapture={() => setKeyboardNavigation(true)}
               onPointerDownCapture={() => setKeyboardNavigation(false)}
@@ -119,6 +120,7 @@ export function UserMenu({
               <Avatar
                 url={session.user.avatar?.url}
                 name={session.user.display_name}
+                className={rail ? "size-8" : undefined}
               />
               <span
                 className="sidebar-label min-w-0 flex-1"

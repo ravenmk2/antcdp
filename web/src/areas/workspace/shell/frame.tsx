@@ -1,33 +1,30 @@
 import { IconButton } from "@/components/button";
 import { Breadcrumbs, type Crumb } from "@/components/layout";
-import { Menu } from "lucide-react";
-import type { ReactNode } from "react";
+import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Drawer } from "@/components/overlays";
 
 export function Frame({
-  collapsed,
   navigation,
   crumbs,
   actions,
   onOpenNavigation,
   children,
   overlays,
-  conversation = false,
+  secondary,
 }: {
-  collapsed: boolean;
   navigation: ReactNode;
   crumbs: Crumb[];
   actions: ReactNode;
   onOpenNavigation: () => void;
   children: ReactNode;
   overlays: ReactNode;
-  conversation?: boolean;
+  secondary?: ReactNode;
 }) {
+  const [secondaryOpen, setSecondaryOpen] = useState(true);
+  const [mobileSecondary, setMobileSecondary] = useState(false);
   return (
-    <div
-      className="app-layout"
-      data-collapsed={collapsed}
-      data-conversation={conversation}
-    >
+    <div className="app-layout" data-collapsed="true">
       <a
         href="#main-content"
         className="sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:not-sr-only focus:rounded-lg focus:bg-surface focus:p-3"
@@ -45,15 +42,57 @@ export function Frame({
             >
               <Menu />
             </IconButton>
+            {secondary && (
+              <>
+                <IconButton
+                  className="max-[820px]:hidden"
+                  label={secondaryOpen ? "收起对话侧栏" : "展开对话侧栏"}
+                  onClick={() => setSecondaryOpen(!secondaryOpen)}
+                >
+                  {secondaryOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
+                </IconButton>
+                <IconButton
+                  className="min-[821px]:hidden"
+                  label="打开对话列表"
+                  onClick={() => setMobileSecondary(true)}
+                >
+                  <PanelLeftOpen />
+                </IconButton>
+              </>
+            )}
             <Breadcrumbs items={crumbs} />
           </div>
           <div className="flex shrink-0 items-center gap-1">{actions}</div>
         </header>
-        <main id="main-content" tabIndex={-1}>
-          {children}
-        </main>
+        <div
+          className="workspace-body"
+          data-secondary={Boolean(secondary) && secondaryOpen}
+        >
+          {secondary && secondaryOpen && (
+            <aside className="workspace-secondary" aria-label="对话导航">
+              {secondary}
+            </aside>
+          )}
+          <main id="main-content" tabIndex={-1} className="workspace-main">
+            {children}
+          </main>
+        </div>
       </div>
       {overlays}
+      <Drawer
+        open={mobileSecondary && Boolean(secondary)}
+        title="对话导航"
+        onClose={() => setMobileSecondary(false)}
+      >
+        <div
+          onClick={(event) => {
+            if ((event.target as HTMLElement).closest("a"))
+              setMobileSecondary(false);
+          }}
+        >
+          {secondary}
+        </div>
+      </Drawer>
     </div>
   );
 }

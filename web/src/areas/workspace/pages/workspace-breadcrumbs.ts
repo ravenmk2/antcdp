@@ -92,6 +92,7 @@ export function workspaceBreadcrumbs(
       { label: "主机详情" },
     ];
   const names: Record<string, string> = {
+    "/agent-catalog": "智能体",
     "/projects": "我的项目",
     "/teams": "我的团队",
   };

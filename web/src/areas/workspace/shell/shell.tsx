@@ -1,25 +1,79 @@
-import { useAuth } from "@/app/auth";
+import { useAuth, useSession } from "@/app/auth";
 import { LogoutDialog, ShellActions, useLogout } from "@/app/session-actions";
 import { LoadingState } from "@/components/feedback";
 import { Drawer } from "@/components/overlays";
-import { SidebarBrand } from "@/components/platform/sidebar-brand";
 import { UserMenu } from "@/components/platform/user-menu";
 import { useApiQuery } from "@/hooks/use-api";
-import { useSidebarPreference } from "@/hooks/use-sidebar-preference";
 import { resolveSiteName } from "@/lib/site-name";
 import type { Resource } from "@/types/collaboration";
-import { Suspense, useState } from "react";
-import { Outlet, useLocation } from "react-router";
+import { Suspense, useEffect, useState } from "react";
+import { Link, Outlet, useLocation } from "react-router";
+import type {
+  AgentNavigationSummary,
+  SessionConfiguration,
+  SessionDetail,
+} from "@/types/agents";
+import { SessionHeadingContext } from "@/features/agents/chat/navigation-context";
+import { ConversationSidebar } from "@/features/agents/chat/conversation-sidebar";
 import { workspaceBreadcrumbs } from "../pages/workspace-breadcrumbs";
 import { WorkspaceSidebar } from "../pages/workspace-sidebar";
+import { rememberConversation } from "../pages/conversation-memory";
 import { Frame } from "./frame";
 export function Shell() {
   const location = useLocation();
-  const { collapsed, toggleCollapsed } = useSidebarPreference("workspace");
+  const { user } = useSession();
+  const [heading, setHeading] = useState<SessionConfiguration>();
   const [mobile, setMobile] = useState(false);
   const logout = useLogout();
   const { settings } = useAuth();
   const brand = resolveSiteName(settings.site_name);
+  const conversationArea =
+    location.pathname === "/agents" || location.pathname.startsWith("/agents/");
+  const sessionId = location.pathname.match(
+    /^\/agents\/sessions\/([1-9]\d*)\/?$/,
+  )?.[1];
+  const detail = useApiQuery<SessionDetail>(
+    ["agent-session", sessionId, "detail"],
+    `/agents/sessions/${sessionId}`,
+    { enabled: Boolean(sessionId) },
+  );
+  const config =
+    heading?.id === sessionId ? heading : detail.data?.data.configuration;
+  const agentId = sessionId
+    ? config?.agent_id
+    : new URLSearchParams(location.search).get("agent") || undefined;
+  useEffect(() => {
+    if (conversationArea && agentId)
+      rememberConversation(user.id, { agentId, sessionId });
+  }, [conversationArea, agentId, sessionId, user.id]);
+  const summary = useApiQuery<AgentNavigationSummary>(
+    ["agent-summary", agentId],
+    `/agents/${agentId}/summary`,
+    { enabled: conversationArea && Boolean(agentId) },
+  );
+  const conversationCrumbs = [
+    { label: "对话", ...(agentId || sessionId ? { to: "/agents" } : {}) },
+    ...(agentId
+      ? [
+          {
+            label:
+              summary.data?.data.name ??
+              (summary.isError ? "智能体不可用" : "加载智能体…"),
+            ...(sessionId ? { to: `/agents?agent=${agentId}` } : {}),
+          },
+        ]
+      : []),
+    ...(sessionId
+      ? [
+          {
+            label:
+              config?.title ?? (detail.isError ? "会话不可用" : "加载会话…"),
+          },
+        ]
+      : agentId
+        ? [{ label: "新对话" }]
+        : []),
+  ];
   const projectId = location.pathname.match(/^\/projects\/([1-9]\d*)/)?.[1];
   const teamId = location.pathname.match(/^\/teams\/([1-9]\d*)(?:\/|$)/)?.[1];
   const project = useApiQuery<Resource>(
@@ -38,63 +92,78 @@ export function Shell() {
       data-compact={compact}
       data-mode="workspace"
     >
-      <SidebarBrand
-        brand={brand}
-        compact={compact}
-        collapsed={collapsed}
-        close={close}
-        onToggleCollapsed={toggleCollapsed}
-      />
-      <div className="sidebar-scroll">
-        <WorkspaceSidebar
-          projectId={projectId}
-          project={project.data?.data}
-          compact={compact}
-          close={close}
+      <Link
+        to="/home"
+        className="workspace-brand"
+        aria-label={brand}
+        title={brand}
+        onClick={close}
+      >
+        <img src="/logo.svg" alt="" className="size-7 dark:hidden" />
+        <img
+          src="/logo-inverse.svg"
+          alt=""
+          className="hidden size-7 dark:block"
         />
+      </Link>
+      <div className="sidebar-scroll">
+        <WorkspaceSidebar compact={compact} close={close} />
       </div>
       <UserMenu compact={compact} onLogout={logout.open} area="workspace" />
     </div>
   );
   return (
-    <Frame
-      conversation={/^\/agents\/sessions\/[1-9]\d*$/.test(location.pathname)}
-      collapsed={collapsed}
-      navigation={navigation(collapsed)}
-      crumbs={workspaceBreadcrumbs(
-        location.pathname,
-        location.search,
-        project.data?.data,
-        team.data?.data.name,
-      )}
-      onOpenNavigation={() => setMobile(true)}
-      actions={
-        <>
-          <ShellActions projectId={projectId} />
-        </>
-      }
-      overlays={
-        <>
-          <Drawer
-            open={mobile}
-            title="页面导航"
-            onClose={() => setMobile(false)}
-          >
-            {navigation(false, () => setMobile(false))}
-          </Drawer>
-          <LogoutDialog controller={logout} />
-        </>
-      }
-    >
-      <Suspense
-        fallback={
-          <div className="page">
-            <LoadingState />
-          </div>
+    <SessionHeadingContext value={setHeading}>
+      <Frame
+        navigation={navigation(true)}
+        secondary={
+          conversationArea ? (
+            <ConversationSidebar
+              agentId={agentId}
+              agentName={summary.data?.data.name}
+              ready={!sessionId || Boolean(config)}
+            />
+          ) : undefined
+        }
+        crumbs={
+          conversationArea
+            ? conversationCrumbs
+            : workspaceBreadcrumbs(
+                location.pathname,
+                location.search,
+                project.data?.data,
+                team.data?.data.name,
+              )
+        }
+        onOpenNavigation={() => setMobile(true)}
+        actions={
+          <>
+            <ShellActions projectId={projectId} />
+          </>
+        }
+        overlays={
+          <>
+            <Drawer
+              open={mobile}
+              title="页面导航"
+              onClose={() => setMobile(false)}
+            >
+              {navigation(false, () => setMobile(false))}
+            </Drawer>
+            <LogoutDialog controller={logout} />
+          </>
         }
       >
-        <Outlet />
-      </Suspense>
-    </Frame>
+        <Suspense
+          fallback={
+            <div className="page">
+              <LoadingState />
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
+      </Frame>
+    </SessionHeadingContext>
   );
 }

@@ -77,6 +77,11 @@ const shortcuts: Shortcuts = {
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: (_key: unknown, path: string) => {
+    if (path.startsWith("/projects?"))
+      return {
+        data: { data: { items: [project], total: 1 } },
+        isPending: false,
+      };
     const data =
       path === "/projects/7"
         ? project
