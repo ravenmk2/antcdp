@@ -170,7 +170,7 @@ func (s *CloudService) claimWorkspaceOperation(ctx context.Context, id uint64) (
 		if op.StartedAt == nil {
 			op.StartedAt = &now
 		}
-		c.access.HelperOperationID, c.access.HelperOperationFence = op.ID, op.FenceVersion
+		c.access.WorkspaceOperationID, c.access.WorkspaceOperationFence = op.ID, op.FenceVersion
 		if err = repo.SaveCloudOperation(op); err != nil {
 			return err
 		}
@@ -238,7 +238,7 @@ func (s *CloudService) processWorkspaceOperation(ctx context.Context, id uint64)
 				break
 			}
 			var response workspacefs.Response
-			response, err = s.workspaceHelper(bounded, c.access, id, request)
+			response, err = s.workspaceRequest(bounded, c.access, id, request)
 			if response.Changed {
 				affected = append(affected, request.Path)
 			}
@@ -283,6 +283,18 @@ func (s *CloudService) recoverWorkspaceOperation(ctx context.Context, c *workspa
 			continue
 		}
 		if c.terminated {
+			continue
+		}
+		if execution.Backend == nativeFilesystemVersion {
+			// Native reads cannot leave a remote write running. Native mutations
+			// have no provider operation handle: never replay or infer completion
+			// merely because a path currently has the expected contents.
+			if nativeReadOnly(execution.Request) {
+				execution.State = "completed"
+				execution.Response = &workspacefs.Response{Version: workspacefs.Version, Code: "WORKSPACE_OPERATION_INTERRUPTED"}
+			} else {
+				confirmed = false
+			}
 			continue
 		}
 		if c.access.Provider == nil || execution.Handle == nil || execution.Handle.Resource != c.access.Resource {
@@ -365,7 +377,7 @@ func (s *CloudService) settleWorkspaceOperation(ctx context.Context, id uint64, 
 		if err != nil {
 			return err
 		}
-		if row == nil || row.ExecutorEpoch != s.Epoch || row.FenceVersion != access.HelperOperationFence || access.HelperOperationID != id {
+		if row == nil || row.ExecutorEpoch != s.Epoch || row.FenceVersion != access.WorkspaceOperationFence || access.WorkspaceOperationID != id {
 			return httpx.E(409, "OPERATION_FENCED", "原文件请求已被接管")
 		}
 		if row.FinishedAt != nil {

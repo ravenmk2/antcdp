@@ -14,7 +14,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
-	"github.com/ravenmk2/antcdp/internal/sandboxcore"
+
 	"github.com/ravenmk2/antcdp/internal/skillpackage"
 	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
@@ -114,8 +114,8 @@ func (s *CloudService) prepareSkills(ctx context.Context, original *SandboxAcces
 	}
 	access := *original
 	access.ReferenceIDs = nil
-	access.HelperOperationID = 0
-	access.HelperOperationFence = 0
+	access.WorkspaceOperationID = 0
+	access.WorkspaceOperationFence = 0
 	var op *CloudOperationRow
 	err = s.cloudBackground(ctx, func(tx identity.Tx, r Repository, st StateRepository, cr CloudRepository) error {
 		if _, err := s.Host.lockExecution(tx, r, st, x.Ref, true); err != nil {
@@ -152,11 +152,7 @@ func (s *CloudService) prepareSkills(ctx context.Context, original *SandboxAcces
 	if err != nil {
 		return err
 	}
-	err = s.uploadSkillBundle(ctx, &access, token, bundle)
-	var result workspacefs.Response
-	if err == nil {
-		result, err = s.workspaceHelper(ctx, &access, op.ID, request)
-	}
+	result, err := s.recordNativeRequest(ctx, &access, op.ID, request, func() (workspacefs.Response, error) { return installNativeSkills(ctx, &access, request, bundle) })
 	cleanup, done := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer done()
 	if cleanErr := s.cleanupKnownFileTransfer(cleanup, &access); err == nil {
@@ -236,33 +232,4 @@ func (s *CloudService) skillBundle(ctx context.Context, manifest []SkillSnapshot
 		return nil, err
 	}
 	return buffer.Bytes(), nil
-}
-
-func (s *CloudService) uploadSkillBundle(ctx context.Context, access *SandboxAccess, token string, data []byte) error {
-	err := s.updateWorkspaceObservation(ctx, access.HelperOperationID, access.HelperOperationFence, func(_ *CloudOperationRow, o *workspaceOperationObservation) error {
-		o.TransferToken, o.TransferState = token, "preparing"
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if _, err = s.workspaceHelper(ctx, access, access.HelperOperationID, workspacefs.Request{Operation: "transfer_begin", Token: token}); err != nil {
-		return err
-	}
-	err = s.updateWorkspaceObservation(ctx, access.HelperOperationID, access.HelperOperationFence, func(_ *CloudOperationRow, o *workspaceOperationObservation) error {
-		o.TransferState = "started"
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	uid, gid := uint32(0), uint32(0)
-	err = access.Provider.PutFile(ctx, access.Resource, sandboxcore.FileRequest{Path: workspacefs.TransferDirectory + "/" + token + "/payload", UID: &uid, GID: &gid, MaxBytes: int64(len(data))}, bytes.NewReader(data))
-	if err != nil {
-		return s.workspaceTransferUnknown(ctx, access, access.HelperOperationID)
-	}
-	return s.updateWorkspaceObservation(ctx, access.HelperOperationID, access.HelperOperationFence, func(_ *CloudOperationRow, o *workspaceOperationObservation) error {
-		o.TransferState = "finished"
-		return nil
-	})
 }

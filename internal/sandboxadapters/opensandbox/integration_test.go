@@ -24,7 +24,10 @@ import (
 // access paths are exercised unless the caller explicitly narrows the modes.
 // Resources are ephemeral and carry unique ownership metadata, with a bounded
 // provider lifetime as a fallback. Cleanup never retries an uncertain DELETE.
-func TestOpenSandboxRuntimeIntegration(t *testing.T) {
+func TestOpenSandboxHardenedRuntimeIntegration(t *testing.T) {
+	if os.Getenv("ANTCDP_TEST_OPENSANDBOX_HARDENED") != "1" {
+		t.Skip("optional hardened fixture not enabled")
+	}
 	endpoint := os.Getenv("ANTCDP_TEST_OPENSANDBOX_ENDPOINT")
 	if endpoint == "" {
 		t.Skip("ANTCDP_TEST_OPENSANDBOX_ENDPOINT not configured")
@@ -278,9 +281,8 @@ func integrationRead(t *testing.T, ctx context.Context, p sandboxcore.Provider, 
 }
 func integrationCancellation(t *testing.T, ctx context.Context, p sandboxcore.Provider, ref sandboxcore.ResourceRef) {
 	t.Helper()
-	uid := uint32(10001)
 	var handle *sandboxcore.ExecutionHandle
-	_, err := p.Exec(ctx, ref, sandboxcore.ExecSpec{Argv: []string{"/bin/sleep", "30"}, CWD: "/data", UID: &uid, GID: &uid, Background: true, Timeout: 40 * time.Second, MaxOutputBytes: 1024}, sandboxcore.ExecCallbacks{Started: func(_ context.Context, h sandboxcore.ExecutionHandle) error { handle = &h; return nil }})
+	_, err := p.Exec(ctx, ref, sandboxcore.ExecSpec{Argv: []string{"/bin/sleep", "30"}, CWD: "/data", Background: true, Timeout: 40 * time.Second, MaxOutputBytes: 1024}, sandboxcore.ExecCallbacks{Started: func(_ context.Context, h sandboxcore.ExecutionHandle) error { handle = &h; return nil }})
 	if err != nil || handle == nil {
 		t.Fatal("background launch:", err)
 	}

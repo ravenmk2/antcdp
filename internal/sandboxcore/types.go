@@ -128,7 +128,11 @@ type ExecCallbacks struct {
 }
 
 type FileRequest struct {
-	Path     string
+	Path string
+	// Offset/Length select a byte range for reading. Zero Length reads to EOF.
+	Offset   int64
+	Length   int64
+	Mode     int
 	UID      *uint32
 	GID      *uint32
 	MaxBytes int64
@@ -152,9 +156,8 @@ type Provider interface {
 	FileTransport
 }
 
-// FileTransport is infrastructure for trusted helper/staging calls. It does not
-// establish path authorization or symlink safety; model paths must go through
-// the separately verified helper before these raw transport methods are used.
+// FileTransport streams provider-native file contents. The caller authorizes
+// resource ownership and paths; this contract makes no symlink confinement claim.
 type FileTransport interface {
 	OpenFile(context.Context, ResourceRef, FileRequest) (io.ReadCloser, error)
 	PutFile(context.Context, ResourceRef, FileRequest, io.Reader) error

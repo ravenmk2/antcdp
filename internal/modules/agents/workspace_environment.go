@@ -21,8 +21,8 @@ func (s *CloudService) environmentToken(access *SandboxAccess, purpose string) s
 	return hex.EncodeToString(cryptox.Digest(s.Host.ETag(value)))[:32]
 }
 
-// Environment setup is a durable helper operation. Re-entering the same
-// binding/maintenance intent returns its committed result; an uncertain helper
+// Environment setup is a durable workspace operation. Re-entering the same
+// binding/maintenance intent returns its committed result; an uncertain operation
 // is observed by the workspace reconciler, never invoked a second time.
 func (s *CloudService) environmentRequests(ctx context.Context, original *SandboxAccess, kind, purpose string, requests []workspacefs.Request) ([]workspacefs.Response, error) {
 	if original == nil || original.Provider == nil {
@@ -30,8 +30,8 @@ func (s *CloudService) environmentRequests(ctx context.Context, original *Sandbo
 	}
 	access := *original
 	access.ReferenceIDs = nil
-	access.HelperOperationID = 0
-	access.HelperOperationFence = 0
+	access.WorkspaceOperationID = 0
+	access.WorkspaceOperationFence = 0
 	token := s.environmentToken(&access, purpose)
 	var op *CloudOperationRow
 	created := false
@@ -103,7 +103,7 @@ func (s *CloudService) environmentRequests(ctx context.Context, original *Sandbo
 	}
 	responses := []workspacefs.Response{}
 	for _, request := range requests {
-		response, err := s.workspaceHelper(ctx, &access, op.ID, request)
+		response, err := s.workspaceRequest(ctx, &access, op.ID, request)
 		responses = append(responses, response)
 		if err != nil {
 			e = err
@@ -145,33 +145,10 @@ func (s *CloudService) InitializeComputer(ctx context.Context, access *SandboxAc
 }
 func (s *CloudService) VerifyWorkspaceEnvironment(ctx context.Context, access *SandboxAccess) (SandboxCapabilities, []DiagnosticCheck, error) {
 	caps := unknownSandboxCapabilities()
-	checks := []DiagnosticCheck{}
-	results, e := s.environmentRequests(ctx, access, "workspace_verify", "verify-security", []workspacefs.Request{{Operation: "capabilities"}, {Operation: "verify_security"}})
-	if e != nil {
-		return caps, append(checks, diagnosticCheck("environment_security", "failed", remoteSandboxError(e))), e
+	_, err := s.environmentRequests(ctx, access, "workspace_verify", "native-v1", []workspacefs.Request{{Operation: "verify_native"}})
+	if err != nil {
+		return caps, []DiagnosticCheck{diagnosticCheck("native_filesystem", "failed", remoteSandboxError(err))}, err
 	}
-	var protocol struct {
-		Protocol     int    `json:"protocol"`
-		SafeIO       string `json:"safe_io"`
-		UID          int    `json:"uid"`
-		WorkspaceUID int    `json:"workspace_uid"`
-	}
-	var security struct {
-		WorkloadUID          int  `json:"workload_uid"`
-		CommandDenied        bool `json:"command_denied"`
-		InitializationDenied bool `json:"initialization_denied"`
-		TransferPrivate      bool `json:"transfer_private"`
-		HelperImmutable      bool `json:"helper_immutable"`
-		ControlPrivate       bool `json:"control_environment_private"`
-		CredentialsAbsent    bool `json:"credentials_absent"`
-	}
-	valid := len(results) == 2 && json.Unmarshal(results[0].Result, &protocol) == nil && json.Unmarshal(results[1].Result, &security) == nil && protocol.Protocol == workspacefs.Version && protocol.SafeIO == "openat2" && protocol.UID == 0 && protocol.WorkspaceUID == 10001 && security.WorkloadUID == 10001 && security.CommandDenied && security.InitializationDenied && security.TransferPrivate && security.HelperImmutable && security.ControlPrivate && security.CredentialsAbsent
-	if !valid {
-		e = httpx.E(409, "SANDBOX_ENVIRONMENT_UNSAFE", "沙箱运行环境未通过安全检查")
-		return caps, append(checks, diagnosticCheck("environment_security", "failed", "workload_control_plane_not_isolated")), e
-	}
-	caps.Execution = "supported"
-	caps.ExecutionInspection = "supported"
-	checks = append(checks, diagnosticCheck("trusted_helper", "succeeded", ""), diagnosticCheck("workload_identity", "succeeded", ""), diagnosticCheck("control_authentication", "succeeded", ""), diagnosticCheck("private_transfer_and_environment", "succeeded", ""))
-	return caps, checks, nil
+	caps.Execution, caps.ExecutionInspection = "supported", "supported"
+	return caps, []DiagnosticCheck{diagnosticCheck("native_filesystem", "succeeded", ""), diagnosticCheck("environment_security", "unknown", "provider_managed")}, nil
 }

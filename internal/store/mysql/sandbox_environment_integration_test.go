@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 
 	sb "github.com/ravenmk2/antcdp/internal/sandboxcore"
 	"github.com/ravenmk2/antcdp/internal/workspacefs"
@@ -128,16 +127,7 @@ func (p *environmentMemoryProvider) CancelExecution(_ context.Context, h sb.Exec
 	p.executions[h.ID] = result
 	return nil
 }
-func (p *environmentMemoryProvider) OpenFile(_ context.Context, ref sb.ResourceRef, q sb.FileRequest) (io.ReadCloser, error) {
-	token := strings.TrimSuffix(strings.TrimPrefix(q.Path, workspacefs.TransferDirectory+"/"), "/payload")
-	return io.NopCloser(bytes.NewReader(p.transfers[ref.RemoteID+":"+token])), nil
-}
-func (p *environmentMemoryProvider) PutFile(_ context.Context, ref sb.ResourceRef, q sb.FileRequest, r io.Reader) error {
-	token := strings.TrimSuffix(strings.TrimPrefix(q.Path, workspacefs.TransferDirectory+"/"), "/payload")
-	data, err := io.ReadAll(r)
-	p.transfers[ref.RemoteID+":"+token] = data
-	return err
-}
+
 func (p *environmentMemoryProvider) Terminate(ctx context.Context, ref sb.ResourceRef) error {
 	p.terminationCalls++
 	if err := p.sandboxMemoryProvider.Terminate(ctx, ref); err != nil {
@@ -154,4 +144,38 @@ type environmentMemoryFactory struct{ provider *environmentMemoryProvider }
 
 func (f environmentMemoryFactory) Open(context.Context, sb.Connection) (sb.Provider, error) {
 	return f.provider, nil
+}
+
+func (p *environmentMemoryProvider) native(ref sb.ResourceRef) nativeMemoryFS {
+	return nativeMemoryFS{p.files, p.fileKey(ref, ""), func() error { p.launches++; return nil }}
+}
+func (p *environmentMemoryProvider) StatFile(ctx context.Context, ref sb.ResourceRef, name string) (sb.FileInfo, error) {
+	return p.native(ref).StatFile(ctx, ref, name)
+}
+func (p *environmentMemoryProvider) ListFiles(ctx context.Context, ref sb.ResourceRef, name string) ([]sb.FileInfo, error) {
+	return p.native(ref).ListFiles(ctx, ref, name)
+}
+func (p *environmentMemoryProvider) SearchFiles(ctx context.Context, ref sb.ResourceRef, name, pattern string) ([]sb.FileInfo, error) {
+	return p.native(ref).SearchFiles(ctx, ref, name, pattern)
+}
+func (p *environmentMemoryProvider) MakeDirectory(ctx context.Context, ref sb.ResourceRef, name string, mode int) error {
+	return p.native(ref).MakeDirectory(ctx, ref, name, mode)
+}
+func (p *environmentMemoryProvider) RemoveFile(ctx context.Context, ref sb.ResourceRef, name string, dir bool) error {
+	return p.native(ref).RemoveFile(ctx, ref, name, dir)
+}
+func (p *environmentMemoryProvider) MoveFile(ctx context.Context, ref sb.ResourceRef, from, to string) error {
+	return p.native(ref).MoveFile(ctx, ref, from, to)
+}
+func (p *environmentMemoryProvider) SetFilePermissions(ctx context.Context, ref sb.ResourceRef, name string, mode int) error {
+	return p.native(ref).SetFilePermissions(ctx, ref, name, mode)
+}
+func (p *environmentMemoryProvider) ReplaceFile(ctx context.Context, ref sb.ResourceRef, name, old, replacement string) (int, error) {
+	return p.native(ref).ReplaceFile(ctx, ref, name, old, replacement)
+}
+func (p *environmentMemoryProvider) OpenFile(ctx context.Context, ref sb.ResourceRef, q sb.FileRequest) (io.ReadCloser, error) {
+	return p.native(ref).OpenFile(ctx, ref, q)
+}
+func (p *environmentMemoryProvider) PutFile(ctx context.Context, ref sb.ResourceRef, q sb.FileRequest, r io.Reader) error {
+	return p.native(ref).PutFile(ctx, ref, q, r)
 }

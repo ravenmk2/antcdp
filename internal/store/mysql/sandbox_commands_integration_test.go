@@ -37,7 +37,7 @@ func (p *commandMemoryProvider) Exec(ctx context.Context, ref sb.ResourceRef, sp
 		p.unknownNext = false
 		return sb.ExecResult{}, &sb.Error{Code: "SANDBOX_TRANSPORT_UNKNOWN", Unknown: true}
 	}
-	if spec.UID == nil || spec.GID == nil || *spec.UID != 10001 || *spec.GID != 10001 {
+	if spec.UID != nil || spec.GID != nil {
 		return sb.ExecResult{}, fmt.Errorf("workload identity missing")
 	}
 	h := sb.ExecutionHandle{Resource: ref, ID: fmt.Sprintf("command-%d", p.launches)}

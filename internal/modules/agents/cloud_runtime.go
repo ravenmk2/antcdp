@@ -50,7 +50,7 @@ type CloudService struct {
 // SandboxAccess is an internal capability for one exact computer generation.
 // It is never serialized as a public resource or constructed by an HTTP client.
 type SandboxAccess struct {
-	HelperOperationID, HelperOperationFence                             uint64
+	WorkspaceOperationID, WorkspaceOperationFence                       uint64
 	Provider                                                            sandboxcore.Provider
 	Resource                                                            sandboxcore.ResourceRef
 	ComputerID, BackendGeneration, RuntimeGeneration, StorageGeneration uint64

@@ -1,8 +1,8 @@
 package opensandbox
 
 import (
+	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/hex"
 	"net/netip"
 	"net/url"
@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 func integrationConnection(t *testing.T, mode string) (sandboxcore.Connection, string) {
@@ -122,11 +121,16 @@ func TestOpenSandboxPersistentWorkspaceIntegration(t *testing.T) {
 			spec.Mount = sandboxcore.MountPlan{Kind: "named_volume", MountPath: "/data", VolumeID: volumeID, VolumeName: volumeName, CreateIfMissing: true}
 			t.Logf("retained test volume=%s volume_id=%s", volumeName, volumeID)
 			first, stop := integrationResource(t, ctx, provider, spec)
-			integrationHelper(t, ctx, provider, first, workspacefs.Request{Operation: "verify_security"})
-			integrationHelper(t, ctx, provider, first, workspacefs.Request{Operation: "initialize", AgentID: "1", ProjectID: "1"})
+
+			fs := provider.(sandboxcore.Filesystem)
+			if err = fs.MakeDirectory(ctx, first, "/data/projects/1", 755); err != nil {
+				t.Fatal(err)
+			}
 			content := []byte("retained workspace evidence:" + integrationToken(t))
 			path := "projects/1/persisted.txt"
-			integrationHelper(t, ctx, provider, first, workspacefs.Request{Operation: "write", Path: path, Data: base64.StdEncoding.EncodeToString(content)})
+			if err = fs.PutFile(ctx, first, sandboxcore.FileRequest{Path: "/data/" + path, MaxBytes: 1024}, bytes.NewReader(content)); err != nil {
+				t.Fatal(err)
+			}
 			if !stop() {
 				t.Fatal("original instance remains unknown; volume must not be remounted")
 			}
@@ -136,8 +140,8 @@ func TestOpenSandboxPersistentWorkspaceIntegration(t *testing.T) {
 			if second.RemoteID == first.RemoteID {
 				t.Fatal("persistence test did not replace the instance")
 			}
-			integrationHelper(t, ctx, provider, second, workspacefs.Request{Operation: "verify_security"})
-			integrationRead(t, ctx, provider, second, path, content)
+
+			integrationNativeRead(t, ctx, provider, second, "/data/"+path, content)
 			if !stopSecond() {
 				t.Fatal("replacement instance cleanup unconfirmed")
 			}
@@ -230,9 +234,8 @@ func integrationProbeURL(u *url.URL) bool {
 }
 func integrationNetworkExit(t *testing.T, ctx context.Context, p sandboxcore.Provider, ref sandboxcore.ResourceRef, target string) int32 {
 	t.Helper()
-	uid := uint32(10001)
 	var handle *sandboxcore.ExecutionHandle
-	_, err := p.Exec(ctx, ref, sandboxcore.ExecSpec{Argv: []string{"/usr/bin/curl", "--fail", "--silent", "--connect-timeout", "3", "--max-time", "8", "--noproxy", "*", "--output", "/dev/null", target}, CWD: "/data", UID: &uid, GID: &uid, Background: true, Timeout: 12 * time.Second, MaxOutputBytes: 1024}, sandboxcore.ExecCallbacks{Started: func(_ context.Context, h sandboxcore.ExecutionHandle) error { handle = &h; return nil }})
+	_, err := p.Exec(ctx, ref, sandboxcore.ExecSpec{Argv: []string{"/usr/bin/curl", "--fail", "--silent", "--connect-timeout", "3", "--max-time", "8", "--noproxy", "*", "--output", "/dev/null", target}, CWD: "/data", Background: true, Timeout: 12 * time.Second, MaxOutputBytes: 1024}, sandboxcore.ExecCallbacks{Started: func(_ context.Context, h sandboxcore.ExecutionHandle) error { handle = &h; return nil }})
 	if err != nil || handle == nil {
 		t.Fatal("network probe command unavailable:", err)
 	}

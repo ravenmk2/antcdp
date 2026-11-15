@@ -109,7 +109,7 @@ func workspaceWorkerFixture() (*CloudService, *workspaceWorkerMemory, *SandboxAc
 		w:      CloudComputerRow{ID: 4},
 	}
 	s := &CloudService{Epoch: "current", InstallationID: func() (string, error) { return strings.Repeat("a", 32), nil }, Host: &Service{Store: func() (identity.Store, error) { return m, nil }}}
-	access := &SandboxAccess{ComputerID: 4, RuntimeGeneration: 1, HelperOperationID: 2, HelperOperationFence: 7}
+	access := &SandboxAccess{ComputerID: 4, RuntimeGeneration: 1, WorkspaceOperationID: 2, WorkspaceOperationFence: 7}
 	return s, m, access
 }
 
@@ -212,7 +212,7 @@ func TestWorkspaceRecoveryObservesOnceAndDoesNotResumeRemainingRemoval(t *testin
 	p := &workspaceRecoveryProvider{state: "ready", output: `{"version":1,"ok":true,"changed":true,"result":{"removed":true}}`}
 	s.Factory = workspaceRecoveryFactory{p}
 	m.op.Intent = json.RawMessage(`{"items":[{"path":"first"},{"path":"second"}]}`)
-	c := &workspaceClaim{op: &m.op, access: access, recovery: true, observation: workspaceOperationObservation{Executions: []workspaceHelperExecution{{State: "outcome_unknown", Handle: &handle, Request: workspacefs.Request{Operation: "remove", Path: "first"}}}}}
+	c := &workspaceClaim{op: &m.op, access: access, recovery: true, observation: workspaceOperationObservation{Executions: []workspaceExecution{{State: "outcome_unknown", Handle: &handle, Request: workspacefs.Request{Operation: "remove", Path: "first"}}}}}
 	if err := s.recoverWorkspaceOperation(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestWorkspaceStoppedHelperWithMissingOutputFailsWithoutClaimingNoChange(t *
 	p := &workspaceRecoveryProvider{state: "ready", output: "unavailable"}
 	s.Factory = workspaceRecoveryFactory{p}
 	m.op.Intent = json.RawMessage(`{"items":[{"path":"first"}]}`)
-	c := &workspaceClaim{op: &m.op, access: access, recovery: true, observation: workspaceOperationObservation{Executions: []workspaceHelperExecution{{State: "outcome_unknown", Handle: &handle, Request: workspacefs.Request{Operation: "remove", Path: "first"}}}}}
+	c := &workspaceClaim{op: &m.op, access: access, recovery: true, observation: workspaceOperationObservation{Executions: []workspaceExecution{{State: "outcome_unknown", Handle: &handle, Request: workspacefs.Request{Operation: "remove", Path: "first"}}}}}
 	if err := s.recoverWorkspaceOperation(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
@@ -257,20 +257,16 @@ func TestWorkspaceStoppedHelperWithMissingOutputFailsWithoutClaimingNoChange(t *
 }
 
 type workspaceDispatchProvider struct {
+	sandboxcore.Filesystem
 	workspaceRecoveryProvider
 }
 
-func (p *workspaceDispatchProvider) Exec(ctx context.Context, resource sandboxcore.ResourceRef, spec sandboxcore.ExecSpec, callbacks sandboxcore.ExecCallbacks) (sandboxcore.ExecResult, error) {
+func (p *workspaceDispatchProvider) MakeDirectory(_ context.Context, _ sandboxcore.ResourceRef, name string, mode int) error {
 	p.execs++
-	request, err := workspacefs.Decode(spec.Argv[1])
-	if err != nil || request.Operation != "mkdir" || request.Path != "storage/new-directory" {
-		return sandboxcore.ExecResult{}, integrity()
+	if name != "/data/storage/new-directory" || mode != 755 {
+		return integrity()
 	}
-	handle := sandboxcore.ExecutionHandle{Resource: resource, ID: "helper"}
-	if err := callbacks.Started(ctx, handle); err != nil {
-		return sandboxcore.ExecResult{}, err
-	}
-	return sandboxcore.ExecResult{Handle: &handle, Running: true}, nil
+	return nil
 }
 
 func TestWorkspaceQueuedMutationDispatchesOnceAndSettlesBothRecords(t *testing.T) {

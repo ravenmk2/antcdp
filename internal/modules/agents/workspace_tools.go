@@ -31,7 +31,7 @@ type workspaceToolInput struct {
 }
 
 // Both modes expose the same /data namespace. Relative names always start at
-// the current session CWD; callers cannot pass hidden helper generations.
+// the current session CWD; callers cannot pass private platform state.
 func workspaceToolPath(cwd, raw string) (string, error) {
 	if raw == "/data" || raw == "/data/" {
 		return ".", nil
@@ -84,7 +84,7 @@ func workspaceToolRequest(key string, raw json.RawMessage) (workspaceToolInput, 
 	default:
 		return input, q, httpx.Invalid("tool_key", "unsupported")
 	}
-	if _, err := workspacefs.Encode(q); err != nil {
+	if encoded, err := json.Marshal(q); err != nil || len(encoded) > workspacefs.MaxRequestBytes {
 		return input, q, httpx.Invalid("arguments", "encoded_content_too_large")
 	}
 	return input, q, nil
@@ -164,11 +164,11 @@ func (s *CloudService) FileTool(ctx context.Context, ref agentcore.ExecutionRef,
 	if err != nil {
 		return observation, err
 	}
-	response, err := s.workspaceHelper(ctx, access, operation.ID, q)
+	response, err := s.workspaceRequest(ctx, access, operation.ID, q)
 	if err != nil {
 		if response.Version == workspacefs.Version && !workspaceUnknown(err) {
 			yes := true
-			observation = agentcore.DispatchObservation{Status: "failed", Executed: &yes, Reason: response.Code, Content: "The file helper completed with error: " + response.Code}
+			observation = agentcore.DispatchObservation{Status: "failed", Executed: &yes, Reason: response.Code, Content: "The file operation completed with error: " + response.Code}
 		}
 		return observation, err
 	}
@@ -180,7 +180,7 @@ func (s *CloudService) FileTool(ctx context.Context, ref agentcore.ExecutionRef,
 		if errors.As(err, &failure) {
 			reason = failure.Code
 		}
-		observation = agentcore.DispatchObservation{Status: "failed", Executed: &yes, Reason: reason, Content: "The file helper completed but its result could not be used: " + reason}
+		observation = agentcore.DispatchObservation{Status: "failed", Executed: &yes, Reason: reason, Content: "The file operation completed but its result could not be used: " + reason}
 		return observation, err
 	}
 	yes := true

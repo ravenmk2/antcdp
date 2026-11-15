@@ -109,29 +109,6 @@ func (p *artifactMemoryProvider) ReadExecutionOutput(_ context.Context, h sb.Exe
 	end := min(start+int64(maxBytes), int64(len(data)))
 	return sb.ExecutionOutput{Text: string(data[start:end]), Cursor: end, Truncated: end < int64(len(data))}, nil
 }
-func (p *artifactMemoryProvider) OpenFile(_ context.Context, _ sb.ResourceRef, q sb.FileRequest) (io.ReadCloser, error) {
-	token := strings.TrimSuffix(strings.TrimPrefix(q.Path, workspacefs.TransferDirectory+"/"), "/payload")
-	data, ok := p.transfers[token]
-	if !ok {
-		return nil, fmt.Errorf("transfer missing")
-	}
-	return io.NopCloser(bytes.NewReader(data)), nil
-}
-func (p *artifactMemoryProvider) PutFile(_ context.Context, _ sb.ResourceRef, q sb.FileRequest, source io.Reader) error {
-	token := strings.TrimSuffix(strings.TrimPrefix(q.Path, workspacefs.TransferDirectory+"/"), "/payload")
-	if _, ok := p.transfers[token]; !ok {
-		return fmt.Errorf("transfer unprepared")
-	}
-	data, e := io.ReadAll(io.LimitReader(source, q.MaxBytes+1))
-	if e != nil {
-		return e
-	}
-	if int64(len(data)) > q.MaxBytes {
-		return fmt.Errorf("transfer too large")
-	}
-	p.transfers[token] = data
-	return nil
-}
 
 type artifactMemoryFactory struct{ remote *artifactMemoryProvider }
 
@@ -499,4 +476,45 @@ func workspaceToolImage(t *testing.T, f *agentIntegrationFixture, svc *a.CloudSe
 	if e = f.Store.db.GetContext(ctx, &state, "SELECT state FROM agent_file WHERE id=?", fileID); e != nil || state != "bound" {
 		t.Fatal("history image was reclaimed", state, e)
 	}
+}
+
+func (p *artifactMemoryProvider) native(ref sb.ResourceRef) nativeMemoryFS {
+	return nativeMemoryFS{p.files, "", func() error {
+		p.requests++
+		if p.unknownImport {
+			p.unknownImport = false
+			return &sb.Error{Code: "SANDBOX_STREAM_INTERRUPTED", Unknown: true}
+		}
+		return nil
+	}}
+}
+func (p *artifactMemoryProvider) StatFile(ctx context.Context, ref sb.ResourceRef, name string) (sb.FileInfo, error) {
+	return p.native(ref).StatFile(ctx, ref, name)
+}
+func (p *artifactMemoryProvider) ListFiles(ctx context.Context, ref sb.ResourceRef, name string) ([]sb.FileInfo, error) {
+	return p.native(ref).ListFiles(ctx, ref, name)
+}
+func (p *artifactMemoryProvider) SearchFiles(ctx context.Context, ref sb.ResourceRef, name, pattern string) ([]sb.FileInfo, error) {
+	return p.native(ref).SearchFiles(ctx, ref, name, pattern)
+}
+func (p *artifactMemoryProvider) MakeDirectory(ctx context.Context, ref sb.ResourceRef, name string, mode int) error {
+	return p.native(ref).MakeDirectory(ctx, ref, name, mode)
+}
+func (p *artifactMemoryProvider) RemoveFile(ctx context.Context, ref sb.ResourceRef, name string, dir bool) error {
+	return p.native(ref).RemoveFile(ctx, ref, name, dir)
+}
+func (p *artifactMemoryProvider) MoveFile(ctx context.Context, ref sb.ResourceRef, from, to string) error {
+	return p.native(ref).MoveFile(ctx, ref, from, to)
+}
+func (p *artifactMemoryProvider) SetFilePermissions(ctx context.Context, ref sb.ResourceRef, name string, mode int) error {
+	return p.native(ref).SetFilePermissions(ctx, ref, name, mode)
+}
+func (p *artifactMemoryProvider) ReplaceFile(ctx context.Context, ref sb.ResourceRef, name, old, replacement string) (int, error) {
+	return p.native(ref).ReplaceFile(ctx, ref, name, old, replacement)
+}
+func (p *artifactMemoryProvider) OpenFile(ctx context.Context, ref sb.ResourceRef, q sb.FileRequest) (io.ReadCloser, error) {
+	return p.native(ref).OpenFile(ctx, ref, q)
+}
+func (p *artifactMemoryProvider) PutFile(ctx context.Context, ref sb.ResourceRef, q sb.FileRequest, r io.Reader) error {
+	return p.native(ref).PutFile(ctx, ref, q, r)
 }

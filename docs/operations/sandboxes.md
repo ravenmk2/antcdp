@@ -2,44 +2,23 @@
 
 本文说明 AntCDP Docker 沙箱的通用运行要求。安装向导仅连接和验证已部署服务，可以跳过；不安装 Docker、OpenSandbox Server 或 Kubernetes。平台应用继续使用原来的单个 MySQL 数据库和应用数据目录。
 
-## 运行组件
+## 官方运行环境
 
-需要 OpenSandbox Server 的 Docker runtime、bridge 网络及支持 DNS 和 IP 策略的 egress 组件，以及两类镜像：执行控制镜像和工作空间镜像。Server 的 runtime 在部署时选择，创建请求不能切换 Docker/Kubernetes。不接入 Kubernetes，不开放 host bind、subPath 或 host 网络作为工作空间配置。
+默认接入官方 OpenSandbox Server、execd 与普通工作镜像，不修改服务端或镜像，不要求安装 AntCDP 文件辅助程序。Server 的 runtime 在部署时选择；当前适配器支持 Docker bridge 与 named volume，不接入 Kubernetes，不开放 host bind、subPath 或 host 网络作为工作空间配置。
 
-工作空间镜像包含 Python、Git、curl、ripgrep、bash、证书、ZIP 工具和可信文件辅助程序。镜像中 UID/GID 10001 是工作负载用户，`/data` 由 root 管理顶层目录，个人可写内容位于受管子目录。操作系统工具、辅助程序和父目录不可由工作负载改写。模型和检索 API Key 留在平台后端，不注入沙箱。
+执行和文件系统分别通过 `sandboxcore.Provider` 与 `sandboxcore.Filesystem` 抽象接入。文件接口贴近 OpenSandbox 原生能力，包括元数据、目录、搜索、流式传输、移动、删除和文本替换；业务层负责 `/data` 布局、技能安装、授权、字节限制与成果完整性。接入其他后端时实现同一能力边界，不要求复制某个辅助程序或工作镜像。
 
-## 构建受控镜像
+工作镜像按实际任务准备 shell、Python、Git 等工具。命令使用后端默认身份，不强制要求 UID/GID 10001。模型和检索 API Key 留在平台后端，不注入沙箱。文件 API 的路径规则、链接处理、操作原子性和进程隔离以所接后端为准；平台路径校验不能替代沙箱隔离，也不宣称元数据令牌提供原子条件写入。
 
-在 Linux、与运行 Docker 相同的 CPU 架构上，准备 Go、Git、patch、Docker 和 OpenSandbox 源码 checkout。从 AntCDP 仓库执行：
+平台先持久化操作意图再执行远端请求。原生写入超时后不自动重放，也不能仅凭文件存在或摘要匹配认定远端已经结束；缺少可查询操作句柄时保留未知状态和资源引用，直到原实例终止得到核实。下载直接读取原文件，校验前后元数据并对实际收到的字节计算摘要，不宣称得到文件系统时间点快照。
 
-```sh
-EXECD_BASE_IMAGE='<official-execd-release-1.1.1-image>' \
-  bash scripts/build-sandbox-images.sh /path/to/OpenSandbox
-```
+技能包在平台验证和解包，经原生文件 API 上传到独立暂存目录，准备完成后发布到稳定技能路径。目录移动不是跨目录原子交换；失败时不得把未完成的安装记为就绪。历史辅助程序操作仅按已有句柄核实，不重新派发旧操作。
 
-占位符必须替换为对应架构的官方 execd `release-1.1.1` 基础镜像。脚本从 `docker/sandbox/execd-source-revision` 固定的提交导出源码，不使用 checkout 中未提交的内容；应用 `execd-control.patch`、执行限定测试、构建二进制。补丁及保留的上游许可证随构建材料维护，不修改输入源码。脚本使用临时目录并在退出时清理，不把源码、凭据或配置放入工作空间镜像。
+## 可选加固材料
 
-默认镜像引用为 `antcdp-execd:latest` 和 `antcdp-sandbox:latest`；可通过 `ANTCDP_EXECD_IMAGE`、`ANTCDP_SANDBOX_IMAGE` 指定固定构建引用。输出包含实际镜像 ID。环境模板中的工作空间镜像必须使用明确版本或不可变内容引用，不接受 `latest`。单机 Docker 可使用构建产生的 `sha256:` 镜像 ID；分发到其他 daemon 时应使用已推送仓库的 digest。执行控制镜像由 Server 的 `runtime.execd_image` 配置；更新它后应重启该 Server，使缓存的执行文件更新生效。
+仓库保留 `scripts/build-sandbox-images.sh`、`scripts/build-sandbox-server.sh` 与 `docker/sandbox/` 中的独立加固构建材料。它们不是默认连接、初始化或文件功能的前提，不由应用自动构建或替换。采用这些材料属于独立部署选择，需审查固定上游版本、补丁、认证和网络拓扑，并自行验证其安全边界。
 
-该兼容补丁解决两项准入要求：启用控制令牌时初始化接口也必须认证；普通命令的最终环境必须移除控制凭据，包含请求环境覆盖的注入路径。平台为每个实例按安装密钥和登记归属派生不同控制令牌，API Key 轮换不会改变已有实例令牌。仅配置 Server API Key 或仅切换命令 UID 都不能替代这些措施。后续升级 execd 时必须重新核验相同行为，不能只按版本字符串认定兼容。
-
-### 专用 Docker 代理控制服务
-
-需要在同一 Docker daemon 上与其他控制服务并存时，可构建本项目提供的专用 Server 镜像：
-
-```sh
-SERVER_BASE_IMAGE='<official-server-0.2.3-repository>@sha256:<digest>' \
-  ANTCDP_SANDBOX_SERVER_IMAGE='antcdp-sandbox-server:latest' \
-  bash scripts/build-sandbox-server.sh /path/to/OpenSandbox
-```
-
-脚本从 `server-source-revision` 指定的提交导出源码，以零模糊匹配应用 `server-control.patch`；基础镜像必须使用官方 0.2.3 的不可变 digest。构建验证实际包版本和导入路径，并运行不依赖 Docker socket 的契约测试。镜像保留上游许可证、修改说明、源码版本与补丁。构建本身不会创建沙箱或启动服务。
-
-这是只支持 Docker 代理访问的专用封装：工作负载仅允许 bridge，`docker.publish_host` 仅接受 IPv4 loopback，默认 `127.0.0.1`；包括执行、工作负载、egress 和额外端口的全部发布地址均受此约束。Server 自身需要使用宿主网络，使其能访问这些 loopback 端口；`server.host` 应显式绑定平台可达的管理地址，配置独立 API Key。`docker.host_ip` 设为同一个 loopback 目标；平台连接选择 `server_proxy`，不能在此拓扑下回退为直连。管理地址可达性和防火墙仍属于部署约束，私有地址本身不构成完整隔离证明。
-
-内部 Docker 标签使用 `io.antcdp.sandbox/`，避免与上游默认标签的控制服务互相恢复或清理资源。创建和修改元数据同时拒绝注入两种系统前缀，响应也不会暴露内部标签；外部 API、平台归属元数据和执行认证协议保持不变。同一 daemon 的同一内部标签命名空间只由一个控制服务管理，不能再启动另一套使用相同前缀的独立控制器。多个可信平台可以连接同一 Server；Docker socket 管理者仍处于共同信任边界，此机制不提供 Kubernetes 式租户隔离。
-
-Server 配置和状态使用独立持久卷，配置文件只读挂载并限制权限。Docker 元数据实际位于运行用户的 `$HOME/.opensandbox/metadata`，只持久化 SQLite 路径不足以保存它。需保存完整 `$HOME/.opensandbox`，配置持久重启策略，固定已验证的执行控制镜像引用。工作空间卷与 Server 状态卷分别管理；删除控制服务容器不能连带删除用户文件。
+普通部署使用官方服务与镜像即可；原生功能测试不要求通过加固专用探测。可选加固运行测试需显式开启对应环境变量。已有部署不能因应用升级被自动重启、替换镜像或清理共享资源。
 
 ## 连接、卷和网络
 
@@ -59,8 +38,8 @@ Server 配置和状态使用独立持久卷，配置文件只读挂载并限制�
 
 连接预览只检查控制面健康。执行、文件和持久性使用明确授权的测试资源验证，测试结束清理本次资源；不读取个人会话或个人文件。创建结果未知时保留原标记并核实，不能重新创建另一台掩盖结果。
 
-真实适配器测试为 `internal/sandboxadapters/opensandbox` 中的 opt-in integration tests。端点、密钥、运行镜像及测试探测地址仅由环境变量输入，缺失环境的跳过不算通过。至少核验直连与代理、工作负载无法访问控制接口或控制环境、辅助程序不可替换、文件快照完整、后台取消后确认退出、原卷重挂载，以及默认内网阻止、自定义允许例外和阻止优先。
+真实适配器测试为 `internal/sandboxadapters/opensandbox` 中的 opt-in integration tests。端点、密钥、运行镜像及测试探测地址仅由环境变量输入，缺失环境的跳过不算通过。原生测试核验目录、中文路径、范围读取、上传下载、替换、移动与删除，以及命令执行、取消后确认退出和原卷重挂载。网络策略使用独立受控目标验证；某条访问路径通过不代表其他拓扑已验证。
 
-专用代理控制服务另需核验实际 Docker 端口绑定全部为 loopback、平台经代理可用而不能从外部直连数据端口、无控制凭据拒绝访问、重启后仅恢复自身标签资源，以及持久元数据仍可读取。离线契约测试不能代替这些真实拓扑检查。通用适配器的直连测试适用于另行配置且满足同等认证要求的环境，不适用于上述仅代理拓扑。
+测试资源使用独立归属标记。实例由测试终止并查询确认；后端不支持卷删除时需依据本次输出的明确卷名核对无挂载后清理，禁止全局 prune。加固部署的控制面隔离、凭据移除与端口发布约束另行验证，不能把官方原生功能通过等同于这些安全测试通过。
 
 应用重启后旧运行会结算为中断，物理操作继续只读核实；未确认的命令和文件传输保持资源引用。管理员回收未知实例也必须先实际终止并核实，不能通过强制清锁继续写同一工作空间。

@@ -109,8 +109,8 @@ func (s *CloudService) startWorkspaceOperation(st StateRepository, repo CloudRep
 			if previous.Kind != kind || previous.ComputerID != access.ComputerID || previous.BackendGeneration != access.BackendGeneration || previous.RuntimeGeneration != access.RuntimeGeneration || previous.StorageGeneration != access.StorageGeneration || !semanticSame(previous.Intent, json.RawMessage(b)) {
 				return nil, integrity()
 			}
-			access.HelperOperationID = previous.ID
-			access.HelperOperationFence = previous.FenceVersion
+			access.WorkspaceOperationID = previous.ID
+			access.WorkspaceOperationFence = previous.FenceVersion
 			return previous, nil
 		}
 	}
@@ -121,7 +121,7 @@ func (s *CloudService) startWorkspaceOperation(st StateRepository, repo CloudRep
 	if err = repo.InsertCloudOperation(op); err != nil {
 		return nil, err
 	}
-	access.HelperOperationID, access.HelperOperationFence = op.ID, op.FenceVersion
+	access.WorkspaceOperationID, access.WorkspaceOperationFence = op.ID, op.FenceVersion
 	if err = s.acquireReferences(st, repo, access, "cloud_file_operation", workspaceHolder(op.ID)); err != nil {
 		return nil, err
 	}
@@ -179,7 +179,7 @@ func (s *CloudService) ListWorkspaceEntries(ctx context.Context, raw string, id 
 	}
 	ctx, cancel := context.WithDeadline(ctx, op.DeadlineAt)
 	defer cancel()
-	response, err := s.workspaceHelper(ctx, access, op.ID, workspacefs.Request{Operation: "list", Path: name, Offset: int64((q.Page - 1) * q.PageSize), Limit: q.PageSize})
+	response, err := s.workspaceRequest(ctx, access, op.ID, workspacefs.Request{Operation: "list", Path: name, Offset: int64((q.Page - 1) * q.PageSize), Limit: q.PageSize})
 	var listing struct {
 		Entries []workspacefs.Entry `json:"entries"`
 		Total   int                 `json:"total"`

@@ -16,11 +16,6 @@ import (
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
-// Workload identity is a property of the verified runtime image. It cannot be
-// selected by model arguments. A UID switch alone is not a security boundary:
-// admission additionally requires the deployment's verified execution support.
-const sandboxWorkloadUID uint32 = 10001
-
 type CommandRequest struct {
 	Command        string `json:"command"`
 	Background     bool   `json:"background"`
@@ -209,8 +204,7 @@ func (s *CloudService) reserveCommand(ctx context.Context, ref agentcore.Executi
 		if !deadline.After(now) {
 			return httpx.E(409, "DEADLINE_EXCEEDED", "执行期限已到")
 		}
-		uid, gid := sandboxWorkloadUID, sandboxWorkloadUID
-		out.Spec = sandboxcore.ExecSpec{Command: w.Command, CWD: out.Access.CWD, UID: &uid, GID: &gid, Background: w.Background, Timeout: deadline.Sub(now), MaxOutputBytes: w.MaxOutputBytes}
+		out.Spec = sandboxcore.ExecSpec{Command: w.Command, CWD: out.Access.CWD, Background: w.Background, Timeout: deadline.Sub(now), MaxOutputBytes: w.MaxOutputBytes}
 		encoded, e := json.Marshal(out.Spec)
 		if e != nil {
 			return e

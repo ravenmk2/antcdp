@@ -2,24 +2,13 @@ package agents
 
 import (
 	"context"
-	"crypto/hmac"
-	"encoding/hex"
 	"encoding/json"
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
-	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
-
-type workspaceExport struct {
-	TransferPath string `json:"transfer_path"`
-	SourcePath   string `json:"source_path"`
-	Size         uint64 `json:"size_bytes,string"`
-	SHA256       string `json:"sha256"`
-	Identity     string `json:"identity"`
-}
 
 func (s *CloudService) OpenWorkspaceFile(ctx context.Context, raw string, id uint64, name string) (*Result, *WorkspaceFileContent, error) {
 	name, err := workspacePath(name, false)
@@ -82,85 +71,58 @@ func (s *CloudService) deleteWorkspaceDownload(ctx context.Context, id uint64, k
 	})
 }
 
-// copyWorkspaceSnapshot verifies the complete transfer before exposing bytes.
-// The remote path is a helper-created private snapshot, never a user pathname.
+// copyWorkspaceSnapshot stores the bytes actually downloaded, once. Metadata
+// checks detect observed concurrent changes; the provider does not promise a
+// point-in-time filesystem snapshot.
 func (s *CloudService) copyWorkspaceSnapshot(ctx context.Context, access *SandboxAccess, operationID uint64, name string) (string, ByteFacts, error) {
-	transfer := NewStorageKey()
 	key := NewStorageKey()
-	err := s.updateWorkspaceObservation(ctx, operationID, access.HelperOperationFence, func(_ *CloudOperationRow, observation *workspaceOperationObservation) error {
-		if observation.TransferToken != "" || observation.LocalStorageKey != "" {
-			return integrity()
+	var facts ByteFacts
+	_, err := s.recordNativeRequest(ctx, access, operationID, workspacefs.Request{Operation: "download", Path: name}, func() (workspacefs.Response, error) {
+		f, e := nativeFiles(access)
+		if e != nil {
+			return workspacefs.Response{}, e
 		}
-		observation.TransferToken = transfer
-		observation.TransferState = "preparing"
-		observation.LocalStorageKey = key
-		return nil
+		remote, e := nativePath(name)
+		if e != nil {
+			return workspacefs.Response{}, e
+		}
+		before, e := f.StatFile(ctx, access.Resource, remote)
+		if e != nil {
+			return workspacefs.Response{}, e
+		}
+		if !nativeFile(before) || before.Size > workspacefs.MaxFileBytes {
+			return workspacefs.Response{}, nativeError("WORKSPACE_SOURCE_INVALID")
+		}
+		e = s.updateWorkspaceObservation(ctx, operationID, access.WorkspaceOperationFence, func(_ *CloudOperationRow, o *workspaceOperationObservation) error {
+			o.LocalStorageKey = key
+			return nil
+		})
+		if e != nil {
+			return workspacefs.Response{}, e
+		}
+		reader, e := f.OpenFile(ctx, access.Resource, sandboxcore.FileRequest{Path: remote, MaxBytes: workspacefs.MaxFileBytes + 1})
+		if e != nil {
+			return workspacefs.Response{}, e
+		}
+		facts, e = s.Host.Files.Write(ctx, key, reader, workspacefs.MaxFileBytes)
+		closeErr := reader.Close()
+		if e == nil {
+			e = closeErr
+		}
+		if e != nil {
+			return workspacefs.Response{}, e
+		}
+		after, e := f.StatFile(ctx, access.Resource, remote)
+		if e != nil {
+			return workspacefs.Response{}, e
+		}
+		if facts.Size != uint64(before.Size) || nativeIdentity(before) != nativeIdentity(after) {
+			return workspacefs.Response{}, nativeError("FILE_STATE_CHANGED")
+		}
+		return workspacefs.Result(map[string]any{"size_bytes": facts.Size, "sha256": hexHash(facts.SHA256)}, false, nil), nil
 	})
 	if err != nil {
-		return "", ByteFacts{}, err
+		_ = s.deleteWorkspaceDownload(context.WithoutCancel(ctx), operationID, key)
 	}
-	if _, err = s.workspaceHelper(ctx, access, operationID, workspacefs.Request{Operation: "transfer_begin", Token: transfer}); err != nil {
-		return key, ByteFacts{}, err
-	}
-	response, err := s.workspaceHelper(ctx, access, operationID, workspacefs.Request{Operation: "export", Token: transfer, Path: name})
-	if err != nil {
-		return key, ByteFacts{}, err
-	}
-	var exported workspaceExport
-	if json.Unmarshal(response.Result, &exported) != nil || exported.TransferPath != workspacefs.TransferDirectory+"/"+transfer+"/payload" || exported.SourcePath != name || exported.Size > uint64(workspacefs.MaxFileBytes) {
-		return key, ByteFacts{}, integrity()
-	}
-	expected, err := hex.DecodeString(exported.SHA256)
-	if err != nil || len(expected) != 32 {
-		return key, ByteFacts{}, integrity()
-	}
-	uid, gid := uint32(0), uint32(0)
-	err = s.updateWorkspaceObservation(ctx, operationID, access.HelperOperationFence, func(_ *CloudOperationRow, observation *workspaceOperationObservation) error {
-		observation.TransferState = "started"
-		return nil
-	})
-	if err != nil {
-		return key, ByteFacts{}, err
-	}
-	reader, err := access.Provider.OpenFile(ctx, access.Resource, sandboxcore.FileRequest{Path: exported.TransferPath, UID: &uid, GID: &gid, MaxBytes: workspacefs.MaxFileBytes + 1})
-	if err != nil {
-		return key, ByteFacts{}, s.workspaceTransferUnknown(ctx, access, operationID)
-	}
-	facts, copyErr := s.Host.Files.Write(ctx, key, reader, workspacefs.MaxFileBytes)
-	closeErr := reader.Close()
-	if copyErr != nil || closeErr != nil {
-		return key, facts, s.workspaceTransferUnknown(ctx, access, operationID)
-	}
-	err = s.updateWorkspaceObservation(ctx, operationID, access.HelperOperationFence, func(_ *CloudOperationRow, observation *workspaceOperationObservation) error {
-		observation.TransferState = "finished"
-		return nil
-	})
-	if err != nil {
-		return key, facts, err
-	}
-	if facts.Size != exported.Size || !hmac.Equal(facts.SHA256, expected) {
-		_ = s.Host.Files.Delete(key)
-		return key, ByteFacts{}, httpx.E(409, "FILE_STATE_CHANGED", "工作文件快照校验失败")
-	}
-	if _, err = s.workspaceHelper(ctx, access, operationID, workspacefs.Request{Operation: "transfer_cleanup", Token: transfer}); err != nil {
-		return key, facts, err
-	}
-	err = s.updateWorkspaceObservation(ctx, operationID, access.HelperOperationFence, func(_ *CloudOperationRow, observation *workspaceOperationObservation) error {
-		observation.TransferToken = ""
-		return nil
-	})
 	return key, facts, err
-}
-
-func (s *CloudService) workspaceTransferUnknown(ctx context.Context, access *SandboxAccess, id uint64) error {
-	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer cancel()
-	_ = s.updateWorkspaceObservation(cleanup, id, access.HelperOperationFence, func(row *CloudOperationRow, _ *workspaceOperationObservation) error {
-		row.Status = "outcome_unknown"
-		code := "WORKSPACE_TRANSFER_OUTCOME_UNKNOWN"
-		row.ErrorCode = &code
-		return nil
-	})
-	_ = s.MarkReferencesUnknown(cleanup, access, "workspace_transfer_outcome_unknown", json.RawMessage(`{"transfer_finished":false}`))
-	return httpx.E(409, "WORKSPACE_IO_OUTCOME_UNKNOWN", "工作文件传输结果需要核实，请勿重复执行")
 }

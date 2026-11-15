@@ -354,13 +354,13 @@ func TestEventWireBoundAndOutputTruncation(t *testing.T) {
 	}
 }
 
-func TestRawFileTransportRejectsWorkloadPaths(t *testing.T) {
-	for _, p := range []string{"/data/user-secret", "/run/antcdp-transfers/../secret", "/run/antcdp-transfers/", "/run/antcdp-transfers//file"} {
+func TestNativeFileTransportAcceptsCleanAbsolutePaths(t *testing.T) {
+	for _, p := range []string{"relative/path", "/run/antcdp-transfers/../secret", "/run/antcdp-transfers/", "/run/antcdp-transfers//file"} {
 		if err := validateFile(sandboxcore.FileRequest{Path: p, MaxBytes: 10}); err == nil {
 			t.Errorf("unsafe raw path accepted %q", p)
 		}
 	}
-	if err := validateFile(sandboxcore.FileRequest{Path: "/run/antcdp-transfers/token/upload", MaxBytes: 10}); err != nil {
+	if err := validateFile(sandboxcore.FileRequest{Path: "/data/用户/file.txt", MaxBytes: 10}); err != nil {
 		t.Fatal(err)
 	}
 }
