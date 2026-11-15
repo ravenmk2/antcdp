@@ -7,7 +7,7 @@ AntCDP：AI Native Team Collaboration & Development Platform
 ```txt
 antcdp/
 ├── cmd/antcdp/        # 程序入口
-├── docs/              # 指导功能开发的需求、架构、API 与技术约定
+├── docs/              # 技术栈、架构、工作流程规范与数据库结构
 ├── internal/          # 应用私有代码
 ├── web/               # 前端源码与构建产物
 └── scripts/           # 辅助脚本
@@ -15,7 +15,7 @@ antcdp/
 
 ## 文档用途与审核
 
-- `docs/` 仅用于指导功能开发，维护源码导航、架构关系、开发方法和必要的安全、兼容及恢复边界。功能、接口、字段、默认值及支持范围以代码和测试为准，不重复维护易失效的实现快照。
+- `docs/` 仅保留技术栈、架构设计、工作流程规范和数据库结构；重点维护事件溯源、模型上下文、投影、智能体前后端通讯及跨组件一致性约束。功能、接口字段、状态、默认值及支持范围以代码和测试为准，不新增逐业务说明或重复维护实现快照。
 - 实际环境信息不得写入 `AGENTS.md` 或 `docs/`，包括实际部署目标、主机与连接信息、环境配置、资源清单、环境运维策略及部署记录。这些内容维护在被 Git 忽略的本机配置中；部署环境信息继续维护在 `.agents/skills/remote-deploy/`。通用操作方法可以写入开发文档。
 - 对 `docs/` 下任何文件的新增、修改、删除或移动，都必须先向用户提供具体变更内容并经用户审核同意，再落盘执行；不得将一般开发任务授权视为文档修改已获审核。待审方案在对话中展示，不先写入 `docs/`。
 - 开发过程中发现文档需要同步时，先整理待审变更；本文件中其他文档同步要求同样遵守上述审核规则。
@@ -25,8 +25,8 @@ antcdp/
 完整目录与维护约定见 [docs/README.md](docs/README.md)，不在此重复维护逐篇索引。
 
 - [开发启动](docs/development/getting-started.md)与[测试方法](docs/development/testing.md)。
-- [架构与模块边界](docs/architecture/overview.md)。
-- [安装与容器部署](docs/operations/deployment.md)。
+- [架构与模块边界](docs/architecture/overview.md)与[智能体执行、事件溯源及通讯](docs/architecture/agent-runtime.md)。
+- [部署、发布与恢复](docs/operations/deployment.md)。
 - [公共 API](docs/api/conventions.md)与[数据库约定](docs/database/README.md)。
 
 ## 开发完成验证
