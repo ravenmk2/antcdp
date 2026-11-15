@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router";
 import {
   Bot,
@@ -213,13 +213,11 @@ export function ConversationSidebar({
 
 function ConversationHistory({ agentId }: { agentId?: string }) {
   const { pathname } = useLocation();
+  const cache = useQueryClient();
+  const [loadingMore, setLoadingMore] = useState(false);
   const query = useInfiniteQuery({
     queryKey: ["agent-sessions", "sidebar", agentId],
     initialPageParam: 1,
-    // Only the open conversation has a stream subscription. Refresh the list
-    // independently so off-screen runs and results viewed elsewhere converge.
-    refetchInterval: 5_000,
-    refetchIntervalInBackground: false,
     queryFn: ({ pageParam, signal }) =>
       request<SessionSummary[]>(
         `/agents/sessions?${agentQuery({ agent_type: "interactive", agent_id: agentId, archived: false, page: pageParam, page_size: 10 })}`,
@@ -235,6 +233,21 @@ function ConversationHistory({ agentId }: { agentId?: string }) {
   const sessions = [
     ...new Map(rows.map((session) => [session.id, session])).values(),
   ];
+  async function loadMore() {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      // Keep a background refresh from cancelling pagination, or vice versa.
+      if (
+        cache.getQueryState(["agent-sessions", "sidebar", agentId])
+          ?.fetchStatus === "fetching"
+      )
+        await query.refetch({ cancelRefetch: false });
+      await query.fetchNextPage({ cancelRefetch: false });
+    } finally {
+      setLoadingMore(false);
+    }
+  }
   return (
     <>
       {query.isPending && (
@@ -298,10 +311,12 @@ function ConversationHistory({ agentId }: { agentId?: string }) {
           variant="ghost"
           size="sm"
           className="conversation-expand"
-          disabled={query.isFetching}
-          onClick={() => void query.fetchNextPage()}
+          disabled={loadingMore || query.isFetchingNextPage}
+          onClick={() => void loadMore()}
         >
-          {query.isFetchingNextPage ? "正在加载…" : "加载更多会话"}
+          {loadingMore || query.isFetchingNextPage
+            ? "正在加载…"
+            : "加载更多会话"}
         </Button>
       )}
     </>

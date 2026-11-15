@@ -499,6 +499,7 @@ func (s *Service) PatchPreference(ctx context.Context, raw string, id uint64, ta
 			if e = st.SavePin(v); e != nil {
 				return e
 			}
+			out.SessionChanges = append(out.SessionChanges, agentcore.SessionChange{SessionID: agentcore.ID(id), UserID: agentcore.ID(a.User.ID)})
 		}
 		out.Tag = s.tag(kind, id, v.RowVersion)
 		out.Data = SessionPreference{v.Pinned, strings.Trim(out.Tag, `"`)}
@@ -540,6 +541,7 @@ func (s *Service) AdvanceView(ctx context.Context, raw string, id uint64, w View
 			if e = st.AdvanceView(pref); e != nil {
 				return e
 			}
+			out.SessionChanges = append(out.SessionChanges, agentcore.SessionChange{SessionID: agentcore.ID(id), UserID: agentcore.ID(a.User.ID)})
 		}
 		view, e := s.viewState(st, v, a.User.ID)
 		if e != nil {

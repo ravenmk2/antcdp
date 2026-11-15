@@ -104,6 +104,7 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 		runtime.Notify()
 	}
 	service.CancelRun = runtime.Cancel
+	service.SessionChanged = hub.SessionChanged
 	return &agentApplication{Service: service, Resources: resources, Runtime: runtime, Hub: hub, Sandboxes: sandboxes}, nil
 }
 

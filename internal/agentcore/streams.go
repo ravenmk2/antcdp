@@ -137,11 +137,12 @@ type Hub struct {
 	mu                   sync.Mutex
 	epoch                string
 	sessions             map[ID]*streamSession
+	changes              map[*SessionChanges]struct{}
 	maxBytes, maxNotices int
 }
 
 func NewHub(epoch string) *Hub {
-	return &Hub{epoch: epoch, sessions: map[ID]*streamSession{}, maxBytes: 4 << 20, maxNotices: 1000}
+	return &Hub{epoch: epoch, sessions: map[ID]*streamSession{}, changes: map[*SessionChanges]struct{}{}, maxBytes: 4 << 20, maxNotices: 1000}
 }
 func (h *Hub) session(id ID) *streamSession {
 	s := h.sessions[id]
@@ -250,6 +251,7 @@ func (h *Hub) Committed(_ context.Context, r CommitReceipt) {
 			copy.Ranges = append([]EventRange(nil), r.Ranges...)
 			copy.ArtifactIDs = append([]ID(nil), r.ArtifactIDs...)
 			h.publish(h.session(v.SessionID), Notice{Commit: &copy})
+			h.sessionChanged(SessionChange{SessionID: v.SessionID})
 		}
 	}
 }

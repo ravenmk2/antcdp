@@ -40,7 +40,7 @@ class TestSocket {
     );
   }
 }
-function setup(maxSubscriptions = 8) {
+function setup(maxSubscriptions = 8, onSessionsChanged = vi.fn()) {
   vi.useFakeTimers();
   const sockets: TestSocket[] = [];
   const check = vi.fn(async () => false);
@@ -55,9 +55,80 @@ function setup(maxSubscriptions = 8) {
     onAuthenticationLost: lost,
     random: () => 0.5,
     maxSubscriptions,
+    onSessionsChanged,
   });
   return { client, sockets, check, lost };
 }
+
+it("keeps one runtime connection across content subscriptions and restores global observation after reconnect", () => {
+  const changed = vi.fn();
+  const { client, sockets } = setup(8, changed);
+  client.start();
+  client.start();
+  expect(sockets).toHaveLength(1);
+  sockets[0].open();
+  const global = sockets[0].frames()[0];
+  expect(global.type).toBe("subscribe_sessions");
+  sockets[0].receive({
+    type: "sessions_changed",
+    subscription_id: global.subscription_id,
+    session_ids: [],
+    resync: true,
+  });
+  expect(changed).toHaveBeenCalledOnce();
+  const unsubscribe = client.observe("10").subscribe(vi.fn());
+  unsubscribe();
+  expect(sockets[0].readyState).toBe(1);
+  expect(sockets[0].frames().at(-1)?.type).toBe("unsubscribe");
+  sockets[0].receive({
+    type: "sessions_changed",
+    subscription_id: global.subscription_id,
+    session_ids: ["11"],
+    resync: false,
+  });
+  expect(changed).toHaveBeenCalledTimes(2);
+  sockets[0].serverClose(1006);
+  vi.advanceTimersByTime(1000);
+  expect(sockets).toHaveLength(2);
+  sockets[1].open();
+  const restored = sockets[1].frames()[0];
+  expect(restored.type).toBe("subscribe_sessions");
+  expect(restored.subscription_id).not.toBe(global.subscription_id);
+  sockets[1].receive({
+    type: "sessions_changed",
+    subscription_id: global.subscription_id,
+    session_ids: ["12"],
+    resync: false,
+  });
+  expect(changed).toHaveBeenCalledTimes(2);
+  sockets[1].receive({
+    type: "sessions_changed",
+    subscription_id: restored.subscription_id,
+    session_ids: [],
+    resync: true,
+  });
+  expect(changed).toHaveBeenCalledTimes(3);
+  client.dispose();
+  expect(sockets[1].readyState).toBe(3);
+  vi.advanceTimersByTime(90_000);
+  expect(sockets).toHaveLength(2);
+});
+
+it("rejects malformed global hints before invalidating cached lists", () => {
+  const changed = vi.fn();
+  const { client, sockets } = setup(8, changed);
+  client.start();
+  sockets[0].open();
+  sockets[0].receive({
+    type: "sessions_changed",
+    subscription_id: sockets[0].frames()[0].subscription_id,
+    session_ids: [0],
+    resync: false,
+  });
+  expect(changed).not.toHaveBeenCalled();
+  expect(client.getConnectionStatus()).toBe("closed");
+  client.dispose();
+});
 
 it("batches chunks while immediately publishing terminal and revoked state", () => {
   const { client, sockets } = setup();

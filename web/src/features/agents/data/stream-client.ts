@@ -2,6 +2,7 @@ import type {
   ClientFrame,
   HistoryPage,
   ServerFrame,
+  SessionsChangedFrame,
 } from "@/types/agent-events";
 import {
   conversationFrame,
@@ -25,6 +26,7 @@ interface ClientOptions {
   createSocket?: () => SocketLike;
   checkAuthentication: () => Promise<boolean>;
   onAuthenticationLost: () => void;
+  onSessionsChanged?: (frame: SessionsChangedFrame) => void;
   random?: () => number;
   maxSubscriptions?: number;
   maxFrameBytes?: number;
@@ -64,7 +66,25 @@ export class AgentStreamClient {
   private connectionListeners = new Set<() => void>();
   private authenticationCheck = false;
   private stopped = false;
+  private started = false;
+  private globalSubscription = "";
   constructor(private readonly options: ClientOptions) {}
+
+  // The authenticated runtime owns the transport; mounted conversations own
+  // only their logical content subscriptions.
+  start() {
+    if (this.started || this.disposed || this.stopped) return;
+    this.started = true;
+    if (this.socket?.readyState === 1) this.subscribeSessions();
+    else if (!this.socket && !this.retryTimer) this.connect();
+  }
+  private subscribeSessions() {
+    this.globalSubscription = `sessions_${this.generation}_${++this.sequence}`;
+    this.send({
+      type: "subscribe_sessions",
+      subscription_id: this.globalSubscription,
+    });
+  }
 
   getConnectionStatus = () => this.status;
   subscribeConnection = (listener: () => void) => {
@@ -184,7 +204,7 @@ export class AgentStreamClient {
     this.entries.delete(entry.sessionId);
     // Content lives only as long as a mounted observer, never in browser storage.
     entry.state = initialConversationState(entry.sessionId, "");
-    if (!this.entries.size) {
+    if (!this.entries.size && !this.started) {
       this.disconnect();
       this.setStatus("disconnected");
     }
@@ -208,7 +228,12 @@ export class AgentStreamClient {
     this.notify(entry);
   }
   private connect() {
-    if (this.disposed || this.stopped || !this.entries.size || this.socket)
+    if (
+      this.disposed ||
+      this.stopped ||
+      (!this.started && !this.entries.size) ||
+      this.socket
+    )
       return;
     this.setStatus("connecting");
     const generation = ++this.generation;
@@ -236,6 +261,7 @@ export class AgentStreamClient {
       this.installedSnapshot = false;
       this.pendingPings.clear();
       this.subscriptions.clear();
+      if (this.started) this.subscribeSessions();
       for (const entry of this.entries.values())
         if (entry.state.phase !== "closed") this.subscribeEntry(entry);
       this.heartbeatTimer = setInterval(() => {
@@ -284,6 +310,27 @@ export class AgentStreamClient {
         if (this.installedSnapshot) this.backoffAttempt = 0;
         return;
       }
+      if (frame.type === "sessions_changed") {
+        if (
+          !this.globalSubscription ||
+          frame.subscription_id !== this.globalSubscription
+        )
+          return;
+        if (
+          typeof frame.resync !== "boolean" ||
+          !Array.isArray(frame.session_ids) ||
+          frame.session_ids.length > 1000 ||
+          !frame.session_ids.every(
+            (id) => typeof id === "string" && /^[1-9]\d{0,19}$/.test(id),
+          )
+        ) {
+          this.protocolFailure();
+          return;
+        }
+        this.installedSnapshot = true;
+        this.options.onSessionsChanged?.(frame);
+        return;
+      }
       if (!("subscription_id" in frame) || !frame.subscription_id) {
         if (frame.type === "error" && frame.code === "UNAUTHENTICATED")
           void this.recheckAuthentication();
@@ -291,6 +338,10 @@ export class AgentStreamClient {
         return;
       }
       const entry = this.subscriptions.get(frame.subscription_id);
+      if (frame.subscription_id === this.globalSubscription) {
+        this.protocolFailure();
+        return;
+      }
       if (!entry) return;
       const previous = entry.state;
       try {
@@ -394,6 +445,7 @@ export class AgentStreamClient {
     this.socket = null;
     this.pendingPings.clear();
     this.subscriptions.clear();
+    this.globalSubscription = "";
     if (old) {
       old.onopen = null;
       old.onmessage = null;
@@ -417,7 +469,12 @@ export class AgentStreamClient {
     this.scheduleReconnect();
   }
   private scheduleReconnect() {
-    if (this.disposed || this.stopped || !this.entries.size || this.retryTimer)
+    if (
+      this.disposed ||
+      this.stopped ||
+      (!this.started && !this.entries.size) ||
+      this.retryTimer
+    )
       return;
     this.setStatus("backoff");
     const base = Math.min(

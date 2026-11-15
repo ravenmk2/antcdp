@@ -400,6 +400,7 @@ export type EventFrame = DurableRecord & {
   session_id: string;
 };
 export type ServerFrame =
+  | SessionsChangedFrame
   | SnapshotFrame
   | StreamFrame
   | EventFrame
@@ -425,6 +426,7 @@ export type ServerFrame =
     }
   | { type: "access_revoked"; subscription_id: string; code: string };
 export type ClientFrame =
+  | { type: "subscribe_sessions"; subscription_id: string }
   | {
       type: "subscribe";
       subscription_id: string;
@@ -433,3 +435,10 @@ export type ClientFrame =
     }
   | { type: "unsubscribe" | "resync"; subscription_id: string }
   | { type: "ping"; nonce: string };
+
+export interface SessionsChangedFrame {
+  type: "sessions_changed";
+  subscription_id: string;
+  session_ids: string[];
+  resync: boolean;
+}

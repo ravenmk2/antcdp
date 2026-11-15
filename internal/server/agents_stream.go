@@ -29,7 +29,8 @@ type agentStreamLimits struct {
 func (l *agentStreamLimits) acquire(id uint64) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.users[id] >= 3 {
+	// Connections now live for the authenticated tab, including non-chat pages.
+	if l.users[id] >= 8 {
 		return false
 	}
 	l.users[id]++
@@ -91,7 +92,7 @@ func parseAgentFrame(raw []byte) (agentClientFrame, error) {
 		allowed["subscription_id"] = true
 		allowed["session_id"] = true
 		allowed["history_limit"] = true
-	case "unsubscribe", "resync":
+	case "subscribe_sessions", "unsubscribe", "resync":
 		allowed["subscription_id"] = true
 	case "ping":
 		allowed["nonce"] = true
@@ -107,7 +108,7 @@ func parseAgentFrame(raw []byte) (agentClientFrame, error) {
 		if e != nil || n == 0 || strconv.FormatUint(n, 10) != f.Session || f.Nonce != nil || f.Limit != nil && (*f.Limit < 1 || *f.Limit > 200) {
 			return f, errors.New("invalid subscribe")
 		}
-	case "unsubscribe", "resync":
+	case "subscribe_sessions", "unsubscribe", "resync":
 		if f.Session != "" || f.Limit != nil || f.Nonce != nil {
 			return f, errors.New("invalid control")
 		}
@@ -151,6 +152,9 @@ type agentWS struct {
 	subscriptions  map[string]*agentWSSubscription
 	used           map[string]bool
 	notices        chan agentWSNotice
+	userID         uint64
+	globalID       string
+	changes        *agentcore.SessionChanges
 }
 
 func registerAgentStream(group *gin.RouterGroup, o Options) {
@@ -190,7 +194,11 @@ func registerAgentStream(group *gin.RouterGroup, o Options) {
 		}
 		defer func() { _ = conn.Close() }()
 		ws := &agentWS{ctx: agents.ObservingContext(ctx), conn: conn, options: o, raw: rawSession(c), requestID: c.GetString("request_id"), subscriptions: map[string]*agentWSSubscription{}, used: map[string]bool{}, notices: make(chan agentWSNotice)}
+		ws.userID = auth.User.ID
 		defer func() {
+			if ws.changes != nil {
+				ws.changes.Close()
+			}
 			for _, sub := range ws.subscriptions {
 				sub.hub.Close()
 			}
@@ -255,7 +263,15 @@ func (w *agentWS) serve() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
+		var changes <-chan struct{}
+		if w.changes != nil {
+			changes = w.changes.Ready()
+		}
 		select {
+		case <-changes:
+			if e := w.sessionsChanged(); e != nil {
+				return
+			}
 		case <-w.ctx.Done():
 			return
 		case e := <-readErrors:
@@ -302,6 +318,22 @@ func (w *agentWS) serve() {
 }
 func (w *agentWS) handle(f agentClientFrame) error {
 	switch f.Type {
+	case "subscribe_sessions":
+		if w.used[f.Subscription] {
+			return w.problem(f.Subscription, "SUBSCRIPTION_EXISTS")
+		}
+		if w.changes != nil {
+			return w.problem(f.Subscription, "SUBSCRIPTION_LIMIT")
+		}
+		if _, e := w.options.Identity.ObserveAccess(w.ctx, w.raw, nil); e != nil {
+			return w.globalAuthenticationError(e)
+		}
+		w.used[f.Subscription] = true
+		w.globalID = f.Subscription
+		w.changes = w.options.AgentHub.SubscribeSessions()
+		// Install before acknowledging: changes racing the baseline HTTP read
+		// remain queued and invalidate that read again.
+		return w.writeSessionChanges(nil, true)
 	case "ping":
 		if _, e := w.options.Identity.ObserveAccess(w.ctx, w.raw, nil); e != nil {
 			_ = w.problem("", "UNAUTHENTICATED")
@@ -324,6 +356,12 @@ func (w *agentWS) handle(f agentClientFrame) error {
 		w.used[f.Subscription] = true
 		return w.open(f.Subscription, id, limit)
 	case "unsubscribe":
+		if f.Subscription == w.globalID && w.changes != nil {
+			w.changes.Close()
+			w.changes = nil
+			w.globalID = ""
+			return w.write(map[string]any{"type": "unsubscribed", "subscription_id": f.Subscription})
+		}
 		sub := w.subscriptions[f.Subscription]
 		if sub == nil {
 			return w.problem(f.Subscription, "SUBSCRIPTION_NOT_FOUND")
@@ -332,6 +370,9 @@ func (w *agentWS) handle(f agentClientFrame) error {
 		delete(w.subscriptions, f.Subscription)
 		return w.write(map[string]any{"type": "unsubscribed", "subscription_id": f.Subscription})
 	case "resync":
+		if f.Subscription == w.globalID && w.changes != nil {
+			return w.writeSessionChanges(nil, true)
+		}
 		sub := w.subscriptions[f.Subscription]
 		if sub == nil {
 			return w.problem(f.Subscription, "SUBSCRIPTION_NOT_FOUND")

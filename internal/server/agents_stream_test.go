@@ -11,6 +11,14 @@ import (
 )
 
 func TestAgentStreamFramesRejectCommandAndAmbiguousInputs(t *testing.T) {
+	if _, e := parseAgentFrame([]byte(`{"type":"subscribe_sessions","subscription_id":"global"}`)); e != nil {
+		t.Fatal(e)
+	}
+	for _, raw := range []string{`{"type":"subscribe_sessions"}`, `{"type":"subscribe_sessions","subscription_id":"global","session_id":"1"}`} {
+		if _, e := parseAgentFrame([]byte(raw)); e == nil {
+			t.Fatal("invalid global subscription accepted", raw)
+		}
+	}
 	for _, raw := range []string{`{"type":"subscribe","subscription_id":"main","session_id":"18446744073709551615","history_limit":200}`, `{"type":"unsubscribe","subscription_id":"main"}`, `{"type":"resync","subscription_id":"main"}`, `{"type":"ping","nonce":"ping-1"}`} {
 		if _, e := parseAgentFrame([]byte(raw)); e != nil {
 			t.Fatalf("valid %s: %v", raw, e)
@@ -20,6 +28,22 @@ func TestAgentStreamFramesRejectCommandAndAmbiguousInputs(t *testing.T) {
 		if _, e := parseAgentFrame([]byte(raw)); e == nil {
 			t.Fatalf("invalid frame accepted %s", raw)
 		}
+	}
+}
+
+func TestAgentStreamConnectionLimitAllowsPersistentTabsAndReleasesSlots(t *testing.T) {
+	limits := &agentStreamLimits{users: map[uint64]int{}}
+	for range 8 {
+		if !limits.acquire(1) {
+			t.Fatal("persistent tab rejected before limit")
+		}
+	}
+	if limits.acquire(1) || !limits.acquire(2) {
+		t.Fatal("connection limit must be per user")
+	}
+	limits.release(1)
+	if !limits.acquire(1) {
+		t.Fatal("closed connection did not release slot")
 	}
 }
 func TestAgentMultipartRejectsExtraPartsAndRawPathFilename(t *testing.T) {

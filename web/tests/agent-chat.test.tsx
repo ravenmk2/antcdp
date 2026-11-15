@@ -104,6 +104,7 @@ const intersectionCallbacks: IntersectionObserverCallback[] = [];
 const sockets: Socket[] = [];
 class Socket {
   subscriptionId = "";
+  globalSubscriptionId = "";
   readyState = 0;
   onopen: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
@@ -120,6 +121,21 @@ class Socket {
   }
   send(text: string) {
     const value = JSON.parse(text) as { type: string; subscription_id: string };
+    if (value.type === "subscribe_sessions") {
+      this.globalSubscriptionId = value.subscription_id;
+      queueMicrotask(() =>
+        this.onmessage?.(
+          new MessageEvent("message", {
+            data: JSON.stringify({
+              type: "sessions_changed",
+              subscription_id: value.subscription_id,
+              session_ids: [],
+              resync: true,
+            }),
+          }),
+        ),
+      );
+    }
     if (value.type === "subscribe") {
       this.subscriptionId = value.subscription_id;
       queueMicrotask(() =>
@@ -792,7 +808,7 @@ it.each([false, true])(
   },
 );
 
-it("refreshes sidebar and attention on committed lifecycle changes, not token chunks", async () => {
+it("refreshes sidebar and attention on global lifecycle hints, not token chunks", async () => {
   current.state.active_run_id = "21";
   current.state.active_run_status = "running";
   const { cache } = mount(<AgentSessionPage />);
@@ -800,9 +816,12 @@ it("refreshes sidebar and attention on committed lifecycle changes, not token ch
   await screen.findByText("已完成配置核对。");
   expect(screen.queryByRole("status", { name: "任务仍在运行" })).toBeNull();
   await waitFor(() =>
-    expect(invalidations).toHaveBeenCalledWith({
-      queryKey: ["agent-sessions"],
-    }),
+    expect(invalidations).toHaveBeenCalledWith(
+      {
+        queryKey: ["agent-sessions"],
+      },
+      { cancelRefetch: false },
+    ),
   );
   invalidations.mockClear();
   const socket = sockets.at(-1)!;
@@ -839,12 +858,18 @@ it("refreshes sidebar and attention on committed lifecycle changes, not token ch
     });
     await new Promise((resolve) => setTimeout(resolve, 250));
   });
-  expect(invalidations).not.toHaveBeenCalledWith({
-    queryKey: ["agent-sessions"],
-  });
-  expect(invalidations).not.toHaveBeenCalledWith({
-    queryKey: ["workspace-attention"],
-  });
+  expect(invalidations).not.toHaveBeenCalledWith(
+    {
+      queryKey: ["agent-sessions"],
+    },
+    { cancelRefetch: false },
+  );
+  expect(invalidations).not.toHaveBeenCalledWith(
+    {
+      queryKey: ["workspace-attention"],
+    },
+    { cancelRefetch: false },
+  );
   expect(invalidations).not.toHaveBeenCalledWith({
     queryKey: ["agent-session", "10", "workspace", "usage"],
   });
@@ -879,14 +904,28 @@ it("refreshes sidebar and attention on committed lifecycle changes, not token ch
       },
     }),
   );
-  await waitFor(() =>
-    expect(invalidations).toHaveBeenCalledWith({
-      queryKey: ["agent-sessions"],
+  await act(async () =>
+    inject({
+      type: "sessions_changed",
+      subscription_id: socket.globalSubscriptionId,
+      session_ids: ["10"],
+      resync: false,
     }),
   );
-  expect(invalidations).toHaveBeenCalledWith({
-    queryKey: ["workspace-attention"],
-  });
+  await waitFor(() =>
+    expect(invalidations).toHaveBeenCalledWith(
+      {
+        queryKey: ["agent-sessions"],
+      },
+      { cancelRefetch: false },
+    ),
+  );
+  expect(invalidations).toHaveBeenCalledWith(
+    {
+      queryKey: ["workspace-attention"],
+    },
+    { cancelRefetch: false },
+  );
   expect(invalidations).toHaveBeenCalledWith({
     queryKey: ["agent-session", "10", "workspace", "usage"],
   });

@@ -15,6 +15,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { request } from "@/api/client";
 import { ConversationSidebar } from "@/features/agents/chat/conversation-sidebar";
+import { SessionInvalidation } from "@/features/agents/data/session-invalidation";
 
 vi.mock("@/api/client", async (original) => ({
   ...(await original<typeof import("@/api/client")>()),
@@ -23,6 +24,7 @@ vi.mock("@/api/client", async (original) => ({
 const mock = vi.mocked(request);
 let phase: "running" | "unviewed" | "viewed";
 let cache: QueryClient;
+let invalidation: SessionInvalidation;
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -31,6 +33,7 @@ beforeEach(() => {
   cache = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
+  invalidation = new SessionInvalidation(cache);
   mock.mockImplementation(async (path) => {
     if (path.startsWith("/agents/favorites?"))
       return { data: [], status: 200, etag: "" };
@@ -57,6 +60,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  invalidation.dispose();
   cache.clear();
   focusManager.setFocused(undefined);
   vi.useRealTimers();
@@ -90,7 +94,8 @@ it("refreshes off-screen results on all loaded pages without replacing rows, the
   await advance(1);
   const second = screen.getByRole("link", { name: "后台会话3" });
   phase = "unviewed";
-  await advance(5_000);
+  invalidation.changed();
+  await advance(200);
   for (const row of [first, second]) {
     expect(row).toBeInTheDocument();
     expect(row.querySelector('[data-state="running"]')).toBeNull();
@@ -100,13 +105,14 @@ it("refreshes off-screen results on all loaded pages without replacing rows, the
     expect(row).not.toHaveTextContent("新结果");
   }
   phase = "viewed";
-  await advance(5_000);
+  invalidation.changed();
+  await advance(200);
   expect(screen.queryByRole("img", { name: "有未查看的回复结果" })).toBeNull();
   expect(first).toBeInTheDocument();
   expect(second).toBeInTheDocument();
 });
 
-it("pauses periodic requests in a hidden tab and stops them when the sidebar unmounts", async () => {
+it("does not poll and processes global notifications even in a hidden tab", async () => {
   const { unmount } = mount();
   await advance(1);
   const initial = listCalls().length;
@@ -114,8 +120,8 @@ it("pauses periodic requests in a hidden tab and stops them when the sidebar unm
   phase = "unviewed";
   await advance(15_000);
   expect(listCalls()).toHaveLength(initial);
-  act(() => focusManager.setFocused(true));
-  await advance(5_000);
+  invalidation.changed();
+  await advance(200);
   expect(
     screen.getByRole("img", { name: "有未查看的回复结果" }),
   ).toBeInTheDocument();
@@ -123,4 +129,66 @@ it("pauses periodic requests in a hidden tab and stops them when the sidebar unm
   unmount();
   await advance(15_000);
   expect(listCalls()).toHaveLength(refreshed);
+});
+
+it("keeps load-more enabled during refresh and queues pagination without cancelling the refresh", async () => {
+  mount();
+  await advance(1);
+  let resolve!: (value: Awaited<ReturnType<typeof request>>) => void;
+  mock.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  invalidation.changed();
+  await advance(200);
+  const more = screen.getByRole("button", { name: "加载更多会话" });
+  expect(more).toBeEnabled();
+  const before = listCalls().length;
+  fireEvent.click(more);
+  await advance(1);
+  expect(screen.getByRole("button", { name: "正在加载…" })).toBeDisabled();
+  expect(listCalls()).toHaveLength(before);
+  await act(async () =>
+    resolve({
+      data: [{ id: "2", agent_id: "1", title: "后台会话2", attention: {} }],
+      status: 200,
+      etag: "",
+      pagination: { total: 2 },
+    }),
+  );
+  await advance(1);
+  expect(listCalls().map(([path]) => path)).toHaveLength(before + 1);
+  expect(screen.getByRole("link", { name: "后台会话3" })).toBeInTheDocument();
+});
+
+it("coalesces bursts but refreshes again for a change arriving during an older response", async () => {
+  mount();
+  await advance(1);
+  let resolve!: (value: Awaited<ReturnType<typeof request>>) => void;
+  mock.mockImplementationOnce(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  for (let i = 0; i < 20; i++) invalidation.changed();
+  await advance(200);
+  expect(listCalls()).toHaveLength(2);
+  phase = "unviewed";
+  invalidation.changed();
+  await act(async () =>
+    resolve({
+      data: [{ id: "2", agent_id: "1", title: "后台会话2", attention: {} }],
+      status: 200,
+      etag: "",
+      pagination: { total: 2 },
+    }),
+  );
+  await advance(200);
+  expect(listCalls()).toHaveLength(3);
+  expect(
+    screen.getByRole("img", { name: "有未查看的回复结果" }),
+  ).toBeInTheDocument();
 });

@@ -275,8 +275,6 @@ export function Conversation({
   useEffect(() => {
     if (state.phase !== "live") return;
     const timer = setTimeout(() => {
-      void cache.invalidateQueries({ queryKey: ["agent-sessions"] });
-      void cache.invalidateQueries({ queryKey: ["workspace-attention"] });
       // A reconnect may install a snapshot without replaying terminal records.
       void cache.invalidateQueries({
         queryKey: ["agent-session", sessionId, "workspace", "usage"],

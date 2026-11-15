@@ -48,6 +48,11 @@ func (s *Service) accessWithAgent(ctx context.Context, raw string, admin bool, a
 		return fn(tx, r, a, out)
 	})
 	out.Auth = a
+	if e == nil && s.SessionChanged != nil {
+		for _, change := range out.SessionChanges {
+			s.SessionChanged(change)
+		}
+	}
 	if e == nil && s.Committed != nil {
 		for _, receipt := range out.Commits {
 			s.Committed(ctx, receipt)

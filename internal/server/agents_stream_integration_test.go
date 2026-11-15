@@ -234,6 +234,40 @@ func TestAgentWebSocketSnapshotCatchupResyncAndRevocation(t *testing.T) {
 	if pong := read(); pong["type"] != "pong" || pong["nonce"] != "alive" {
 		t.Fatal(pong)
 	}
+	// Global observation continues without any content subscriptions.
+	send(map[string]any{"type": "subscribe_sessions", "subscription_id": "sessions"})
+	if ready := read(); ready["type"] != "sessions_changed" || ready["resync"] != true {
+		t.Fatal("missing global baseline", ready)
+	}
+	hub.Committed(t.Context(), agentcore.CommitReceipt{Ranges: []agentcore.EventRange{{SessionID: 1}, {SessionID: 2}}})
+	if changed := read(); changed["type"] != "sessions_changed" || changed["resync"] != false || len(changed["session_ids"].([]any)) != 1 || changed["session_ids"].([]any)[0] != "1" {
+		t.Fatal("unobserved commit missing or unauthorized ID leaked", changed)
+	}
+	hub.SessionChanged(agentcore.SessionChange{SessionID: 1, UserID: 1})
+	if changed := read(); changed["type"] != "sessions_changed" || changed["resync"] != false {
+		t.Fatal("personal change missing", changed)
+	}
+	send(map[string]any{"type": "subscribe_sessions", "subscription_id": "duplicate"})
+	if read()["code"] != "SUBSCRIPTION_LIMIT" {
+		t.Fatal("duplicate global subscription allowed")
+	}
+	send(map[string]any{"type": "unsubscribe", "subscription_id": "sessions"})
+	if read()["type"] != "unsubscribed" {
+		t.Fatal("missing global unsubscribe acknowledgement")
+	}
+	send(map[string]any{"type": "subscribe_sessions", "subscription_id": "restored"})
+	if read()["resync"] != true {
+		t.Fatal("resubscribing must request a fresh baseline")
+	}
+	// Filtering must produce no output at all for another user's preference or
+	// an inaccessible session. A nil writer makes accidental output fail here.
+	filtered := &agentWS{ctx: a.ObservingContext(t.Context()), options: options, raw: strings.Repeat("x", 43), userID: 1, changes: hub.SubscribeSessions()}
+	defer filtered.changes.Close()
+	hub.SessionChanged(agentcore.SessionChange{SessionID: 1, UserID: 2})
+	hub.SessionChanged(agentcore.SessionChange{SessionID: 2})
+	if e := filtered.sessionsChanged(); e != nil {
+		t.Fatal(e)
+	}
 	store.mu.Lock()
 	store.user.Status = "disabled"
 	renewed := store.renewed

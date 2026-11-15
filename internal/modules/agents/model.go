@@ -17,13 +17,14 @@ import (
 type Field[T any] = models.Field[T]
 type Pagination = models.Pagination
 type Result struct {
-	Data          any
-	Tag, Location string
-	Status        int
-	Replayed      bool
-	Pagination    *Pagination
-	Auth          *identity.Auth            `json:"-"`
-	Commits       []agentcore.CommitReceipt `json:"-"`
+	Data           any
+	Tag, Location  string
+	Status         int
+	Replayed       bool
+	Pagination     *Pagination
+	Auth           *identity.Auth            `json:"-"`
+	Commits        []agentcore.CommitReceipt `json:"-"`
+	SessionChanges []agentcore.SessionChange `json:"-"`
 }
 type Receipt = commandstate.Receipt
 type CommandReceipt = commandstate.CommandReceipt
@@ -219,6 +220,7 @@ type Service struct {
 	Models              *models.Service
 	Catalog             ResourceCatalog
 	Committed           func(context.Context, agentcore.CommitReceipt)
+	SessionChanged      func(agentcore.SessionChange)
 	Files               *ByteStore
 	Skills              agentcore.SkillSource
 	CancelRun           func(agentcore.ID)

@@ -195,12 +195,30 @@ func agentManagementLifecycle(t *testing.T, f *agentIntegrationFixture) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	var preferenceChanges []agentcore.SessionChange
+	svc.SessionChanged = func(change agentcore.SessionChange) {
+		// Reading through a separate transaction proves this is post-commit.
+		stored, err := svc.GetPreference(ctx, raw, uint64(change.SessionID))
+		if err != nil || !stored.Data.(a.SessionPreference).Pinned {
+			t.Fatal("preference notification preceded commit", err)
+		}
+		preferenceChanges = append(preferenceChanges, change)
+	}
 	_, e = svc.PatchPreference(ctx, raw, session.Configuration.ID, pref.Tag, a.PreferencePatch{Pinned: a.Field[bool]{Set: true, Value: true}})
 	if e != nil {
 		t.Fatal(e)
 	}
+	if len(preferenceChanges) != 1 || uint64(preferenceChanges[0].SessionID) != session.Configuration.ID || preferenceChanges[0].UserID == 0 {
+		t.Fatal("missing private preference notification", preferenceChanges)
+	}
+	_, e = svc.PatchPreference(ctx, raw, session.Configuration.ID, pref.Tag, a.PreferencePatch{Pinned: a.Field[bool]{Set: true, Value: false}})
+	modelsExpectCode(t, e, "VERSION_CONFLICT")
 	_, e = svc.AdvanceView(ctx, raw, session.Configuration.ID, a.ViewStateWrite{ThroughSeq: "1"})
 	modelsExpectCode(t, e, "VIEW_POSITION_INVALID")
+	if len(preferenceChanges) != 1 {
+		t.Fatal("failed transaction emitted notification", preferenceChanges)
+	}
+	svc.SessionChanged = nil
 	inputKey := cryptox.ID()
 	input := a.InputCreate{Content: []agentcore.TextBlock{{Type: "text", Text: "核对运行生命周期"}}, ExpectedHash: session.Selection.Hash}
 	accepted, e := svc.SubmitInput(ctx, raw, session.Configuration.ID, inputKey, input)
@@ -397,5 +415,22 @@ func agentSimpleExecution(t *testing.T, f *agentIntegrationFixture, session uint
 	view := detail.Data.(a.SessionDetail).ViewState
 	if view.UnviewedCount != 1 {
 		t.Fatal("missing result attention", view)
+	}
+	changes := 0
+	svc.SessionChanged = func(change agentcore.SessionChange) {
+		stored, err := svc.GetSession(ctx, raw, session)
+		if err != nil || stored.Data.(a.SessionDetail).ViewState.UnviewedCount != 0 || uint64(change.SessionID) != session || change.UserID == 0 {
+			t.Fatal("view notification preceded commit or lost owner", change, err)
+		}
+		changes++
+	}
+	defer func() { svc.SessionChanged = nil }()
+	for range 2 {
+		if _, e := svc.AdvanceView(ctx, raw, session, a.ViewStateWrite{ThroughSeq: strconv.FormatUint(view.LatestResult.EndSeq, 10)}); e != nil {
+			t.Fatal(e)
+		}
+	}
+	if changes != 1 {
+		t.Fatal("view no-op should not emit another notification", changes)
 	}
 }
