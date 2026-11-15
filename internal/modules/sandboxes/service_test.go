@@ -337,3 +337,113 @@ func TestObserverCannotExecuteOrWriteEvenWithForgedLeaseMode(t *testing.T) {
 		t.Fatal("observer mutated instance")
 	}
 }
+
+func TestRecoveryBatchesRotatePastUnfinishedWork(t *testing.T) {
+	t.Run("active execution does not starve interrupted execution", func(t *testing.T) {
+		s, m, p, _, lease := ready(t)
+		ctx := context.Background()
+		p.running = true
+		spec := sandboxcore.ExecSpec{Command: "sleep", Background: true, Timeout: time.Minute}
+		first, err := s.Execute(ctx, *lease, "active", spec, sandboxcore.ExecCallbacks{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		second, err := s.Execute(ctx, *lease, "interrupted", spec, sandboxcore.ExecCallbacks{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		row := m.executions[second.ID]
+		row.ExecutorEpoch = "previous-worker"
+		m.executions[row.ID] = row
+		p.running = false
+		for range 2 {
+			if err = s.Reconcile(ctx, 1); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if m.executions[first.ID].FinishedAt != nil || m.executions[second.ID].FinishedAt == nil {
+			t.Fatal("active early row prevented later recovery")
+		}
+	})
+	t.Run("unknown write does not starve interrupted read", func(t *testing.T) {
+		s, m, _, v, lease := ready(t)
+		ctx := context.Background()
+		write, err := s.File(ctx, *lease, "uncertain", json.RawMessage(`{}`), true, func(sandboxcore.Filesystem, sandboxcore.ResourceRef) (json.RawMessage, error) {
+			return nil, &sandboxcore.Error{Code: "LOST", Unknown: true}
+		})
+		if err == nil {
+			t.Fatal("missing uncertain failure")
+		}
+		now := nowUTC()
+		read := &Operation{InstanceID: v.ID, LeaseID: &lease.ID, Token: "interrupted-read", Kind: "file_read", Status: "dispatching", ExecutorEpoch: "previous-worker", FenceVersion: 1, CreatedAt: now, DeadlineAt: now.Add(time.Minute), UpdatedAt: now}
+		if err = m.InsertOperation(read); err != nil {
+			t.Fatal(err)
+		}
+		for range 2 {
+			if err = s.ReconcileFiles(ctx, 1); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if m.operations[write.ID].FinishedAt != nil || m.operations[read.ID].FinishedAt == nil {
+			t.Fatal("uncertain write prevented later read recovery")
+		}
+	})
+	t.Run("busy expired lease does not starve idle lease", func(t *testing.T) {
+		s, m, p, v, initial := ready(t)
+		ctx := context.Background()
+		if err := s.Release(ctx, *initial, "shared test"); err != nil {
+			t.Fatal(err)
+		}
+		busy, err := s.Acquire(ctx, v.ID, "script", "busy", "shared", time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		idle, err := s.Acquire(ctx, v.ID, "script", "idle", "shared", time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p.running = true
+		if _, err = s.Execute(ctx, *busy, "running", sandboxcore.ExecSpec{Command: "sleep", Background: true, Timeout: time.Minute}, sandboxcore.ExecCallbacks{}); err != nil {
+			t.Fatal(err)
+		}
+		for _, id := range []uint64{busy.ID, idle.ID} {
+			row := m.leases[id]
+			row.ExpiresAt = nowUTC().Add(-time.Second)
+			m.leases[id] = row
+		}
+		for range 2 {
+			if err = s.Reconcile(ctx, 1); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if m.leases[busy.ID].ReleasedAt != nil || m.leases[idle.ID].ReleasedAt == nil {
+			t.Fatal("busy early lease prevented idle lease release")
+		}
+	})
+}
+
+func TestPendingCancellationWithoutHandleSettlesAfterInstanceTermination(t *testing.T) {
+	s, m, p, v, lease := ready(t)
+	ctx := context.Background()
+	p.running = true
+	row, err := s.Execute(ctx, *lease, "missing-handle", sandboxcore.ExecSpec{Command: "sleep", Timeout: time.Minute}, sandboxcore.ExecCallbacks{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row.RemoteID = nil
+	row.Status = "outcome_unknown"
+	row.DeadlineAt = nowUTC().Add(-time.Second)
+	m.executions[row.ID] = *row
+	if err = s.Transition(ctx, v.ID, "delete", "force-terminate", true); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Reconcile(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	if m.executions[row.ID].FinishedAt == nil || p.cancels != 0 {
+		t.Fatal("missing handle prevented terminal observation")
+	}
+	if err = s.Release(ctx, *lease, "terminated"); err != nil {
+		t.Fatal(err)
+	}
+}

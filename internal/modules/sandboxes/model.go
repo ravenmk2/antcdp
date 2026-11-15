@@ -4,6 +4,7 @@ package sandboxes
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
@@ -110,9 +111,10 @@ type Repository interface {
 	InsertOperation(*Operation) error
 	SaveOperation(*Operation) error
 	Busy(uint64, *uint64) (bool, error)
-	PendingExecutions(int) ([]Execution, error)
-	PendingOperations(int) ([]Operation, error)
-	ExpiredLeases(time.Time, int) ([]Lease, error)
+	// Bounded pages start after the cursor and wrap to the oldest pending row.
+	PendingExecutions(uint64, int) ([]Execution, error)
+	PendingOperations(uint64, int) ([]Operation, error)
+	ExpiredLeases(time.Time, uint64, int) ([]Lease, error)
 }
 
 type Transaction func(context.Context, func(Repository) error) error
@@ -126,6 +128,23 @@ type Service struct {
 	Open           Open
 	InstallationID func() (string, error)
 	Epoch          string
+	Recovery       *RecoveryCursor
+	localRecovery  RecoveryCursor
+}
+
+// RecoveryCursor is scheduling state, not a claim on remote work. Losing it on
+// restart only changes scan order. Share it when constructing short-lived service
+// adapters so unresolved early rows cannot starve later resources.
+type RecoveryCursor struct {
+	mu                                    sync.Mutex
+	executions, operations, files, leases uint64
+}
+
+func (s *Service) recoveryCursor() *RecoveryCursor {
+	if s.Recovery != nil {
+		return s.Recovery
+	}
+	return &s.localRecovery
 }
 
 func (s *Service) Resource(v *Instance) (sandboxcore.ResourceRef, error) {

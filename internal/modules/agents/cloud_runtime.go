@@ -12,6 +12,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modules/cloudcomputers"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/modules/sandboxes"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
@@ -33,6 +34,7 @@ type CloudService struct {
 	ExecutionReconciler func(context.Context, uint64) error
 	skillMu             sync.Mutex
 	skillPreparations   map[string]chan struct{}
+	resourceRecovery    sandboxes.RecoveryCursor
 }
 
 // SandboxAccess is an internal capability for one exact computer generation.

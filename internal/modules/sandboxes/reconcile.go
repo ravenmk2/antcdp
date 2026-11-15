@@ -11,6 +11,9 @@ import (
 // Reconcile observes persisted work after deadlines or executor replacement.
 // No command or filesystem mutation is restarted by this worker.
 func (s *Service) Reconcile(ctx context.Context, limit int) error {
+	cursor := s.recoveryCursor()
+	cursor.mu.Lock()
+	defer cursor.mu.Unlock()
 	if limit < 1 || limit > 100 {
 		limit = 25
 	}
@@ -18,15 +21,21 @@ func (s *Service) Reconcile(ctx context.Context, limit int) error {
 	var operations []Operation
 	err := s.Transact(ctx, func(r Repository) error {
 		var e error
-		executions, e = r.PendingExecutions(limit)
+		executions, e = r.PendingExecutions(cursor.executions, limit)
 		if e != nil {
 			return e
 		}
-		operations, e = r.PendingOperations(limit)
+		operations, e = r.PendingOperations(cursor.operations, limit)
 		return e
 	})
 	if err != nil {
 		return err
+	}
+	if len(executions) > 0 {
+		cursor.executions = executions[len(executions)-1].ID
+	}
+	if len(operations) > 0 {
+		cursor.operations = operations[len(operations)-1].ID
 	}
 	var failures []error
 	for _, e := range executions {
@@ -40,6 +49,11 @@ func (s *Service) Reconcile(ctx context.Context, limit int) error {
 			err = s.Transact(ctx, func(r Repository) error { var read error; lease, read = r.Lease(e.LeaseID, false); return read })
 			if err == nil && lease != nil {
 				err = s.CancelExecution(ctx, *lease, e.ID)
+				if err == nil && e.RemoteID == nil {
+					// No handle can arrive after the original instance has gone.
+					// Cancellation intent alone must not block that observation.
+					_, err = s.ObserveExecution(ctx, e.ID)
+				}
 			}
 		} else {
 			_, err = s.ObserveExecution(ctx, e.ID)
@@ -76,14 +90,21 @@ func (s *Service) Reconcile(ctx context.Context, limit int) error {
 			failures = append(failures, err)
 		}
 	}
-	if err = s.ReconcileFiles(ctx, limit); err != nil {
+	if err = s.reconcileFiles(ctx, limit, cursor); err != nil {
 		failures = append(failures, err)
 	}
 	var leases []Lease
-	err = s.Transact(ctx, func(r Repository) error { var e error; leases, e = r.ExpiredLeases(nowUTC(), limit); return e })
+	err = s.Transact(ctx, func(r Repository) error {
+		var e error
+		leases, e = r.ExpiredLeases(nowUTC(), cursor.leases, limit)
+		return e
+	})
 	if err != nil {
 		failures = append(failures, err)
 	} else {
+		if len(leases) > 0 {
+			cursor.leases = leases[len(leases)-1].ID
+		}
 		for _, lease := range leases {
 			if e := s.Release(ctx, lease, "expired_and_idle"); e != nil {
 				var remote *sandboxcore.Error

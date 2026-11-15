@@ -16,7 +16,7 @@ func (s *CloudService) ReconcileResources(ctx context.Context, limit int) error 
 // This bridge adapts application configuration to the standalone sandbox service.
 // The service itself has no dependency on Agent state or cloud computers.
 func (s *CloudService) foundation() *sandboxes.Service {
-	return &sandboxes.Service{Epoch: s.Epoch, InstallationID: s.InstallationID, Transact: func(ctx context.Context, fn func(sandboxes.Repository) error) error {
+	return &sandboxes.Service{Epoch: s.Epoch, Recovery: &s.resourceRecovery, InstallationID: s.InstallationID, Transact: func(ctx context.Context, fn func(sandboxes.Repository) error) error {
 		store, err := s.Host.Store()
 		if err != nil {
 			return err

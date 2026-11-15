@@ -3,18 +3,20 @@ package sandboxes
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"sync"
 	"time"
 )
 
-func (m *memory) ExpiredLeases(now time.Time, limit int) ([]Lease, error) {
+func (m *memory) ExpiredLeases(now time.Time, after uint64, limit int) ([]Lease, error) {
 	out := []Lease{}
 	for _, v := range m.leases {
-		if v.ReleasedAt == nil && !now.Before(v.ExpiresAt) && len(out) < limit {
+		if v.ReleasedAt == nil && !now.Before(v.ExpiresAt) {
 			out = append(out, clone(v))
 		}
 	}
-	return out, nil
+	sort.Slice(out, func(i, j int) bool { return cursorLess(out[i].ID, out[j].ID, after) })
+	return out[:min(limit, len(out))], nil
 }
 
 type memory struct {
@@ -149,21 +151,30 @@ func (m *memory) Busy(id uint64, lease *uint64) (bool, error) {
 	}
 	return false, nil
 }
-func (m *memory) PendingExecutions(limit int) ([]Execution, error) {
+func (m *memory) PendingExecutions(after uint64, limit int) ([]Execution, error) {
 	out := []Execution{}
 	for _, v := range m.executions {
-		if v.FinishedAt == nil && len(out) < limit {
+		if v.FinishedAt == nil {
 			out = append(out, clone(v))
 		}
 	}
-	return out, nil
+	sort.Slice(out, func(i, j int) bool { return cursorLess(out[i].ID, out[j].ID, after) })
+	return out[:min(limit, len(out))], nil
 }
-func (m *memory) PendingOperations(limit int) ([]Operation, error) {
+func (m *memory) PendingOperations(after uint64, limit int) ([]Operation, error) {
 	out := []Operation{}
 	for _, v := range m.operations {
-		if v.FinishedAt == nil && len(out) < limit {
+		if v.FinishedAt == nil {
 			out = append(out, clone(v))
 		}
 	}
-	return out, nil
+	sort.Slice(out, func(i, j int) bool { return cursorLess(out[i].ID, out[j].ID, after) })
+	return out[:min(limit, len(out))], nil
+}
+
+func cursorLess(a, b, after uint64) bool {
+	if (a > after) != (b > after) {
+		return a > after
+	}
+	return a < b
 }

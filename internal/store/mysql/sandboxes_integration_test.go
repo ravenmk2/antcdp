@@ -89,10 +89,29 @@ func standaloneSandboxIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil || background.Status != "running" {
 		t.Fatal(background, err)
 	}
+	later, err := service.Execute(ctx, *lease, cryptox.ID(), sb.ExecSpec{Argv: []string{"/bin/sleep", "30"}, CWD: "/data", Background: true, Timeout: time.Minute}, sb.ExecCallbacks{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = service.Transact(ctx, func(r s.Repository) error {
+		page, e := r.PendingExecutions(background.ID, 1)
+		if e == nil && (len(page) != 1 || page[0].ID != later.ID) {
+			t.Fatal("recovery cursor did not advance past earlier running command", page)
+		}
+		return e
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if err = service.Release(ctx, *lease, "premature"); err == nil {
 		t.Fatal("running process released")
 	}
 	if err = service.CancelExecution(ctx, *lease, background.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = service.Release(ctx, *lease, "one command stopped"); err == nil {
+		t.Fatal("other running command lost its hold")
+	}
+	if err = service.CancelExecution(ctx, *lease, later.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err = service.Release(ctx, *lease, "job complete"); err != nil {

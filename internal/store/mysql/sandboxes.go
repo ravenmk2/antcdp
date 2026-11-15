@@ -15,9 +15,9 @@ type sandboxTx struct {
 	tx  *sqlx.Tx
 }
 
-func (t *sandboxTx) ExpiredLeases(now time.Time, limit int) ([]s.Lease, error) {
+func (t *sandboxTx) ExpiredLeases(now time.Time, after uint64, limit int) ([]s.Lease, error) {
 	rows := []s.Lease{}
-	err := t.tx.SelectContext(t.ctx, &rows, "SELECT "+sandboxLeaseColumns+" FROM sandbox_lease WHERE released_at IS NULL AND lease_expires_at<=? ORDER BY lease_expires_at,id LIMIT ?", now, limit)
+	err := t.tx.SelectContext(t.ctx, &rows, "SELECT "+sandboxLeaseColumns+" FROM sandbox_lease WHERE released_at IS NULL AND lease_expires_at<=? ORDER BY (id>?) DESC,id LIMIT ?", now, after, limit)
 	return rows, err
 }
 
@@ -159,13 +159,13 @@ func (t *sandboxTx) Busy(id uint64, lease *uint64) (bool, error) {
 	e := t.tx.GetContext(t.ctx, &busy, q, args...)
 	return busy, e
 }
-func (t *sandboxTx) PendingExecutions(limit int) ([]s.Execution, error) {
+func (t *sandboxTx) PendingExecutions(after uint64, limit int) ([]s.Execution, error) {
 	out := []s.Execution{}
-	e := t.tx.SelectContext(t.ctx, &out, "SELECT "+sandboxExecutionColumns+" FROM sandbox_execution WHERE finished_at IS NULL ORDER BY id LIMIT ?", limit)
+	e := t.tx.SelectContext(t.ctx, &out, "SELECT "+sandboxExecutionColumns+" FROM sandbox_execution WHERE finished_at IS NULL ORDER BY (id>?) DESC,id LIMIT ?", after, limit)
 	return out, e
 }
-func (t *sandboxTx) PendingOperations(limit int) ([]s.Operation, error) {
+func (t *sandboxTx) PendingOperations(after uint64, limit int) ([]s.Operation, error) {
 	out := []s.Operation{}
-	e := t.tx.SelectContext(t.ctx, &out, "SELECT "+sandboxOperationColumns+" FROM sandbox_operation WHERE finished_at IS NULL ORDER BY id LIMIT ?", limit)
+	e := t.tx.SelectContext(t.ctx, &out, "SELECT "+sandboxOperationColumns+" FROM sandbox_operation WHERE finished_at IS NULL ORDER BY (id>?) DESC,id LIMIT ?", after, limit)
 	return out, e
 }

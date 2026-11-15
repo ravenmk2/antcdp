@@ -119,10 +119,23 @@ func (s *Service) File(ctx context.Context, lease Lease, token string, intent js
 // ReconcileFiles observes termination, never file content, to discharge uncertain
 // writes. Reads interrupted by a process restart cannot leave a remote mutation.
 func (s *Service) ReconcileFiles(ctx context.Context, limit int) error {
+	cursor := s.recoveryCursor()
+	cursor.mu.Lock()
+	defer cursor.mu.Unlock()
+	if limit < 1 || limit > 100 {
+		limit = 25
+	}
+	return s.reconcileFiles(ctx, limit, cursor)
+}
+
+func (s *Service) reconcileFiles(ctx context.Context, limit int, cursor *RecoveryCursor) error {
 	var rows []Operation
-	err := s.Transact(ctx, func(r Repository) error { var e error; rows, e = r.PendingOperations(limit); return e })
+	err := s.Transact(ctx, func(r Repository) error { var e error; rows, e = r.PendingOperations(cursor.files, limit); return e })
 	if err != nil {
 		return err
+	}
+	if len(rows) > 0 {
+		cursor.files = rows[len(rows)-1].ID
 	}
 	var failures []error
 	for _, initial := range rows {
