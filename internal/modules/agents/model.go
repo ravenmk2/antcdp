@@ -233,6 +233,10 @@ type Service struct {
 	imageMemory         imageMemory
 }
 type Repository interface {
+	FavoriteDefinitions(uint64, bool, Query) ([]Definition, int, error)
+	FavoriteAgents(uint64, []uint64) (map[uint64]bool, error)
+	SaveFavorite(uint64, uint64, bool, time.Time) error
+	CanReadAgentHistory(uint64, uint64, bool) (bool, error)
 	Definitions(Query) ([]Definition, int, error)
 	Definition(uint64, bool) (*Definition, error)
 	InsertDefinition(*Definition) error

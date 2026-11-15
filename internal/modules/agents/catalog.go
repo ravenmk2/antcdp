@@ -26,6 +26,7 @@ type ModelOption struct {
 	Thinking      []ThinkingOption `json:"thinking_options"`
 }
 type CatalogAgent struct {
+	Favorited       bool          `json:"favorited"`
 	ID              uint64        `json:"id,string"`
 	Name            string        `json:"name"`
 	Description     string        `json:"description"`
@@ -177,12 +178,21 @@ func (s *Service) ListCatalog(ctx context.Context, raw string, q Query) (*Result
 		if e != nil {
 			return e
 		}
+		ids := make([]uint64, 0, len(rows))
+		for _, row := range rows {
+			ids = append(ids, row.ID)
+		}
+		favorites, e := r.FavoriteAgents(a.User.ID, ids)
+		if e != nil {
+			return e
+		}
 		items := []CatalogAgent{}
 		for i := range rows {
 			item, e := s.catalogAgent(tx, r, &rows[i], false)
 			if e != nil {
 				return e
 			}
+			item.Favorited = favorites[item.ID]
 			items = append(items, item)
 		}
 		out.Data = items
@@ -213,6 +223,11 @@ func (s *Service) GetCatalog(ctx context.Context, raw string, id uint64) (*Resul
 		if !value.Availability.Available {
 			return missing()
 		}
+		favorites, e := r.FavoriteAgents(a.User.ID, []uint64{id})
+		if e != nil {
+			return e
+		}
+		value.Favorited = favorites[id]
 		out.Data = value
 		return nil
 	})

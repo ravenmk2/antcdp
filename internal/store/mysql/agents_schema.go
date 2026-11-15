@@ -9,6 +9,7 @@ import (
 
 // These projections and index signatures are the deployed migration contract.
 var agentSchemaColumns = map[string]string{
+	"agent_favorite":            "user_id,agent_id,created_at",
 	"agent_image_variant":       imageCacheColumns,
 	"agent_model_file":          imageCacheColumns,
 	"agent_session_projection":  "session_id,projection_version,through_seq,payload,payload_sha256,updated_at",
@@ -51,6 +52,9 @@ type agentSchemaIndex struct {
 }
 
 var agentSchemaIndexes = []agentSchemaIndex{
+	{"agent_favorite", "PRIMARY", 0, "user_id,agent_id"},
+	{"agent_favorite", "idx_agent_favorite_order", 1, "user_id,created_at,agent_id"},
+	{"agent_favorite", "idx_agent_favorite_agent", 1, "agent_id,user_id"},
 	{"agent_image_variant", "PRIMARY", 0, "id"},
 	{"agent_image_variant", "uq_agent_image_variant_key", 0, "cache_key"},
 	{"agent_image_variant", "idx_agent_image_variant_expiry", 1, "last_used_at,id"},

@@ -152,6 +152,29 @@ func registerAgents(api *gin.RouterGroup, o Options) {
 		return s.Capabilities(c.Request.Context(), rawSession(c), agents.ImplementedFeatures{Chat: o.AgentHub != nil, Child: o.AgentHub != nil, Skills: o.AgentResources != nil && o.AgentResources.Files != nil, MCP: o.AgentResources != nil && o.AgentResources.MCPFactory != nil, Sandbox: o.Sandboxes != nil && o.Sandboxes.Factory != nil})
 	}))
 	registerAgentStream(u, o)
+	u.GET("/:id/summary", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+		id, ok := agentID(c, "id")
+		if !ok || !modelNoQuery(c) {
+			return nil, nil
+		}
+		return s.GetAgentSummary(c.Request.Context(), rawSession(c), id)
+	}))
+	u.GET("/favorites", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+		q, ok := agentQuery(c)
+		if !ok {
+			return nil, nil
+		}
+		return s.ListFavorites(c.Request.Context(), rawSession(c), q)
+	}))
+	for _, method := range []string{"PUT", "DELETE"} {
+		u.Handle(method, "/favorites/:id", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+			id, ok := agentID(c, "id")
+			if !ok || !modelNoQuery(c) {
+				return nil, nil
+			}
+			return s.SetFavorite(c.Request.Context(), rawSession(c), id, method == "PUT")
+		}))
+	}
 	u.GET("/catalog", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
 		q, ok := agentQuery(c)
 		if !ok {
