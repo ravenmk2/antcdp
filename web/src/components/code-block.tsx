@@ -48,6 +48,7 @@ export function CodeBlock({
   className,
   contentClassName,
   toolbarContainer,
+  streaming = false,
 }: {
   source: string;
   language: string;
@@ -60,6 +61,7 @@ export function CodeBlock({
   className?: string;
   contentClassName?: string;
   toolbarContainer?: HTMLElement | null;
+  streaming?: boolean;
 }) {
   const { resolved } = useTheme();
   const [wrap, setWrap] = useState(defaultWrap);
@@ -70,17 +72,23 @@ export function CodeBlock({
     theme: string;
     html: string;
   }>();
+  // Use identical line endings for the plain and highlighted representations.
+  const displaySource = source.replace(/\n$/, "");
   useEffect(() => {
+    // Token updates must not alternate plain text and asynchronous highlights.
+    if (streaming) return;
     let active = true;
     void import("shiki")
       .then(({ codeToHtml }) =>
-        codeToHtml(source, {
-          lang: language || "text",
-          theme: resolved === "dark" ? "github-dark" : "github-light",
-        }),
+        active
+          ? codeToHtml(displaySource, {
+              lang: language || "text",
+              theme: resolved === "dark" ? "github-dark" : "github-light",
+            })
+          : undefined,
       )
       .then((value) => {
-        if (active)
+        if (active && value !== undefined)
           setHighlight({
             source,
             language,
@@ -94,8 +102,9 @@ export function CodeBlock({
     return () => {
       active = false;
     };
-  }, [source, language, resolved]);
+  }, [source, displaySource, language, resolved, streaming]);
   const html =
+    !streaming &&
     highlight?.source === source &&
     highlight.language === language &&
     highlight.theme === resolved
@@ -110,7 +119,7 @@ export function CodeBlock({
     const rows = [...code.querySelectorAll(".line")];
     return rows.length ? rows.map((row) => row.innerHTML) : [code.innerHTML];
   }, [html]);
-  const plain = source.replace(/\n$/, "").split("\n");
+  const plain = displaySource.split("\n");
   const normalizedLanguage = language.trim().toLowerCase();
   const extension =
     languageExtensions[normalizedLanguage] ||

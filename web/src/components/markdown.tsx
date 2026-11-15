@@ -63,8 +63,12 @@ export function MarkdownView({
             key={key}
             data-source-line={node.getAttribute("data-source-line")}
           >
-            {block.language === "mermaid" && !streaming ? (
-              <MermaidBlock key={key} source={block.source} />
+            {block.language === "mermaid" ? (
+              <MermaidBlock
+                key={key}
+                source={block.source}
+                streaming={streaming}
+              />
             ) : (
               <CodeBlock
                 key={key}
@@ -72,6 +76,7 @@ export function MarkdownView({
                 language={block.language}
                 title={block.title}
                 highlightedLines={block.highlightedLines}
+                streaming={streaming}
               />
             )}
           </div>

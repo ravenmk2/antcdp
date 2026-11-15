@@ -216,6 +216,10 @@ function ConversationHistory({ agentId }: { agentId?: string }) {
   const query = useInfiniteQuery({
     queryKey: ["agent-sessions", "sidebar", agentId],
     initialPageParam: 1,
+    // Only the open conversation has a stream subscription. Refresh the list
+    // independently so off-screen runs and results viewed elsewhere converge.
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: false,
     queryFn: ({ pageParam, signal }) =>
       request<SessionSummary[]>(
         `/agents/sessions?${agentQuery({ agent_type: "interactive", agent_id: agentId, archived: false, page: pageParam, page_size: 10 })}`,
@@ -256,7 +260,12 @@ function ConversationHistory({ agentId }: { agentId?: string }) {
             0 ? (
               <small>待回应</small>
             ) : session.attention.unviewed_run_count > 0 ? (
-              <small>新结果</small>
+              <span
+                className="ml-auto mr-1 size-1.5 shrink-0 rounded-full bg-emerald-500"
+                role="img"
+                aria-label="有未查看的回复结果"
+                title="有未查看的回复结果"
+              />
             ) : (
               session.active_run_status && (
                 <span

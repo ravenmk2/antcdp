@@ -53,7 +53,13 @@ function downloadBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function MermaidBlock({ source }: { source: string }) {
+export function MermaidBlock({
+  source,
+  streaming = false,
+}: {
+  source: string;
+  streaming?: boolean;
+}) {
   const { resolved } = useTheme();
   const [graph, setGraph] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -66,7 +72,7 @@ export function MermaidBlock({ source }: { source: string }) {
   const current =
     result?.source === source && result.theme === resolved ? result : undefined;
   useEffect(() => {
-    if (!graph) return;
+    if (!graph || streaming) return;
     let active = true;
     renderQueue = renderQueue
       .catch(() => {})
@@ -103,7 +109,7 @@ export function MermaidBlock({ source }: { source: string }) {
     return () => {
       active = false;
     };
-  }, [graph, source, resolved]);
+  }, [graph, source, resolved, streaming]);
   const diagram = current?.diagram;
   const image = diagram
     ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(diagram.svg)}`
@@ -134,13 +140,16 @@ export function MermaidBlock({ source }: { source: string }) {
           aria-label="Mermaid 显示模式"
         >
           <ToggleGroupItem value="code">代码</ToggleGroupItem>
-          <ToggleGroupItem value="graph">图形</ToggleGroupItem>
+          <ToggleGroupItem value="graph" disabled={streaming}>
+            图形
+          </ToggleGroupItem>
         </ToggleGroup>
       </div>
       {!graph ? (
         <CodeBlock
           source={source}
           language="mermaid"
+          streaming={streaming}
           className="m-0 border-0 rounded-none"
         />
       ) : current?.error ? (

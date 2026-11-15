@@ -1,4 +1,6 @@
 import { useAuth, useSession } from "@/app/auth";
+import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import type { ApiResponse } from "@/api/client";
 import { LogoutDialog, ShellActions, useLogout } from "@/app/session-actions";
 import { LoadingState } from "@/components/feedback";
 import { Drawer } from "@/components/overlays";
@@ -12,6 +14,7 @@ import type {
   AgentNavigationSummary,
   SessionConfiguration,
   SessionDetail,
+  SessionSummary,
 } from "@/types/agents";
 import { SessionHeadingContext } from "@/features/agents/chat/navigation-context";
 import { ConversationSidebar } from "@/features/agents/chat/conversation-sidebar";
@@ -20,6 +23,7 @@ import { WorkspaceSidebar } from "../pages/workspace-sidebar";
 import { rememberConversation } from "../pages/conversation-memory";
 import { Frame } from "./frame";
 export function Shell() {
+  const cache = useQueryClient();
   const location = useLocation();
   const { user } = useSession();
   const [heading, setHeading] = useState<SessionConfiguration>();
@@ -39,8 +43,26 @@ export function Shell() {
   );
   const config =
     heading?.id === sessionId ? heading : detail.data?.data.configuration;
+  // List navigation already knows the owner; don't unmount its history while
+  // fetching the newly selected session's detail.
+  const listedSession =
+    sessionId && !config
+      ? cache
+          .getQueriesData<
+            | ApiResponse<SessionSummary[]>
+            | InfiniteData<ApiResponse<SessionSummary[]>>
+          >({ queryKey: ["agent-sessions"] })
+          .flatMap(([, result]) =>
+            !result
+              ? []
+              : "pages" in result
+                ? result.pages.flatMap((page) => page.data)
+                : result.data,
+          )
+          .find((session) => session.id === sessionId)
+      : undefined;
   const agentId = sessionId
-    ? config?.agent_id
+    ? (config?.agent_id ?? listedSession?.agent_id)
     : new URLSearchParams(location.search).get("agent") || undefined;
   useEffect(() => {
     if (conversationArea && agentId)
@@ -121,7 +143,7 @@ export function Shell() {
             <ConversationSidebar
               agentId={agentId}
               agentName={summary.data?.data.name}
-              ready={!sessionId || Boolean(config)}
+              ready={!sessionId || Boolean(agentId)}
             />
           ) : undefined
         }
