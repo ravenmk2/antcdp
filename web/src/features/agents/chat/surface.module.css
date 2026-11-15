@@ -1397,8 +1397,8 @@
 .root :global(.agent-process-step > .agent-message-assistant) {
   padding: 0;
 }
-.root :global([data-has-tools="false"] .agent-process-steps),
-.root :global([data-has-tools="false"] .agent-process-step) {
+.root :global([data-grouped="false"] .agent-process-steps),
+.root :global([data-grouped="false"] .agent-process-step) {
   padding-block: 0;
 }
 .root :global(.agent-process-step:not(:last-child)::after) {

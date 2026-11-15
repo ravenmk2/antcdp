@@ -21,43 +21,28 @@ export type PresentedNode =
   | PresentedProcess
   | { kind: "draft"; id: string; attempt: ActiveAttempt };
 
-// Durable projection stays append-only. This view joins work in event order,
-// including the live attempt, without crossing visible inputs or run boundaries.
+// Only adjacent reasoning and tools share a process fold. Every reply body is
+// a boundary, including intermediate and interrupted replies. The turn fold
+// independently hides intermediate replies while preserving the final body.
 export function conversationPresentation(
   nodes: ConversationNode[],
   attempt: ActiveAttempt | null,
 ): PresentedNode[] {
   const result: PresentedNode[] = [];
   let group: PresentedProcess | undefined;
-  let pending: Extract<ConversationNode, { kind: "record" }> | undefined;
-  const flush = () => {
-    if (pending) result.push(pending);
-    pending = undefined;
-  };
   const process = (runId: string | null, id: string, anchor: string) => {
     if (group && group.runId !== runId) {
-      flush();
       group = undefined;
     }
     if (!group) {
       group = { kind: "process", id, runId, anchor, tools: [], entries: [] };
       result.push(group);
     }
-    if (pending) {
-      const record = pending.record as Reply;
-      group.entries.push({
-        kind: "assistant",
-        id: `message:${record.data.attempt_id}`,
-        record,
-      });
-      pending = undefined;
-    }
     return group;
   };
   for (const node of nodes) {
     const runId = node.kind === "process" ? node.runId : node.record.run_id;
     if (group && group.runId !== runId) {
-      flush();
       group = undefined;
     }
     if (node.kind === "process") {
@@ -93,27 +78,35 @@ export function conversationPresentation(
         )
       )
         continue;
-      process(
-        runId,
-        `process:attempt:${record.data.attempt_id}`,
-        record.seq,
-      ).entries.push({
-        kind: "assistant",
-        id: `reasoning:${record.data.attempt_id}`,
-        record,
-      });
-    } else if (record.event_type === "assistant/message") {
-      // A text reply remains outside the fold until subsequent work proves it
-      // was an intermediate reply. Never move the final text into the process.
-      if (pending)
+      const reasoning = record.data.content.filter(
+        (block) => block.type === "reasoning" && block.text.trim(),
+      );
+      if (reasoning.length)
         process(
           runId,
-          `process:attempt:${(pending.record as Reply).data.attempt_id}`,
-          pending.record.seq,
-        );
-      pending = node;
+          `process:attempt:${record.data.attempt_id}`,
+          record.seq,
+        ).entries.push({
+          kind: "assistant",
+          id: `reasoning:${record.data.attempt_id}`,
+          record: { ...record, data: { ...record.data, content: reasoning } },
+        });
+      const content = record.data.content.filter(
+        (block) =>
+          block.type === "file_reference" ||
+          (block.type === "text" && block.text.trim()),
+      );
+      if (content.length) {
+        result.push({
+          ...node,
+          record: { ...record, data: { ...record.data, content } },
+        });
+        group = undefined;
+      }
+    } else if (record.event_type === "assistant/message") {
+      result.push(node);
+      group = undefined;
     } else {
-      flush();
       result.push(node);
       group = undefined;
     }
@@ -122,7 +115,7 @@ export function conversationPresentation(
     const content = attempt.content.filter(
       (block) => block.type === "reasoning" || block.type === "tool_call",
     );
-    if (content.length || pending) {
+    if (content.length) {
       const target = process(
         attempt.run_id,
         `process:attempt:${attempt.attempt_id}`,
@@ -145,6 +138,5 @@ export function conversationPresentation(
         attempt: { ...attempt, content: text },
       });
   }
-  flush();
   return result;
 }

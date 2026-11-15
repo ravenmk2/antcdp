@@ -9,6 +9,7 @@ import {
   initialConversationState,
 } from "@/features/agents/data/stream-reducer";
 import type { DurableRecord } from "@/types/agent-events";
+import type { ContentBlock } from "@/types/agents";
 import { records, snapshot, time, question } from "./fixtures/agents";
 import { conversationPresentation } from "@/features/agents/data/conversation-presentation";
 
@@ -49,7 +50,7 @@ const result: Extract<DurableRecord, { event_type: "tool/result" }> = {
   },
 };
 
-it.each(["question", "retry", "artifact", "progress"] as const)(
+it.each(["question", "retry", "artifact"] as const)(
   "keeps %s and subsequent reasoning in one ordered process with a separate final reply",
   (boundary) => {
     const between: DurableRecord =
@@ -116,13 +117,7 @@ it.each(["question", "retry", "artifact", "progress"] as const)(
       group.kind === "process" && group.entries.map((entry) => entry.id),
     ).toEqual([
       "50",
-      ...(boundary === "retry"
-        ? ["reasoning:failed"]
-        : boundary === "progress"
-          ? [
-              `message:${(records[1] as Extract<DurableRecord, { event_type: "assistant/message" }>).data.attempt_id}`,
-            ]
-          : []),
+      ...(boundary === "retry" ? ["reasoning:failed"] : []),
       "reasoning:final",
     ]);
     expect(
@@ -130,6 +125,101 @@ it.each(["question", "retry", "artifact", "progress"] as const)(
         view[1].record.event_type === "assistant/message" &&
         view[1].record.data.content,
     ).toEqual([{ type: "text", text: "最终回复" }]);
+  },
+);
+
+it.each(["assistant/message", "assistant/attempt"] as const)(
+  "keeps mixed %s bodies between adjacent process groups during streaming and replay",
+  (event_type) => {
+    const content: ContentBlock[] = [
+      { type: "reasoning", text: "中间思考" },
+      { type: "text", text: "中间正文" },
+      { type: "file_reference", kind: "artifact", id: "90" },
+    ];
+    const common = {
+      ...call,
+      seq: "7",
+      data: {
+        attempt_id: "progress",
+        model_call_id: "31",
+        content,
+      },
+    };
+    const progress: DurableRecord =
+      event_type === "assistant/message"
+        ? {
+            ...common,
+            event_type,
+            data: { ...common.data, finish_reason: "tool_calls" },
+          }
+        : {
+            ...common,
+            event_type,
+            data: {
+              ...common.data,
+              status: "failed",
+              partial: true,
+              reason_code: "MODEL_CONNECTION_FAILED",
+            },
+          };
+    const projector = new ConversationProjector();
+    const history = [call, result, progress];
+    const view = conversationPresentation(projector.project(history), {
+      attempt_id: "next",
+      run_id: "20",
+      step: 2,
+      next_index: 1,
+      content: [{ type: "reasoning", text: "后续思考" }],
+    });
+    expect(view.map((node) => node.kind)).toEqual([
+      "process",
+      "record",
+      "process",
+    ]);
+    const first = view[0];
+    expect(
+      first.kind === "process" && first.entries.map((entry) => entry.id),
+    ).toEqual(["50", "reasoning:progress"]);
+    const body = view[1];
+    expect(
+      body.kind === "record" &&
+        (body.record.event_type === "assistant/message" ||
+          body.record.event_type === "assistant/attempt") &&
+        body.record.data.content,
+    ).toEqual(content.filter((block) => block.type !== "reasoning"));
+    const next: DurableRecord = {
+      ...call,
+      seq: "8",
+      event_type: "assistant/message",
+      data: {
+        attempt_id: "next",
+        model_call_id: "32",
+        finish_reason: "stop",
+        content: [
+          { type: "reasoning", text: "后续思考" },
+          { type: "text", text: "最终正文" },
+        ],
+      },
+    };
+    const settled = conversationPresentation(
+      projector.project([...history, next]),
+      null,
+    );
+    expect(settled.map((node) => node.kind)).toEqual([
+      "process",
+      "record",
+      "process",
+      "record",
+    ]);
+    expect(settled.slice(0, 3).map((node) => node.id)).toEqual(
+      view.map((node) => node.id),
+    );
+    expect(settled).toEqual(
+      conversationPresentation(
+        new ConversationProjector().project([...history, next]),
+        null,
+      ),
+    );
   },
 );
 

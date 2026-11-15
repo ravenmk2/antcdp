@@ -644,6 +644,19 @@ const ProcessGroup = memo(function ProcessGroup({
           !tool.reconciliation)),
   );
   const [opened, setOpened] = useState<boolean | null>(null);
+  const grouped =
+    node.entries.reduce(
+      (count, entry) =>
+        count +
+        (entry.kind === "tool"
+          ? 1
+          : (entry.attempt?.content ?? entry.record?.data.content ?? []).filter(
+              (block) =>
+                block.type === "tool_call" ||
+                (block.type === "reasoning" && block.text.trim()),
+            ).length),
+      0,
+    ) > 1;
   const live = node.entries.some(
     (entry) => entry.kind === "assistant" && entry.attempt,
   );
@@ -696,19 +709,22 @@ const ProcessGroup = memo(function ProcessGroup({
     <section
       className="min-w-0"
       data-has-tools={Boolean(node.tools.length)}
+      data-grouped={grouped}
       data-message-anchor={node.anchor}
       aria-label={node.tools.length ? "工具过程" : "思考过程"}
     >
       <ChatDisclosure
-        open={!node.tools.length || open}
-        headingHidden={!node.tools.length}
+        open={!grouped || open}
+        headingHidden={!grouped}
         onToggle={() => setOpened(!open)}
         label={
           activeName
             ? activityLabel!
             : live
               ? "思考与工具过程"
-              : `已使用工具 ${node.tools.length} 次`
+              : node.tools.length
+                ? `已使用工具 ${node.tools.length} 次`
+                : "思考过程"
         }
         active={Boolean(activeName) || live}
         icon={

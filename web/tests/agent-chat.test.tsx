@@ -537,7 +537,7 @@ it("opens the same turn diagnostic from a failed tool marker", async () => {
       attempt={null}
     />,
   );
-  await user.click(screen.getByRole("button", { name: "已使用工具 1 次" }));
+  expect(screen.queryByRole("button", { name: "已使用工具 1 次" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "查看本轮工具异常" }));
   const dialog = await screen.findByRole("dialog", { name: "本轮异常" });
   expect(dialog).toHaveTextContent("读取文件");
@@ -1631,12 +1631,17 @@ it("preserves nested disclosure combinations across whole-turn toggles without h
         if (tool.getAttribute("aria-expanded") !== String(toolOpen))
           await user.click(tool);
         if (!groupOpen) await user.click(group);
+        expect(screen.getByText("中间进度说明")).toBeVisible();
+        expect(
+          screen.getByRole("region", { name: "工具过程" }),
+        ).not.toContainElement(screen.getByText("中间进度说明"));
         await user.click(turn);
         expect(reply).toBeVisible();
         expect(screen.getByText("中间进度说明")).not.toBeVisible();
         expect(group).not.toBeVisible();
         await user.click(turn);
         expect(reply).toBeVisible();
+        expect(screen.getByText("中间进度说明")).toBeVisible();
         expect(screen.getByText("已完成配置核对。")).toBe(reply);
         expect(group).toHaveAttribute("aria-expanded", String(groupOpen));
         expect(thought).toHaveAttribute("aria-expanded", String(reasoningOpen));
@@ -1696,7 +1701,7 @@ it("shows the actual loaded skill version without claiming a filesystem copy", a
   const { user } = mount(
     <ConversationTimeline records={loaded} sessionId="10" attempt={null} />,
   );
-  await user.click(screen.getByRole("button", { name: "已使用工具 1 次" }));
+  expect(screen.queryByRole("button", { name: "已使用工具 1 次" })).toBeNull();
   await user.click(screen.getByText("加载技能"));
   expect(screen.getByText(/已加载技能版本 7/)).toBeVisible();
   expect(screen.getByText("技能文本可用，尚无工作目录副本。")).toBeVisible();
@@ -1961,6 +1966,57 @@ it("keeps live reasoning mounted through tools and finalization, and the final t
   expect(lastBody).toBeVisible();
   expect(firstBody).toBeVisible();
 });
+
+it.each([1, 2])(
+  "only adds an outer fold for multiple thoughts (%s thoughts)",
+  async (count) => {
+    const thoughts: DurableRecord[] = Array.from(
+      { length: count },
+      (_, index) => ({
+        ...records[0],
+        seq: String(index + 2),
+        event_type: "assistant/message",
+        data: {
+          attempt_id: `thought-${index}`,
+          model_call_id: `call-${index}`,
+          finish_reason: "tool_calls",
+          content: [
+            { type: "reasoning", text: `思考内容 ${index}`, duration_ms: 1000 },
+          ],
+        },
+      }),
+    );
+    const { user } = mount(
+      <ConversationTimeline
+        records={[
+          records[0],
+          ...thoughts,
+          { ...records[1], seq: "5" },
+          { ...records[2], seq: "6" },
+        ]}
+        sessionId="10"
+        attempt={null}
+      />,
+    );
+    const group = screen.queryByRole("button", {
+      name: "思考过程",
+    });
+    if (count === 1) {
+      expect(group).toBeNull();
+    } else {
+      expect(group).toHaveAttribute("aria-expanded", "false");
+      await user.click(group!);
+    }
+    expect(
+      screen.getAllByRole("button", { name: /思考\s*用时 1 秒/ }),
+    ).toHaveLength(count);
+    await user.click(screen.getByRole("button", { name: "已完成 · 执行过程" }));
+    expect(
+      screen.queryByRole("button", { name: /思考\s*用时 1 秒/ }),
+    ).toBeNull();
+    expect(screen.getByText("已完成配置核对。")).toBeVisible();
+  },
+);
 
 it("keeps the newest process expanded when paged history starts with an older result without process content", () => {
   const old = { ...records[2], run_id: "old", seq: "1" };
