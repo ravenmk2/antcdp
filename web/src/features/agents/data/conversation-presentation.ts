@@ -21,6 +21,26 @@ export type PresentedNode =
   | PresentedProcess
   | { kind: "draft"; id: string; attempt: ActiveAttempt };
 
+/** Preserve mounted process controls when pagination reveals an earlier start. */
+export class ConversationPresenter {
+  private identities = new Map<string, string>();
+
+  project(
+    nodes: ConversationNode[],
+    attempt: ActiveAttempt | null,
+  ): PresentedNode[] {
+    return conversationPresentation(nodes, attempt).map((node) => {
+      if (node.kind !== "process") return node;
+      const members = node.entries.map((entry) => `${node.runId}:${entry.id}`);
+      const id =
+        members.map((member) => this.identities.get(member)).find(Boolean) ??
+        node.id;
+      for (const member of members) this.identities.set(member, id);
+      return id === node.id ? node : { ...node, id };
+    });
+  }
+}
+
 // Only adjacent reasoning and tools share a process fold. Every reply body is
 // a boundary, including intermediate and interrupted replies. The turn fold
 // independently hides intermediate replies while preserving the final body.

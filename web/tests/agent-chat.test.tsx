@@ -441,14 +441,16 @@ it("consolidates an empty failed attempt into an accessible result hint without 
   );
 });
 
-it("keeps partial generated text with a compact unfinished marker", () => {
-  mount(
+it("keeps partial generated text with an unfinished marker inside the completed turn fold", async () => {
+  const { user } = mount(
     <ConversationTimeline
       records={failedHistory("已经生成的内容")}
       sessionId="10"
       attempt={null}
     />,
   );
+  expect(screen.getByText("已经生成的内容")).not.toBeVisible();
+  await user.click(screen.getByRole("button", { name: "失败 · 执行过程" }));
   expect(screen.getByText("已经生成的内容")).toBeVisible();
   expect(screen.getByText("未完成")).toBeVisible();
   expect(
@@ -472,12 +474,14 @@ it("keeps the diagnostic beside the duration and independent of the process fold
   expect(hint.closest(".agent-turn-heading")).toBe(fold.parentElement);
   await user.click(hint);
   expect(await screen.findByRole("dialog")).toHaveTextContent("操作者已停止");
-  expect(fold).toHaveAttribute("aria-expanded", "true");
+  expect(fold).toHaveAttribute("aria-expanded", "false");
   await user.keyboard("{Escape}");
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
   expect(hint).toHaveFocus();
+  await user.click(fold);
+  expect(fold).toHaveAttribute("aria-expanded", "true");
   await user.click(fold);
   expect(fold).toHaveAttribute("aria-expanded", "false");
   await user.click(hint);
@@ -538,6 +542,7 @@ it("opens the same turn diagnostic from a failed tool marker", async () => {
     />,
   );
   expect(screen.queryByRole("button", { name: "已使用工具 1 次" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "失败 · 执行过程" }));
   await user.click(screen.getByRole("button", { name: "查看本轮工具异常" }));
   const dialog = await screen.findByRole("dialog", { name: "本轮异常" });
   expect(dialog).toHaveTextContent("读取文件");
@@ -1481,6 +1486,8 @@ it("folds reasoning and intermediate replies while retaining the final reply and
   expect(reply).toBeVisible();
   expect(screen.queryByText("查看工具调用")).not.toBeInTheDocument();
   const toggle = screen.getByRole("button", { name: "已完成 · 执行过程" });
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await user.click(toggle);
   expect(screen.getByText("思考")).toBeVisible();
   await user.click(toggle);
   expect(screen.getByText("思考")).not.toBeVisible();
@@ -1613,6 +1620,7 @@ it("preserves nested disclosure combinations across whole-turn toggles without h
     />,
   );
   const turn = screen.getByRole("button", { name: "已完成 · 执行过程" });
+  await user.click(turn);
   const group = screen.getByRole("button", { name: "已使用工具 1 次" });
   const reply = screen.getByText("已完成配置核对。");
   expect(
@@ -1998,6 +2006,7 @@ it.each([1, 2])(
         attempt={null}
       />,
     );
+    await user.click(screen.getByRole("button", { name: "已完成 · 执行过程" }));
     const group = screen.queryByRole("button", {
       name: "思考过程",
     });
@@ -2018,7 +2027,7 @@ it.each([1, 2])(
   },
 );
 
-it("keeps the newest process expanded when paged history starts with an older result without process content", () => {
+it("collapses the newest ended process even when paged history starts with an older result without process content", async () => {
   const old = { ...records[2], run_id: "old", seq: "1" };
   const reply: DurableRecord = {
     ...records[0],
@@ -2034,7 +2043,7 @@ it("keeps the newest process expanded when paged history starts with an older re
       ],
     },
   };
-  mount(
+  const { user } = mount(
     <ConversationTimeline
       records={[
         old,
@@ -2046,6 +2055,12 @@ it("keeps the newest process expanded when paged history starts with an older re
       attempt={null}
     />,
   );
+  expect(screen.queryByRole("button", { name: /思考.*用时 1 秒/ })).toBeNull();
+  const turn = screen
+    .getAllByRole("button", { name: "已完成 · 执行过程" })
+    .find((button) => !button.hasAttribute("disabled"))!;
+  expect(turn).toHaveAttribute("aria-expanded", "false");
+  await user.click(turn);
   expect(screen.getByRole("button", { name: /思考.*用时 1 秒/ })).toBeVisible();
   expect(screen.getByText("本轮最终回复")).toBeVisible();
 });

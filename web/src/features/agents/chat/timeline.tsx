@@ -9,11 +9,10 @@ import { runStatusNames } from "@/features/agents/resources/admin-shared";
 import {
   ConversationProjector,
   conversationTurns,
-  toolNeedsAttention,
   type ConversationTurn,
 } from "../data/conversation-projection";
 import {
-  conversationPresentation,
+  ConversationPresenter,
   type PresentedNode,
   type PresentedProcess,
 } from "../data/conversation-presentation";
@@ -22,6 +21,11 @@ import { TurnIssues } from "./turn-issues";
 import { MessageContent, FileReference } from "./content";
 import { ToolEvent, builtinToolNames } from "./tool-event";
 import { ChatDisclosure } from "./disclosure";
+import {
+  DisclosureScope,
+  DisclosureState,
+  useDisclosureState,
+} from "./disclosure-state";
 import { ActivityIcon } from "./activity-icon";
 import { questionReplyText } from "./question-content";
 import { TurnUsage } from "./turn-usage";
@@ -35,14 +39,14 @@ import {
 
 export { runtimeReason } from "../data/runtime-reasons";
 export { readPlan } from "./tool-event";
-export function ConversationTimeline({
-  records,
-  sessionId,
-  attempt,
-  service = false,
-  onVisibleResult,
-  submissions = [],
-}: {
+export function ConversationTimeline(props: ConversationTimelineProps) {
+  return (
+    <DisclosureState key={props.sessionId}>
+      <Timeline {...props} />
+    </DisclosureState>
+  );
+}
+type ConversationTimelineProps = {
   records: DurableRecord[];
   sessionId: string;
   attempt: ActiveAttempt | null;
@@ -51,12 +55,21 @@ export function ConversationTimeline({
   onVisibleResult?: (
     record: Extract<DurableRecord, { event_type: "run/ended" }>,
   ) => void;
-}) {
+};
+function Timeline({
+  records,
+  sessionId,
+  attempt,
+  service = false,
+  onVisibleResult,
+  submissions = [],
+}: ConversationTimelineProps) {
   const { user } = useSession();
   const [projector] = useState(() => new ConversationProjector());
+  const [presenter] = useState(() => new ConversationPresenter());
   const nodes = useMemo(
-    () => conversationPresentation(projector.project(records), attempt),
-    [projector, records, attempt],
+    () => presenter.project(projector.project(records), attempt),
+    [presenter, projector, records, attempt],
   );
   const turns = useMemo(
     () => conversationTurns(records, nodes),
@@ -119,15 +132,9 @@ export function ConversationTimeline({
       ),
     [records],
   );
-  const [opened, setOpened] = useState<Map<string, boolean>>(() => new Map());
+  const disclosure = useDisclosureState();
   const motion = useDisclosureMotion();
   const [turnRevisions, setTurnRevisions] = useState(new Map<string, number>());
-  const latestTurnId = submissions.length
-    ? undefined
-    : (attempt?.run_id ??
-      [...records]
-        .reverse()
-        .find((record) => record.run_id && turns.has(record.run_id))?.run_id);
   const latestReply = [...records]
     .reverse()
     .find(
@@ -181,11 +188,7 @@ export function ConversationTimeline({
   const turnExpanded = (turn?: ConversationTurn) =>
     !turn?.foldable ||
     !foldableTurns.has(turn.id) ||
-    (opened.get(turn.id) ??
-      (turn.id === latestTurnId ||
-        Boolean(
-          issues.get(turn.id)?.some((issue) => issue.state === "pending"),
-        )));
+    disclosure.expanded(turn.id, false);
   const turnHeader = (turn?: ConversationTurn) => {
     if (!turn) return null;
     const foldable = turn.foldable && foldableTurns.has(turn.id);
@@ -220,11 +223,7 @@ export function ConversationTimeline({
                     (previous.get(turn.id) ?? 0) + 1,
                   ),
                 );
-                setOpened((previous) => {
-                  const next = new Map(previous);
-                  next.set(turn.id, !expanded);
-                  return next;
-                });
+                disclosure.change(turn.id, !expanded);
               })
             }
           >
@@ -265,7 +264,7 @@ export function ConversationTimeline({
     items.push({ kind: "submission", submission });
   return (
     <div className="agent-timeline">
-      {items.map((node) => {
+      {items.map((node, index) => {
         if (node.kind === "submission") {
           const item = node.submission;
           return (
@@ -284,31 +283,35 @@ export function ConversationTimeline({
           const turn = node.runId ? turns.get(node.runId) : undefined;
           const expanded = turnExpanded(turn);
           const revision = turn ? (turnRevisions.get(turn.id) ?? 0) : 0;
+          const next = nodes[index + 1];
+          // An empty next-attempt placeholder is only a model/tool handoff.
+          const closed = Boolean(
+            next &&
+            (next.kind !== "draft" ||
+              next.attempt.content.some(
+                (block) => block.type === "text" && block.text.trim(),
+              )),
+          );
           return (
             <Fragment key={node.id}>
               {turn?.firstNode === node.id && turnHeader(turn)}
               <DisclosureContent open={expanded} revision={revision}>
-                <div
-                  className="agent-process-slot"
-                  onFocusCapture={() => {
-                    if (turn && !expanded)
-                      setOpened((previous) =>
-                        new Map(previous).set(turn.id, true),
-                      );
-                  }}
-                >
-                  <ProcessGroup
-                    node={node}
-                    sessionId={sessionId}
-                    historical={Boolean(turn?.end)}
-                    onIssue={(toolId) => {
-                      if (turn)
-                        setDiagnostic({
-                          runId: turn.id,
-                          issueId: `tool:${toolId}`,
-                        });
-                    }}
-                  />
+                <div className="agent-process-slot">
+                  <DisclosureScope id={node.runId ?? node.id}>
+                    <ProcessGroup
+                      node={node}
+                      sessionId={sessionId}
+                      historical={Boolean(turn?.end)}
+                      closed={closed}
+                      onIssue={(toolId) => {
+                        if (turn)
+                          setDiagnostic({
+                            runId: turn.id,
+                            issueId: `tool:${toolId}`,
+                          });
+                      }}
+                    />
+                  </DisclosureScope>
                 </div>
               </DisclosureContent>
             </Fragment>
@@ -629,21 +632,15 @@ const ProcessGroup = memo(function ProcessGroup({
   node,
   sessionId,
   historical,
+  closed,
   onIssue,
 }: {
   node: PresentedProcess;
   sessionId: string;
   historical: boolean;
+  closed: boolean;
   onIssue: (toolId: string) => void;
 }) {
-  const attention = node.tools.some(
-    (tool) =>
-      toolNeedsAttention(tool) &&
-      (!historical ||
-        (tool.result?.data.outcome.certainty === "unknown" &&
-          !tool.reconciliation)),
-  );
-  const [opened, setOpened] = useState<boolean | null>(null);
   const grouped =
     node.entries.reduce(
       (count, entry) =>
@@ -657,13 +654,24 @@ const ProcessGroup = memo(function ProcessGroup({
             ).length),
       0,
     ) > 1;
-  const live = node.entries.some(
-    (entry) => entry.kind === "assistant" && entry.attempt,
+  const pending = node.tools.some(
+    (tool) =>
+      (!tool.result &&
+        ![
+          "succeeded",
+          "failed",
+          "blocked",
+          "cancelled",
+          "outcome_unknown",
+        ].includes(tool.status ?? "")) ||
+      (tool.question &&
+        ["waiting", "continued"].includes(tool.question.status) &&
+        !tool.question.answer),
   );
-  // Keep the automatically revealed live process open after it settles, while
-  // respecting an explicit user collapse throughout subsequent streaming.
-  if (live && opened === null) setOpened(true);
-  const open = opened ?? (attention || live);
+  const completed = historical || (closed && !pending);
+  const live =
+    !completed &&
+    node.entries.some((entry) => entry.kind === "assistant" && entry.attempt);
   const activeTool = !historical
     ? [...node.tools]
         .reverse()
@@ -714,9 +722,9 @@ const ProcessGroup = memo(function ProcessGroup({
       aria-label={node.tools.length ? "工具过程" : "思考过程"}
     >
       <ChatDisclosure
-        open={!grouped || open}
+        open={!grouped || !completed}
+        automatic={grouped}
         headingHidden={!grouped}
-        onToggle={() => setOpened(!open)}
         label={
           activeName
             ? activityLabel!

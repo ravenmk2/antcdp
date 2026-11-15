@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from "react";
+import { DisclosureScope, useDisclosureState } from "./disclosure-state";
 import {
   DisclosureChevron,
   DisclosureContent,
@@ -7,7 +8,7 @@ import {
 
 /** Keep content mounted so streamed replies and nested controls retain identity. */
 export function ChatDisclosure({
-  open,
+  open: defaultOpen,
   onToggle,
   label,
   icon,
@@ -17,9 +18,10 @@ export function ChatDisclosure({
   active = false,
   locked = false,
   headingHidden = false,
+  automatic = false,
 }: {
   open: boolean;
-  onToggle: () => void;
+  onToggle?: () => void;
   label: string;
   icon?: ReactNode;
   detail?: ReactNode;
@@ -28,8 +30,11 @@ export function ChatDisclosure({
   active?: boolean;
   locked?: boolean;
   headingHidden?: boolean;
+  automatic?: boolean;
 }) {
   const id = useId();
+  const intent = useDisclosureState();
+  const open = automatic ? intent.expanded(id, defaultOpen) : defaultOpen;
   const motion = useDisclosureMotion();
   return (
     <div className="agent-disclosure" data-active={active}>
@@ -41,7 +46,12 @@ export function ChatDisclosure({
             aria-expanded={open}
             aria-controls={id}
             disabled={locked}
-            onClick={(event) => motion.toggle(event, onToggle)}
+            onClick={(event) =>
+              motion.toggle(event, () => {
+                intent.change(id, !open);
+                onToggle?.();
+              })
+            }
           >
             {icon}
             <span className={active ? "agent-activity-label" : undefined}>
@@ -61,7 +71,7 @@ export function ChatDisclosure({
       )}
       <div id={id} inert={!open} aria-hidden={!open}>
         <DisclosureContent open={open} revision={motion.revision}>
-          {children}
+          <DisclosureScope id={id}>{children}</DisclosureScope>
         </DisclosureContent>
       </div>
     </div>

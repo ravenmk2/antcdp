@@ -141,6 +141,23 @@ it("follows viewport resizing from a question or composer without needing a new 
   expect(size.top).toBe(1300);
 });
 
+it("keeps bottom following through automatic collapse and the next streamed reply", () => {
+  render(<Harness />);
+  const { node, size } = setupGeometry();
+  resize(node);
+  expect(size.top).toBe(1500);
+  // Automatic folds shrink the transcript without a manual disclosure event.
+  size.height = 900;
+  node.scrollTop = 400;
+  fireEvent.scroll(node);
+  resize(screen.getByTestId("content"));
+  expectFollowing(true);
+  size.height = 1400;
+  resize(screen.getByTestId("content"));
+  expect(size.top).toBe(900);
+  expectFollowing(true);
+});
+
 it("cancels an active disclosure anchor when the user clicks back to bottom", () => {
   render(<Harness />);
   const { node, size } = setupGeometry();
