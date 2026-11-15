@@ -137,7 +137,7 @@ func cloudLifecycleIntegration(t *testing.T, f *agentIntegrationFixture) {
 		}
 		maintain(first.Binding.ComputerID, "rebuild")
 		after := readComputer(first.Binding.ComputerID)
-		if after.State != "ready" || after.StorageGeneration != before.StorageGeneration || after.RuntimeGeneration != before.RuntimeGeneration+1 || after.VolumeName == nil || before.VolumeName == nil || *after.VolumeName != *before.VolumeName {
+		if after.State != "ready" || after.StorageGeneration != before.StorageGeneration || after.InstanceID != before.InstanceID+1 || after.VolumeName == nil || before.VolumeName == nil || *after.VolumeName != *before.VolumeName {
 			t.Fatalf("ordinary rebuild lost storage identity: %+v -> %+v", before, after)
 		}
 		if remote.specs[len(remote.specs)-1].Mount.CreateIfMissing {

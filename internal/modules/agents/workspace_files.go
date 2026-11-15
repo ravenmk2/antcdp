@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 type WorkspaceEntryQuery struct {
@@ -58,7 +58,7 @@ type workspaceFileIntent struct {
 }
 
 func workspacePath(value string, root bool) (string, error) {
-	name, err := workspacefs.PublicPath(value, root)
+	name, err := workspace.PublicPath(value, root)
 	if err != nil {
 		return "", httpx.Invalid("path", "invalid_format")
 	}
@@ -106,7 +106,7 @@ func (s *CloudService) startWorkspaceOperation(st StateRepository, repo CloudRep
 			return nil, e
 		}
 		if previous != nil {
-			if previous.Kind != kind || previous.ComputerID != access.ComputerID || previous.BackendGeneration != access.BackendGeneration || previous.RuntimeGeneration != access.RuntimeGeneration || previous.StorageGeneration != access.StorageGeneration || !semanticSame(previous.Intent, json.RawMessage(b)) {
+			if previous.Kind != kind || previous.ComputerID != access.ComputerID || previous.BackendGeneration != access.BackendGeneration || previous.InstanceID != access.InstanceID || previous.StorageGeneration != access.StorageGeneration || !semanticSame(previous.Intent, json.RawMessage(b)) {
 				return nil, integrity()
 			}
 			access.WorkspaceOperationID = previous.ID
@@ -114,7 +114,7 @@ func (s *CloudService) startWorkspaceOperation(st StateRepository, repo CloudRep
 			return previous, nil
 		}
 	}
-	op := &CloudOperationRow{OperationToken: token, Kind: kind, Status: "running", ComputerID: access.ComputerID, BackendGeneration: access.BackendGeneration, RuntimeGeneration: access.RuntimeGeneration, StorageGeneration: access.StorageGeneration, Intent: b, Observation: json.RawMessage(`{"executions":[]}`), ActorKind: actorKind, ActorID: actorID, ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, StartedAt: &now, DeadlineAt: now.Add(60 * time.Second), UpdatedAt: now}
+	op := &CloudOperationRow{OperationToken: token, Kind: kind, Status: "running", ComputerID: access.ComputerID, BackendGeneration: access.BackendGeneration, InstanceID: access.InstanceID, StorageGeneration: access.StorageGeneration, Intent: b, Observation: json.RawMessage(`{"executions":[]}`), ActorKind: actorKind, ActorID: actorID, ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, StartedAt: &now, DeadlineAt: now.Add(60 * time.Second), UpdatedAt: now}
 	if access.BindingID != 0 {
 		op.RootRunID = &access.BindingID
 	}
@@ -179,11 +179,11 @@ func (s *CloudService) ListWorkspaceEntries(ctx context.Context, raw string, id 
 	}
 	ctx, cancel := context.WithDeadline(ctx, op.DeadlineAt)
 	defer cancel()
-	response, err := s.workspaceRequest(ctx, access, op.ID, workspacefs.Request{Operation: "list", Path: name, Offset: int64((q.Page - 1) * q.PageSize), Limit: q.PageSize})
+	response, err := s.workspaceRequest(ctx, access, op.ID, workspace.Request{Operation: "list", Path: name, Offset: int64((q.Page - 1) * q.PageSize), Limit: q.PageSize})
 	var listing struct {
-		Entries []workspacefs.Entry `json:"entries"`
-		Total   int                 `json:"total"`
-		HasMore bool                `json:"has_more"`
+		Entries []workspace.Entry `json:"entries"`
+		Total   int               `json:"total"`
+		HasMore bool              `json:"has_more"`
 	}
 	if err == nil && json.Unmarshal(response.Result, &listing) != nil {
 		err = integrity()
@@ -269,7 +269,7 @@ func (s *CloudService) workspaceMutation(ctx context.Context, raw string, id uin
 		if err = workspaceContentAccess(w, a); err != nil {
 			return err
 		}
-		return s.Host.sessionReceipt(ctx, tx, r, st, a, out, key, command, fmt.Sprintf("workspace:%d", id), input, func(receipt *Receipt) error {
+		return s.cloudReceipt(ctx, tx, repo, a, out, key, command, fmt.Sprintf("workspace:%d", id), input, func(receipt *Receipt) error {
 			if kind == "workspace_remove" {
 				if err = checkTag(tag, s.tag("computer", id, w.RowVersion)); err != nil {
 					return err
@@ -291,10 +291,7 @@ func (s *CloudService) workspaceMutation(ctx context.Context, raw string, id uin
 				return err
 			}
 			op.DeadlineAt = op.CreatedAt.Add(60 * time.Second)
-			if err = st.SavePublicOperation(op); err != nil {
-				return err
-			}
-			physical, err := repo.CloudOperationByPublic(op.ID)
+			physical, err := repo.CloudOperation(op.ID, true)
 			if err != nil {
 				return err
 			}
@@ -312,8 +309,8 @@ func (s *CloudService) workspaceMutation(ctx context.Context, raw string, id uin
 			}
 			out.Status = 202
 			out.Data = operationView(op)
-			out.Location = fmt.Sprintf("/api/v1/agents/operations/%d", op.ID)
-			return audit(ctx, tx, a, command, "workspace", id)
+			out.Location = fmt.Sprintf("/api/v1/agents/cloud-computers/operations/%d", op.ID)
+			return nil
 		})
 	})
 }

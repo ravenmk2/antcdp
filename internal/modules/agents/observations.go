@@ -240,7 +240,7 @@ func (s *Service) GetRun(ctx context.Context, raw string, id uint64) (*Result, e
 				if frozen == nil {
 					return integrity()
 				}
-				d.Binding = map[string]any{"id": agentcore.ID(lease.RootRunID), "cloud_computer_id": agentcore.ID(lease.ComputerID), "runtime_generation": coreID(lease.RuntimeGeneration), "storage_generation": agentcore.ID(lease.StorageGeneration), "mode": lease.Mode, "state": lease.State, "cwd": frozen.CWD}
+				d.Binding = map[string]any{"id": agentcore.ID(lease.RootRunID), "cloud_computer_id": agentcore.ID(lease.ComputerID), "sandbox_instance_id": coreID(lease.InstanceID), "storage_generation": agentcore.ID(lease.StorageGeneration), "mode": lease.Mode, "state": lease.State, "cwd": frozen.CWD}
 			}
 		}
 		out.Data = d

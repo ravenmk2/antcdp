@@ -40,7 +40,7 @@ func (p *sandboxMemoryProvider) Create(_ context.Context, spec sb.CreateSpec) (s
 		p.rejectNext = false
 		return sb.Observation{}, &sb.Error{Code: "SANDBOX_VOLUME_INVALID"}
 	}
-	id := fmt.Sprintf("sandbox-%d-%d", spec.Ownership.ComputerID, len(p.specs))
+	id := fmt.Sprintf("sandbox-%d-%d", spec.Ownership.InstanceID, len(p.specs))
 	v := sb.Observation{Ref: sb.ResourceRef{BackendGeneration: spec.BackendGeneration, RemoteID: id, Ownership: spec.Ownership}, State: "ready"}
 	p.resources[id] = v
 	if p.unknownNext {

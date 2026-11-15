@@ -38,14 +38,14 @@ func integrationSpec(t *testing.T, image string, policy sandboxcore.NetworkPolic
 	if err != nil {
 		t.Fatal(err)
 	}
-	return sandboxcore.CreateSpec{BackendGeneration: 1, Ownership: sandboxcore.Ownership{InstallationID: integrationToken(t), ComputerID: 1, CreationToken: integrationToken(t)}, Config: sandboxcore.EffectiveConfig{RuntimeBackend: "docker", Environment: sandboxcore.Environment{Image: image, CPUMillicores: 1000, MemoryMiB: 1024}, Network: snapshot}, Network: compiled, Mount: sandboxcore.MountPlan{Kind: "ephemeral", MountPath: "/data"}, Lifetime: 5 * time.Minute}
+	return sandboxcore.CreateSpec{BackendGeneration: 1, Ownership: sandboxcore.Ownership{InstallationID: integrationToken(t), InstanceID: 1, CreationToken: integrationToken(t)}, Config: sandboxcore.EffectiveConfig{RuntimeBackend: "docker", Environment: sandboxcore.Environment{Image: image, CPUMillicores: 1000, MemoryMiB: 1024}, Network: snapshot}, Network: compiled, Mount: sandboxcore.MountPlan{Kind: "ephemeral", MountPath: "/data"}, Lifetime: 5 * time.Minute}
 }
 
 func integrationResource(t *testing.T, ctx context.Context, provider sandboxcore.Provider, spec sandboxcore.CreateSpec) (sandboxcore.ResourceRef, func() bool) {
 	t.Helper()
 	// These are non-secret, unique ownership facts needed for independently
 	// verifying cleanup after an interrupted process or an unknown Create.
-	t.Logf("resource intent installation=%s workspace=%d creation=%s", spec.Ownership.InstallationID, spec.Ownership.ComputerID, spec.Ownership.CreationToken)
+	t.Logf("resource intent installation=%s workspace=%d creation=%s", spec.Ownership.InstallationID, spec.Ownership.InstanceID, spec.Ownership.CreationToken)
 	created, err := provider.Create(ctx, spec)
 	ref := created.Ref
 	if err != nil && ref.RemoteID == "" {

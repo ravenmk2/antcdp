@@ -21,7 +21,7 @@ func (t *agentsTx) CloudRootWorkPending(root uint64) (bool, error) {
  EXISTS(SELECT 1 FROM agent_run WHERE root_run_id=? AND finished_at IS NULL)
  OR EXISTS(SELECT 1 FROM agent_tool_call WHERE root_run_id=? AND (result_event_seq IS NULL OR (status='outcome_unknown' AND reconciled_outcome IS NULL)))
  OR EXISTS(SELECT 1 FROM agent_file_operation WHERE root_run_id=? AND finished_at IS NULL)
- OR EXISTS(SELECT 1 FROM cloud_computer_execution WHERE root_run_id=? AND finished_at IS NULL)
+ OR EXISTS(SELECT 1 FROM sandbox_execution e JOIN agent_sandbox_execution a ON a.sandbox_execution_id=e.id WHERE a.root_run_id=? AND finished_at IS NULL)
  OR EXISTS(SELECT 1 FROM cloud_computer_operation WHERE root_run_id=? AND finished_at IS NULL)
  OR EXISTS(SELECT 1 FROM agent_resource_reference WHERE resource_kind IN ('cloud_lease','local_worker') AND resource_id=? AND released_at IS NULL)`, root, root, root, root, root, root)
 	return busy, e
@@ -43,6 +43,9 @@ func (t *agentsTx) PersonalComputer(owner uint64, lock bool) (*a.CloudComputerRo
 	if errors.Is(e, sql.ErrNoRows) {
 		return nil, nil
 	}
+	if e == nil {
+		e = t.hydrateComputer(v, lock)
+	}
 	return v, e
 }
 func (t *agentsTx) PoolComputers(agent uint64, lock bool) ([]a.CloudComputerRow, error) {
@@ -52,6 +55,13 @@ func (t *agentsTx) PoolComputers(agent uint64, lock bool) ([]a.CloudComputerRow,
 	}
 	v := []a.CloudComputerRow{}
 	e := t.tx.SelectContext(t.ctx, &v, q, agent)
+	if e == nil {
+		for i := range v {
+			if e = t.hydrateComputer(&v[i], lock); e != nil {
+				break
+			}
+		}
+	}
 	return v, e
 }
 func (t *agentsTx) Computers(q a.CloudQuery) ([]a.CloudComputerRow, int, error) {
@@ -75,29 +85,48 @@ func (t *agentsTx) Computers(q a.CloudQuery) ([]a.CloudComputerRow, int, error) 
 	rows := []a.CloudComputerRow{}
 	args = append(args, q.PageSize, (q.Page-1)*q.PageSize)
 	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+computerColumns+" FROM cloud_computer"+where+" ORDER BY id DESC LIMIT ? OFFSET ?", args...)
+	if e == nil {
+		for i := range rows {
+			if e = t.hydrateComputer(&rows[i], false); e != nil {
+				break
+			}
+		}
+	}
 	return rows, total, e
 }
 func (t *agentsTx) ComputerLeases(id uint64) ([]a.CloudLeaseRow, error) {
 	rows := []a.CloudLeaseRow{}
-	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+leaseColumns+" FROM cloud_computer_lease WHERE cloud_computer_id=? AND released_at IS NULL ORDER BY root_run_id", id)
+	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+leaseColumns+" FROM agent_cloud_computer_lease WHERE cloud_computer_id=? AND released_at IS NULL ORDER BY root_run_id", id)
 	return rows, e
 }
 func (t *agentsTx) PendingLeases(limit int) ([]a.CloudLeaseRow, error) {
 	rows := []a.CloudLeaseRow{}
-	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+leaseColumns+" FROM cloud_computer_lease WHERE released_at IS NULL ORDER BY updated_at,root_run_id LIMIT ?", limit)
+	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+leaseColumns+" FROM agent_cloud_computer_lease WHERE released_at IS NULL ORDER BY updated_at,root_run_id LIMIT ?", limit)
 	return rows, e
 }
 func (t *agentsTx) LeaseExecutions(root uint64) ([]a.CloudExecutionRow, error) {
+	ids := []uint64{}
+	if err := t.tx.SelectContext(t.ctx, &ids, "SELECT sandbox_execution_id FROM agent_sandbox_execution WHERE root_run_id=? ORDER BY sandbox_execution_id", root); err != nil {
+		return nil, err
+	}
 	rows := []a.CloudExecutionRow{}
-	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+cloudExecutionColumns+" FROM cloud_computer_execution WHERE root_run_id=? ORDER BY id", root)
-	return rows, e
+	for _, id := range ids {
+		v, err := t.CloudExecution(id, false)
+		if err != nil {
+			return nil, err
+		}
+		if v != nil {
+			rows = append(rows, *v)
+		}
+	}
+	return rows, nil
 }
 func (t *agentsTx) CloudActivity(id uint64) (a.CloudActivity, error) {
 	var v a.CloudActivity
 	e := t.tx.GetContext(t.ctx, &v, `SELECT
- (SELECT COUNT(*) FROM cloud_computer_lease WHERE cloud_computer_id=? AND released_at IS NULL) AS leases,
+ (SELECT COUNT(*) FROM agent_cloud_computer_lease WHERE cloud_computer_id=? AND released_at IS NULL) AS leases,
  (SELECT COUNT(*) FROM agent_file_operation WHERE cloud_computer_id=? AND finished_at IS NULL) AS transfers,
- (SELECT COUNT(*) FROM cloud_computer_execution WHERE cloud_computer_id=? AND finished_at IS NULL AND status='outcome_unknown') AS unknown,
+ (SELECT COUNT(*) FROM sandbox_execution e JOIN agent_sandbox_execution a ON a.sandbox_execution_id=e.id JOIN agent_cloud_computer_lease l ON l.root_run_id=a.root_run_id WHERE l.cloud_computer_id=? AND finished_at IS NULL AND status='outcome_unknown') AS unknown,
  (SELECT COUNT(*) FROM agent_resource_reference WHERE resource_kind='cloud_computer' AND resource_id=? AND released_at IS NULL) AS refs,
  (SELECT COUNT(*) FROM cloud_computer_operation WHERE cloud_computer_id=? AND finished_at IS NULL) AS operations`, id, id, id, id, id)
 	return v, e
@@ -109,20 +138,23 @@ func (t *agentsTx) CloudTopology() (int, int, error) {
 	}
 	e := t.tx.GetContext(t.ctx, &v, `SELECT
  (SELECT COUNT(*) FROM cloud_computer WHERE deleted_at IS NULL) AS count,
- (SELECT COUNT(*) FROM cloud_computer_lease WHERE released_at IS NULL)
- +(SELECT COUNT(*) FROM cloud_computer_operation WHERE finished_at IS NULL)
- +(SELECT COUNT(*) FROM cloud_computer_execution WHERE finished_at IS NULL)
+ (SELECT COUNT(*) FROM agent_cloud_computer_lease WHERE released_at IS NULL)
+ +(SELECT COUNT(*) FROM cloud_computer_operation WHERE finished_at IS NULL AND kind<>'command')
+ +(SELECT COUNT(*) FROM sandbox_lease WHERE released_at IS NULL)
+ +(SELECT COUNT(*) FROM sandbox_operation WHERE finished_at IS NULL)
+ +(SELECT COUNT(*) FROM sandbox_instance i WHERE i.finished_at IS NULL AND i.backend_generation=(SELECT backend_generation FROM sandbox_connection WHERE id=1) AND NOT EXISTS(SELECT 1 FROM cloud_computer c WHERE c.sandbox_instance_id=i.id))
+ +(SELECT COUNT(*) FROM sandbox_execution WHERE finished_at IS NULL)
  +(SELECT COUNT(*) FROM agent_resource_reference WHERE resource_kind IN ('cloud_computer','cloud_lease') AND released_at IS NULL)
  +(SELECT COUNT(*) FROM agent_run WHERE settled_at IS NULL)
  +(SELECT COUNT(*) FROM agent_file_operation WHERE finished_at IS NULL) AS busy`)
 	return v.Count, v.Busy, e
 }
 func (t *agentsTx) ResetCloudResources(generation uint64, now time.Time) error {
-	_, e := t.tx.ExecContext(t.ctx, `UPDATE cloud_computer SET state='uninitialized',backend_generation=?,runtime_generation=runtime_generation+1,storage_generation=storage_generation+1,runtime_id=NULL,runtime_creation_token=NULL,runtime_expires_at=NULL,volume_id=NULL,volume_name=NULL,volume_state='absent',volume_cleanup_state='not_requested',applied_template_version=NULL,effective_environment=NULL,verified_capabilities=NULL,last_observed_at=NULL,error_code=NULL,fence_version=fence_version+1,row_version=row_version+1,idle_since=?,updated_at=? WHERE deleted_at IS NULL`, generation, now, now)
+	_, e := t.tx.ExecContext(t.ctx, `UPDATE cloud_computer SET state='uninitialized',backend_generation=?,sandbox_instance_id=NULL,storage_generation=storage_generation+1,volume_id=NULL,volume_name=NULL,volume_state='absent',volume_cleanup_state='not_requested',applied_template_version=NULL,error_code=NULL,fence_version=fence_version+1,row_version=row_version+1,idle_since=?,updated_at=? WHERE deleted_at IS NULL`, generation, now, now)
 	if e != nil {
 		return e
 	}
-	_, e = t.tx.ExecContext(t.ctx, "DELETE FROM cloud_computer_skill_state")
+	_, e = t.tx.ExecContext(t.ctx, "DELETE FROM agent_cloud_computer_skill_state")
 	return e
 }
 func (t *agentsTx) cloudOperationQuery(where string, args ...any) (*a.CloudOperationRow, error) {
@@ -146,9 +178,7 @@ func (t *agentsTx) CloudOperationByToken(token string, lock bool) (*a.CloudOpera
 	}
 	return t.cloudOperationQuery(where, token)
 }
-func (t *agentsTx) CloudOperationByPublic(id uint64) (*a.CloudOperationRow, error) {
-	return t.cloudOperationQuery("public_operation_id=?", id)
-}
+
 func (t *agentsTx) PendingCloudOperations(epoch string, now time.Time, limit int) ([]a.CloudOperationRow, error) {
 	rows := []a.CloudOperationRow{}
 	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+cloudOperationColumns+" FROM cloud_computer_operation WHERE kind IN "+cloudMaintenanceKinds+" AND finished_at IS NULL AND (status IN ('queued','outcome_unknown') OR executor_epoch<>? OR deadline_at<=?) ORDER BY updated_at,id LIMIT ?", epoch, now, limit)

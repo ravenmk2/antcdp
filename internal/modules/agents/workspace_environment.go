@@ -6,25 +6,25 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 type environmentOperationResult struct {
-	Responses []workspacefs.Response `json:"responses"`
+	Responses []workspace.Response `json:"responses"`
 }
 
 func (s *CloudService) environmentToken(access *SandboxAccess, purpose string) string {
-	value := fmt.Sprintf("sandbox/environment/%s/%d/%d/%d/%d/%s", purpose, access.ComputerID, access.RuntimeGeneration, access.BindingID, access.OperationID, access.Resource.Ownership.CreationToken)
+	value := fmt.Sprintf("sandbox/environment/%s/%d/%d/%d/%d/%s", purpose, access.ComputerID, access.InstanceID, access.BindingID, access.OperationID, access.Resource.Ownership.CreationToken)
 	return hex.EncodeToString(cryptox.Digest(s.Host.ETag(value)))[:32]
 }
 
 // Environment setup is a durable workspace operation. Re-entering the same
 // binding/maintenance intent returns its committed result; an uncertain operation
 // is observed by the workspace reconciler, never invoked a second time.
-func (s *CloudService) environmentRequests(ctx context.Context, original *SandboxAccess, kind, purpose string, requests []workspacefs.Request) ([]workspacefs.Response, error) {
+func (s *CloudService) environmentRequests(ctx context.Context, original *SandboxAccess, kind, purpose string, requests []workspace.Request) ([]workspace.Response, error) {
 	if original == nil || original.Provider == nil {
 		return nil, integrity()
 	}
@@ -49,7 +49,7 @@ func (s *CloudService) environmentRequests(ctx context.Context, original *Sandbo
 		if e != nil {
 			return e
 		}
-		if w == nil || instance == nil || instance.ID != w.ID || instance.BackendGeneration != access.BackendGeneration || instance.RuntimeGeneration != access.RuntimeGeneration || (instance.State != "ready" && instance.State != "provisioning") {
+		if w == nil || instance == nil || instance.ID != w.ID || instance.BackendGeneration != access.BackendGeneration || instance.InstanceID != access.InstanceID || (instance.State != "ready" && instance.State != "provisioning") {
 			return httpx.E(409, "SANDBOX_NOT_READY", "环境初始化目标尚未就绪")
 		}
 		if access.BindingID != 0 {
@@ -68,7 +68,7 @@ func (s *CloudService) environmentRequests(ctx context.Context, original *Sandbo
 			if parent == nil || parent.FenceVersion != access.OperationFence || parent.Status != "running" {
 				return httpx.E(409, "OPERATION_FENCED", "环境维护操作已变化")
 			}
-			if (parent.Kind != "create" && parent.Kind != "rebuild") || parent.ComputerID != instance.ID || parent.RuntimeGeneration != instance.RuntimeGeneration {
+			if (parent.Kind != "create" && parent.Kind != "rebuild") || parent.ComputerID != instance.ID || parent.InstanceID != instance.InstanceID {
 				return httpx.E(409, "OPERATION_FENCED", "环境维护目标已变化")
 			}
 		}
@@ -101,7 +101,7 @@ func (s *CloudService) environmentRequests(ctx context.Context, original *Sandbo
 		}
 		return result.Responses, nil
 	}
-	responses := []workspacefs.Response{}
+	responses := []workspace.Response{}
 	for _, request := range requests {
 		response, err := s.workspaceRequest(ctx, &access, op.ID, request)
 		responses = append(responses, response)
@@ -117,14 +117,14 @@ func (s *CloudService) environmentRequests(ctx context.Context, original *Sandbo
 }
 
 func (s *CloudService) InitializeComputer(ctx context.Context, access *SandboxAccess, projectID, agentID uint64) error {
-	request := workspacefs.Request{Operation: "initialize"}
+	request := workspace.Request{Operation: "initialize"}
 	if agentID != 0 {
 		request.AgentID = idString(agentID)
 	}
 	if projectID != 0 {
 		request.ProjectID = idString(projectID)
 	}
-	results, e := s.environmentRequests(ctx, access, "workspace_prepare", fmt.Sprintf("initialize/%d/%d", projectID, agentID), []workspacefs.Request{request})
+	results, e := s.environmentRequests(ctx, access, "workspace_prepare", fmt.Sprintf("initialize/%d/%d", projectID, agentID), []workspace.Request{request})
 	if e != nil {
 		return e
 	}
@@ -145,7 +145,7 @@ func (s *CloudService) InitializeComputer(ctx context.Context, access *SandboxAc
 }
 func (s *CloudService) VerifyWorkspaceEnvironment(ctx context.Context, access *SandboxAccess) (SandboxCapabilities, []DiagnosticCheck, error) {
 	caps := unknownSandboxCapabilities()
-	_, err := s.environmentRequests(ctx, access, "workspace_verify", "native-v1", []workspacefs.Request{{Operation: "verify_native"}})
+	_, err := s.environmentRequests(ctx, access, "workspace_verify", "native-v1", []workspace.Request{{Operation: "verify_native"}})
 	if err != nil {
 		return caps, []DiagnosticCheck{diagnosticCheck("native_filesystem", "failed", remoteSandboxError(err))}, err
 	}

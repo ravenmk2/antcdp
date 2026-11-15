@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	NetworkCompilerVersion = "opensandbox-egress-v1"
+	NetworkCompilerVersion = "egress-v1"
 	MaxNetworkRules        = 4096
 	MaxNetworkPolicyBytes  = 256 << 10
 )

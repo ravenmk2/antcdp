@@ -16,8 +16,9 @@
 | [messaging.sql](messaging.sql) | 邮件、短信与钉钉 | [消息管理](../../domains/messaging/overview.md) |
 | [models.sql](models.sql) | 模型提供商与模型定义 | [模型](../../domains/models/overview.md) |
 | [web_access.sql](web_access.sql) | 检索提供商与搜索、读取设置 | [搜索与网页读取](../../domains/web-access/overview.md) |
-| [agents.sql](agents.sql) | 智能体、技能、MCP、会话、运行、文件、成果与图像缓存 | [智能体](../../domains/agents/overview.md) |
-| [sandboxes.sql](sandboxes.sql) | 单一沙箱连接、云电脑模板、电脑、租约、执行和技能物化 | [云电脑](../../domains/sandboxes/overview.md) |
+| [agents.sql](agents.sql) | 智能体、技能、MCP、会话、运行、文件、成果、图像缓存及沙箱调用关联 | [智能体](../../domains/agents/overview.md) |
+| [sandboxes.sql](sandboxes.sql) | 基础连接、实例、租约、物理执行及操作 | [沙箱](../../domains/sandboxes/overview.md) |
+| [cloud-computers.sql](cloud-computers.sql) | 云电脑模板、持久工作空间及产品操作 | [云电脑](../../domains/sandboxes/overview.md) |
 
 按业务领域分组，不按表数量继续拆分配置、运行或文件等技术分类。智能体使用的模型文件缓存归智能体领域，模型提供商与模型定义归模型领域。分文件只用于阅读，不改变模块依赖或事务边界。跨领域资源引用只定义一次；字段类型、可空性、生成列、默认值和索引须与迁移保持一致。SQL 不包含种子、升级数据修正或秘密；MySQL DDL 隐式提交，不能作为整批操作可回滚的承诺。
 

@@ -216,6 +216,7 @@ func maintainAgentResources(ctx context.Context, installer *install.Service, app
 		func(c context.Context) error { return app.Resources.CleanupSkills(c, 20) },
 		func(c context.Context) error { return app.Service.ProcessFileMaintenance(c, 20) },
 		func(c context.Context) error { return app.Service.ProcessPendingCompactions(c, 4) },
+		func(c context.Context) error { return app.Sandboxes.ReconcileResources(c, 32) },
 		func(c context.Context) error { return app.Sandboxes.ProcessPending(c, 8) },
 		func(c context.Context) error { return app.Sandboxes.ProcessWorkspaceOperations(c, 8) },
 		func(c context.Context) error { return app.Sandboxes.ProcessFileOperations(c, 8) },

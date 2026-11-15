@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 type nativeSkillProvider struct {
@@ -53,7 +53,7 @@ func TestNativeSkillPublicationRestoresOnlyAfterKnownFailure(t *testing.T) {
 				p.publishError = &sandboxcore.Error{Code: "SANDBOX_UPLOAD_FAILED", Unknown: state == "unknown"}
 			}
 			a := &SandboxAccess{Provider: p, WorkspaceOperationID: 42}
-			result, err := installNativeSkills(context.Background(), a, workspacefs.Request{AgentID: "1", SkillSetHash: "empty", Skills: []workspacefs.SkillArchive{}}, bundle.Bytes())
+			result, err := installNativeSkills(context.Background(), a, workspace.Request{AgentID: "1", SkillSetHash: "empty", Skills: []workspace.SkillArchive{}}, bundle.Bytes())
 			if state == "success" {
 				if err != nil || !result.OK || p.moves != 2 || !strings.Contains(p.calls[len(p.calls)-1], "42-previous") {
 					t.Fatal(result, err, p.calls)
@@ -79,7 +79,7 @@ func TestNativeSkillPublicationRestoresOnlyAfterKnownFailure(t *testing.T) {
 func TestNativeSkillsRejectCorruptBundleBeforeRemoteIO(t *testing.T) {
 	p := &nativeSkillProvider{}
 	a := &SandboxAccess{Provider: p, WorkspaceOperationID: 42}
-	if _, err := installNativeSkills(context.Background(), a, workspacefs.Request{AgentID: "1"}, []byte("corrupt")); err == nil || len(p.calls) != 0 {
+	if _, err := installNativeSkills(context.Background(), a, workspace.Request{AgentID: "1"}, []byte("corrupt")); err == nil || len(p.calls) != 0 {
 		t.Fatal("corrupt archive reached sandbox")
 	}
 }

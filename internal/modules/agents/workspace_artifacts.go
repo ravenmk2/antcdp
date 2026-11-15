@@ -17,10 +17,10 @@ import (
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 type PresentFile struct {
@@ -38,11 +38,11 @@ type ReadImageRequest struct {
 	Path string `json:"path"`
 }
 type fileTransferIntent struct {
-	Present *PresentRequest        `json:"present,omitempty"`
-	Import  *ImportFileRequest     `json:"import,omitempty"`
-	Image   *ReadImageRequest      `json:"image,omitempty"`
-	Helpers []uint64               `json:"helpers"`
-	Ref     agentcore.ExecutionRef `json:"execution"`
+	Present    *PresentRequest        `json:"present,omitempty"`
+	Import     *ImportFileRequest     `json:"import,omitempty"`
+	Image      *ReadImageRequest      `json:"image,omitempty"`
+	Operations []uint64               `json:"operations"`
+	Ref        agentcore.ExecutionRef `json:"execution"`
 }
 type fileTransferClaim struct {
 	Operation  FileOperationRow
@@ -60,7 +60,7 @@ func validatePresent(w PresentRequest) error {
 	}
 	seen := map[string]bool{}
 	for _, v := range w.Files {
-		if _, e := workspacefs.Normalize(v.Path, false); e != nil || seen[v.Path] || !safeFilename(path.Base(v.Path)) {
+		if _, e := workspace.Normalize(v.Path, false); e != nil || seen[v.Path] || !safeFilename(path.Base(v.Path)) {
 			return httpx.Invalid("files.path", "invalid_format")
 		}
 		if len(v.Description) > 8000 || !utf8.ValidString(v.Description) || utf8.RuneCountInString(v.Description) > 2000 {
@@ -71,7 +71,7 @@ func validatePresent(w PresentRequest) error {
 	return nil
 }
 func fileCWDPath(cwd, relative string) (string, error) {
-	if _, e := workspacefs.Normalize(relative, false); e != nil {
+	if _, e := workspace.Normalize(relative, false); e != nil {
 		return "", httpx.Invalid("path", "invalid_format")
 	}
 	base, ok := strings.CutPrefix(cwd, "/data/")
@@ -253,11 +253,11 @@ func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.Ex
 		if x.Root.DeadlineAt.Before(deadline) {
 			deadline = x.Root.DeadlineAt
 		}
-		out.Operation = FileOperationRow{ToolCallID: callID, ContentSessionID: x.RootSession.ID, RootRunID: x.Root.ID, Kind: kind, OperationToken: NewStorageKey(), Status: "preparing", BindingID: binding.RootRunID, ComputerID: out.Access.ComputerID, BackendGeneration: out.Access.BackendGeneration, RuntimeGeneration: out.Access.RuntimeGeneration, StorageGeneration: out.Access.StorageGeneration, VolumeID: *computer.VolumeID, BindingFenceVersion: binding.FenceVersion, ExecutorEpoch: s.Epoch, FenceVersion: 1, RequestHash: hash[:], Result: json.RawMessage(`{}`), CommitReceipt: json.RawMessage(`null`), CreatedAt: now, DeadlineAt: deadline, UpdatedAt: now}
+		out.Operation = FileOperationRow{ToolCallID: callID, ContentSessionID: x.RootSession.ID, RootRunID: x.Root.ID, Kind: kind, OperationToken: NewStorageKey(), Status: "preparing", BindingID: binding.RootRunID, ComputerID: out.Access.ComputerID, BackendGeneration: out.Access.BackendGeneration, InstanceID: out.Access.InstanceID, StorageGeneration: out.Access.StorageGeneration, VolumeID: *computer.VolumeID, BindingFenceVersion: binding.FenceVersion, ExecutorEpoch: s.Epoch, FenceVersion: 1, RequestHash: hash[:], Result: json.RawMessage(`{}`), CommitReceipt: json.RawMessage(`null`), CreatedAt: now, DeadlineAt: deadline, UpdatedAt: now}
 		if e = st.InsertFileOperation(&out.Operation); e != nil {
 			return e
 		}
-		out.Intent = fileTransferIntent{Present: present, Import: imported, Image: readImage, Ref: ref, Helpers: []uint64{}}
+		out.Intent = fileTransferIntent{Present: present, Import: imported, Image: readImage, Ref: ref, Operations: []uint64{}}
 		count := 1
 		if present != nil {
 			count = len(present.Files)
@@ -292,8 +292,8 @@ func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.Ex
 				return e
 			}
 			out.Items = append(out.Items, item)
-			helperAccess := *out.Access
-			op, e := s.startWorkspaceOperation(st, repo, &helperAccess, "workspace_tool", "system", "system", map[string]any{"file_operation_id": strconv.FormatUint(out.Operation.ID, 10), "ordinal": i})
+			operationAccess := *out.Access
+			op, e := s.startWorkspaceOperation(st, repo, &operationAccess, "workspace_tool", "system", "system", map[string]any{"file_operation_id": strconv.FormatUint(out.Operation.ID, 10), "ordinal": i})
 			if e != nil {
 				return e
 			}
@@ -301,7 +301,7 @@ func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.Ex
 			if e = repo.SaveCloudOperation(op); e != nil {
 				return e
 			}
-			out.Intent.Helpers = append(out.Intent.Helpers, op.ID)
+			out.Intent.Operations = append(out.Intent.Operations, op.ID)
 		}
 		out.Operation.Result, e = json.Marshal(out.Intent)
 		if e != nil {
@@ -345,7 +345,7 @@ func (s *CloudService) Present(ctx context.Context, ref agentcore.ExecutionRef, 
 		}
 		item := &claim.Items[i]
 		access := *claim.Access
-		access.WorkspaceOperationID = claim.Intent.Helpers[i]
+		access.WorkspaceOperationID = claim.Intent.Operations[i]
 		access.WorkspaceOperationFence = 1
 		var key string
 		var facts ByteFacts
@@ -358,11 +358,6 @@ func (s *CloudService) Present(ctx context.Context, ref agentcore.ExecutionRef, 
 		}
 		if e == nil {
 			e = s.stagePresentedFile(ctx, claim, *item, key, facts)
-		}
-		if e != nil {
-			if cleanupErr := s.cleanupKnownFileTransfer(ctx, &access); cleanupErr != nil {
-				e = cleanupErr
-			}
 		}
 		if finish := s.finishWorkspaceOperation(ctx, access.WorkspaceOperationID, &access, nil, e); e == nil {
 			e = finish
@@ -391,7 +386,7 @@ func (s *CloudService) ReadImage(ctx context.Context, ref agentcore.ExecutionRef
 	ctx, cancel := context.WithDeadline(ctx, claim.Operation.DeadlineAt)
 	defer cancel()
 	access := *claim.Access
-	access.WorkspaceOperationID = claim.Intent.Helpers[0]
+	access.WorkspaceOperationID = claim.Intent.Operations[0]
 	access.WorkspaceOperationFence = 1
 	access.Provider, e = s.openProvider(ctx, claim.Connection)
 	if e == nil {
@@ -400,11 +395,6 @@ func (s *CloudService) ReadImage(ctx context.Context, ref agentcore.ExecutionRef
 		key, facts, e = s.copyWorkspaceSnapshot(ctx, &access, access.WorkspaceOperationID, *claim.Items[0].SourcePath)
 		if e == nil {
 			e = s.stagePresentedFile(ctx, claim, claim.Items[0], key, facts)
-		}
-	}
-	if e != nil {
-		if cleanup := s.cleanupKnownFileTransfer(ctx, &access); cleanup != nil {
-			e = cleanup
 		}
 	}
 	if finish := s.finishWorkspaceOperation(ctx, access.WorkspaceOperationID, &access, nil, e); e == nil {
@@ -494,11 +484,11 @@ func (s *CloudService) stagePresentedFile(ctx context.Context, claim fileTransfe
 	})
 }
 func sameFileOperation(op *FileOperationRow, expected FileOperationRow) bool {
-	return op != nil && op.ID == expected.ID && op.OperationToken == expected.OperationToken && op.ExecutorEpoch == expected.ExecutorEpoch && op.FenceVersion == expected.FenceVersion && op.BackendGeneration == expected.BackendGeneration && op.RuntimeGeneration == expected.RuntimeGeneration && op.StorageGeneration == expected.StorageGeneration && op.VolumeID == expected.VolumeID && op.FinishedAt == nil
+	return op != nil && op.ID == expected.ID && op.OperationToken == expected.OperationToken && op.ExecutorEpoch == expected.ExecutorEpoch && op.FenceVersion == expected.FenceVersion && op.BackendGeneration == expected.BackendGeneration && op.InstanceID == expected.InstanceID && op.StorageGeneration == expected.StorageGeneration && op.VolumeID == expected.VolumeID && op.FinishedAt == nil
 }
 
 func (s *CloudService) ImportFile(ctx context.Context, ref agentcore.ExecutionRef, callID uint64, w ImportFileRequest) (agentcore.DispatchObservation, error) {
-	if _, e := workspacefs.Normalize(w.Destination, false); e != nil {
+	if _, e := workspace.Normalize(w.Destination, false); e != nil {
 		return agentcore.DispatchObservation{}, httpx.Invalid("destination", "invalid_format")
 	}
 	claim, e := s.reserveFileTransfer(ctx, ref, callID, nil, &w, nil)
@@ -511,16 +501,11 @@ func (s *CloudService) ImportFile(ctx context.Context, ref agentcore.ExecutionRe
 	ctx, cancel := context.WithDeadline(ctx, claim.Operation.DeadlineAt)
 	defer cancel()
 	access := *claim.Access
-	access.WorkspaceOperationID = claim.Intent.Helpers[0]
+	access.WorkspaceOperationID = claim.Intent.Operations[0]
 	access.WorkspaceOperationFence = 1
 	access.Provider, e = s.openProvider(ctx, claim.Connection)
 	if e == nil {
 		e = s.transferImportedFile(ctx, claim, &access)
-	}
-	if e != nil {
-		if cleanupErr := s.cleanupKnownFileTransfer(ctx, &access); cleanupErr != nil {
-			e = cleanupErr
-		}
 	}
 	if finish := s.finishWorkspaceOperation(ctx, access.WorkspaceOperationID, &access, nil, e); e == nil {
 		e = finish
@@ -529,60 +514,6 @@ func (s *CloudService) ImportFile(ctx context.Context, ref agentcore.ExecutionRe
 		return s.commitFileTransfer(ctx, claim)
 	}
 	return s.failFileTransfer(ctx, claim, e)
-}
-
-// Only historical transfers have a private helper staging token. Native imports
-// do not use this directory. Unknown historical transfers remain held.
-func (s *CloudService) cleanupKnownFileTransfer(ctx context.Context, access *SandboxAccess) error {
-	if access.Provider == nil {
-		return nil
-	}
-	var token string
-	e := s.cloudBackground(ctx, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository) error {
-		op, e := repo.CloudOperation(access.WorkspaceOperationID, false)
-		if e != nil {
-			return e
-		}
-		if op == nil || op.FinishedAt != nil || op.Status == "outcome_unknown" {
-			return nil
-		}
-		var observation workspaceOperationObservation
-		if json.Unmarshal(op.Observation, &observation) != nil {
-			return integrity()
-		}
-		if observation.TransferState == "started" {
-			return nil
-		}
-		for _, execution := range observation.Executions {
-			if execution.State != "completed" || execution.Response == nil {
-				return nil
-			}
-		}
-		token = observation.TransferToken
-		return nil
-	})
-	if e != nil || token == "" {
-		return e
-	}
-	if strings.ContainsAny(token, "/\\") || token == "." || token == ".." {
-		return integrity()
-	}
-	fs, e := nativeFiles(access)
-	if e != nil {
-		return e
-	}
-	_, e = s.recordNativeRequest(ctx, access, access.WorkspaceOperationID, workspacefs.Request{Operation: "legacy_transfer_cleanup", Token: token}, func() (workspacefs.Response, error) {
-		err := fs.RemoveFile(ctx, access.Resource, workspacefs.TransferDirectory+"/"+token, true)
-		if err != nil && !nativeMissing(err) {
-			return workspacefs.Response{}, err
-		}
-		return workspacefs.Result(map[string]any{"removed": true}, true, nil), nil
-	})
-	if e != nil {
-		return e
-	}
-
-	return s.updateWorkspaceObservation(ctx, access.WorkspaceOperationID, access.WorkspaceOperationFence, func(_ *CloudOperationRow, o *workspaceOperationObservation) error { o.TransferToken = ""; return nil })
 }
 
 func (s *CloudService) transferImportedFile(ctx context.Context, claim fileTransferClaim, access *SandboxAccess) error {
@@ -595,29 +526,29 @@ func (s *CloudService) transferImportedFile(ctx context.Context, claim fileTrans
 	if source.SizeBytes == nil || facts.Size != *source.SizeBytes || !hmac.Equal(facts.SHA256, source.SHA256) {
 		return httpx.E(409, "FILE_INTEGRITY_FAILED", "来源文件校验失败")
 	}
-	_, e = s.recordNativeRequest(ctx, access, access.WorkspaceOperationID, workspacefs.Request{Operation: "import", Path: *item.DestinationPath, ExpectedHash: hexHash(source.SHA256)}, func() (workspacefs.Response, error) {
+	_, e = s.recordNativeRequest(ctx, access, access.WorkspaceOperationID, workspace.Request{Operation: "import", Path: *item.DestinationPath, ExpectedHash: hexHash(source.SHA256)}, func() (workspace.Response, error) {
 		fs, err := nativeFiles(access)
 		if err != nil {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 		target, err := nativePath(*item.DestinationPath)
 		if err != nil {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 		if target == "/data/agents" || strings.HasPrefix(target, "/data/agents/") {
-			return workspacefs.Response{}, nativeError("WORKSPACE_PATH_PROTECTED")
+			return workspace.Response{}, nativeError("WORKSPACE_PATH_PROTECTED")
 		}
 		if _, err = fs.StatFile(ctx, access.Resource, target); err == nil {
-			return workspacefs.Response{}, httpx.E(409, "DESTINATION_EXISTS", "目标文件已存在，未覆盖")
+			return workspace.Response{}, httpx.E(409, "DESTINATION_EXISTS", "目标文件已存在，未覆盖")
 		} else if !nativeMissing(err) {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 		if err = s.authorizeFilePublication(ctx, claim); err != nil {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 		reader, err := s.Host.Files.Open(source.StorageKey)
 		if err != nil {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 		err = fs.PutFile(ctx, access.Resource, sandboxcore.FileRequest{Path: target, MaxBytes: max(1, int64(facts.Size))}, reader)
 		closeErr := reader.Close()
@@ -625,11 +556,11 @@ func (s *CloudService) transferImportedFile(ctx context.Context, claim fileTrans
 			err = closeErr
 		}
 		if err != nil {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 		downloaded, err := fs.OpenFile(ctx, access.Resource, sandboxcore.FileRequest{Path: target, MaxBytes: max(1, int64(facts.Size)+1)})
 		if err != nil {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 		digest := sha256.New()
 		size, err := io.Copy(digest, downloaded)
@@ -638,12 +569,12 @@ func (s *CloudService) transferImportedFile(ctx context.Context, claim fileTrans
 			err = closeErr
 		}
 		if err != nil {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 		if uint64(size) != facts.Size || !hmac.Equal(digest.Sum(nil), facts.SHA256) {
-			return workspacefs.Response{}, httpx.E(409, "FILE_INTEGRITY_FAILED", "上传文件校验失败")
+			return workspace.Response{}, httpx.E(409, "FILE_INTEGRITY_FAILED", "上传文件校验失败")
 		}
-		return workspacefs.Result(map[string]any{"path": *item.DestinationPath, "size_bytes": facts.Size, "sha256": hexHash(facts.SHA256)}, true, nil), nil
+		return workspace.Result(map[string]any{"path": *item.DestinationPath, "size_bytes": facts.Size, "sha256": hexHash(facts.SHA256)}, true, nil), nil
 	})
 	if e != nil {
 		return e
@@ -695,7 +626,7 @@ func (s *CloudService) authorizeFilePublication(ctx context.Context, claim fileT
 		if e != nil {
 			return e
 		}
-		if binding == nil || binding.State != "active" || binding.FenceVersion != claim.Operation.BindingFenceVersion || binding.BackendGeneration != claim.Operation.BackendGeneration || binding.RuntimeGeneration == nil || *binding.RuntimeGeneration != claim.Operation.RuntimeGeneration || binding.StorageGeneration != claim.Operation.StorageGeneration {
+		if binding == nil || binding.State != "active" || binding.FenceVersion != claim.Operation.BindingFenceVersion || binding.BackendGeneration != claim.Operation.BackendGeneration || binding.InstanceID == nil || *binding.InstanceID != claim.Operation.InstanceID || binding.StorageGeneration != claim.Operation.StorageGeneration {
 			return httpx.E(409, "BINDING_CHANGED", "运行绑定已改变")
 		}
 		return nil
@@ -726,7 +657,7 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 		if e != nil {
 			return e
 		}
-		if binding == nil || binding.State != "active" || binding.FenceVersion != claim.Operation.BindingFenceVersion || binding.BackendGeneration != claim.Operation.BackendGeneration || binding.RuntimeGeneration == nil || *binding.RuntimeGeneration != claim.Operation.RuntimeGeneration || binding.StorageGeneration != claim.Operation.StorageGeneration {
+		if binding == nil || binding.State != "active" || binding.FenceVersion != claim.Operation.BindingFenceVersion || binding.BackendGeneration != claim.Operation.BackendGeneration || binding.InstanceID == nil || *binding.InstanceID != claim.Operation.InstanceID || binding.StorageGeneration != claim.Operation.StorageGeneration {
 			return httpx.E(409, "BINDING_CHANGED", "运行绑定已改变")
 		}
 		op, e := st.FileOperation(claim.Operation.ID, true)
@@ -789,7 +720,7 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 					images = []modelcore.ImagePart{sourceImagePart(file, file.SHA256, "tool_image")}
 					imageMetadata = map[string]any{"path": "/data/" + *item.SourcePath, "media_type": file.MediaType, "width": dimensions.Width, "height": dimensions.Height, "size_bytes": strconv.FormatUint(*file.SizeBytes, 10), "sha256": hexHash(file.SHA256)}
 				} else {
-					source, _ := json.Marshal(ArtifactSource{ComputerID: op.ComputerID, BindingID: op.BindingID, BackendGeneration: op.BackendGeneration, RuntimeGeneration: op.RuntimeGeneration, StorageGeneration: op.StorageGeneration, VolumeID: op.VolumeID, Path: "/data/" + *item.SourcePath})
+					source, _ := json.Marshal(ArtifactSource{ComputerID: op.ComputerID, BindingID: op.BindingID, BackendGeneration: op.BackendGeneration, InstanceID: op.InstanceID, StorageGeneration: op.StorageGeneration, VolumeID: op.VolumeID, Path: "/data/" + *item.SourcePath})
 					artifact := &ArtifactRow{ContentSessionID: op.ContentSessionID, RunID: call.RunID, ToolCallID: call.ID, OutputOrdinal: item.Ordinal, FileID: file.ID, Filename: path.Base(*item.SourcePath), Description: claim.Intent.Present.Files[i].Description, SourcePath: "/data/" + *item.SourcePath, SourceSnapshot: source, RetainedEventSeq: rootFrom, RowVersion: 1, CreatedAt: now}
 					if e = st.InsertArtifact(artifact); e != nil {
 						return e
@@ -984,7 +915,7 @@ func fileTransferError(cause error) string {
 }
 
 // Interrupted transfers are never resumed. This worker waits for all recorded
-// helper/transfer effects to be physically resolved, then retires staging bytes.
+// file effects to be physically resolved, then retires staging bytes.
 // The original tool result remains immutable, including an unknown result.
 func (s *CloudService) ProcessFileOperations(ctx context.Context, limit int) error {
 	if limit < 1 || limit > 100 {
@@ -1015,7 +946,7 @@ func (s *CloudService) retireFileTransfer(ctx context.Context, initial FileOpera
 	if json.Unmarshal(initial.Result, &intent) != nil {
 		return integrity()
 	}
-	for _, id := range intent.Helpers {
+	for _, id := range intent.Operations {
 		if e := s.processWorkspaceOperation(ctx, id); e != nil && !workspaceUnknown(e) {
 			return e
 		}
@@ -1039,19 +970,19 @@ func (s *CloudService) retireFileTransfer(ctx context.Context, initial FileOpera
 		if op.ExecutorEpoch == s.Epoch && op.Status != "outcome_unknown" && op.Status != "cancelled" && time.Now().Before(op.DeadlineAt) {
 			return nil
 		}
-		for _, id := range intent.Helpers {
-			helper, e := repo.CloudOperation(id, false)
+		for _, id := range intent.Operations {
+			operation, e := repo.CloudOperation(id, false)
 			if e != nil {
 				return e
 			}
-			if helper == nil {
+			if operation == nil {
 				return integrity()
 			}
-			if helper.FinishedAt == nil {
+			if operation.FinishedAt == nil {
 				return nil
 			}
 			var observation workspaceOperationObservation
-			if json.Unmarshal(helper.Observation, &observation) != nil {
+			if json.Unmarshal(operation.Observation, &observation) != nil {
 				return integrity()
 			}
 			if observation.LocalStorageKey != "" {

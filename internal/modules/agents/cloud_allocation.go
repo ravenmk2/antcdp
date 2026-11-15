@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/modules/cloudcomputers"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/modules/sandboxes"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
-	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
 func sessionCWD(project *uint64) string {
@@ -19,7 +20,7 @@ func sessionCWD(project *uint64) string {
 	return "/data/workspace"
 }
 func newComputer(cr CloudRepository, connection *SandboxConnectionRow, owner uint64, agent *uint64, now time.Time) (*CloudComputerRow, error) {
-	v := &CloudComputerRow{OwnerUserID: owner, PoolAgentID: agent, State: "uninitialized", BackendGeneration: connection.BackendGeneration, RuntimeGeneration: 1, StorageGeneration: 1, VolumeState: "absent", VolumeCleanupState: "not_requested", EffectiveEnvironment: json.RawMessage(`null`), Capabilities: json.RawMessage(`null`), IdleSince: now, LastActivityAt: now, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
+	v := &CloudComputerRow{OwnerUserID: owner, PoolAgentID: agent, State: "uninitialized", BackendGeneration: connection.BackendGeneration, StorageGeneration: 1, VolumeState: "absent", VolumeCleanupState: "not_requested", EffectiveEnvironment: json.RawMessage(`null`), Capabilities: json.RawMessage(`null`), IdleSince: now, LastActivityAt: now, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
 	if e := cr.InsertComputer(v); e != nil {
 		return nil, e
 	}
@@ -250,7 +251,7 @@ func (s *CloudService) createCloudLease(tx identity.Tx, computer *CloudComputerR
 	lease := &CloudLeaseRow{RootRunID: root.ID, ComputerID: computer.ID, Mode: mode, State: "active", BackendGeneration: computer.BackendGeneration, StorageGeneration: computer.StorageGeneration, SkillSetHash: "", ExecutorEpoch: root.ExecutorEpoch, FenceVersion: 1, AcquiredAt: root.CreatedAt, LeaseExpiresAt: root.DeadlineAt, UpdatedAt: root.CreatedAt}
 	lease.SkillSetHash = hash
 	if computer.State == "ready" {
-		lease.RuntimeGeneration = &computer.RuntimeGeneration
+		lease.InstanceID = &computer.InstanceID
 	}
 	if e = cr.InsertLease(lease); e != nil {
 		return nil, e
@@ -263,17 +264,9 @@ func (s *CloudService) createCloudLease(tx identity.Tx, computer *CloudComputerR
 	return cloudBinding(lease, cwd), nil
 }
 
-type cloudOperationIntent struct {
-	OriginalRuntime *sandboxcore.ResourceRef `json:"original_runtime,omitempty"`
-	Create          *sandboxcore.CreateSpec  `json:"create,omitempty"`
-	CreateSent      bool                     `json:"create_sent"`
-	TerminateSent   bool                     `json:"terminate_sent"`
-	TransitionSent  bool                     `json:"transition_sent"`
-	VolumeNew       bool                     `json:"volume_new"`
-	Phase           string                   `json:"phase"`
-}
+type cloudOperationIntent = cloudcomputers.OperationIntent
 
-func (s *CloudService) queueCloudOperation(cr CloudRepository, connection *SandboxConnectionRow, v *CloudComputerRow, kind, actorKind, actorID string, receipt, public *uint64, now time.Time) (*CloudOperationRow, error) {
+func (s *CloudService) queueCloudOperation(cr CloudRepository, connection *SandboxConnectionRow, v *CloudComputerRow, kind, actorKind, actorID string, receipt, _ *uint64, now time.Time) (*CloudOperationRow, error) {
 	if connection.Endpoint == nil && (kind != "delete" || v.RuntimeID != nil || v.VolumeID != nil) {
 		return nil, httpx.E(409, "SANDBOX_NOT_CONFIGURED", "请管理员配置沙箱服务连接")
 	}
@@ -298,7 +291,7 @@ func (s *CloudService) queueCloudOperation(cr CloudRepository, connection *Sandb
 		}
 		intent.OriginalRuntime = &ref
 	}
-	op := &CloudOperationRow{ComputerID: v.ID, Kind: kind, Status: "queued", OperationToken: cryptox.ID(), CommandReceiptID: receipt, PublicOperationID: public, BackendGeneration: v.BackendGeneration, RuntimeGeneration: v.RuntimeGeneration, StorageGeneration: v.StorageGeneration, Intent: json.RawMessage(`{}`), Observation: json.RawMessage(`{}`), ActorKind: actorKind, ActorID: actorID, ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, UpdatedAt: now, DeadlineAt: now.Add(5 * time.Minute)}
+	op := &CloudOperationRow{ComputerID: v.ID, Kind: kind, Status: "queued", OperationToken: cryptox.ID(), CommandReceiptID: receipt, BackendGeneration: v.BackendGeneration, InstanceID: v.InstanceID, StorageGeneration: v.StorageGeneration, Intent: json.RawMessage(`{}`), Observation: json.RawMessage(`{}`), ActorKind: actorKind, ActorID: actorID, ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, UpdatedAt: now, DeadlineAt: now.Add(5 * time.Minute)}
 	switch kind {
 	case "create", "rebuild":
 		template, e := cr.CloudTemplate(v.PoolAgentID, false)
@@ -336,15 +329,17 @@ func (s *CloudService) queueCloudOperation(cr CloudRepository, connection *Sandb
 		} else {
 			intent.VolumeNew = kind == "create" && v.AppliedTemplateVersion == nil && v.VolumeState != "ready"
 		}
-		if kind == "rebuild" {
-			v.RuntimeGeneration++
-		}
 		token := cryptox.ID()
+		instance := &sandboxes.Instance{ConnectionID: 1, BackendGeneration: v.BackendGeneration, CreationToken: token, State: "reserved", EffectiveConfig: op.TargetEnvironment, Capabilities: json.RawMessage(`{}`), ExecutorEpoch: s.Epoch, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
+		if e = cr.Sandbox().InsertInstance(instance); e != nil {
+			return nil, e
+		}
+		v.InstanceID = instance.ID
 		v.RuntimeCreationToken = &token
 		v.RuntimeID = nil
 		v.RuntimeExpiresAt = nil
 		v.State = "provisioning"
-		op.RuntimeGeneration = v.RuntimeGeneration
+		op.InstanceID = v.InstanceID
 	case "delete":
 		v.State = "deleting"
 		v.VolumeCleanupState = "pending"

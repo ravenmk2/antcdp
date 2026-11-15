@@ -112,7 +112,7 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	call := commandDeclare(t, f, x, 1, "exec_command", string(args))
 	remote.afterStarted = func(h sb.ExecutionHandle) {
 		var persisted string
-		if e := f.Store.db.GetContext(ctx, &persisted, "SELECT remote_execution_id FROM cloud_computer_execution WHERE tool_call_id=?", uint64(call.ID)); e != nil || persisted != h.ID {
+		if e := f.Store.db.GetContext(ctx, &persisted, "SELECT e.remote_execution_id FROM sandbox_execution e JOIN agent_sandbox_execution a ON a.sandbox_execution_id=e.id WHERE a.tool_call_id=?", uint64(call.ID)); e != nil || persisted != h.ID {
 			t.Fatal("execution ID not durable before output", e)
 		}
 	}
@@ -252,7 +252,7 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	// Losing the actual runtime must settle an unknown command even though
 	// the logical computer remains bound and cannot be deleted while busy.
 	for id, resource := range remote.resources {
-		if resource.Ref.Ownership.ComputerID == uint64(yBinding.ComputerID) {
+		if resource.Ref.Ownership.InstanceID == uint64(yBinding.ComputerID) {
 			delete(remote.resources, id)
 		}
 	}

@@ -3,15 +3,11 @@ package mysql
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"image"
 	"image/png"
 	"io"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +18,6 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	sb "github.com/ravenmk2/antcdp/internal/sandboxcore"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 func init() {
@@ -35,79 +30,8 @@ func init() {
 type artifactMemoryProvider struct {
 	*sandboxMemoryProvider
 	files         map[string][]byte
-	transfers     map[string][]byte
-	results       map[string][]byte
 	requests      int
 	unknownImport bool
-}
-
-func (p *artifactMemoryProvider) Exec(ctx context.Context, ref sb.ResourceRef, spec sb.ExecSpec, callbacks sb.ExecCallbacks) (sb.ExecResult, error) {
-	if len(spec.Argv) != 2 || spec.Argv[0] != workspacefs.HelperPath || spec.UID == nil || *spec.UID != 0 {
-		return sb.ExecResult{}, fmt.Errorf("invalid trusted helper call")
-	}
-	q, e := workspacefs.Decode(spec.Argv[1])
-	if e != nil {
-		return sb.ExecResult{}, e
-	}
-	p.requests++
-	h := sb.ExecutionHandle{Resource: ref, ID: fmt.Sprintf("helper-%d", p.requests)}
-	if e = callbacks.Started(ctx, h); e != nil {
-		return sb.ExecResult{Handle: &h}, e
-	}
-	var result any = map[string]any{}
-	response := workspacefs.Response{Version: workspacefs.Version, OK: true}
-	switch q.Operation {
-	case "transfer_begin":
-		p.transfers[q.Token] = nil
-	case "transfer_cleanup":
-		delete(p.transfers, q.Token)
-	case "export":
-		content, ok := p.files[q.Path]
-		if !ok {
-			response.OK = false
-			response.Code = "WORKSPACE_PATH_NOT_FOUND"
-			break
-		}
-		p.transfers[q.Token] = append([]byte(nil), content...)
-		sum := sha256.Sum256(content)
-		result = map[string]any{"transfer_path": workspacefs.TransferDirectory + "/" + q.Token + "/payload", "source_path": q.Path, "size_bytes": strconv.Itoa(len(content)), "sha256": hex.EncodeToString(sum[:]), "identity": strings.Repeat("a", 64)}
-	case "import":
-		if p.unknownImport {
-			p.unknownImport = false
-			return sb.ExecResult{Handle: &h}, &sb.Error{Code: "SANDBOX_STREAM_INTERRUPTED", Unknown: true}
-		}
-		if _, exists := p.files[q.Path]; exists {
-			response.OK = false
-			response.Code = "WORKSPACE_PATH_EXISTS"
-			break
-		}
-		content := p.transfers[q.Token]
-		sum := sha256.Sum256(content)
-		if hex.EncodeToString(sum[:]) != q.ExpectedHash {
-			return sb.ExecResult{}, fmt.Errorf("test import hash mismatch")
-		}
-		p.files[q.Path] = append([]byte(nil), content...)
-		response.Changed = true
-		result = map[string]any{"path": q.Path, "sha256": q.ExpectedHash, "size_bytes": strconv.Itoa(len(content))}
-	default:
-		return sb.ExecResult{}, fmt.Errorf("unsupported fixture helper %s", q.Operation)
-	}
-	response.Result, _ = json.Marshal(result)
-	p.results[h.ID], _ = json.Marshal(response)
-	return sb.ExecResult{Handle: &h, Running: true}, nil
-}
-func (p *artifactMemoryProvider) InspectExecution(_ context.Context, h sb.ExecutionHandle) (sb.ExecResult, error) {
-	if _, ok := p.results[h.ID]; !ok {
-		return sb.ExecResult{}, &sb.Error{Code: "SANDBOX_EXECUTION_UNCONFIRMED", Unknown: true}
-	}
-	code := int32(0)
-	return sb.ExecResult{Handle: &h, ExitCode: &code}, nil
-}
-func (p *artifactMemoryProvider) ReadExecutionOutput(_ context.Context, h sb.ExecutionHandle, cursor int64, maxBytes int) (sb.ExecutionOutput, error) {
-	data := p.results[h.ID]
-	start := min(cursor, int64(len(data)))
-	end := min(start+int64(maxBytes), int64(len(data)))
-	return sb.ExecutionOutput{Text: string(data[start:end]), Cursor: end, Truncated: end < int64(len(data))}, nil
 }
 
 type artifactMemoryFactory struct{ remote *artifactMemoryProvider }
@@ -130,7 +54,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	}, AuthorizeTool: func(context.Context, identity.Tx, core.ExecutionContext, a.ToolDescriptor, json.RawMessage, json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{}`), nil
 	}}
-	remote := &artifactMemoryProvider{sandboxMemoryProvider: &sandboxMemoryProvider{resources: map[string]sb.Observation{}}, files: map[string][]byte{}, transfers: map[string][]byte{}, results: map[string][]byte{}}
+	remote := &artifactMemoryProvider{sandboxMemoryProvider: &sandboxMemoryProvider{resources: map[string]sb.Observation{}}, files: map[string][]byte{}}
 	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Cipher: f.Models.Cipher, InstallationID: func() (string, error) { return f.Installation, nil }, Factory: artifactMemoryFactory{remote}, PrepareWorkspace: func(context.Context, *a.SandboxAccess, uint64, uint64) error { return nil }, VerifyEnvironment: func(context.Context, *a.SandboxAccess) (a.SandboxCapabilities, []a.DiagnosticCheck, error) {
 		return a.SandboxCapabilities{Execution: "supported", FileTransfer: "supported"}, []a.DiagnosticCheck{{Name: "fixture", Status: "succeeded"}}, nil
 	}}
@@ -281,7 +205,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	if _, e = host.CompleteTool(ctx, x.Ref, core.ToolResult{Call: duplicate, Observation: failed}); e != nil {
 		t.Fatal(e)
 	}
-	// A lost helper response with a durable handle is inspected, never sent
+	// An uncertain native import retains its hold and is never sent
 	// again. Its source and workspace references survive until physical proof.
 	w.Destination = "unknown.txt"
 	args, _ = json.Marshal(w)

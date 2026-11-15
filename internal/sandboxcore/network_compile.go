@@ -37,7 +37,7 @@ func CompilePolicy(snapshot NetworkPolicySnapshot, protectedTargets []string) (N
 	allowIPs = minimalPrefixes(allowIPs)
 	out := ProviderNetworkPolicy{DefaultAction: snapshot.DefaultAction, Egress: []NetworkRule{}}
 	// Deny-before-allow also makes overlapping exact/wildcard DNS rules safe.
-	// nftables enforces IP deny precedence independently of this array order.
+	// Adapters must preserve IP deny precedence independently of array order.
 	for _, target := range sortedUnique(denyNames) {
 		out.Egress = append(out.Egress, NetworkRule{Action: "deny", Target: target})
 	}

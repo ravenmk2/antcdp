@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 type nativeTestProvider struct {
@@ -59,24 +59,24 @@ func TestNativeFilesProtectPathsAndRequireUniqueEdits(t *testing.T) {
 	p := &nativeTestProvider{data: []byte("one two one")}
 	a := &SandboxAccess{Provider: p}
 	for _, name := range []string{".", "agents/1/skills/a/SKILL.md", "workspace/.system/key", "../outside"} {
-		if _, err := runNativeRequest(context.Background(), a, workspacefs.Request{Operation: "write", Path: name, Data: "eA==", Overwrite: true}); err == nil {
+		if _, err := runNativeRequest(context.Background(), a, workspace.Request{Operation: "write", Path: name, Data: "eA==", Overwrite: true}); err == nil {
 			t.Fatal("protected path", name)
 		}
 	}
-	if _, err := runNativeRequest(context.Background(), a, workspacefs.Request{Operation: "edit", Path: "workspace/a", Pattern: "one", Data: "eA=="}); err == nil {
+	if _, err := runNativeRequest(context.Background(), a, workspace.Request{Operation: "edit", Path: "workspace/a", Pattern: "one", Data: "eA=="}); err == nil {
 		t.Fatal("ambiguous edit accepted")
 	}
 	if p.writes != 0 {
 		t.Fatal("validation wrote bytes")
 	}
-	_, err := runNativeRequest(context.Background(), a, workspacefs.Request{Operation: "edit", Path: "workspace/a", Pattern: "two", Data: base64.StdEncoding.EncodeToString([]byte("中"))})
+	_, err := runNativeRequest(context.Background(), a, workspace.Request{Operation: "edit", Path: "workspace/a", Pattern: "two", Data: base64.StdEncoding.EncodeToString([]byte("中"))})
 	if err != nil || string(p.data) != "one 中 one" || p.writes != 1 {
 		t.Fatal("edit", err, string(p.data))
 	}
-	if _, err = runNativeRequest(context.Background(), a, workspacefs.Request{Operation: "write", Path: "workspace/a", Data: "eA=="}); err == nil || p.writes != 1 {
+	if _, err = runNativeRequest(context.Background(), a, workspace.Request{Operation: "write", Path: "workspace/a", Data: "eA=="}); err == nil || p.writes != 1 {
 		t.Fatal("existing file overwritten")
 	}
-	if _, err = runNativeRequest(context.Background(), a, workspacefs.Request{Operation: "write", Path: "workspace/a", Data: "eA==", Overwrite: true, Identity: strings.Repeat("f", 64)}); err == nil || p.writes != 1 {
+	if _, err = runNativeRequest(context.Background(), a, workspace.Request{Operation: "write", Path: "workspace/a", Data: "eA==", Overwrite: true, Identity: strings.Repeat("f", 64)}); err == nil || p.writes != 1 {
 		t.Fatal("stale identity accepted")
 	}
 }
@@ -84,7 +84,7 @@ func TestNativeFilesProtectPathsAndRequireUniqueEdits(t *testing.T) {
 func TestNativeReadRangeAndSearchScope(t *testing.T) {
 	p := &nativeTestProvider{data: []byte("0123456789")}
 	a := &SandboxAccess{Provider: p}
-	r, err := runNativeRequest(context.Background(), a, workspacefs.Request{Operation: "read", Path: "workspace/a", Offset: 3, Limit: 4})
+	r, err := runNativeRequest(context.Background(), a, workspace.Request{Operation: "read", Path: "workspace/a", Offset: 3, Limit: 4})
 	var result struct {
 		Data string `json:"data_base64"`
 		Next int64  `json:"next_offset"`
@@ -94,7 +94,7 @@ func TestNativeReadRangeAndSearchScope(t *testing.T) {
 		t.Fatal("range", string(r.Result), err)
 	}
 	p.searches = []sandboxcore.FileInfo{{Path: "/data/workspace/a", Kind: "file", Size: 10}, {Path: "/data/workspace-other/private", Kind: "file", Size: 10}, {Path: "/data/workspace/.system/key", Kind: "file", Size: 10}, {Path: "/etc/passwd", Kind: "file", Size: 10}}
-	r, err = runNativeRequest(context.Background(), a, workspacefs.Request{Operation: "glob", Path: "workspace", Pattern: "**", Limit: 10})
+	r, err = runNativeRequest(context.Background(), a, workspace.Request{Operation: "glob", Path: "workspace", Pattern: "**", Limit: 10})
 	if err != nil || strings.Contains(string(r.Result), "private") || strings.Contains(string(r.Result), "passwd") || strings.Contains(string(r.Result), "key") || !strings.Contains(string(r.Result), "workspace/a") {
 		t.Fatal("scope", string(r.Result), err)
 	}
@@ -104,11 +104,11 @@ func TestNativeUnknownWritesAreNeverReplayed(t *testing.T) {
 	s, m, a := workspaceWorkerFixture()
 	m.op.DeadlineAt = time.Now().Add(time.Minute)
 	calls := 0
-	run := func() (workspacefs.Response, error) {
+	run := func() (workspace.Response, error) {
 		calls++
-		return workspacefs.Response{}, &sandboxcore.Error{Code: "SANDBOX_OPERATION_TIMEOUT", Unknown: true}
+		return workspace.Response{}, &sandboxcore.Error{Code: "SANDBOX_OPERATION_TIMEOUT", Unknown: true}
 	}
-	q := workspacefs.Request{Operation: "write", Path: "workspace/a"}
+	q := workspace.Request{Operation: "write", Path: "workspace/a"}
 	if _, err := s.recordNativeRequest(context.Background(), a, 2, q, run); err == nil || !workspaceUnknown(err) {
 		t.Fatal("unknown write became final", err)
 	}
@@ -116,7 +116,7 @@ func TestNativeUnknownWritesAreNeverReplayed(t *testing.T) {
 		t.Fatal("replayed unknown write")
 	}
 	var observation workspaceOperationObservation
-	if json.Unmarshal(m.op.Observation, &observation) != nil || len(observation.Executions) != 1 || observation.Executions[0].Backend != nativeFilesystemVersion {
+	if json.Unmarshal(m.op.Observation, &observation) != nil || len(observation.Executions) != 1 {
 		t.Fatal("missing native durable intent")
 	}
 	p := &workspaceRecoveryProvider{state: "ready"}
@@ -135,7 +135,7 @@ func TestNativeInterruptedReadReleasesWithoutRemoteExecution(t *testing.T) {
 	s, m, a := workspaceWorkerFixture()
 	p := &workspaceRecoveryProvider{state: "ready"}
 	s.Factory = workspaceRecoveryFactory{p}
-	claim := &workspaceClaim{op: &m.op, access: a, recovery: true, observation: workspaceOperationObservation{Executions: []workspaceExecution{{Backend: nativeFilesystemVersion, State: "dispatching", Request: workspacefs.Request{Operation: "download"}}}}}
+	claim := &workspaceClaim{op: &m.op, access: a, recovery: true, observation: workspaceOperationObservation{Executions: []workspaceExecution{{State: "dispatching", Request: workspace.Request{Operation: "download"}}}}}
 	if err := s.recoverWorkspaceOperation(context.Background(), claim); err != nil || m.op.FinishedAt == nil || p.execs != 0 {
 		t.Fatal("read recovery", err)
 	}

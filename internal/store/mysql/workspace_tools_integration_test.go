@@ -2,19 +2,15 @@ package mysql
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	core "github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	a "github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	sb "github.com/ravenmk2/antcdp/internal/sandboxcore"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 func init() {
@@ -25,47 +21,6 @@ func init() {
 }
 
 type workspaceToolProvider struct{ *environmentMemoryProvider }
-
-func (p *workspaceToolProvider) Exec(ctx context.Context, ref sb.ResourceRef, spec sb.ExecSpec, callbacks sb.ExecCallbacks) (sb.ExecResult, error) {
-	if len(spec.Argv) != 2 {
-		return p.environmentMemoryProvider.Exec(ctx, ref, spec, callbacks)
-	}
-	request, err := workspacefs.Decode(spec.Argv[1])
-	if err != nil {
-		return sb.ExecResult{}, err
-	}
-	if request.Operation != "read" && request.Operation != "write" && request.Operation != "list" {
-		return p.environmentMemoryProvider.Exec(ctx, ref, spec, callbacks)
-	}
-	p.launches++
-	handle := sb.ExecutionHandle{Resource: ref, ID: fmt.Sprintf("file-tool-%d", p.launches)}
-	if err = callbacks.Started(ctx, handle); err != nil {
-		return sb.ExecResult{Handle: &handle}, err
-	}
-	key := p.fileKey(ref, request.Path)
-	var value any
-	switch request.Operation {
-	case "write":
-		data, e := base64.StdEncoding.DecodeString(request.Data)
-		if e != nil {
-			return sb.ExecResult{}, e
-		}
-		p.files[key] = data
-		value = map[string]any{"path": request.Path, "size_bytes": fmt.Sprint(len(data))}
-	case "list":
-		path := request.Path + "/note.md"
-		data := p.files[p.fileKey(ref, path)]
-		value = map[string]any{"entries": []workspacefs.Entry{{Name: "note.md", Path: path, Kind: "file", Size: int64(len(data)), ModifiedAt: time.Now().UTC().Format(time.RFC3339Nano), Identity: strings.Repeat("a", 64)}}, "total": 1, "has_more": false}
-	default:
-		data := p.files[key]
-		value = map[string]any{"path": request.Path, "data_base64": base64.StdEncoding.EncodeToString(data), "offset": 0, "next_offset": len(data), "size_bytes": fmt.Sprint(len(data)), "has_more": false, "identity": strings.Repeat("a", 64)}
-	}
-	encoded, _ := json.Marshal(workspacefs.Result(value, request.Operation == "write", nil))
-	zero := int32(0)
-	result := sb.ExecResult{Handle: &handle, ExitCode: &zero}
-	p.executions[handle.ID], p.outputs[handle.ID] = result, string(encoded)
-	return result, nil
-}
 
 type workspaceToolFactory struct{ provider *workspaceToolProvider }
 
@@ -85,7 +40,7 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	}, AuthorizeTool: func(context.Context, identity.Tx, core.ExecutionContext, a.ToolDescriptor, json.RawMessage, json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{}`), nil
 	}}
-	remote := &workspaceToolProvider{&environmentMemoryProvider{sandboxMemoryProvider: &sandboxMemoryProvider{resources: map[string]sb.Observation{}}, executions: map[string]sb.ExecResult{}, outputs: map[string]string{}, files: map[string][]byte{}, transfers: map[string][]byte{}}}
+	remote := &workspaceToolProvider{&environmentMemoryProvider{sandboxMemoryProvider: &sandboxMemoryProvider{resources: map[string]sb.Observation{}}, executions: map[string]sb.ExecResult{}, outputs: map[string]string{}, files: map[string][]byte{}}}
 	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Factory: workspaceToolFactory{remote}, Cipher: f.Models.Cipher, InstallationID: func() (string, error) { return f.Installation, nil }, EndpointTargets: func(string) ([]string, error) { return []string{"192.0.2.21"}, nil }}
 	svc.PrepareWorkspace, svc.VerifyEnvironment = svc.InitializeComputer, svc.VerifyWorkspaceEnvironment
 	host.Sandboxes = svc
@@ -143,7 +98,7 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	}
 	var held int
 	if err = f.Store.db.GetContext(ctx, &held, "SELECT COUNT(*) FROM agent_resource_reference WHERE holder_kind='workspace_operation' AND resource_kind='binding' AND resource_id=? AND state IN ('active','unknown')", uint64(binding.ID)); err != nil || held != 0 {
-		t.Fatal("completed helper kept resources", held, err)
+		t.Fatal("completed native operation kept resources", held, err)
 	}
 	runtimeEnd(t, f, x)
 }

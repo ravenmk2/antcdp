@@ -21,7 +21,7 @@ func cloudSkillBindingsIntegration(t *testing.T, f *agentIntegrationFixture, clo
 	t.Cleanup(func() { host.Catalog.Skill, host.Skills, cloud.Factory = oldSkill, oldSource, oldFactory })
 	host.Catalog.Skill = resources.ReadSkillSnapshot
 	host.Skills = a.FrozenSkillSource{Host: host}
-	environment := &environmentMemoryProvider{sandboxMemoryProvider: remote, executions: map[string]sb.ExecResult{}, outputs: map[string]string{}, files: map[string][]byte{}, transfers: map[string][]byte{}}
+	environment := &environmentMemoryProvider{sandboxMemoryProvider: remote, executions: map[string]sb.ExecResult{}, outputs: map[string]string{}, files: map[string][]byte{}}
 	cloud.Factory = environmentMemoryFactory{environment}
 	created, err := resources.CreateSkill(ctx, raw, cryptox.ID(), r.SkillCreate{Name: "cloud-review", Title: "Cloud review"})
 	if err != nil {

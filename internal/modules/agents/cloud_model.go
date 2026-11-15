@@ -56,7 +56,7 @@ type CloudView struct {
 	PoolAgentID            *uint64             `json:"pool_agent_id,string"`
 	State                  string              `json:"state"`
 	BackendGeneration      uint64              `json:"backend_generation,string"`
-	RuntimeGeneration      uint64              `json:"runtime_generation,string"`
+	InstanceID             uint64              `json:"sandbox_instance_id,string"`
 	StorageGeneration      uint64              `json:"storage_generation,string"`
 	Environment            json.RawMessage     `json:"effective_environment"`
 	AppliedTemplateVersion *uint64             `json:"applied_template_version,string"`

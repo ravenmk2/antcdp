@@ -32,7 +32,7 @@ export const computer: CloudComputer = {
   pool_agent_id: null,
   state: "ready",
   backend_generation: "1",
-  runtime_generation: "1",
+  sandbox_instance_id: "1",
   storage_generation: "1",
   effective_environment: {
     image: "example/agent:1",

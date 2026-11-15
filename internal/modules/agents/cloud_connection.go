@@ -42,56 +42,59 @@ func (s *CloudService) cloudBackground(ctx context.Context, fn func(identity.Tx,
 }
 func (s *CloudService) cloudCommand(ctx context.Context, raw, key, command, scope string, input any, fn func(identity.Tx, Repository, StateRepository, CloudRepository, *identity.Auth, *Result, *Receipt) error) (*Result, error) {
 	return s.cloudAccess(ctx, raw, true, func(tx identity.Tx, r Repository, st StateRepository, cr CloudRepository, a *identity.Auth, out *Result) error {
-		if !keyPattern.MatchString(key) {
-			return httpx.Invalid("Idempotency-Key", "invalid_format")
-		}
-		body, e := agentcore.CanonicalJSON(input)
-		if e != nil {
-			return e
-		}
-		digest := sha256.Sum256([]byte(s.Host.ETag("cloud/request/" + string(body))))
-		kind, id := splitScope(scope)
-		receipt, e := r.Receipt(idString(a.User.ID), kind, id, command, key)
-		if e != nil {
-			return e
-		}
-		if receipt != nil {
-			if !hmac.Equal(receipt.Hash, digest[:]) {
-				return httpx.E(409, "IDEMPOTENCY_CONFLICT", "幂等键已用于其他请求")
-			}
-			var saved savedResult
-			if json.Unmarshal(receipt.Result, &saved) != nil {
-				return integrity()
-			}
-			out.Data, out.Tag, out.Location, out.Status, out.Replayed = saved.Data, saved.Tag, saved.Location, receipt.ResponseStatus, true
-			return nil
-		}
-		now := time.Now().UTC().Truncate(time.Millisecond)
-		receipt = &Receipt{ActorKind: "user", ActorID: idString(a.User.ID), ScopeKind: kind, ScopeID: id, Command: command, Key: key, Hash: digest[:], Status: "pending", Result: json.RawMessage(`{}`), CreatedAt: now}
-		if e = r.InsertReceipt(receipt); e != nil {
-			return e
-		}
-		if e = fn(tx, r, st, cr, a, out, receipt); e != nil {
-			return e
-		}
-		data, e := json.Marshal(out.Data)
-		if e != nil {
-			return e
-		}
-		receipt.Result, e = json.Marshal(savedResult{data, out.Tag, out.Location})
-		if e != nil {
-			return e
-		}
-		receipt.Status, receipt.ResponseStatus, receipt.CompletedAt = "completed", out.Status, &now
-		if e = r.SaveReceipt(receipt); e != nil {
-			return e
-		}
-		target := uint64(0)
-		if receipt.TargetID != nil {
-			target = *receipt.TargetID
-		}
-		return audit(ctx, tx, a, command, kind, target)
+		return s.cloudReceipt(ctx, tx, cr, a, out, key, command, scope, input, func(receipt *Receipt) error { return fn(tx, r, st, cr, a, out, receipt) })
 	})
+}
+func (s *CloudService) cloudReceipt(ctx context.Context, tx identity.Tx, cr CloudRepository, a *identity.Auth, out *Result, key, command, scope string, input any, fn func(*Receipt) error) error {
+	if !keyPattern.MatchString(key) {
+		return httpx.Invalid("Idempotency-Key", "invalid_format")
+	}
+	body, e := agentcore.CanonicalJSON(input)
+	if e != nil {
+		return e
+	}
+	digest := sha256.Sum256([]byte(s.Host.ETag("cloud/request/" + string(body))))
+	kind, id := splitScope(scope)
+	receipt, e := cr.CloudReceipt(idString(a.User.ID), kind, id, command, key)
+	if e != nil {
+		return e
+	}
+	if receipt != nil {
+		if !hmac.Equal(receipt.Hash, digest[:]) {
+			return httpx.E(409, "IDEMPOTENCY_CONFLICT", "幂等键已用于其他请求")
+		}
+		var saved savedResult
+		if json.Unmarshal(receipt.Result, &saved) != nil {
+			return integrity()
+		}
+		out.Data, out.Tag, out.Location, out.Status, out.Replayed = saved.Data, saved.Tag, saved.Location, receipt.ResponseStatus, true
+		return nil
+	}
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	receipt = &Receipt{ActorKind: "user", ActorID: idString(a.User.ID), ScopeKind: kind, ScopeID: id, Command: command, Key: key, Hash: digest[:], Status: "pending", Result: json.RawMessage(`{}`), CreatedAt: now}
+	if e = cr.InsertCloudReceipt(receipt); e != nil {
+		return e
+	}
+	if e = fn(receipt); e != nil {
+		return e
+	}
+	data, e := json.Marshal(out.Data)
+	if e != nil {
+		return e
+	}
+	receipt.Result, e = json.Marshal(savedResult{data, out.Tag, out.Location})
+	if e != nil {
+		return e
+	}
+	receipt.Status, receipt.ResponseStatus, receipt.CompletedAt = "completed", out.Status, &now
+	if e = cr.SaveCloudReceipt(receipt); e != nil {
+		return e
+	}
+	target := uint64(0)
+	if receipt.TargetID != nil {
+		target = *receipt.TargetID
+	}
+	return audit(ctx, tx, a, command, kind, target)
 }
 
 func normalizeConnection(w *ConnectionWrite) error {

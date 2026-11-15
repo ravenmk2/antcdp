@@ -8,24 +8,24 @@ import (
 	"path"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 	"github.com/ravenmk2/antcdp/internal/skillpackage"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 // Validate every archive before changing the sandbox. Expanded data stays bounded;
 // the sandbox only needs ordinary directory, upload and rename APIs.
-func installNativeSkills(ctx context.Context, a *SandboxAccess, q workspacefs.Request, bundle []byte) (response workspacefs.Response, cause error) {
+func installNativeSkills(ctx context.Context, a *SandboxAccess, q workspace.Request, bundle []byte) (response workspace.Response, cause error) {
 	if !validNumericID(q.AgentID) || a.WorkspaceOperationID == 0 {
-		return workspacefs.Response{}, integrity()
+		return workspace.Response{}, integrity()
 	}
 	fs, err := nativeFiles(a)
 	if err != nil {
-		return workspacefs.Response{}, err
+		return workspace.Response{}, err
 	}
 	z, err := zip.NewReader(bytes.NewReader(bundle), int64(len(bundle)))
 	if err != nil || len(z.File) != len(q.Skills) {
-		return workspacefs.Response{}, integrity()
+		return workspace.Response{}, integrity()
 	}
 	type entry struct {
 		name string
@@ -35,11 +35,11 @@ func installNativeSkills(ctx context.Context, a *SandboxAccess, q workspacefs.Re
 	total := 0
 	for i, skill := range q.Skills {
 		if !skillpackage.ValidName(skill.Name) || z.File[i].Name != skill.Name+".zip" {
-			return workspacefs.Response{}, integrity()
+			return workspace.Response{}, integrity()
 		}
 		stream, e := z.File[i].Open()
 		if e != nil {
-			return workspacefs.Response{}, e
+			return workspace.Response{}, e
 		}
 		archive, e := io.ReadAll(io.LimitReader(stream, skillpackage.MaxArchiveBytes+1))
 		closeErr := stream.Close()
@@ -47,7 +47,7 @@ func installNativeSkills(ctx context.Context, a *SandboxAccess, q workspacefs.Re
 			e = closeErr
 		}
 		if e != nil {
-			return workspacefs.Response{}, e
+			return workspace.Response{}, e
 		}
 		e = skillpackage.Unpack(ctx, bytes.NewReader(archive), int64(len(archive)), skill.Name, skill.ArchiveSHA, skill.ContentSHA, func(v skillpackage.Entry, data []byte) error {
 			total += len(data)
@@ -58,7 +58,7 @@ func installNativeSkills(ctx context.Context, a *SandboxAccess, q workspacefs.Re
 			return nil
 		})
 		if e != nil {
-			return workspacefs.Response{}, e
+			return workspace.Response{}, e
 		}
 	}
 	// The operation ID is generated internally, never from archive names.
@@ -88,7 +88,7 @@ func installNativeSkills(ctx context.Context, a *SandboxAccess, q workspacefs.Re
 		}
 	}()
 	if err = fs.MakeDirectory(ctx, a.Resource, staging, 755); err != nil {
-		return workspacefs.Response{}, err
+		return workspace.Response{}, err
 	}
 	dirs := map[string]bool{staging: true}
 	for _, v := range entries {
@@ -96,30 +96,30 @@ func installNativeSkills(ctx context.Context, a *SandboxAccess, q workspacefs.Re
 		parent := path.Dir(name)
 		if !dirs[parent] {
 			if err = fs.MakeDirectory(ctx, a.Resource, parent, 755); err != nil {
-				return workspacefs.Response{}, err
+				return workspace.Response{}, err
 			}
 			dirs[parent] = true
 		}
 		if err = fs.PutFile(ctx, a.Resource, sandboxcore.FileRequest{Path: name, MaxBytes: int64(max(1, len(v.data))), Mode: 644}, bytes.NewReader(v.data)); err != nil {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 	}
 	if _, err = fs.StatFile(ctx, a.Resource, target); err == nil {
 		if err = fs.MoveFile(ctx, a.Resource, target, backup); err != nil {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 		hadPrevious = true
 	} else if !nativeMissing(err) {
-		return workspacefs.Response{}, err
+		return workspace.Response{}, err
 	}
 	if err = fs.MoveFile(ctx, a.Resource, staging, target); err != nil {
-		return workspacefs.Response{}, err
+		return workspace.Response{}, err
 	}
 	published = true
 	if hadPrevious {
 		if err = fs.RemoveFile(ctx, a.Resource, backup, true); err != nil {
-			return workspacefs.Response{}, err
+			return workspace.Response{}, err
 		}
 	}
-	return workspacefs.Result(map[string]any{"installed": true, "skill_set_hash": q.SkillSetHash}, true, nil), nil
+	return workspace.Result(map[string]any{"installed": true, "skill_set_hash": q.SkillSetHash}, true, nil), nil
 }

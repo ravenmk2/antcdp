@@ -51,7 +51,9 @@ flowchart LR
 | agentcore | 不依赖平台、SQL、Gin 或 Eino 的执行端口、调度、事件、模型上下文、交互、压缩及预算规则 |
 | agents / agentresources | 平台身份与资源授权、会话和运行事务、观察与元数据、MCP/技能管理及私有字节生命周期 |
 | sandboxcore / sandboxadapters/opensandbox | 与平台和 SQL 独立的生命周期、进程、文件传输及网络策略契约；OpenSandbox Docker 适配 |
-| workspacefs / cmd/antcdp-workspace-helper | 镜像内可信文件协议与 Linux 安全 IO；平台在 agents 内协调权限、持久意图、引用和恢复 |
+| modules/sandboxes | 独立沙箱实例、租约、物理执行、原生文件操作与恢复；不依赖 Agent |
+| modules/cloudcomputers | 云电脑产品身份、持久工作空间与实例重建编排 |
+| agents/workspace | Agent 工作空间路径及操作数据；权限、技能和成果在 Agent 适配层协调 |
 | agentadapters/mcp | HTTP MCP 协议、受控网络、运行时发现与参数/结果校验；管理员同步测试/调试；不控制远端资源范围 |
 | webaccess / webaccessadapters | 与智能体并列的搜索/读取契约、有限路由切换和供应商/HTTP 读取适配 |
 | modules/webaccess / skillpackage | 检索提供商管理与凭据；独立技能 ZIP 校验与按需读取 |
@@ -76,9 +78,9 @@ internal/webaccessadapters/ # 检索供应商和内置 HTTP 读取
 internal/skillpackage/    # 无执行能力的技能包校验与按需读取
 internal/sandboxcore/      # 独立沙箱契约与网络规则编译
 internal/sandboxadapters/  # OpenSandbox Docker 适配
-internal/workspacefs/      # 可信 helper 协议与 Linux 实现
-cmd/antcdp-workspace-helper/ # 镜像内固定入口
-docker/sandbox/           # 工作空间镜像与控制组件兼容补丁
+internal/modules/sandboxes/      # 基础沙箱服务与持久化契约
+internal/modules/cloudcomputers/ # 云电脑产品与生命周期编排
+internal/modules/agents/workspace/ # Agent 工作空间路径与操作数据
 web/src/app/               # 公共入口、身份、跨区域服务与路由装配
 web/src/areas/             # 控制台、工作区、个人中心的独立应用壳与页面
 web/src/features/          # 公共访问流程、共享业务能力与领域控件

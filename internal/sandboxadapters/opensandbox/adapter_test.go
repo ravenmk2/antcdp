@@ -18,7 +18,7 @@ import (
 )
 
 func testOwner() sandboxcore.Ownership {
-	return sandboxcore.Ownership{InstallationID: strings.Repeat("a", 32), ComputerID: 7, CreationToken: strings.Repeat("b", 32)}
+	return sandboxcore.Ownership{InstallationID: strings.Repeat("a", 32), InstanceID: 7, CreationToken: strings.Repeat("b", 32)}
 }
 func testRef() sandboxcore.ResourceRef {
 	return sandboxcore.ResourceRef{BackendGeneration: 1, RemoteID: "sandbox-1", Ownership: testOwner()}

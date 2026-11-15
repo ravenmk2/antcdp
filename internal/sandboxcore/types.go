@@ -35,7 +35,7 @@ func (e *Error) Error() string { return e.Code }
 
 type Ownership struct {
 	InstallationID string `json:"installation_id"`
-	ComputerID     uint64 `json:"cloud_computer_id,string"`
+	InstanceID     uint64 `json:"sandbox_instance_id,string"`
 	CreationToken  string `json:"creation_token"`
 }
 
@@ -60,7 +60,7 @@ type EffectiveConfig struct {
 // MountPlan is a host-derived immutable fact, never a model/client-selected path.
 type MountPlan struct {
 	Kind            string `json:"kind"`       // ephemeral or named_volume
-	MountPath       string `json:"mount_path"` // always /data
+	MountPath       string `json:"mount_path"` // consumer-selected absolute mount path
 	VolumeID        string `json:"volume_id,omitempty"`
 	VolumeName      string `json:"volume_name,omitempty"`
 	CreateIfMissing bool   `json:"create_if_missing"` // first provision only
@@ -171,7 +171,7 @@ type LifecycleControl interface {
 }
 type VolumeRef struct {
 	InstallationID string
-	ComputerID     uint64
+	InstanceID     uint64
 	ID, Name       string
 }
 type VolumeControl interface {

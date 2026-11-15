@@ -14,7 +14,7 @@ func (t *agentsTx) RootPhysicalPending(root uint64) (bool, error) {
         EXISTS(SELECT 1 FROM agent_run WHERE root_run_id=? AND finished_at IS NULL)
         OR EXISTS(SELECT 1 FROM agent_tool_call WHERE root_run_id=? AND (result_event_seq IS NULL OR (status='outcome_unknown' AND reconciled_outcome IS NULL)))
         OR EXISTS(SELECT 1 FROM agent_file_operation WHERE root_run_id=? AND finished_at IS NULL)
-        OR EXISTS(SELECT 1 FROM cloud_computer_lease WHERE root_run_id=? AND released_at IS NULL)
+        OR EXISTS(SELECT 1 FROM agent_cloud_computer_lease WHERE root_run_id=? AND released_at IS NULL)
         OR EXISTS(SELECT 1 FROM agent_resource_reference WHERE resource_kind='local_worker' AND resource_id=? AND released_at IS NULL)`, root, root, root, root, root)
 	return pending, err
 }

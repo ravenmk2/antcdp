@@ -7,26 +7,21 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
-	"github.com/ravenmk2/antcdp/internal/sandboxcore"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 type workspaceExecution struct {
-	Backend  string                       `json:"backend,omitempty"`
-	Ordinal  int                          `json:"ordinal"`
-	Request  workspacefs.Request          `json:"request"`
-	Handle   *sandboxcore.ExecutionHandle `json:"handle,omitempty"`
-	Response *workspacefs.Response        `json:"response,omitempty"`
-	State    string                       `json:"state"`
+	Ordinal  int                 `json:"ordinal"`
+	Request  workspace.Request   `json:"request"`
+	Response *workspace.Response `json:"response,omitempty"`
+	State    string              `json:"state"`
 }
 type workspaceOperationObservation struct {
 	Executions          []workspaceExecution `json:"executions"`
 	LocalStorageKey     string               `json:"local_storage_key,omitempty"`
 	LocalCleanupPending bool                 `json:"local_cleanup_pending,omitempty"`
-	TransferToken       string               `json:"transfer_token,omitempty"`
-	TransferState       string               `json:"transfer_state,omitempty"`
 	Result              json.RawMessage      `json:"result,omitempty"`
 }
 
@@ -55,50 +50,7 @@ func (s *CloudService) updateWorkspaceObservation(ctx context.Context, id, expec
 	})
 }
 
-func awaitWorkspaceHelper(ctx context.Context, provider sandboxcore.Provider, handle sandboxcore.ExecutionHandle) (sandboxcore.ExecResult, []byte, error) {
-	var result sandboxcore.ExecResult
-	for {
-		var err error
-		result, err = provider.InspectExecution(ctx, handle)
-		if err != nil {
-			return result, nil, err
-		}
-		if !result.Running {
-			break
-		}
-		timer := time.NewTimer(200 * time.Millisecond)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
-			return result, nil, ctx.Err()
-		case <-timer.C:
-		}
-	}
-	if result.ExitCode == nil {
-		return result, nil, &sandboxcore.Error{Code: "SANDBOX_EXECUTION_UNCONFIRMED", Unknown: true}
-	}
-	data := make([]byte, 0, 4096)
-	var cursor int64
-	for {
-		chunk, err := provider.ReadExecutionOutput(ctx, handle, cursor, 64<<10)
-		if err != nil {
-			return result, nil, err
-		}
-		if len(data)+len(chunk.Text) > workspacefs.MaxResponseBytes {
-			return result, nil, &sandboxcore.Error{Code: "WORKSPACE_OUTPUT_LIMIT", Unknown: true}
-		}
-		data = append(data, []byte(chunk.Text)...)
-		if chunk.Cursor < cursor || chunk.Cursor == cursor && chunk.Text != "" {
-			return result, nil, integrity()
-		}
-		cursor = chunk.Cursor
-		if !chunk.Truncated || chunk.Text == "" {
-			return result, data, nil
-		}
-	}
-}
-
-func helperFailure(code string) error {
+func workspaceFailure(code string) error {
 	status := 409
 	if code == "WORKSPACE_PATH_NOT_FOUND" {
 		status = 404

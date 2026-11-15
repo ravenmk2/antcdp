@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 type workspaceWorkerMemory struct {
@@ -25,6 +25,11 @@ type workspaceWorkerMemory struct {
 	provider SandboxConnectionRow
 	actor    identity.User
 	txRuns   int
+}
+
+type workspaceDispatchProvider struct {
+	sandboxcore.Filesystem
+	workspaceRecoveryProvider
 }
 
 func (m *workspaceWorkerMemory) Transact(_ context.Context, fn func(identity.Tx) error) error {
@@ -63,6 +68,7 @@ func (m *workspaceWorkerMemory) CloudOperation(uint64, bool) (*CloudOperationRow
 }
 func (m *workspaceWorkerMemory) SaveCloudOperation(op *CloudOperationRow) error {
 	m.op = *op
+	m.public = *cloudPublicOperation(op)
 	return nil
 }
 func (m *workspaceWorkerMemory) HolderReferences(kind, id string, _ bool) ([]ResourceReferenceRow, error) {
@@ -101,15 +107,15 @@ func (m *workspaceWorkerMemory) SavePublicOperation(op *PublicOperationRow) erro
 }
 
 func workspaceWorkerFixture() (*CloudService, *workspaceWorkerMemory, *SandboxAccess) {
-	publicID, workspaceID := uint64(3), uint64(4)
+	workspaceID := uint64(4)
 	m := &workspaceWorkerMemory{
-		op:     CloudOperationRow{ID: 2, PublicOperationID: &publicID, ComputerID: workspaceID, Kind: "workspace_remove", Status: "running", ExecutorEpoch: "current", FenceVersion: 7, Observation: json.RawMessage(`{"executions":[]}`)},
+		op:     CloudOperationRow{ID: 2, ComputerID: workspaceID, Kind: "workspace_remove", Status: "running", ExecutorEpoch: "current", FenceVersion: 7, Observation: json.RawMessage(`{"executions":[]}`)},
 		public: PublicOperationRow{ID: 3, Status: "running"},
 		refs:   []ResourceReferenceRow{{ID: 1, HolderKind: "cloud_file_operation", HolderID: "2", ResourceKind: "cloud_computer", ResourceID: 4, State: "active", FenceVersion: 1}},
 		w:      CloudComputerRow{ID: 4},
 	}
 	s := &CloudService{Epoch: "current", InstallationID: func() (string, error) { return strings.Repeat("a", 32), nil }, Host: &Service{Store: func() (identity.Store, error) { return m, nil }}}
-	access := &SandboxAccess{ComputerID: 4, RuntimeGeneration: 1, WorkspaceOperationID: 2, WorkspaceOperationFence: 7}
+	access := &SandboxAccess{ComputerID: 4, InstanceID: 1, WorkspaceOperationID: 2, WorkspaceOperationFence: 7}
 	return s, m, access
 }
 
@@ -208,11 +214,10 @@ func (f workspaceRecoveryFactory) Open(context.Context, sandboxcore.Connection) 
 func TestWorkspaceRecoveryObservesOnceAndDoesNotResumeRemainingRemoval(t *testing.T) {
 	s, m, access := workspaceWorkerFixture()
 	access.Resource = sandboxcore.ResourceRef{BackendGeneration: 1, RemoteID: "sandbox"}
-	handle := sandboxcore.ExecutionHandle{Resource: access.Resource, ID: "helper"}
 	p := &workspaceRecoveryProvider{state: "ready", output: `{"version":1,"ok":true,"changed":true,"result":{"removed":true}}`}
 	s.Factory = workspaceRecoveryFactory{p}
 	m.op.Intent = json.RawMessage(`{"items":[{"path":"first"},{"path":"second"}]}`)
-	c := &workspaceClaim{op: &m.op, access: access, recovery: true, observation: workspaceOperationObservation{Executions: []workspaceExecution{{State: "outcome_unknown", Handle: &handle, Request: workspacefs.Request{Operation: "remove", Path: "first"}}}}}
+	c := &workspaceClaim{op: &m.op, access: access, recovery: true, observation: workspaceOperationObservation{Executions: []workspaceExecution{{State: "completed", Response: &workspace.Response{Version: workspace.Version, OK: true, Changed: true}, Request: workspace.Request{Operation: "remove", Path: "first"}}}}}
 	if err := s.recoverWorkspaceOperation(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +230,7 @@ func TestWorkspaceUnqueryableTransferNeedsWholeInstanceTermination(t *testing.T)
 	s, m, access := workspaceWorkerFixture()
 	p := &workspaceRecoveryProvider{state: "ready"}
 	s.Factory = workspaceRecoveryFactory{p}
-	c := &workspaceClaim{op: &m.op, access: access, recovery: true, observation: workspaceOperationObservation{TransferState: "started"}}
+	c := &workspaceClaim{op: &m.op, access: access, recovery: true, observation: workspaceOperationObservation{Executions: []workspaceExecution{{State: "outcome_unknown", Request: workspace.Request{Operation: "write"}}}}}
 	if err := s.recoverWorkspaceOperation(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
@@ -239,26 +244,6 @@ func TestWorkspaceUnqueryableTransferNeedsWholeInstanceTermination(t *testing.T)
 	if m.public.Status != "failed" || m.refs[0].State != "released" || p.execs != 0 {
 		t.Fatal("verified absent instance did not release old transfer")
 	}
-}
-
-func TestWorkspaceStoppedHelperWithMissingOutputFailsWithoutClaimingNoChange(t *testing.T) {
-	s, m, access := workspaceWorkerFixture()
-	handle := sandboxcore.ExecutionHandle{Resource: access.Resource, ID: "helper"}
-	p := &workspaceRecoveryProvider{state: "ready", output: "unavailable"}
-	s.Factory = workspaceRecoveryFactory{p}
-	m.op.Intent = json.RawMessage(`{"items":[{"path":"first"}]}`)
-	c := &workspaceClaim{op: &m.op, access: access, recovery: true, observation: workspaceOperationObservation{Executions: []workspaceExecution{{State: "outcome_unknown", Handle: &handle, Request: workspacefs.Request{Operation: "remove", Path: "first"}}}}}
-	if err := s.recoverWorkspaceOperation(context.Background(), c); err != nil {
-		t.Fatal(err)
-	}
-	if m.public.Status != "failed" || m.public.ErrorCode == nil || *m.public.ErrorCode != "WORKSPACE_RESULT_UNAVAILABLE" || m.refs[0].State != "released" {
-		t.Fatal("missing output was presented as success or replayed")
-	}
-}
-
-type workspaceDispatchProvider struct {
-	sandboxcore.Filesystem
-	workspaceRecoveryProvider
 }
 
 func (p *workspaceDispatchProvider) MakeDirectory(_ context.Context, _ sandboxcore.ResourceRef, name string, mode int) error {
@@ -282,11 +267,11 @@ func TestWorkspaceQueuedMutationDispatchesOnceAndSettlesBothRecords(t *testing.T
 	remote := "sandbox"
 	m.w.RuntimeID = &remote
 	m.w.RuntimeCreationToken = new("fixture-token")
-	m.w.RuntimeGeneration = 1
-	m.op.RuntimeGeneration = 1
+	m.w.InstanceID = 1
+	m.op.InstanceID = 1
 	m.op.BackendGeneration = 1
 	format, key := uint64(2), "v1"
-	m.provider = SandboxConnectionRow{ID: 1, Endpoint: new("http://localhost:8080"), AccessMode: "direct", BackendGeneration: 1, MaintenanceState: "normal", SecretCiphertext: []byte("fixture"), SecretFormatVersion: &format, SecretKeyVersion: &key}
+	m.provider = SandboxConnectionRow{ID: 1, BackendType: "opensandbox", Endpoint: new("http://localhost:8080"), AccessMode: "direct", BackendGeneration: 1, MaintenanceState: "normal", SecretCiphertext: []byte("fixture"), SecretFormatVersion: &format, SecretKeyVersion: &key}
 	s.Cipher = func(string, string, bool) (string, error) { return "fixture", nil }
 	p := &workspaceDispatchProvider{workspaceRecoveryProvider: workspaceRecoveryProvider{state: "ready", output: `{"version":1,"ok":true,"changed":true,"result":{"path":"storage/new-directory"}}`}}
 	s.Factory = workspaceRecoveryFactory{p}

@@ -17,12 +17,10 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
-
-const nativeFilesystemVersion = "native-v1"
 
 func nativeFiles(access *SandboxAccess) (sandboxcore.Filesystem, error) {
 	f, ok := access.Provider.(sandboxcore.Filesystem)
@@ -32,13 +30,12 @@ func nativeFiles(access *SandboxAccess) (sandboxcore.Filesystem, error) {
 	return f, nil
 }
 
-// The DTOs retain their historical wire shape so committed operations can be
-// recovered. Native requests never encode or launch the old helper protocol.
-func (s *CloudService) workspaceRequest(ctx context.Context, access *SandboxAccess, id uint64, q workspacefs.Request) (workspacefs.Response, error) {
-	return s.recordNativeRequest(ctx, access, id, q, func() (workspacefs.Response, error) { return runNativeRequest(ctx, access, q) })
+// Record intent before native IO; uncertain writes are never replayed.
+func (s *CloudService) workspaceRequest(ctx context.Context, access *SandboxAccess, id uint64, q workspace.Request) (workspace.Response, error) {
+	return s.recordNativeRequest(ctx, access, id, q, func() (workspace.Response, error) { return runNativeRequest(ctx, access, q) })
 }
 
-func nativeReadOnly(q workspacefs.Request) bool {
+func nativeReadOnly(q workspace.Request) bool {
 	switch q.Operation {
 	case "list", "read", "glob", "grep", "verify_native", "download":
 		return true
@@ -46,9 +43,9 @@ func nativeReadOnly(q workspacefs.Request) bool {
 	return false
 }
 
-func (s *CloudService) recordNativeRequest(ctx context.Context, access *SandboxAccess, id uint64, q workspacefs.Request, run func() (workspacefs.Response, error)) (workspacefs.Response, error) {
+func (s *CloudService) recordNativeRequest(ctx context.Context, access *SandboxAccess, id uint64, q workspace.Request, run func() (workspace.Response, error)) (workspace.Response, error) {
 	if access.WorkspaceOperationID != id || access.WorkspaceOperationFence == 0 {
-		return workspacefs.Response{}, integrity()
+		return workspace.Response{}, integrity()
 	}
 	ordinal := 0
 	err := s.updateWorkspaceObservation(ctx, id, access.WorkspaceOperationFence, func(row *CloudOperationRow, o *workspaceOperationObservation) error {
@@ -64,7 +61,7 @@ func (s *CloudService) recordNativeRequest(ctx context.Context, access *SandboxA
 		if ordinal >= 100 {
 			return httpx.E(422, "WORKSPACE_OPERATION_LIMIT", "文件操作数量超限")
 		}
-		o.Executions = append(o.Executions, workspaceExecution{Backend: nativeFilesystemVersion, Ordinal: ordinal, Request: q, State: "dispatching"})
+		o.Executions = append(o.Executions, workspaceExecution{Ordinal: ordinal, Request: q, State: "dispatching"})
 		row.Status = "running"
 		if row.StartedAt == nil {
 			now := time.Now().UTC()
@@ -73,13 +70,13 @@ func (s *CloudService) recordNativeRequest(ctx context.Context, access *SandboxA
 		return nil
 	})
 	if err != nil {
-		return workspacefs.Response{}, err
+		return workspace.Response{}, err
 	}
 	response, cause := run()
 	unknown := cause != nil && !nativeReadOnly(q) && nativeUncertain(cause)
 
 	if cause != nil {
-		response = workspacefs.Response{Version: workspacefs.Version, Code: remoteSandboxError(cause)}
+		response = workspace.Response{Version: workspace.Version, Code: remoteSandboxError(cause)}
 	}
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
@@ -104,7 +101,7 @@ func (s *CloudService) recordNativeRequest(ctx context.Context, access *SandboxA
 		return response, cause
 	}
 	if !response.OK {
-		return response, helperFailure(response.Code)
+		return response, workspaceFailure(response.Code)
 	}
 	return response, nil
 }
@@ -134,7 +131,7 @@ func nativeError(code string) error {
 	return httpx.E(409, code, "工作文件状态不符合本次操作要求")
 }
 func nativePath(relative string) (string, error) {
-	name, err := workspacefs.PublicPath(relative, true)
+	name, err := workspace.PublicPath(relative, true)
 	if err != nil {
 		return "", nativeError("WORKSPACE_PATH_INVALID")
 	}
@@ -158,18 +155,18 @@ func readNativeFile(ctx context.Context, a *SandboxAccess, name string, offset, 
 	return data, err
 }
 
-func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspacefs.Request) (workspacefs.Response, error) {
+func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspace.Request) (workspace.Response, error) {
 	f, err := nativeFiles(a)
 	if err != nil {
-		return workspacefs.Response{}, err
+		return workspace.Response{}, err
 	}
 	name, err := nativePath(q.Path)
 	if err != nil && q.Operation != "initialize" && q.Operation != "verify_native" {
-		return workspacefs.Response{}, err
+		return workspace.Response{}, err
 	}
 	if q.Operation == "write" || q.Operation == "edit" || q.Operation == "mkdir" || q.Operation == "remove" {
 		if name == "/data" || name == "/data/agents" || strings.HasPrefix(name, "/data/agents/") {
-			return workspacefs.Response{}, nativeError("WORKSPACE_PATH_PROTECTED")
+			return workspace.Response{}, nativeError("WORKSPACE_PATH_PROTECTED")
 		}
 	}
 	var value any
@@ -179,7 +176,7 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspacefs.Reque
 		cwd := "/data/workspace"
 		if q.ProjectID != "" {
 			if !validNumericID(q.ProjectID) {
-				return workspacefs.Response{}, integrity()
+				return workspace.Response{}, integrity()
 			}
 			cwd = "/data/projects/" + q.ProjectID
 		}
@@ -187,7 +184,7 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspacefs.Reque
 		changed = err == nil
 		if err == nil && q.AgentID != "" {
 			if !validNumericID(q.AgentID) {
-				return workspacefs.Response{}, integrity()
+				return workspace.Response{}, integrity()
 			}
 			err = f.MakeDirectory(ctx, a.Resource, "/data/agents/"+q.AgentID+"/skills", 755)
 		}
@@ -199,7 +196,7 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspacefs.Reque
 		}
 		value = map[string]any{"filesystem": "native", "version": 1}
 	case "list":
-		entries := []workspacefs.Entry{}
+		entries := []workspace.Entry{}
 		values, e := f.ListFiles(ctx, a.Resource, name)
 		err = e
 		for _, v := range values {
@@ -207,7 +204,7 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspacefs.Reque
 			if !ok || path.Dir(v.Path) != name || v.Path == name {
 				continue
 			}
-			entries = append(entries, workspacefs.Entry{Name: path.Base(v.Path), Path: relative, Kind: v.Kind, Size: v.Size, ModifiedAt: v.ModifiedAt.Format(time.RFC3339Nano), Identity: nativeIdentity(v)})
+			entries = append(entries, workspace.Entry{Name: path.Base(v.Path), Path: relative, Kind: v.Kind, Size: v.Size, ModifiedAt: v.ModifiedAt.Format(time.RFC3339Nano), Identity: nativeIdentity(v)})
 		}
 		sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 		start := min(max(0, int(q.Offset)), len(entries))
@@ -226,7 +223,7 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspacefs.Reque
 		length := min(max(0, info.Size-q.Offset), int64(q.Limit))
 		data := []byte{}
 		if length > 0 {
-			data, err = readNativeFile(ctx, a, name, q.Offset, length, workspacefs.MaxReadBytes)
+			data, err = readNativeFile(ctx, a, name, q.Offset, length, workspace.MaxReadBytes)
 		}
 		if err == nil {
 			after, e := f.StatFile(ctx, a.Resource, name)
@@ -240,7 +237,7 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspacefs.Reque
 		var data []byte
 		data, err = base64.StdEncoding.DecodeString(q.Data)
 		if err != nil {
-			return workspacefs.Response{}, nativeError("WORKSPACE_CONTENT_INVALID")
+			return workspace.Response{}, nativeError("WORKSPACE_CONTENT_INVALID")
 		}
 		info, statErr := f.StatFile(ctx, a.Resource, name)
 		if statErr != nil && !nativeMissing(statErr) {
@@ -261,7 +258,7 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspacefs.Reque
 				break
 			}
 			var old []byte
-			old, err = readNativeFile(ctx, a, name, 0, 0, workspacefs.MaxReadBytes)
+			old, err = readNativeFile(ctx, a, name, 0, 0, workspace.MaxReadBytes)
 			if err != nil {
 				break
 			}
@@ -284,7 +281,7 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspacefs.Reque
 			err = nativeError("WORKSPACE_PATH_EXISTS")
 			break
 		}
-		if len(data) > workspacefs.MaxReadBytes {
+		if len(data) > workspace.MaxReadBytes {
 			err = nativeError("WORKSPACE_FILE_TOO_LARGE")
 			break
 		}
@@ -326,9 +323,9 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspacefs.Reque
 		err = nativeError("WORKSPACE_OPERATION_UNSUPPORTED")
 	}
 	if err != nil {
-		return workspacefs.Response{}, err
+		return workspace.Response{}, err
 	}
-	return workspacefs.Result(value, changed, nil), nil
+	return workspace.Result(value, changed, nil), nil
 }
 
 func validNumericID(v string) bool {
@@ -347,13 +344,13 @@ func nativeRelative(name string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	_, err := workspacefs.PublicPath(relative, false)
+	_, err := workspace.PublicPath(relative, false)
 	return relative, err == nil
 }
 
 // Content search is bounded and uses native file reads, so even a minimal image
 // needs no grep/python/helper binary. Filename search stays provider-side.
-func nativeSearch(ctx context.Context, a *SandboxAccess, f sandboxcore.Filesystem, name string, q workspacefs.Request) (any, error) {
+func nativeSearch(ctx context.Context, a *SandboxAccess, f sandboxcore.Filesystem, name string, q workspace.Request) (any, error) {
 	pattern := q.Pattern
 	if q.Operation == "grep" {
 		pattern = "**"
@@ -369,7 +366,7 @@ func nativeSearch(ctx context.Context, a *SandboxAccess, f sandboxcore.Filesyste
 	}
 	limit = min(limit, 200)
 	paths := []string{}
-	matches := []workspacefs.Match{}
+	matches := []workspace.Match{}
 	visited := 0
 	truncated := false
 	budget := int64(8 << 20)
@@ -392,7 +389,7 @@ func nativeSearch(ctx context.Context, a *SandboxAccess, f sandboxcore.Filesyste
 			return nil, ctx.Err()
 		}
 		visited++
-		if visited > workspacefs.MaxWalkEntries {
+		if visited > workspace.MaxWalkEntries {
 			truncated = true
 			break
 		}
@@ -411,7 +408,7 @@ func nativeSearch(ctx context.Context, a *SandboxAccess, f sandboxcore.Filesyste
 		if !nativeFile(entry) {
 			continue
 		}
-		if entry.Size > workspacefs.MaxReadBytes {
+		if entry.Size > workspace.MaxReadBytes {
 			truncated = true
 			continue
 		}
@@ -420,7 +417,7 @@ func nativeSearch(ctx context.Context, a *SandboxAccess, f sandboxcore.Filesyste
 			break
 		}
 		budget -= entry.Size
-		data, e := readNativeFile(ctx, a, entry.Path, 0, 0, workspacefs.MaxReadBytes)
+		data, e := readNativeFile(ctx, a, entry.Path, 0, 0, workspace.MaxReadBytes)
 		if e != nil {
 			return nil, e
 		}
@@ -429,7 +426,7 @@ func nativeSearch(ctx context.Context, a *SandboxAccess, f sandboxcore.Filesyste
 		}
 		for line, text := range strings.Split(string(data), "\n") {
 			if expression.MatchString(text) {
-				matches = append(matches, workspacefs.Match{Path: relative, Line: line + 1, Text: utf8Prefix(text, 2048)})
+				matches = append(matches, workspace.Match{Path: relative, Line: line + 1, Text: utf8Prefix(text, 2048)})
 				if len(matches) >= limit {
 					truncated = true
 					break

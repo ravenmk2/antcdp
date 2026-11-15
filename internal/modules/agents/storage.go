@@ -333,7 +333,7 @@ type FileOperationRow struct {
 	ComputerID          uint64          `db:"cloud_computer_id"`
 	BindingFenceVersion uint64          `db:"binding_fence_version"`
 	BackendGeneration   uint64          `db:"backend_generation"`
-	RuntimeGeneration   uint64          `db:"runtime_generation"`
+	InstanceID          uint64          `db:"sandbox_instance_id"`
 	StorageGeneration   uint64          `db:"storage_generation"`
 	VolumeID            string          `db:"volume_id"`
 	ExecutorEpoch       string          `db:"executor_epoch"`

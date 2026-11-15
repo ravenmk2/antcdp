@@ -68,7 +68,7 @@ export interface CloudComputer extends Versioned {
   pool_agent_id: string | null;
   state: CloudState;
   backend_generation: string;
-  runtime_generation: string;
+  sandbox_instance_id: string;
   storage_generation: string;
   effective_environment: CloudEnvironment | null;
   applied_template_version: string | null;

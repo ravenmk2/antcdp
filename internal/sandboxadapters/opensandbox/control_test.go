@@ -40,7 +40,7 @@ func TestControlTokenStableAndSandboxScoped(t *testing.T) {
 		t.Fatal("creation identity not bound")
 	}
 	other = testOwner()
-	other.ComputerID++
+	other.InstanceID++
 	changed, err = p.controlToken(other)
 	if err != nil || first == changed {
 		t.Fatal("workspace identity not bound")

@@ -257,7 +257,7 @@ func cleanupApplicationSandboxes(t *testing.T, db *sql.DB, installer *install.Se
 	for rows.Next() {
 		var ref sandboxcore.ResourceRef
 		ref.Ownership.InstallationID = installation
-		if err = rows.Scan(&ref.BackendGeneration, &ref.Ownership.ComputerID, &ref.Ownership.CreationToken, &ref.RemoteID); err != nil {
+		if err = rows.Scan(&ref.BackendGeneration, &ref.Ownership.InstanceID, &ref.Ownership.CreationToken, &ref.RemoteID); err != nil {
 			t.Error(err)
 			continue
 		}

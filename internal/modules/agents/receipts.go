@@ -17,6 +17,9 @@ func (s *Service) GetCommandReceipt(ctx context.Context, raw, key, command, scop
 	return s.getReceipt(ctx, raw, key, command, scope, false)
 }
 func (s *Service) getReceipt(ctx context.Context, raw, key, command, scope string, admin bool) (*Result, error) {
+	if s.Sandboxes != nil && cloudCommandKind(command) {
+		return s.Sandboxes.getReceipt(ctx, raw, key, command, scope, admin)
+	}
 	return s.access(ctx, raw, admin, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
 		if !keyPattern.MatchString(key) || len(command) < 1 || len(command) > 64 || len(scope) < 1 || len(scope) > 128 {
 			return httpx.Invalid("command", "invalid_format")

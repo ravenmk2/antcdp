@@ -11,9 +11,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 type workspaceToolInput struct {
@@ -49,14 +49,14 @@ func workspaceToolPath(cwd, raw string) (string, error) {
 	return fileCWDPath(cwd, raw)
 }
 
-func workspaceToolRequest(key string, raw json.RawMessage) (workspaceToolInput, workspacefs.Request, error) {
+func workspaceToolRequest(key string, raw json.RawMessage) (workspaceToolInput, workspace.Request, error) {
 	var input workspaceToolInput
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
 	if len(raw) > 46<<10 || d.Decode(&input) != nil || d.Decode(new(any)) != io.EOF {
-		return input, workspacefs.Request{}, httpx.Invalid("arguments", "invalid_format")
+		return input, workspace.Request{}, httpx.Invalid("arguments", "invalid_format")
 	}
-	q := workspacefs.Request{Path: input.Path}
+	q := workspace.Request{Path: input.Path}
 	switch key {
 	case "read_file":
 		if input.Path == "" || input.Offset < 0 || input.Limit < 0 || input.Limit > 32768 {
@@ -67,7 +67,7 @@ func workspaceToolRequest(key string, raw json.RawMessage) (workspaceToolInput, 
 			q.Limit = 16384
 		}
 	case "write_file":
-		if input.Path == "" || !utf8.ValidString(input.Content) || len(input.Content) > workspacefs.MaxWriteBytes || input.Identity != "" && len(input.Identity) != 64 {
+		if input.Path == "" || !utf8.ValidString(input.Content) || len(input.Content) > workspace.MaxWriteBytes || input.Identity != "" && len(input.Identity) != 64 {
 			return input, q, httpx.Invalid("arguments", "invalid_content")
 		}
 		q.Operation, q.Data, q.Overwrite, q.Identity = "write", base64.StdEncoding.EncodeToString([]byte(input.Content)), input.Overwrite, input.Identity
@@ -84,7 +84,7 @@ func workspaceToolRequest(key string, raw json.RawMessage) (workspaceToolInput, 
 	default:
 		return input, q, httpx.Invalid("tool_key", "unsupported")
 	}
-	if encoded, err := json.Marshal(q); err != nil || len(encoded) > workspacefs.MaxRequestBytes {
+	if encoded, err := json.Marshal(q); err != nil || len(encoded) > workspace.MaxRequestBytes {
 		return input, q, httpx.Invalid("arguments", "encoded_content_too_large")
 	}
 	return input, q, nil
@@ -166,7 +166,7 @@ func (s *CloudService) FileTool(ctx context.Context, ref agentcore.ExecutionRef,
 	}
 	response, err := s.workspaceRequest(ctx, access, operation.ID, q)
 	if err != nil {
-		if response.Version == workspacefs.Version && !workspaceUnknown(err) {
+		if response.Version == workspace.Version && !workspaceUnknown(err) {
 			yes := true
 			observation = agentcore.DispatchObservation{Status: "failed", Executed: &yes, Reason: response.Code, Content: "The file operation completed with error: " + response.Code}
 		}
@@ -240,10 +240,10 @@ func workspaceToolContent(key string, raw json.RawMessage) (string, error) {
 	}
 	if key == "glob" || key == "grep" {
 		var result struct {
-			Paths     []string            `json:"paths"`
-			Matches   []workspacefs.Match `json:"matches"`
-			Truncated bool                `json:"truncated"`
-			Visited   int                 `json:"visited_entries"`
+			Paths     []string          `json:"paths"`
+			Matches   []workspace.Match `json:"matches"`
+			Truncated bool              `json:"truncated"`
+			Visited   int               `json:"visited_entries"`
 		}
 		if json.Unmarshal(raw, &result) != nil {
 			return "", integrity()

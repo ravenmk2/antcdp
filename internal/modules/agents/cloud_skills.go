@@ -15,8 +15,8 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/skillpackage"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 func (s *CloudService) lockSkillPreparation(ctx context.Context, key string) (func(), error) {
@@ -108,9 +108,9 @@ func (s *CloudService) prepareSkills(ctx context.Context, original *SandboxAcces
 	}
 	checksum := sha256.Sum256(bundle)
 	token := cryptox.ID()
-	request := workspacefs.Request{Operation: "skills_install", AgentID: idString(uint64(x.AgentID)), Token: token, SkillSetHash: hash, ExpectedHash: hex.EncodeToString(checksum[:]), Skills: []workspacefs.SkillArchive{}}
+	request := workspace.Request{Operation: "skills_install", AgentID: idString(uint64(x.AgentID)), Token: token, SkillSetHash: hash, ExpectedHash: hex.EncodeToString(checksum[:]), Skills: []workspace.SkillArchive{}}
 	for _, skill := range manifest {
-		request.Skills = append(request.Skills, workspacefs.SkillArchive{Name: skill.Name, ArchiveSHA: skill.ArchiveSHA, ContentSHA: skill.ContentSHA})
+		request.Skills = append(request.Skills, workspace.SkillArchive{Name: skill.Name, ArchiveSHA: skill.ArchiveSHA, ContentSHA: skill.ContentSHA})
 	}
 	access := *original
 	access.ReferenceIDs = nil
@@ -125,7 +125,7 @@ func (s *CloudService) prepareSkills(ctx context.Context, original *SandboxAcces
 		if err != nil {
 			return err
 		}
-		if computer == nil || computer.BackendGeneration != access.BackendGeneration || computer.RuntimeGeneration != access.RuntimeGeneration || computer.StorageGeneration != access.StorageGeneration || computer.State != "ready" {
+		if computer == nil || computer.BackendGeneration != access.BackendGeneration || computer.InstanceID != access.InstanceID || computer.StorageGeneration != access.StorageGeneration || computer.State != "ready" {
 			return httpx.E(409, "CLOUD_OPERATION_FENCED", "技能更新目标已变化")
 		}
 		op, err = s.startWorkspaceOperation(st, cr, &access, "workspace_skill", "system", "system", request)
@@ -152,12 +152,9 @@ func (s *CloudService) prepareSkills(ctx context.Context, original *SandboxAcces
 	if err != nil {
 		return err
 	}
-	result, err := s.recordNativeRequest(ctx, &access, op.ID, request, func() (workspacefs.Response, error) { return installNativeSkills(ctx, &access, request, bundle) })
+	result, err := s.recordNativeRequest(ctx, &access, op.ID, request, func() (workspace.Response, error) { return installNativeSkills(ctx, &access, request, bundle) })
 	cleanup, done := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer done()
-	if cleanErr := s.cleanupKnownFileTransfer(cleanup, &access); err == nil {
-		err = cleanErr
-	}
 	if finish := s.finishWorkspaceOperation(cleanup, op.ID, &access, result, err); err == nil {
 		err = finish
 	}

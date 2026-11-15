@@ -14,32 +14,6 @@ import (
 func cloudMaintenanceKind(kind string) bool {
 	return kind == "create" || kind == "rebuild" || kind == "pause" || kind == "resume" || kind == "delete"
 }
-func sandboxOperationKind(kind string) bool {
-	return strings.HasPrefix(kind, "cloud_") || kind == "workspace_mkdir" || kind == "workspace_remove"
-}
-func sandboxOperationAccess(tx identity.Tx, op *PublicOperationRow, a *identity.Auth) error {
-	if op.Kind == "workspace_mkdir" || op.Kind == "workspace_remove" {
-		if op.SubjectID == nil {
-			return integrity()
-		}
-		cr, e := CloudStateFor(tx)
-		if e != nil {
-			return e
-		}
-		v, e := cr.Computer(*op.SubjectID, false)
-		if e != nil {
-			return e
-		}
-		return workspaceContentAccess(v, a)
-	}
-	if a.User.Role != "admin" {
-		return missing()
-	}
-	return nil
-}
-func sandboxOperationView(_ identity.Tx, op *PublicOperationRow) (any, error) {
-	return operationView(op), nil
-}
 func (s *Service) GetAdminOperation(ctx context.Context, raw string, id uint64) (*Result, error) {
 	delegate := false
 	out, e := s.access(ctx, raw, true, func(tx identity.Tx, _ Repository, a *identity.Auth, out *Result) error {
@@ -53,13 +27,6 @@ func (s *Service) GetAdminOperation(ctx context.Context, raw string, id uint64) 
 		}
 		if op == nil {
 			return missing()
-		}
-		if sandboxOperationKind(op.Kind) {
-			if e = sandboxOperationAccess(tx, op, a); e != nil {
-				return e
-			}
-			out.Data = operationView(op)
-			return nil
 		}
 		if op.ContentDomain == "management" && op.Kind == "skill_validate" {
 			delegate = true
@@ -75,24 +42,59 @@ func (s *Service) GetAdminOperation(ctx context.Context, raw string, id uint64) 
 	}
 	return out, e
 }
-func (s *CloudService) GetOperation(ctx context.Context, raw string, id uint64) (*Result, error) {
-	return s.Host.GetOperation(ctx, raw, id)
+func cloudPublicOperation(op *CloudOperationRow) *PublicOperationRow {
+	kind := op.Kind
+	if cloudMaintenanceKind(kind) {
+		kind = "cloud_" + kind
+	}
+	status := op.Status
+	if status == "completed" {
+		status = "succeeded"
+	}
+	result := op.Observation
+	if strings.HasPrefix(op.Kind, "workspace_") {
+		var observation workspaceOperationObservation
+		if json.Unmarshal(op.Observation, &observation) == nil {
+			result = observation.Result
+		}
+	}
+	return &PublicOperationRow{ID: op.ID, Kind: kind, SubjectKind: "cloud_computer", SubjectID: &op.ComputerID, Status: status, Result: result, ErrorCode: op.ErrorCode, CreatedAt: op.CreatedAt, StartedAt: op.StartedAt, DeadlineAt: op.DeadlineAt, FinishedAt: op.FinishedAt, UpdatedAt: op.UpdatedAt}
 }
-func (s *CloudService) enqueueFileOperation(st StateRepository, cr CloudRepository, a *identity.Auth, receipt *Receipt, kind string, computer *CloudComputerRow, intent any) (*PublicOperationRow, error) {
+func (s *CloudService) GetOperation(ctx context.Context, raw string, id uint64) (*Result, error) {
+	return s.cloudAccess(ctx, raw, false, func(_ identity.Tx, _ Repository, _ StateRepository, cr CloudRepository, a *identity.Auth, out *Result) error {
+		op, e := cr.CloudOperation(id, false)
+		if e != nil {
+			return e
+		}
+		if op == nil || op.Kind == "command" {
+			return missing()
+		}
+		computer, e := cr.Computer(op.ComputerID, false)
+		if e != nil {
+			return e
+		}
+		if cloudMaintenanceKind(op.Kind) {
+			if a.User.Role != "admin" {
+				return missing()
+			}
+		} else if e = workspaceContentAccess(computer, a); e != nil {
+			return e
+		}
+		out.Data = operationView(cloudPublicOperation(op))
+		return nil
+	})
+}
+func (s *CloudService) enqueueFileOperation(_ StateRepository, cr CloudRepository, a *identity.Auth, receipt *Receipt, kind string, computer *CloudComputerRow, intent any) (*PublicOperationRow, error) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	config, e := json.Marshal(intent)
 	if e != nil {
 		return nil, e
 	}
-	public := &PublicOperationRow{CommandReceiptID: receipt.ID, Kind: kind, SubjectKind: "cloud_computer", SubjectID: &computer.ID, ContentDomain: "management", Status: "queued", ConfigSnapshot: config, Result: json.RawMessage(`null`), ActorUserID: a.User.ID, FenceVersion: 1, CreatedAt: now, DeadlineAt: now.Add(time.Minute), UpdatedAt: now}
-	if e = st.InsertPublicOperation(public); e != nil {
+	op := &CloudOperationRow{ComputerID: computer.ID, Kind: kind, Status: "queued", OperationToken: cryptox.ID(), CommandReceiptID: &receipt.ID, BackendGeneration: computer.BackendGeneration, InstanceID: computer.InstanceID, StorageGeneration: computer.StorageGeneration, Intent: config, Observation: json.RawMessage(`{}`), ActorKind: "user", ActorID: idString(a.User.ID), ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, DeadlineAt: now.Add(time.Minute), UpdatedAt: now}
+	if e = cr.InsertCloudOperation(op); e != nil {
 		return nil, e
 	}
-	physical := &CloudOperationRow{ComputerID: computer.ID, Kind: kind, Status: "queued", OperationToken: cryptox.ID(), CommandReceiptID: &receipt.ID, PublicOperationID: &public.ID, BackendGeneration: computer.BackendGeneration, RuntimeGeneration: computer.RuntimeGeneration, StorageGeneration: computer.StorageGeneration, Intent: config, Observation: json.RawMessage(`{}`), ActorKind: "user", ActorID: idString(a.User.ID), ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, DeadlineAt: public.DeadlineAt, UpdatedAt: now}
-	if e = cr.InsertCloudOperation(physical); e != nil {
-		return nil, e
-	}
-	return public, nil
+	return cloudPublicOperation(op), nil
 }
 func (s *CloudService) cloudView(cr CloudRepository, v *CloudComputerRow) (CloudView, error) {
 	activity, e := cr.CloudActivity(v.ID)
@@ -103,9 +105,9 @@ func (s *CloudService) cloudView(cr CloudRepository, v *CloudComputerRow) (Cloud
 	if e != nil {
 		return CloudView{}, e
 	}
-	out := CloudView{ID: v.ID, OwnerUserID: v.OwnerUserID, PoolAgentID: v.PoolAgentID, State: v.State, BackendGeneration: v.BackendGeneration, RuntimeGeneration: v.RuntimeGeneration, StorageGeneration: v.StorageGeneration, Environment: v.EffectiveEnvironment, AppliedTemplateVersion: v.AppliedTemplateVersion, VolumeState: v.VolumeState, RuntimeID: v.RuntimeID, VolumeID: v.VolumeID, VolumeName: v.VolumeName, VolumeCleanupState: v.VolumeCleanupState, ActiveLeases: activity.Leases, PendingTransfers: activity.Transfers, UnknownExecutions: activity.Unknown, IdleSince: v.IdleSince, LastActivityAt: v.LastActivityAt, ErrorCode: v.ErrorCode, Version: strings.Trim(s.tag("computer", v.ID, v.RowVersion), `"`)}
+	out := CloudView{ID: v.ID, OwnerUserID: v.OwnerUserID, PoolAgentID: v.PoolAgentID, State: v.State, BackendGeneration: v.BackendGeneration, InstanceID: v.InstanceID, StorageGeneration: v.StorageGeneration, Environment: v.EffectiveEnvironment, AppliedTemplateVersion: v.AppliedTemplateVersion, VolumeState: v.VolumeState, RuntimeID: v.RuntimeID, VolumeID: v.VolumeID, VolumeName: v.VolumeName, VolumeCleanupState: v.VolumeCleanupState, ActiveLeases: activity.Leases, PendingTransfers: activity.Transfers, UnknownExecutions: activity.Unknown, IdleSince: v.IdleSince, LastActivityAt: v.LastActivityAt, ErrorCode: v.ErrorCode, Version: strings.Trim(s.tag("computer", v.ID, v.RowVersion), `"`)}
 	if latest != nil {
-		out.LatestOperationID = latest.PublicOperationID
+		out.LatestOperationID = &latest.ID
 	}
 	out.Capabilities = computerCapabilities(v)
 	return out, nil
@@ -285,16 +287,13 @@ func (s *CloudService) MaintainComputer(ctx context.Context, raw string, id uint
 				out.Commits = append(out.Commits, commit)
 			}
 		}
-		config, _ := json.Marshal(w)
-		public := &PublicOperationRow{CommandReceiptID: receipt.ID, Kind: "cloud_" + w.Action, SubjectKind: "cloud_computer", SubjectID: &id, ContentDomain: "management", Status: "queued", ConfigSnapshot: config, Result: json.RawMessage(`null`), ActorUserID: a.User.ID, FenceVersion: 1, CreatedAt: now, DeadlineAt: now.Add(5 * time.Minute), UpdatedAt: now}
-		if e = st.InsertPublicOperation(public); e != nil {
+		op, e := s.queueCloudOperation(cr, c, v, w.Action, "user", idString(a.User.ID), &receipt.ID, nil, now)
+		if e != nil {
 			return e
 		}
-		if _, e = s.queueCloudOperation(cr, c, v, w.Action, "user", idString(a.User.ID), &receipt.ID, &public.ID, now); e != nil {
-			return e
-		}
+		public := cloudPublicOperation(op)
 		out.Status = 202
-		out.Location = "/api/v1/admin/agents/operations/" + idString(public.ID)
+		out.Location = "/api/v1/admin/agents/cloud-computers/operations/" + idString(public.ID)
 		out.Data = operationView(public)
 		return nil
 	})

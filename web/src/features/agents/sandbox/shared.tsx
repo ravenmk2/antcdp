@@ -152,7 +152,7 @@ export function SandboxOperationView({
   const query = useQuery({
     queryKey: ["sandbox", "operation", domain, id],
     queryFn: ({ signal }) =>
-      request<Operation<CloudOperationResult>>(`${domain}/operations/${id}`, {
+      request<Operation<CloudOperationResult>>(`${domain}/cloud-computers/operations/${id}`, {
         signal,
       }),
     retry: false,

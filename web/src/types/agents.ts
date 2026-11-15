@@ -490,7 +490,7 @@ export interface RunDetail extends RunSummary {
   binding: {
     id: string;
     cloud_computer_id: string;
-    runtime_generation: string | null;
+    sandbox_instance_id: string | null;
     storage_generation: string;
     mode: "shared" | "exclusive";
     state: string;

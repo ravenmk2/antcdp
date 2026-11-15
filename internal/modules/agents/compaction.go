@@ -37,13 +37,6 @@ func (s *Service) GetOperation(ctx context.Context, raw string, id uint64) (*Res
 		if e != nil {
 			return e
 		}
-		if op != nil && sandboxOperationKind(op.Kind) {
-			if e = sandboxOperationAccess(tx, op, a); e != nil {
-				return e
-			}
-			out.Data, e = sandboxOperationView(tx, op)
-			return e
-		}
 		if op == nil || op.ContentSessionID == nil || op.Kind != "session_compaction" {
 			return missing()
 		}

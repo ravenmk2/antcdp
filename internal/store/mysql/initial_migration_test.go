@@ -46,7 +46,7 @@ func TestInitialMigration(t *testing.T) {
 	if err = s.db.GetContext(ctx, &applied, "SELECT COUNT(*) FROM goose_db_version WHERE is_applied=1 AND version_id>0"); err != nil || applied != 1 {
 		t.Fatal("expected one initial migration", applied, err)
 	}
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 75 {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 79 {
 		t.Fatal("expected baseline tables and goose history", tables, err)
 	}
 	var constraints int

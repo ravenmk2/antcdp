@@ -107,5 +107,5 @@ func (s FrozenSkillSource) Load(ctx context.Context, x agentcore.ExecutionContex
 	if !utf8.Valid(content) || bytes.ContainsRune(content, 0) {
 		return agentcore.SkillLoad{}, httpx.E(422, "SKILL_TEXT_REQUIRED", "技能工具只支持文本文件")
 	}
-	return agentcore.SkillLoad{SkillID: agentcore.ID(selected.SkillID), VersionID: agentcore.ID(selected.VersionID), ContentSHA256: selected.ContentSHA, Text: string(content), StablePath: skillPath(uint64(x.AgentID), selected.Name), Materialized: x.Binding != nil && x.Binding.RuntimeGeneration != 0}, nil
+	return agentcore.SkillLoad{SkillID: agentcore.ID(selected.SkillID), VersionID: agentcore.ID(selected.VersionID), ContentSHA256: selected.ContentSHA, Text: string(content), StablePath: skillPath(uint64(x.AgentID), selected.Name), Materialized: x.Binding != nil && x.Binding.InstanceID != 0}, nil
 }

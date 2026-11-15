@@ -361,7 +361,7 @@ export function CloudComputerDetailPage() {
                 </pre>
                 <p className="text-xs text-muted">
                   后端代次 {v.backend_generation} · 运行环境代次{" "}
-                  {v.runtime_generation} · 数据卷代次 {v.storage_generation}
+                  {v.sandbox_instance_id} · 数据卷代次 {v.storage_generation}
                 </p>
               </div>
             </details>

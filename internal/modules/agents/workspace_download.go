@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 func (s *CloudService) OpenWorkspaceFile(ctx context.Context, raw string, id uint64, name string) (*Result, *WorkspaceFileContent, error) {
@@ -77,49 +77,49 @@ func (s *CloudService) deleteWorkspaceDownload(ctx context.Context, id uint64, k
 func (s *CloudService) copyWorkspaceSnapshot(ctx context.Context, access *SandboxAccess, operationID uint64, name string) (string, ByteFacts, error) {
 	key := NewStorageKey()
 	var facts ByteFacts
-	_, err := s.recordNativeRequest(ctx, access, operationID, workspacefs.Request{Operation: "download", Path: name}, func() (workspacefs.Response, error) {
+	_, err := s.recordNativeRequest(ctx, access, operationID, workspace.Request{Operation: "download", Path: name}, func() (workspace.Response, error) {
 		f, e := nativeFiles(access)
 		if e != nil {
-			return workspacefs.Response{}, e
+			return workspace.Response{}, e
 		}
 		remote, e := nativePath(name)
 		if e != nil {
-			return workspacefs.Response{}, e
+			return workspace.Response{}, e
 		}
 		before, e := f.StatFile(ctx, access.Resource, remote)
 		if e != nil {
-			return workspacefs.Response{}, e
+			return workspace.Response{}, e
 		}
-		if !nativeFile(before) || before.Size > workspacefs.MaxFileBytes {
-			return workspacefs.Response{}, nativeError("WORKSPACE_SOURCE_INVALID")
+		if !nativeFile(before) || before.Size > workspace.MaxFileBytes {
+			return workspace.Response{}, nativeError("WORKSPACE_SOURCE_INVALID")
 		}
 		e = s.updateWorkspaceObservation(ctx, operationID, access.WorkspaceOperationFence, func(_ *CloudOperationRow, o *workspaceOperationObservation) error {
 			o.LocalStorageKey = key
 			return nil
 		})
 		if e != nil {
-			return workspacefs.Response{}, e
+			return workspace.Response{}, e
 		}
-		reader, e := f.OpenFile(ctx, access.Resource, sandboxcore.FileRequest{Path: remote, MaxBytes: workspacefs.MaxFileBytes + 1})
+		reader, e := f.OpenFile(ctx, access.Resource, sandboxcore.FileRequest{Path: remote, MaxBytes: workspace.MaxFileBytes + 1})
 		if e != nil {
-			return workspacefs.Response{}, e
+			return workspace.Response{}, e
 		}
-		facts, e = s.Host.Files.Write(ctx, key, reader, workspacefs.MaxFileBytes)
+		facts, e = s.Host.Files.Write(ctx, key, reader, workspace.MaxFileBytes)
 		closeErr := reader.Close()
 		if e == nil {
 			e = closeErr
 		}
 		if e != nil {
-			return workspacefs.Response{}, e
+			return workspace.Response{}, e
 		}
 		after, e := f.StatFile(ctx, access.Resource, remote)
 		if e != nil {
-			return workspacefs.Response{}, e
+			return workspace.Response{}, e
 		}
 		if facts.Size != uint64(before.Size) || nativeIdentity(before) != nativeIdentity(after) {
-			return workspacefs.Response{}, nativeError("FILE_STATE_CHANGED")
+			return workspace.Response{}, nativeError("FILE_STATE_CHANGED")
 		}
-		return workspacefs.Result(map[string]any{"size_bytes": facts.Size, "sha256": hexHash(facts.SHA256)}, false, nil), nil
+		return workspace.Result(map[string]any{"size_bytes": facts.Size, "sha256": hexHash(facts.SHA256)}, false, nil), nil
 	})
 	if err != nil {
 		_ = s.deleteWorkspaceDownload(context.WithoutCancel(ctx), operationID, key)

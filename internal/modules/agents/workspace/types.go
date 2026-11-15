@@ -1,21 +1,16 @@
-// Package workspacefs defines the bounded protocol of the trusted workspace
-// helper. It does not authorize platform users or choose a sandbox.
-package workspacefs
+// Package workspace defines Agent workspace paths and bounded operation data.
+// Remote filesystem behavior belongs to the sandbox provider.
+package workspace
 
 import (
-	"bytes"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"io"
 	"path"
 	"strings"
 	"unicode/utf8"
 )
 
 const Version = 1
-const HelperPath = "/usr/local/libexec/antcdp-workspace-helper"
-const TransferDirectory = "/run/antcdp-transfers"
 const MaxRequestBytes = 46 << 10
 const MaxResponseBytes = 1 << 20
 const MaxReadBytes = 64 << 10
@@ -23,7 +18,7 @@ const MaxWriteBytes = 32 << 10
 const MaxFileBytes int64 = 100 << 20
 const MaxWalkEntries = 10000
 
-// Paths are relative to /data. File operations never follow symlinks.
+// Paths are relative to the Agent workspace mount. Provider APIs govern IO semantics.
 type Request struct {
 	Version      int            `json:"version"`
 	Operation    string         `json:"operation"`
@@ -105,34 +100,6 @@ func Result(value any, changed bool, err error) Response {
 	return r
 }
 
-func Encode(request Request) (string, error) {
-	request.Version = Version
-	data, err := json.Marshal(request)
-	if err != nil || len(data) > MaxRequestBytes {
-		return "", failure("WORKSPACE_REQUEST_INVALID")
-	}
-	return base64.RawURLEncoding.EncodeToString(data), nil
-}
-
-func Decode(encoded string) (Request, error) {
-	var request Request
-	if len(encoded) > base64.RawURLEncoding.EncodedLen(MaxRequestBytes) {
-		return request, failure("WORKSPACE_REQUEST_INVALID")
-	}
-	data, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil || len(data) > MaxRequestBytes {
-		return request, failure("WORKSPACE_REQUEST_INVALID")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&request) != nil || decoder.Decode(new(any)) != io.EOF || request.Version != Version {
-		return request, failure("WORKSPACE_REQUEST_INVALID")
-	}
-	return request, nil
-}
-
-// Normalize refuses aliases such as a/../b instead of silently changing their
-// meaning. The host resolves a model's relative CWD before using this protocol.
 func Normalize(value string, allowRoot bool) (string, error) {
 	if value == "" && allowRoot {
 		return ".", nil
@@ -151,15 +118,7 @@ func Normalize(value string, allowRoot bool) (string, error) {
 	return value, nil
 }
 
-func reserved(value string) bool {
-	if value == "." || value == ".system" || strings.HasPrefix(value, ".system/") {
-		return true
-	}
-	parts := strings.Split(value, "/")
-	return parts[0] == "agents"
-}
-
-// PublicPath excludes internal helper state from client-selected paths.
+// PublicPath excludes internal workspace state from client-selected paths.
 func PublicPath(value string, allowRoot bool) (string, error) {
 	name, err := Normalize(value, allowRoot)
 	if err != nil {
@@ -171,14 +130,4 @@ func PublicPath(value string, allowRoot bool) (string, error) {
 		}
 	}
 	return name, nil
-}
-
-type Engine struct {
-	WorkspaceRoot string
-	TransferRoot  string
-	UID, GID      int
-}
-
-func DefaultEngine() *Engine {
-	return &Engine{WorkspaceRoot: "/data", TransferRoot: TransferDirectory, UID: 10001, GID: 10001}
 }

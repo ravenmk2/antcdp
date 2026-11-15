@@ -195,7 +195,7 @@ type BindingRef struct {
 	ID                ID     `json:"id"`
 	ComputerID        ID     `json:"cloud_computer_id"`
 	BackendGeneration uint64 `json:"backend_generation"`
-	RuntimeGeneration uint64 `json:"runtime_generation"`
+	InstanceID        uint64 `json:"sandbox_instance_id"`
 	StorageGeneration uint64 `json:"storage_generation"`
 	Fence             uint64 `json:"fence"`
 	CWD               string `json:"cwd"`

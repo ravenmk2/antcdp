@@ -12,6 +12,7 @@ import (
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/modules/sandboxes"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
@@ -210,7 +211,7 @@ func (s *CloudService) reserveCommand(ctx context.Context, ref agentcore.Executi
 			return e
 		}
 		hash := sha256.Sum256(encoded)
-		out.Row = CloudExecutionRow{ComputerID: out.Access.ComputerID, BackendGeneration: out.Access.BackendGeneration, RuntimeGeneration: out.Access.RuntimeGeneration, RootRunID: x.Root.ID, RunID: x.Run.ID, ToolCallID: callID, ExecutionOrdinal: 1, ExecutionToken: NewStorageKey(), IsBackground: w.Background, Status: "prepared", CommandEventSeq: call.ArgumentsEventSeq, CWD: out.Access.CWD, ExecutionSpecHash: hash[:], ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, DeadlineAt: deadline, LastObservation: json.RawMessage(`{}`)}
+		out.Row = CloudExecutionRow{ComputerID: out.Access.ComputerID, BackendGeneration: out.Access.BackendGeneration, InstanceID: out.Access.InstanceID, RootRunID: x.Root.ID, RunID: x.Run.ID, ToolCallID: callID, ExecutionOrdinal: 1, ExecutionToken: NewStorageKey(), IsBackground: w.Background, Status: "prepared", CommandEventSeq: call.ArgumentsEventSeq, CWD: out.Access.CWD, ExecutionSpecHash: hash[:], ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, DeadlineAt: deadline, LastObservation: json.RawMessage(`{}`)}
 		if e = repo.InsertCloudExecution(&out.Row); e != nil {
 			return e
 		}
@@ -294,7 +295,7 @@ func (s *CloudService) ExecuteCommand(ctx context.Context, ref agentcore.Executi
 		}
 		hash := sha256.Sum256(encoded)
 		row.ExecutionSpecHash = hash[:]
-		row.Status = "dispatching"
+		claim.Row.ExecutionSpecHash = row.ExecutionSpecHash
 		return repo.SaveCloudExecution(row)
 	})
 	if e != nil {
@@ -305,7 +306,7 @@ func (s *CloudService) ExecuteCommand(ctx context.Context, ref agentcore.Executi
 		}
 		return out, e
 	}
-	result, e := claim.Access.Provider.Exec(ctx, claim.Access.Resource, claim.Spec, sandboxcore.ExecCallbacks{
+	result, e := s.foundation().Dispatch(ctx, sandboxes.Execution{ID: claim.Row.ID, InstanceID: claim.Row.InstanceID, LeaseID: claim.Row.SandboxLeaseID, FenceVersion: claim.Row.FenceVersion}, claim.Spec, sandboxcore.ExecCallbacks{
 		Started: func(callbackCtx context.Context, handle sandboxcore.ExecutionHandle) error {
 			return s.recordCommandHandle(callbackCtx, claim, handle)
 		},
@@ -359,7 +360,7 @@ func lockCommandRows(repo CloudRepository, expected CloudExecutionRow, access *S
 	if e != nil {
 		return nil, e
 	}
-	if v == nil || v.ID != w.ID || v.BackendGeneration != access.BackendGeneration || v.RuntimeGeneration != access.RuntimeGeneration {
+	if v == nil || v.ID != w.ID || v.BackendGeneration != access.BackendGeneration || v.InstanceID != access.InstanceID {
 		return nil, integrity()
 	}
 	b, e := repo.Lease(access.BindingID, true)
@@ -902,7 +903,7 @@ func (s *CloudService) reconcileCommand(ctx context.Context, initial CloudExecut
 		if err != nil {
 			return err
 		}
-		if binding == nil || binding.ComputerID == 0 || binding.RuntimeGeneration == nil {
+		if binding == nil || binding.ComputerID == 0 || binding.InstanceID == nil {
 			return integrity()
 		}
 		w, err := repo.Computer(binding.ComputerID, true)
@@ -933,10 +934,10 @@ func (s *CloudService) reconcileCommand(ctx context.Context, initial CloudExecut
 		if row == nil {
 			return integrity()
 		}
-		if row.ComputerID != instance.ID || row.BackendGeneration != instance.BackendGeneration || row.RuntimeGeneration != instance.RuntimeGeneration {
+		if row.ComputerID != instance.ID || row.BackendGeneration != instance.BackendGeneration || row.InstanceID != instance.InstanceID {
 			return httpx.E(409, "CLOUD_EXECUTION_FENCED", "执行所属环境代次已变化")
 		}
-		access = &SandboxAccess{BindingID: binding.RootRunID, ComputerID: w.ID, BackendGeneration: instance.BackendGeneration, RuntimeGeneration: instance.RuntimeGeneration, StorageGeneration: instance.StorageGeneration, BindingFence: binding.FenceVersion, CWD: row.CWD}
+		access = &SandboxAccess{BindingID: binding.RootRunID, ComputerID: w.ID, BackendGeneration: instance.BackendGeneration, InstanceID: instance.InstanceID, StorageGeneration: instance.StorageGeneration, BindingFence: binding.FenceVersion, CWD: row.CWD}
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		if row.FinishedAt != nil {
 			return releaseCommandReferences(st, repo, row.ID, now, json.RawMessage(`{"terminal_execution":true}`))
@@ -1053,7 +1054,7 @@ func (s *CloudService) settleAbsentCommand(ctx context.Context, observed *CloudE
 		if err != nil {
 			return err
 		}
-		if ref != access.Resource || computer.BackendGeneration != observed.BackendGeneration || computer.RuntimeGeneration != observed.RuntimeGeneration || row.FenceVersion != observed.FenceVersion || row.ExecutorEpoch != observed.ExecutorEpoch {
+		if ref != access.Resource || computer.BackendGeneration != observed.BackendGeneration || computer.InstanceID != observed.InstanceID || row.FenceVersion != observed.FenceVersion || row.ExecutorEpoch != observed.ExecutorEpoch {
 			return httpx.E(409, "CLOUD_EXECUTION_FENCED", "执行所属环境代次已变化")
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)

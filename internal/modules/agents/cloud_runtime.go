@@ -10,26 +10,14 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/modules/cloudcomputers"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
-type SandboxCapabilities struct {
-	Lifecycle           string `json:"lifecycle"`
-	Execution           string `json:"execution"`
-	ExecutionInspection string `json:"execution_inspection"`
-	Cancellation        string `json:"cancellation"`
-	FileTransfer        string `json:"file_transfer"`
-	PersistentWorkspace string `json:"persistent_workspace"`
-	NetworkEnforcement  string `json:"network_enforcement"`
-	VolumeDeletion      string `json:"volume_deletion"`
-}
-type DiagnosticCheck struct {
-	Name   string  `json:"name"`
-	Status string  `json:"status"`
-	Reason *string `json:"reason"`
-}
+type SandboxCapabilities = cloudcomputers.Capabilities
+type DiagnosticCheck = cloudcomputers.DiagnosticCheck
 
 type CloudService struct {
 	Host                *Service
@@ -50,21 +38,17 @@ type CloudService struct {
 // SandboxAccess is an internal capability for one exact computer generation.
 // It is never serialized as a public resource or constructed by an HTTP client.
 type SandboxAccess struct {
-	WorkspaceOperationID, WorkspaceOperationFence                       uint64
-	Provider                                                            sandboxcore.Provider
-	Resource                                                            sandboxcore.ResourceRef
-	ComputerID, BackendGeneration, RuntimeGeneration, StorageGeneration uint64
-	BindingID, BindingFence                                             uint64
-	OperationID, OperationFence                                         uint64
-	CWD                                                                 string
-	ReferenceIDs                                                        []uint64
-	Execution                                                           *agentcore.ExecutionRef
+	WorkspaceOperationID, WorkspaceOperationFence                uint64
+	Provider                                                     sandboxcore.Provider
+	Resource                                                     sandboxcore.ResourceRef
+	ComputerID, BackendGeneration, InstanceID, StorageGeneration uint64
+	BindingID, BindingFence                                      uint64
+	OperationID, OperationFence                                  uint64
+	CWD                                                          string
+	ReferenceIDs                                                 []uint64
+	Execution                                                    *agentcore.ExecutionRef
 }
-type CloudConnection struct {
-	BackendGeneration                uint64
-	Endpoint, AccessMode, APIKey     string
-	ConnectTimeout, OperationTimeout time.Duration
-}
+type CloudConnection = cloudcomputers.Connection
 
 func idString(id uint64) string { return strconv.FormatUint(id, 10) }
 func diagnosticCheck(name, status, reason string) DiagnosticCheck {
@@ -75,7 +59,7 @@ func diagnosticCheck(name, status, reason string) DiagnosticCheck {
 	return DiagnosticCheck{Name: name, Status: status, Reason: why}
 }
 func unknownSandboxCapabilities() SandboxCapabilities {
-	return SandboxCapabilities{"unknown", "unknown", "unknown", "unknown", "unknown", "unknown", "unknown", "unsupported"}
+	return SandboxCapabilities{Lifecycle: "unknown", Execution: "unknown", ExecutionInspection: "unknown", Cancellation: "unknown", FileTransfer: "unknown", PersistentWorkspace: "unknown", NetworkEnforcement: "unknown", VolumeDeletion: "unsupported"}
 }
 func sandboxFailure(e error) error {
 	var failure *sandboxcore.Error
@@ -112,7 +96,7 @@ func (s *CloudService) tag(kind string, id, version uint64) string {
 	return s.Host.tag("cloud/"+kind, id, version)
 }
 func (s *CloudService) runtimeConnection(row *SandboxConnectionRow) (CloudConnection, error) {
-	if row == nil || row.ID != 1 {
+	if row == nil || row.ID != 1 || row.BackendType != "opensandbox" {
 		return CloudConnection{}, integrity()
 	}
 	if row.Endpoint == nil {
@@ -152,7 +136,7 @@ func (s *CloudService) resource(v *CloudComputerRow) (sandboxcore.ResourceRef, e
 	if v.RuntimeID == nil || v.RuntimeCreationToken == nil {
 		return sandboxcore.ResourceRef{}, httpx.E(409, "CLOUD_NOT_READY", "云电脑尚未激活")
 	}
-	return sandboxcore.ResourceRef{BackendGeneration: v.BackendGeneration, RemoteID: *v.RuntimeID, Ownership: sandboxcore.Ownership{InstallationID: installation, ComputerID: v.ID, CreationToken: *v.RuntimeCreationToken}}, nil
+	return sandboxcore.ResourceRef{BackendGeneration: v.BackendGeneration, RemoteID: *v.RuntimeID, Ownership: sandboxcore.Ownership{InstallationID: installation, InstanceID: v.InstanceID, CreationToken: *v.RuntimeCreationToken}}, nil
 }
 func computerCapabilities(v *CloudComputerRow) SandboxCapabilities {
 	c := unknownSandboxCapabilities()
@@ -194,9 +178,9 @@ func (s *CloudService) accessRows(repo CloudRepository, computerID uint64, lease
 	if e != nil {
 		return nil, c, e
 	}
-	access := &SandboxAccess{Resource: ref, ComputerID: w.ID, BackendGeneration: w.BackendGeneration, RuntimeGeneration: w.RuntimeGeneration, StorageGeneration: w.StorageGeneration, CWD: "/data/workspace"}
+	access := &SandboxAccess{Resource: ref, ComputerID: w.ID, BackendGeneration: w.BackendGeneration, InstanceID: w.InstanceID, StorageGeneration: w.StorageGeneration, CWD: "/data/workspace"}
 	if lease != nil {
-		if lease.ComputerID != w.ID || lease.State != "active" || lease.ReleasedAt != nil || lease.BackendGeneration != w.BackendGeneration || lease.RuntimeGeneration == nil || *lease.RuntimeGeneration != w.RuntimeGeneration || lease.StorageGeneration != w.StorageGeneration {
+		if lease.ComputerID != w.ID || lease.State != "active" || lease.ReleasedAt != nil || lease.BackendGeneration != w.BackendGeneration || lease.InstanceID == nil || *lease.InstanceID != w.InstanceID || lease.StorageGeneration != w.StorageGeneration {
 			return nil, c, httpx.E(409, "CLOUD_LEASE_FENCED", "云电脑执行占用已失效")
 		}
 		access.BindingID, access.BindingFence = lease.RootRunID, lease.FenceVersion
@@ -231,10 +215,10 @@ func (s *Service) executionBinding(tx identity.Tx, root *RunRow) (*agentcore.Bin
 }
 func cloudBinding(b *CloudLeaseRow, cwd string) *agentcore.BindingRef {
 	runtime := uint64(0)
-	if b.RuntimeGeneration != nil {
-		runtime = *b.RuntimeGeneration
+	if b.InstanceID != nil {
+		runtime = *b.InstanceID
 	}
-	return &agentcore.BindingRef{ID: agentcore.ID(b.RootRunID), ComputerID: agentcore.ID(b.ComputerID), BackendGeneration: b.BackendGeneration, RuntimeGeneration: runtime, StorageGeneration: b.StorageGeneration, Fence: b.FenceVersion, CWD: cwd}
+	return &agentcore.BindingRef{ID: agentcore.ID(b.RootRunID), ComputerID: agentcore.ID(b.ComputerID), BackendGeneration: b.BackendGeneration, InstanceID: runtime, StorageGeneration: b.StorageGeneration, Fence: b.FenceVersion, CWD: cwd}
 }
 func (s *CloudService) Acquire(ctx context.Context, x agentcore.ExecutionContext) (*agentcore.BindingRef, error) {
 	var out *agentcore.BindingRef
@@ -249,7 +233,7 @@ func (s *CloudService) Acquire(ctx context.Context, x agentcore.ExecutionContext
 	return out, e
 }
 func (s *CloudService) PrepareTurn(ctx context.Context, x agentcore.ExecutionContext) error {
-	if x.Binding == nil || x.Binding.RuntimeGeneration == 0 {
+	if x.Binding == nil || x.Binding.InstanceID == 0 {
 		return nil
 	}
 	var access *SandboxAccess

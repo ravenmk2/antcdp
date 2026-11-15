@@ -1,17 +1,15 @@
 package agents
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"strconv"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
 )
 
 type workspaceClaim struct {
@@ -26,7 +24,7 @@ type workspaceClaim struct {
 }
 
 // ProcessWorkspaceOperations dispatches queued user mutations once. All other
-// unfinished operations are observed only; no interrupted helper is replayed.
+// unfinished operations are observed only; no interrupted mutation is replayed.
 func (s *CloudService) ProcessWorkspaceOperations(ctx context.Context, limit int) error {
 	if limit <= 0 || limit > 100 {
 		limit = 25
@@ -114,7 +112,7 @@ func (s *CloudService) claimWorkspaceOperation(ctx context.Context, id uint64) (
 		if op.FenceVersion != initial.FenceVersion || op.Status == "running" && op.ExecutorEpoch == s.Epoch && op.DeadlineAt.After(now) {
 			return nil
 		}
-		if w == nil || instance == nil || instance.ID != w.ID || instance.BackendGeneration != op.BackendGeneration || instance.RuntimeGeneration != op.RuntimeGeneration || instance.StorageGeneration != op.StorageGeneration {
+		if w == nil || instance == nil || instance.ID != w.ID || instance.BackendGeneration != op.BackendGeneration || instance.InstanceID != op.InstanceID || instance.StorageGeneration != op.StorageGeneration {
 			return integrity()
 		}
 		c := &workspaceClaim{op: op, recovery: op.Status != "queued", terminated: instance.DeletedAt != nil}
@@ -136,7 +134,7 @@ func (s *CloudService) claimWorkspaceOperation(ctx context.Context, id uint64) (
 				}
 			}
 		}
-		c.access = &SandboxAccess{ComputerID: w.ID, BackendGeneration: instance.BackendGeneration, RuntimeGeneration: instance.RuntimeGeneration, StorageGeneration: instance.StorageGeneration, CWD: "/data", OperationID: op.ID}
+		c.access = &SandboxAccess{ComputerID: w.ID, BackendGeneration: instance.BackendGeneration, InstanceID: instance.InstanceID, StorageGeneration: instance.StorageGeneration, CWD: "/data", OperationID: op.ID}
 		if op.RootRunID != nil {
 			c.access.BindingID = *op.RootRunID
 		}
@@ -176,17 +174,6 @@ func (s *CloudService) claimWorkspaceOperation(ctx context.Context, id uint64) (
 		}
 		if !c.recovery && c.cause == nil {
 			if err = s.acquireReferences(st, repo, c.access, "cloud_file_operation", workspaceHolder(op.ID)); err != nil {
-				return err
-			}
-		}
-		if op.PublicOperationID != nil {
-			public, err := st.PublicOperation(*op.PublicOperationID, true)
-			if err != nil || public == nil {
-				return errors.Join(err, integrity())
-			}
-			public.Status, public.StartedAt, public.UpdatedAt = op.Status, op.StartedAt, now
-			public.ExecutorEpoch, public.FenceVersion = &op.ExecutorEpoch, op.FenceVersion
-			if err = st.SavePublicOperation(public); err != nil {
 				return err
 			}
 		}
@@ -237,7 +224,7 @@ func (s *CloudService) processWorkspaceOperation(ctx context.Context, id uint64)
 				err = httpx.E(409, "WORKSPACE_OPERATION_INTERRUPTED", "操作期限已到，剩余文件未继续处理")
 				break
 			}
-			var response workspacefs.Response
+			var response workspace.Response
 			response, err = s.workspaceRequest(bounded, c.access, id, request)
 			if response.Changed {
 				affected = append(affected, request.Path)
@@ -250,13 +237,13 @@ func (s *CloudService) processWorkspaceOperation(ctx context.Context, id uint64)
 	return s.finishWorkspaceOperation(ctx, id, c.access, map[string]any{"affected_paths": affected}, err)
 }
 
-func mutationRequests(kind string, intent workspaceFileIntent) []workspacefs.Request {
+func mutationRequests(kind string, intent workspaceFileIntent) []workspace.Request {
 	if kind == "workspace_mkdir" {
-		return []workspacefs.Request{{Operation: "mkdir", Path: intent.Path}}
+		return []workspace.Request{{Operation: "mkdir", Path: intent.Path}}
 	}
-	requests := make([]workspacefs.Request, 0, len(intent.Items))
+	requests := make([]workspace.Request, 0, len(intent.Items))
 	for _, item := range intent.Items {
-		requests = append(requests, workspacefs.Request{Operation: "remove", Path: item.Path, Identity: item.Identity, Recursive: intent.Recursive})
+		requests = append(requests, workspace.Request{Operation: "remove", Path: item.Path, Identity: item.Identity, Recursive: intent.Recursive})
 	}
 	return requests
 }
@@ -274,9 +261,6 @@ func (s *CloudService) recoverWorkspaceOperation(ctx context.Context, c *workspa
 		}
 	}
 	confirmed := c.terminated || c.cause == nil
-	if !c.terminated && c.observation.TransferState == "started" {
-		confirmed = false
-	}
 	for i := range c.observation.Executions {
 		execution := &c.observation.Executions[i]
 		if execution.State == "completed" && execution.Response != nil {
@@ -285,32 +269,14 @@ func (s *CloudService) recoverWorkspaceOperation(ctx context.Context, c *workspa
 		if c.terminated {
 			continue
 		}
-		if execution.Backend == nativeFilesystemVersion {
-			// Native reads cannot leave a remote write running. Native mutations
-			// have no provider operation handle: never replay or infer completion
-			// merely because a path currently has the expected contents.
-			if nativeReadOnly(execution.Request) {
-				execution.State = "completed"
-				execution.Response = &workspacefs.Response{Version: workspacefs.Version, Code: "WORKSPACE_OPERATION_INTERRUPTED"}
-			} else {
-				confirmed = false
-			}
-			continue
-		}
-		if c.access.Provider == nil || execution.Handle == nil || execution.Handle.Resource != c.access.Resource {
+		// Reads cannot leave a mutation running. Writes have no remote operation
+		// handle and remain unknown until instance termination is observed.
+		if nativeReadOnly(execution.Request) {
+			execution.State = "completed"
+			execution.Response = &workspace.Response{Version: workspace.Version, Code: "WORKSPACE_OPERATION_INTERRUPTED"}
+		} else {
 			confirmed = false
-			continue
 		}
-		result, output, err := awaitWorkspaceHelper(bounded, c.access.Provider, *execution.Handle)
-		if result.Running || result.ExitCode == nil {
-			confirmed = false
-			continue
-		}
-		response, valid := recoveredHelperResponse(output)
-		if err != nil || !valid {
-			response = workspacefs.Response{Version: workspacefs.Version, Code: "WORKSPACE_RESULT_UNAVAILABLE"}
-		}
-		execution.State, execution.Response = "completed", &response
 	}
 	result, cause := recoveredWorkspaceResult(c.op, c.observation)
 	if !confirmed {
@@ -328,14 +294,6 @@ func (s *CloudService) recoverWorkspaceOperation(ctx context.Context, c *workspa
 	return nil
 }
 
-func recoveredHelperResponse(raw []byte) (workspacefs.Response, bool) {
-	var response workspacefs.Response
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	valid := len(raw) <= workspacefs.MaxResponseBytes && decoder.Decode(&response) == nil && decoder.Decode(new(any)) == io.EOF && response.Version == workspacefs.Version
-	return response, valid
-}
-
 func recoveredWorkspaceResult(op *CloudOperationRow, observation workspaceOperationObservation) (map[string]any, error) {
 	affected := []string{}
 	var cause error
@@ -348,7 +306,7 @@ func recoveredWorkspaceResult(op *CloudOperationRow, observation workspaceOperat
 			affected = append(affected, execution.Request.Path)
 		}
 		if !execution.Response.OK {
-			cause = helperFailure(execution.Response.Code)
+			cause = workspaceFailure(execution.Response.Code)
 		}
 	}
 	var intent workspaceFileIntent
@@ -442,18 +400,6 @@ func (s *CloudService) settleWorkspaceOperation(ctx context.Context, id uint64, 
 		if err = repo.SaveCloudOperation(row); err != nil {
 			return err
 		}
-		if row.PublicOperationID == nil {
-			return nil
-		}
-		public, err := st.PublicOperation(*row.PublicOperationID, true)
-		if err != nil || public == nil {
-			return errors.Join(err, integrity())
-		}
-		public.Status, public.ErrorCode, public.FinishedAt, public.UpdatedAt = row.Status, row.ErrorCode, row.FinishedAt, now
-		if public.Status == "completed" {
-			public.Status = "succeeded"
-		}
-		public.Result = observation.Result
-		return st.SavePublicOperation(public)
+		return nil
 	})
 }

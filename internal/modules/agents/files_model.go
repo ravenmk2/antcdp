@@ -48,7 +48,7 @@ type ArtifactSource struct {
 	ComputerID        uint64 `json:"cloud_computer_id,string"`
 	BindingID         uint64 `json:"binding_id,string"`
 	BackendGeneration uint64 `json:"backend_generation,string"`
-	RuntimeGeneration uint64 `json:"runtime_generation,string"`
+	InstanceID        uint64 `json:"sandbox_instance_id,string"`
 	StorageGeneration uint64 `json:"storage_generation,string"`
 	VolumeID          string `json:"volume_id"`
 	Path              string `json:"path"`

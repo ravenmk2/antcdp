@@ -19,6 +19,15 @@ func registerAgentSandboxes(user, admin *gin.RouterGroup, o Options) {
 		})
 	}
 	s := o.Sandboxes
+	for _, group := range []*gin.RouterGroup{u, a} {
+		group.GET("/cloud-computers/operations/:id", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+			id, ok := agentID(c, "id")
+			if !ok {
+				return nil, nil
+			}
+			return s.GetOperation(c.Request.Context(), rawSession(c), id)
+		}))
+	}
 	registerSandboxFiles(u, o)
 	a.GET("/sandbox-network-presets", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
 		if !modelNoQuery(c) {

@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ import (
 
 const (
 	installationKey = "antcdp_installation_id"
-	workspaceKey    = "antcdp_cloud_computer_id"
+	workspaceKey    = "antcdp_sandbox_instance_id"
 	creationKey     = "antcdp_creation_token"
 	execdPort       = 44772
 )
@@ -107,7 +108,7 @@ func (p *Provider) Create(ctx context.Context, s sandboxcore.CreateSpec) (sandbo
 	}
 	if s.Mount.Kind == "named_volume" {
 		create, deleteOnTermination := s.Mount.CreateIfMissing, false
-		request.Volumes = []sdk.Volume{{Name: "data", PVC: &sdk.PVC{ClaimName: s.Mount.VolumeName, CreateIfNotExists: &create, DeleteOnSandboxTermination: &deleteOnTermination}, MountPath: "/data"}}
+		request.Volumes = []sdk.Volume{{Name: "data", PVC: &sdk.PVC{ClaimName: s.Mount.VolumeName, CreateIfNotExists: &create, DeleteOnSandboxTermination: &deleteOnTermination}, MountPath: s.Mount.MountPath}}
 		request.Metadata["antcdp_volume_id"] = s.Mount.VolumeID
 	}
 	result, err := p.lifecycle.CreateSandbox(ctx, request)
@@ -289,12 +290,12 @@ func (p *Provider) controlToken(owner sandboxcore.Ownership) (string, error) {
 		return "", failure("SANDBOX_CONTROL_KEY_UNAVAILABLE", false)
 	}
 	mac := hmac.New(sha256.New, p.connection.ControlKey)
-	_, _ = fmt.Fprintf(mac, "antcdp/sandbox-execd/v1\x00%s\x00%d\x00%s", owner.InstallationID, owner.ComputerID, owner.CreationToken)
+	_, _ = fmt.Fprintf(mac, "antcdp/sandbox-execd/v1\x00%s\x00%d\x00%s", owner.InstallationID, owner.InstanceID, owner.CreationToken)
 	return hex.EncodeToString(mac.Sum(nil)), nil
 }
 
 func validateCreate(s sandboxcore.CreateSpec) error {
-	if s.BackendGeneration == 0 || !validOwner(s.Ownership) || s.Config.RuntimeBackend != "docker" || s.Lifetime < 0 || s.Lifetime > 24*time.Hour || s.Lifetime > 0 && s.Lifetime < time.Minute || s.Mount.MountPath != "/data" {
+	if s.BackendGeneration == 0 || !validOwner(s.Ownership) || s.Config.RuntimeBackend != "docker" || s.Lifetime < 0 || s.Lifetime > 24*time.Hour || s.Lifetime > 0 && s.Lifetime < time.Minute {
 		return failure("SANDBOX_REQUEST_INVALID", false)
 	}
 	e := s.Config.Environment
@@ -302,6 +303,9 @@ func validateCreate(s sandboxcore.CreateSpec) error {
 		return failure("SANDBOX_REQUEST_INVALID", false)
 	}
 	if s.Mount.Kind == "named_volume" {
+		if !path.IsAbs(s.Mount.MountPath) || path.Clean(s.Mount.MountPath) != s.Mount.MountPath || s.Mount.MountPath == "/" || strings.ContainsAny(s.Mount.MountPath, "\\\x00\r\n") {
+			return failure("SANDBOX_VOLUME_INVALID", false)
+		}
 		if !lowerHex32(s.Mount.VolumeID) || s.Mount.VolumeName != "acdp-"+s.Ownership.InstallationID[:8]+"-"+s.Mount.VolumeID {
 			return failure("SANDBOX_VOLUME_INVALID", false)
 		}
@@ -343,10 +347,10 @@ func lowerHex32(v string) bool {
 	return true
 }
 func validOwner(o sandboxcore.Ownership) bool {
-	return lowerHex32(o.InstallationID) && o.ComputerID > 0 && lowerHex32(o.CreationToken)
+	return lowerHex32(o.InstallationID) && o.InstanceID > 0 && lowerHex32(o.CreationToken)
 }
 func metadata(o sandboxcore.Ownership) map[string]string {
-	return map[string]string{installationKey: o.InstallationID, workspaceKey: strconv.FormatUint(o.ComputerID, 10), creationKey: o.CreationToken}
+	return map[string]string{installationKey: o.InstallationID, workspaceKey: strconv.FormatUint(o.InstanceID, 10), creationKey: o.CreationToken}
 }
 func observe(ref sandboxcore.ResourceRef, info *sdk.SandboxInfo) (sandboxcore.Observation, error) {
 	out := sandboxcore.Observation{Ref: ref, State: "unknown"}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ravenmk2/antcdp/internal/workspacefs"
+	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 )
 
 func TestWorkspaceToolPathsStayWithinPublicData(t *testing.T) {
@@ -50,9 +50,9 @@ func TestWorkspaceReadOutputKeepsValidJSONAndContinuation(t *testing.T) {
 }
 
 func TestWorkspaceSearchOutputBoundsWholeRecords(t *testing.T) {
-	matches := make([]workspacefs.Match, 200)
+	matches := make([]workspace.Match, 200)
 	for i := range matches {
-		matches[i] = workspacefs.Match{Path: strings.Repeat("x", 1024), Line: i + 1, Text: strings.Repeat("\x01", 2048)}
+		matches[i] = workspace.Match{Path: strings.Repeat("x", 1024), Line: i + 1, Text: strings.Repeat("\x01", 2048)}
 	}
 	raw, _ := json.Marshal(map[string]any{"paths": []string{}, "matches": matches, "truncated": false, "visited_entries": 500})
 	text, err := workspaceToolContent("grep", raw)
@@ -60,8 +60,8 @@ func TestWorkspaceSearchOutputBoundsWholeRecords(t *testing.T) {
 		t.Fatalf("bounded result: %v", err)
 	}
 	var result struct {
-		Matches   []workspacefs.Match `json:"matches"`
-		Truncated bool                `json:"truncated"`
+		Matches   []workspace.Match `json:"matches"`
+		Truncated bool              `json:"truncated"`
 	}
 	_ = json.Unmarshal([]byte(text), &result)
 	if len(result.Matches) == 0 || len(result.Matches) >= len(matches) || !result.Truncated {
