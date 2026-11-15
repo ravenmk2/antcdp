@@ -54,6 +54,7 @@ type RunMetadataRow struct {
 	OwnerID *uint64 `db:"owner_user_id"`
 }
 type usageRepository interface {
+	SessionActivity(uint64) (SessionActivity, error)
 	Usage(UsageQuery) (UsageTotals, []UsageBucket, error)
 	SessionUsageMetrics(uint64) (CacheUsage, *ModelCallRow, uint64, error)
 	ModelCallPage(UsageQuery) ([]ModelCallRow, int, error)
@@ -136,7 +137,11 @@ func (s *Service) SessionUsage(ctx context.Context, raw string, id uint64) (*Res
 		if e != nil {
 			return e
 		}
-		out.Data = SessionUsageReport{UsageTotals: totals, Context: context, Cache: cache}
+		activity, e := repo.SessionActivity(id)
+		if e != nil {
+			return e
+		}
+		out.Data = SessionUsageReport{UsageTotals: totals, SessionActivity: activity, Context: context, Cache: cache}
 		return nil
 	})
 }

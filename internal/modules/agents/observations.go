@@ -172,11 +172,17 @@ func (s *Service) ListInteractions(ctx context.Context, raw string, id uint64, q
 	})
 }
 func runSummary(v RunRow, c RunCounts) RunSummary {
+	steps := c.EndedSteps
+	// Older terminal runs have the authoritative final ordinal even when their
+	// event log predates explicit step boundaries. Do not invent timestamps.
+	if v.FinishedAt != nil {
+		steps = v.CurrentStepNo
+	}
 	root := v.ID
 	if v.RootRunID != nil {
 		root = *v.RootRunID
 	}
-	return RunSummary{ID: v.ID, SessionID: v.SessionID, RootRunID: root, ParentRunID: v.ParentRunID, TriggerInputID: v.TriggerInputID, Status: v.Status, Reason: v.EndReason, StartedAt: v.StartedAt, FinishedAt: v.FinishedAt, SettledAt: v.SettledAt, Deadline: v.DeadlineAt, Steps: v.CurrentStepNo, ModelCalls: c.ModelCalls, ToolCalls: c.ToolCalls, UsageCompleteness: v.UsageCompleteness}
+	return RunSummary{ID: v.ID, SessionID: v.SessionID, RootRunID: root, ParentRunID: v.ParentRunID, TriggerInputID: v.TriggerInputID, Status: v.Status, Reason: v.EndReason, StartedAt: v.StartedAt, FinishedAt: v.FinishedAt, SettledAt: v.SettledAt, Deadline: v.DeadlineAt, Steps: steps, CurrentStep: v.CurrentStepNo, ModelCalls: c.ModelCalls, ToolCalls: c.ToolCalls, UsageCompleteness: v.UsageCompleteness}
 }
 func (s *Service) GetRun(ctx context.Context, raw string, id uint64) (*Result, error) {
 	return s.observationAccess(ctx, raw, func(tx identity.Tx, _ Repository, a *identity.Auth, out *Result) error {

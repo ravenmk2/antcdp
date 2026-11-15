@@ -51,6 +51,7 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 	t.Run("session_titles", func(t *testing.T) { runtimeSessionTitles(t, f, agent.ID) })
 	t.Run("turn_lifecycle", func(t *testing.T) { runtimeTurnLifecycle(t, f, agent.ID) })
 	t.Run("model_retry", func(t *testing.T) { runtimeModelRetry(t, f, agent.ID) })
+	t.Run("step_statistics", func(t *testing.T) { runtimeStepStatistics(t, f, agent.ID) })
 	t.Run("tool_output", func(t *testing.T) { runtimeToolOutput(t, f, agent.ID) })
 	t.Run("tool_output_replay", func(t *testing.T) { runtimeOutputReplay(t, f, agent.ID) })
 	t.Run("reconciliation_context", func(t *testing.T) { runtimeReconciliationContext(t, f, agent.ID) })
@@ -267,6 +268,7 @@ func runtimeToolsAndQuestions(t *testing.T, f *agentIntegrationFixture, agent ui
 	if e != nil || q.InteractionID == nil {
 		t.Fatal("question admission", e)
 	}
+	assertRunSteps(t, f, x, 1, 0)
 	view, e := f.Agents.GetInteraction(f.Context, f.AdminToken, uint64(*q.InteractionID))
 	if e != nil {
 		t.Fatal(e)
@@ -290,7 +292,9 @@ func runtimeToolsAndQuestions(t *testing.T, f *agentIntegrationFixture, agent ui
 		t.Fatal("timely answer created an input")
 	}
 	runtimeAttempt(t, f, x, 2, modelcore.Message{Role: "assistant", Content: "工具与答复完成"})
+	assertRunSteps(t, f, x, 2, 1)
 	runtimeEnd(t, f, x)
+	assertRunSteps(t, f, x, 2, 2)
 
 	x = runtimeClaim(t, f, session.Configuration.ID, "等待一个可以迟答的问题")
 	commit = runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "call-late", Name: "ask_user_question", Arguments: runtimeQuestionArgs}}})

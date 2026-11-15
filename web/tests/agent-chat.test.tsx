@@ -8,6 +8,7 @@ import { QueuePanel } from "@/features/agents/chat/queue-panel";
 import { SessionFiles } from "@/features/agents/chat/session-files";
 import { ConversationTimeline } from "@/features/agents/chat/timeline";
 import { ToolEvent } from "@/features/agents/chat/tool-event";
+import { TurnUsage } from "@/features/agents/chat/turn-usage";
 import {
   runDiagnosticReasons,
   runtimeReason,
@@ -643,6 +644,8 @@ it.each([false, true])(
     override = (url) =>
       url.endsWith("/usage")
         ? response({
+            run_count: 4,
+            step_count: 12,
             input_tokens: "30000",
             output_tokens: "1000",
             context: {
@@ -664,20 +667,81 @@ it.each([false, true])(
           })
         : undefined;
     const { user } = mount(<ContextUsage sessionId="10" />);
-    await user.click(
+    await user.hover(
       await screen.findByRole("button", {
         name: `上下文 ${stale ? "—" : "25%"}，缓存命中 0%，查看用量`,
       }),
     );
     expect(await screen.findByText("80%")).toBeVisible();
     expect(screen.getByText("2 / 3 次")).toBeVisible();
-    expect(screen.getByText(/部分请求未提供有效缓存计数/)).toBeVisible();
-    if (stale)
-      expect(
-        screen.getByText("上下文已压缩，等待下一次请求更新占用。"),
-      ).toBeVisible();
+    expect(screen.getByText("会话轮数").nextElementSibling).toHaveTextContent(
+      "4",
+    );
+    expect(screen.getByText("已结束步骤").nextElementSibling).toHaveTextContent(
+      "12",
+    );
+    expect(screen.getByRole("dialog").querySelector("p")).toBeNull();
   },
 );
+it("loads turn statistics on hover, separates retries from ended steps, and reuses data on click", async () => {
+  override = (url) => {
+    if (url.includes("/runs/20/model-calls"))
+      return response(
+        [1, 2].map((id) => ({
+          id: String(id),
+          usage_completeness: "complete",
+          usage: {
+            input_tokens: "1000",
+            output_tokens: "20",
+            cache_read_tokens: "800",
+            cache_write_tokens: null,
+          },
+        })),
+      );
+    if (url === "/agents/runs/20") return response({ step_count: 1 });
+  };
+  const { user } = mount(<TurnUsage sessionId="10" runId="20" />);
+  expect(mock).not.toHaveBeenCalled();
+  const trigger = screen.getByRole("button", { name: "本轮统计" });
+  expect(trigger).toHaveClass("agent-chat-icon-button");
+  expect(trigger).toHaveTextContent("");
+  await user.hover(trigger);
+  expect(await screen.findByText("2,000")).toBeVisible();
+  expect(screen.getByText("已结束步骤").nextElementSibling).toHaveTextContent(
+    "1",
+  );
+  expect(screen.getByText("模型调用").nextElementSibling).toHaveTextContent(
+    "2 次",
+  );
+  expect(screen.getByText("缓存命中").nextElementSibling).toHaveTextContent(
+    "80%",
+  );
+  expect(screen.getByRole("dialog").querySelector("p")).toBeNull();
+  await user.unhover(trigger);
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  await user.click(trigger);
+  expect(await screen.findByText("2,000")).toBeVisible();
+  expect(mock).toHaveBeenCalledTimes(2);
+});
+
+it("offers statistics for a failed turn without inventing a reply to copy", () => {
+  mount(
+    <ConversationTimeline
+      sessionId="10"
+      attempt={null}
+      records={[
+        records[0],
+        {
+          ...records[2],
+          data: { ...records[2].data, status: "failed" },
+        } as DurableRecord,
+      ]}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "本轮统计" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "复制回复" })).toBeNull();
+});
+
 it("keeps Shift+Enter as a newline without sending the draft", async () => {
   const { user } = mount(<AgentSessionPage />);
   const input = await screen.findByRole("textbox", { name: "消息内容" });

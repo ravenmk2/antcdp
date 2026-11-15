@@ -103,6 +103,7 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 				return
 			}
 			again, err := f.Agents.CompleteAttempt(f.Context, x.Ref, result)
+			assertRunSteps(t, f, x, 1, 0)
 			if err != nil || !again.Retry || again.Failure != nil || again.AssistantSeq != commit.AssistantSeq || again.RetryAfter > commit.RetryAfter {
 				t.Fatal("retry decision not idempotent", again, err)
 			}
@@ -121,6 +122,14 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 			draft.Attempt = 2
 			second, err := f.Agents.FreezeAttempt(f.Context, x.Ref, draft)
 			if mode == "stop" || mode == "restart" {
+				if mode == "stop" {
+					// A stop request forbids new attempts but is not a logical end.
+					assertRunSteps(t, f, x, 1, 0)
+					if _, endErr := f.Agents.EndRoot(f.Context, x.Ref, core.RunEnd{Status: core.Cancelled}); endErr != nil {
+						t.Fatal(endErr)
+					}
+				}
+				assertRunSteps(t, f, x, 1, 1)
 				if err == nil {
 					t.Fatal("closed execution admitted retry")
 				}
@@ -151,6 +160,7 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 				t.Fatal(err)
 			}
 			next, err := f.Agents.PrepareStep(f.Context, x, 2)
+			assertRunSteps(t, f, x, 2, 1)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -159,6 +169,7 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 				t.Fatal("failed output polluted next step", string(encoded), err)
 			}
 			runtimeEnd(t, f, x)
+			assertRunSteps(t, f, x, 2, 2)
 		})
 	}
 }

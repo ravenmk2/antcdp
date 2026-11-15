@@ -9,6 +9,17 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
+func (t *agentsTx) SessionActivity(id uint64) (a.SessionActivity, error) {
+	var result a.SessionActivity
+	err := t.tx.GetContext(t.ctx, &result, `SELECT COUNT(*) AS runs,
+COALESCE(SUM(CASE WHEN r.finished_at IS NOT NULL THEN r.current_step_no ELSE COALESCE(e.steps,0) END),0) AS steps
+FROM agent_run r LEFT JOIN (
+SELECT run_id, MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(payload,'$.public.step_no')) AS UNSIGNED)) AS steps
+FROM agent_event WHERE session_id=? AND event_type='step/ended' GROUP BY run_id
+) e ON e.run_id=r.id WHERE r.session_id=? AND r.started_at IS NOT NULL`, id, id)
+	return result, err
+}
+
 func (t *agentsTx) SessionUsageMetrics(id uint64) (a.CacheUsage, *a.ModelCallRow, uint64, error) {
 	var cache a.CacheUsage
 	const paired = "input_tokens IS NOT NULL AND cache_read_tokens IS NOT NULL AND cache_read_tokens<=input_tokens"

@@ -17,6 +17,7 @@ type SequenceRange struct {
 	Through uint64 `db:"through_seq"`
 }
 type RunCounts struct {
+	EndedSteps       uint64 `db:"ended_steps"`
 	ModelCalls       uint64 `db:"model_calls"`
 	ToolCalls        uint64 `db:"tool_calls"`
 	UnknownTools     uint64 `db:"unknown_tools"`
@@ -52,6 +53,7 @@ type RunSummary struct {
 	SettledAt         *time.Time `json:"settled_at"`
 	Deadline          time.Time  `json:"deadline_at"`
 	Steps             uint64     `json:"step_count"`
+	CurrentStep       uint64     `json:"current_step"`
 	ModelCalls        uint64     `json:"model_call_count"`
 	ToolCalls         uint64     `json:"tool_call_count"`
 	UsageCompleteness string     `json:"usage_completeness"`

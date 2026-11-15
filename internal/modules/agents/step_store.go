@@ -125,6 +125,18 @@ func (s *Service) claimQuestionReplies(st StateRepository, session *SessionRow, 
 	return ids, nil
 }
 
+// endStep runs under the session/run locks, only after the next-step or terminal
+// transition has been admitted. Those transitions and the semantic key make
+// closure exactly once; a retry or a waiting interaction never reaches it.
+// This is a logical boundary, not proof that a remote process has stopped.
+func endStep(st StateRepository, session *SessionRow, run *RunRow, now time.Time) error {
+	if run.CurrentStepNo == 0 {
+		return nil
+	}
+	_, err := appendEvent(st, session, &run.ID, "step/ended", "step-ended:"+strconv.FormatUint(run.ID, 10)+":"+strconv.FormatUint(run.CurrentStepNo, 10), map[string]any{"run_id": agentcore.ID(run.ID), "step_no": run.CurrentStepNo}, nil, now)
+	return err
+}
+
 func (s *Service) BeginStep(ctx context.Context, ref agentcore.ExecutionRef, step uint32) (agentcore.StepBoundary, error) {
 	var out agentcore.StepBoundary
 	var committed agentcore.CommitReceipt
@@ -141,8 +153,14 @@ func (s *Service) BeginStep(ctx context.Context, ref agentcore.ExecutionRef, ste
 			return httpx.E(409, "STEP_ALREADY_STARTED", "步骤边界已经推进")
 		}
 		from := x.Session.LastSeq + 1
+		if e = endStep(st, x.Session, x.Run, now); e != nil {
+			return e
+		}
 		x.Run.CurrentStepNo = uint64(step)
 		x.Run.UpdatedAt = now
+		if _, e = appendEvent(st, x.Session, &x.Run.ID, "step/started", "step-started:"+strconv.FormatUint(x.Run.ID, 10)+":"+strconv.FormatUint(uint64(step), 10), map[string]any{"run_id": ref.RunID, "step_no": step}, nil, now); e != nil {
+			return e
+		}
 		if x.Run.Status == "preparing" {
 			old := x.Run.Status
 			x.Run.Status = "running"

@@ -8,7 +8,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 )
 
-const conversationProjectionVersion = 1
+const conversationProjectionVersion = 2
 
 // ConversationProjection contains display facts only. It grants no permission
 // and cannot replace the execution rows that own leases and side effects.
@@ -26,6 +26,7 @@ type ConversationRun struct {
 	ID         agentcore.ID    `json:"id"`
 	Status     string          `json:"status"`
 	Step       uint64          `json:"step"`
+	EndedSteps uint64          `json:"completed_steps"`
 	Settled    bool            `json:"settled"`
 	ModelCalls uint64          `json:"model_call_count"`
 	ToolCalls  uint64          `json:"tool_call_count"`
@@ -99,6 +100,16 @@ func FoldConversation(state ConversationProjection, record DurableRecord) (Conve
 	case "run/state", "run/ended":
 		if state.LatestRun != nil && state.LatestRun.ID == data.RunID {
 			state.LatestRun.Status = data.Status
+			if record.Type == "run/ended" {
+				state.LatestRun.EndedSteps = state.LatestRun.Step
+			}
+		}
+	case "step/started", "step/ended":
+		if state.LatestRun != nil && state.LatestRun.ID == data.RunID {
+			state.LatestRun.Step = max(state.LatestRun.Step, data.Step)
+			if record.Type == "step/ended" {
+				state.LatestRun.EndedSteps = max(state.LatestRun.EndedSteps, data.Step)
+			}
 		}
 	case "run/settled":
 		if state.LatestRun != nil && state.LatestRun.ID == data.RunID {

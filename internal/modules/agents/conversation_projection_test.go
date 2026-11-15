@@ -126,6 +126,57 @@ func TestDisplayEventsAndNamingLeaveModelRequestPrefixUnchanged(t *testing.T) {
 	if !bytes.Equal(before, build()) || v.SurfaceRevision != revision {
 		t.Fatal("display metadata changed model context")
 	}
+	for _, kind := range []string{"step/started", "step/ended"} {
+		if _, err := appendEvent(m, v, nil, kind, "", map[string]any{"run_id": "7", "step_no": 1}, nil, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !bytes.Equal(before, build()) || v.SurfaceRevision != revision {
+		t.Fatal("step statistics changed model context or cache prefix")
+	}
+}
+
+func TestEndedStepProjectionAndHistoricalRunTotals(t *testing.T) {
+	m := &conversationMemory{}
+	v := &SessionRow{ID: 1}
+	run := uint64(7)
+	for _, event := range []struct {
+		kind        string
+		step, ended uint64
+	}{
+		{"run/started", 0, 0},
+		{"step/started", 1, 0},
+		{"assistant/attempt", 1, 0},
+		{"assistant/message", 1, 0},
+		{"step/ended", 1, 1},
+		{"step/started", 2, 1},
+		{"step/ended", 2, 2},
+		{"run/ended", 2, 2},
+	} {
+		if _, err := appendEvent(m, v, &run, event.kind, "", map[string]any{"run_id": "7", "step_no": event.step}, nil, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		cached, err := loadConversationProjection(m, 1, v.LastSeq)
+		if err != nil || cached.LatestRun.Step != event.step || cached.LatestRun.EndedSteps != event.ended {
+			t.Fatal(event.kind, cached.LatestRun, err)
+		}
+		m.cache = nil
+		replay, err := loadConversationProjection(m, 1, v.LastSeq)
+		if err != nil || !reflect.DeepEqual(cached, replay) {
+			t.Fatal("step replay differs from checkpoint", err)
+		}
+	}
+	now := time.Now()
+	for _, finished := range []*time.Time{nil, &now} {
+		got := runSummary(RunRow{CurrentStepNo: 3, FinishedAt: finished}, RunCounts{EndedSteps: 2})
+		want := uint64(2)
+		if finished != nil {
+			want = 3
+		}
+		if got.Steps != want || got.CurrentStep != 3 {
+			t.Fatal("run statistics conflated current and ended steps", got)
+		}
+	}
 }
 
 func TestSummaryRequestPreservesSystemToolsAndNativePrefix(t *testing.T) {

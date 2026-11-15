@@ -229,6 +229,7 @@ export function Conversation({
         type.startsWith("session/") ||
         type.startsWith("context/") ||
         type.startsWith("run/") ||
+        type.startsWith("step/") ||
         type.startsWith("compaction/")
       )
         pending.keys.add("detail");

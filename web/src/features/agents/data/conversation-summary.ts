@@ -21,6 +21,7 @@ export function foldConversationSummary(
         id: event.data.run_id,
         status: "running",
         step: 0,
+        completed_steps: 0,
         settled: false,
         model_call_count: 0,
         tool_call_count: 0,
@@ -29,7 +30,21 @@ export function foldConversationSummary(
       break;
     case "run/state":
     case "run/ended":
-      if (run?.id === event.data.run_id) run.status = event.data.status;
+      if (run?.id === event.data.run_id) {
+        run.status = event.data.status;
+        if (event.event_type === "run/ended") run.completed_steps = run.step;
+      }
+      break;
+    case "step/started":
+    case "step/ended":
+      if (run?.id === event.data.run_id) {
+        run.step = Math.max(run.step, event.data.step_no);
+        if (event.event_type === "step/ended")
+          run.completed_steps = Math.max(
+            run.completed_steps,
+            event.data.step_no,
+          );
+      }
       break;
     case "run/settled":
       if (run?.id === event.data.run_id) run.settled = true;

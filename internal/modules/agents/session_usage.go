@@ -29,8 +29,14 @@ type ContextUsage struct {
 
 type SessionUsageReport struct {
 	UsageTotals
+	SessionActivity
 	Context ContextUsage `json:"context"`
 	Cache   CacheUsage   `json:"cache"`
+}
+
+type SessionActivity struct {
+	Runs  uint64 `db:"runs" json:"run_count"`
+	Steps uint64 `db:"steps" json:"step_count"`
 }
 
 func sessionContextUsage(session *SessionRow, latest *ModelCallRow, summarySeq uint64) (ContextUsage, error) {

@@ -32,6 +32,8 @@ export interface SandboxExecution {
 }
 
 export interface EventPayloads {
+  "step/started": { run_id: string; step_no: number };
+  "step/ended": { run_id: string; step_no: number };
   "session/title": {
     configuration: SessionConfiguration;
     source: "fallback" | "model" | "user";
@@ -330,7 +332,7 @@ export interface SnapshotState {
   interactions_truncated: boolean;
 }
 export interface ConversationSummary {
-  version: 1;
+  version: 2;
   through_seq: string;
   title: string;
   run_count: number;
@@ -340,6 +342,7 @@ export interface ConversationSummary {
     id: string;
     status: RunStatus;
     step: number;
+    completed_steps: number;
     settled: boolean;
     model_call_count: number;
     tool_call_count: number;

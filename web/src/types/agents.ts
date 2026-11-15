@@ -468,6 +468,7 @@ export interface RunSummary {
   settled_at: string | null;
   deadline_at: string;
   step_count: number;
+  current_step: number;
   model_call_count: number;
   tool_call_count: number;
   usage_completeness: "complete" | "partial" | "unknown";
@@ -683,6 +684,8 @@ export interface UsageReport {
   generated_at: string;
 }
 export interface SessionUsageReport extends UsageTotals {
+  run_count: number;
+  step_count: number;
   context: {
     window_tokens: string;
     reserved_output_tokens: string;

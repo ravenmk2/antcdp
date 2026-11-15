@@ -15,6 +15,8 @@ import type {
 } from "@/types/agent-events";
 
 export const eventTypes: readonly EventType[] = [
+  "step/started",
+  "step/ended",
   "session/configured",
   "session/title",
   "tool/state",
@@ -67,6 +69,15 @@ export function validRecord(record: DurableRecord) {
     !eventTypeSet.has(record.event_type) ||
     !record.data ||
     typeof record.data !== "object"
+  )
+    return false;
+  if (
+    (record.event_type === "step/started" ||
+      record.event_type === "step/ended") &&
+    (!validSeq(record.data.run_id) ||
+      record.data.run_id !== record.run_id ||
+      !Number.isSafeInteger(record.data.step_no) ||
+      record.data.step_no < 1)
   )
     return false;
   if (
@@ -341,7 +352,7 @@ function installSnapshot(
     const run = summary?.latest_run;
     if (
       !summary ||
-      summary.version !== 1 ||
+      summary.version !== 2 ||
       summary.through_seq !== frame.through_seq ||
       typeof summary.title !== "string" ||
       !count(summary.run_count) ||
@@ -351,6 +362,8 @@ function installSnapshot(
         (!run ||
           !validSeq(run.id) ||
           !count(run.step) ||
+          !count(run.completed_steps) ||
+          run.completed_steps > run.step ||
           !count(run.model_call_count) ||
           !count(run.tool_call_count) ||
           typeof run.status !== "string" ||

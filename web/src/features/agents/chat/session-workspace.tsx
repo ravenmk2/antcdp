@@ -212,9 +212,29 @@ function SessionProgress({
                 <>
                   <dl className="agent-workspace-facts">
                     <div>
-                      <dt>执行步骤</dt>
-                      <dd>{Math.max(projected?.step ?? 0, run.step_count)}</dd>
+                      <dt>已结束步骤</dt>
+                      <dd>
+                        {Math.max(
+                          projected?.completed_steps ?? 0,
+                          run.step_count,
+                        )}
+                      </dd>
                     </div>
+                    {!run.finished_at &&
+                      Math.max(projected?.step ?? 0, run.current_step) >
+                        Math.max(
+                          projected?.completed_steps ?? 0,
+                          run.step_count,
+                        ) && (
+                        <div>
+                          <dt>当前步骤</dt>
+                          <dd>
+                            第{" "}
+                            {Math.max(projected?.step ?? 0, run.current_step)}{" "}
+                            步
+                          </dd>
+                        </div>
+                      )}
                     <div>
                       <dt>工具调用</dt>
                       <dd>

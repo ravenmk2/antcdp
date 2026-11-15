@@ -49,6 +49,9 @@ export function ContextUsage({ sessionId }: { sessionId: string }) {
   return (
     <Popover>
       <PopoverTrigger
+        openOnHover
+        delay={200}
+        closeDelay={150}
         className="agent-context-trigger"
         aria-label={`上下文 ${percent(occupancy)}，缓存命中 ${percent(hit)}，查看用量`}
       >
@@ -93,7 +96,7 @@ export function ContextUsage({ sessionId }: { sessionId: string }) {
         align="start"
         className="w-80 max-w-[calc(100vw-2rem)] rounded-2xl space-y-3"
       >
-        <h3 className="text-sm font-medium">上下文与缓存</h3>
+        <h3 className="text-sm font-medium">会话统计</h3>
         {query.isError ? (
           <div className="space-y-2 text-sm">
             <p>用量暂时无法读取</p>
@@ -112,6 +115,10 @@ export function ContextUsage({ sessionId }: { sessionId: string }) {
         ) : (
           <>
             <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-2 text-xs tabular-nums">
+              <dt>会话轮数</dt>
+              <dd className="text-right">{data?.run_count ?? "—"}</dd>
+              <dt>已结束步骤</dt>
+              <dd className="text-right">{data?.step_count ?? "—"}</dd>
               <dt>上下文占用</dt>
               <dd className="text-right">{percent(occupancy)}</dd>
               <dt>最近请求输入</dt>
@@ -145,23 +152,6 @@ export function ContextUsage({ sessionId }: { sessionId: string }) {
                 {count(data?.input_tokens)} / {count(data?.output_tokens)}
               </dd>
             </dl>
-            <p className="text-xs leading-5 text-muted">
-              {context?.stale
-                ? "上下文已压缩，等待下一次请求更新占用。"
-                : "占用以最近一次已结束的对话请求为准，不包含未发送草稿。"}
-            </p>
-            {context?.observed_at && (
-              <p className="text-xs text-muted">
-                更新于 {new Date(context.observed_at).toLocaleString()}
-              </p>
-            )}
-            <p className="text-xs leading-5 text-muted">
-              缓存仅统计当前会话的对话生成请求，按输入 Token 加权；
-              {cache && cache.covered_call_count < cache.call_count
-                ? "部分请求未提供有效缓存计数。"
-                : "未提供的值显示 —。"}
-              会话累计用量包含标题与压缩调用。
-            </p>
           </>
         )}
       </PopoverContent>

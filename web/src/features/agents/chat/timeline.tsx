@@ -409,31 +409,29 @@ function Timeline({
           const reply = closingReplies.get(runId);
           return (
             <Fragment key={record.seq}>
-              {(files.length > 0 || reply) && (
-                <div className="agent-turn-tail" data-run-id={runId}>
-                  <ArtifactCards files={files} sessionId={sessionId} />
-                  {reply && (
-                    <div className="agent-message-actions">
-                      <CopyButton
-                        value={reply.data.content
-                          .flatMap((block) =>
-                            block.type === "text" ? [block.text] : [],
-                          )
-                          .join("\n\n")}
-                        label="复制回复"
-                      />
-                      <TurnUsage sessionId={sessionId} runId={runId} />
-                      <time>
-                        {new Date(record.data.finished_at).toLocaleTimeString(
-                          [],
-                          { hour: "2-digit", minute: "2-digit" },
-                        )}
-                      </time>
-                    </div>
-                  )}
-                </div>
-              )}
               {!turns.get(runId)?.firstNode && turnHeader(turns.get(runId))}
+              <div className="agent-turn-tail" data-run-id={runId}>
+                <ArtifactCards files={files} sessionId={sessionId} />
+                <div className="agent-message-actions">
+                  {reply && (
+                    <CopyButton
+                      value={reply.data.content
+                        .flatMap((block) =>
+                          block.type === "text" ? [block.text] : [],
+                        )
+                        .join("\n\n")}
+                      label="复制回复"
+                    />
+                  )}
+                  <TurnUsage sessionId={sessionId} runId={runId} />
+                  <time>
+                    {new Date(record.data.finished_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </time>
+                </div>
+              </div>
               <VisibleResult record={record} onVisible={onVisibleResult} />
             </Fragment>
           );

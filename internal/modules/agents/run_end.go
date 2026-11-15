@@ -412,6 +412,9 @@ func (s *Service) endOne(st StateRepository, session *SessionRow, row, root *Run
 		}
 	}
 	row.Status = string(plan.Run.Status)
+	if e = endStep(st, session, row, now); e != nil {
+		return e
+	}
 	row.FenceVersion = plan.Run.Ref.Fence
 	row.FinishedAt = &now
 	row.UpdatedAt = now

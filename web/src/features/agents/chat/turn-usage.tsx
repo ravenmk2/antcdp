@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { ChartNoAxesColumn } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { request } from "@/api/client";
 import {
@@ -6,7 +7,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import type { ModelCallMetadata } from "@/types/agents";
+import type { ModelCallMetadata, RunDetail } from "@/types/agents";
 import { agentRoot } from "../data/agent-api";
 import { tokenPercent } from "./context-usage";
 
@@ -62,26 +63,10 @@ export function TurnUsage({
   sessionId: string;
   runId: string;
 }) {
-  const anchor = useRef<HTMLSpanElement>(null);
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const element = anchor.current;
-    if (!element) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setVisible(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "300px" },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
+  const [open, setOpen] = useState(false);
   const query = useQuery({
     queryKey: ["agent-session", sessionId, "workspace", "turn-usage", runId],
-    enabled: visible,
+    enabled: open,
     staleTime: 30_000,
     queryFn: async ({ signal }) => {
       const calls = new Map<string, ModelCallMetadata>();
@@ -97,23 +82,30 @@ export function TurnUsage({
         )
           break;
       }
-      return summarizeTurnUsage([...calls.values()]);
+      const run = await request<RunDetail>(`${agentRoot}/runs/${runId}`, {
+        signal,
+      });
+      return {
+        ...summarizeTurnUsage([...calls.values()]),
+        steps: run.data.step_count,
+      };
     },
   });
   const usage = query.data;
   return (
-    <span ref={anchor} className="agent-turn-usage">
-      <Popover>
+    <span className="agent-turn-usage">
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
-          className="agent-turn-usage-trigger"
-          aria-label="本轮用量统计"
-          onClick={() => setVisible(true)}
+          className="agent-chat-icon-button"
+          aria-label="本轮统计"
+          openOnHover
+          delay={200}
+          closeDelay={150}
         >
-          ↑{format(usage?.input_tokens)} ↓{format(usage?.output_tokens)}
-          {usage?.partial && <span> · 部分已知</span>}
+          <ChartNoAxesColumn aria-hidden />
         </PopoverTrigger>
         <PopoverContent side="top" className="w-72 space-y-3">
-          <h3 className="text-sm font-medium">本轮用量</h3>
+          <h3 className="text-sm font-medium">本轮统计</h3>
           {query.isError ? (
             <button type="button" onClick={() => void query.refetch()}>
               读取失败，点击重试
@@ -125,6 +117,8 @@ export function TurnUsage({
               <>
                 <dl className="agent-turn-usage-details">
                   {[
+                    ["已结束步骤", String(usage.steps)],
+                    ["模型调用", `${usage.count} 次`],
                     ["输入 Token", format(usage.input_tokens)],
                     ["输出 Token", format(usage.output_tokens)],
                     ["缓存读取", format(usage.cache_read_tokens)],
@@ -141,10 +135,6 @@ export function TurnUsage({
                     </div>
                   ))}
                 </dl>
-                <p className="text-xs leading-5 text-muted">
-                  本轮模型调用合计，包含重试。缓存读取已包含在输入中，不重复相加；缺失计数显示
-                  —。
-                </p>
               </>
             )
           )}
