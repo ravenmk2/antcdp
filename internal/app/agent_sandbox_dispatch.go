@@ -119,9 +119,14 @@ func sandboxCommandObservation(result agents.CommandResult) (agentcore.DispatchO
 	} else if result.Reason != "" {
 		status = "failed"
 	}
-	content := string(metadata)
+	// Keep the captured output before the smaller UI metadata projection trims it.
+	full, err := json.Marshal(map[string]any{"sandbox_execution": result.Execution})
+	if err != nil {
+		return agentcore.DispatchObservation{}, err
+	}
+	content := string(full)
 	if result.Cursor != "" {
 		content += "\noutput_cursor: " + result.Cursor
 	}
-	return agentcore.DispatchObservation{Status: status, Executed: result.Executed, Content: content, Reason: result.Reason, Metadata: metadata}, nil
+	return agentcore.DispatchObservation{Status: status, Executed: result.Executed, Content: content, Reason: result.Reason, Metadata: metadata, Truncated: result.Execution.Truncated}, nil
 }

@@ -7,6 +7,7 @@ import { InteractionCard } from "@/features/agents/chat/interactions";
 import { QueuePanel } from "@/features/agents/chat/queue-panel";
 import { SessionFiles } from "@/features/agents/chat/session-files";
 import { ConversationTimeline } from "@/features/agents/chat/timeline";
+import { ToolEvent } from "@/features/agents/chat/tool-event";
 import {
   runDiagnosticReasons,
   runtimeReason,
@@ -35,6 +36,62 @@ vi.mock("@/app/auth", () => ({
   useSession: () => ({ user: { id: "1", role: "admin" } }),
 }));
 const mock = vi.mocked(request);
+
+it("offers retained output only inside the expanded tool and distinguishes source omissions", async () => {
+  const { user } = mount(
+    <ToolEvent
+      id="80"
+      sessionId="10"
+      call={{
+        ...records[0],
+        seq: "4",
+        event_type: "tool/call",
+        data: {
+          tool_call_id: "80",
+          tool_key: "web_fetch",
+          mcp_server_id: null,
+          mcp_binding_id: null,
+          mcp_tool_name: null,
+          arguments: { url: "https://example.com" },
+          arguments_hash: "hash",
+          execution_class: "read_only",
+          policy: "allow",
+        },
+      }}
+      result={{
+        ...records[0],
+        seq: "5",
+        event_type: "tool/result",
+        data: {
+          tool_call_id: "80",
+          status: "succeeded",
+          executed: true,
+          content: [{ type: "text", text: "head ... tail" }],
+          truncated: true,
+          outcome: { certainty: "known", reason: null },
+          output_file: {
+            file_id: "42",
+            size_bytes: "65536",
+            sha256: "a".repeat(64),
+          },
+          source_truncated: true,
+        },
+      }}
+    />,
+  );
+  expect(
+    screen.queryByRole("link", { name: "下载完整记录" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /网页读取/ }));
+  expect(screen.getByRole("link", { name: "下载完整记录" })).toHaveAttribute(
+    "href",
+    "/api/v1/agents/files/42/content",
+  );
+  expect(screen.getByText("来源输出已有省略")).toBeVisible();
+  expect(
+    screen.queryByText("工具结果超过显示上限，已按服务端规则截断。"),
+  ).not.toBeInTheDocument();
+});
 vi.mock("@/app/theme", () => ({ useTheme: () => ({ resolved: "light" }) }));
 const response = (data: unknown, etag = '"v1"') => ({
   data,

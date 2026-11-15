@@ -136,6 +136,7 @@ export interface EventPayloads {
     } | null;
   };
   "image/offload": { count: number };
+  "tool/output_pruned": { count: number; policy_version: 1 };
   "model/retry-started": {
     attempt_id: string;
     step_no: number;
@@ -167,6 +168,8 @@ export interface EventPayloads {
     truncated: boolean;
     outcome: ToolCall["outcome"];
     sandbox_execution?: SandboxExecution;
+    output_file?: { file_id: string; size_bytes: string; sha256: string };
+    source_truncated?: boolean;
     artifacts?: Artifact[];
     commit_receipt?: {
       content_session_id: string;

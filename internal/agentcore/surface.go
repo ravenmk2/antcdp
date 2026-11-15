@@ -23,10 +23,11 @@ type SurfaceEntry struct {
 	Sequences []Seq  `json:"sequences"`
 }
 type SurfaceManifest struct {
-	SchemaVersion int            `json:"schema_version"`
-	Revision      Version        `json:"revision"`
-	Entries       []SurfaceEntry `json:"entries"`
-	ImageOffloads []ImageOffload `json:"image_offloads,omitempty"`
+	SchemaVersion    int               `json:"schema_version"`
+	Revision         Version           `json:"revision"`
+	Entries          []SurfaceEntry    `json:"entries"`
+	ImageOffloads    []ImageOffload    `json:"image_offloads,omitempty"`
+	ToolOutputPrunes []ToolOutputPrune `json:"tool_output_prunes,omitempty"`
 }
 type ImageOffload struct {
 	Seq    Seq    `json:"seq"`
@@ -91,7 +92,11 @@ func BuildSurface(manifest SurfaceManifest, facts map[Seq]HistoryFact) ([]modelc
 			}
 			selected[seq] = true
 			if f.Message != nil {
-				message, err := ProjectImages(*f.Message, seq, manifest.ImageOffloads)
+				message, err := projectToolOutput(*f.Message, seq, manifest.ToolOutputPrunes)
+				if err != nil {
+					return nil, err
+				}
+				message, err = ProjectImages(message, seq, manifest.ImageOffloads)
 				if err != nil {
 					return nil, err
 				}
@@ -258,6 +263,13 @@ func ApplyReplacement(manifest SurfaceManifest, r Replacement) (SurfaceManifest,
 		}
 	}
 	manifest.ImageOffloads = offloads
+	prunes := []ToolOutputPrune{}
+	for _, target := range manifest.ToolOutputPrunes {
+		if visible[target.Seq] {
+			prunes = append(prunes, target)
+		}
+	}
+	manifest.ToolOutputPrunes = prunes
 	manifest.Revision++
 	return manifest, nil
 }

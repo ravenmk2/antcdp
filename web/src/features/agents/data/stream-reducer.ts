@@ -35,6 +35,7 @@ export const eventTypes: readonly EventType[] = [
   "assistant/attempt",
   "model/retry-started",
   "image/offload",
+  "tool/output_pruned",
   "tool/call",
   "tool/result",
   "tool/reconciled",
@@ -161,6 +162,28 @@ export function validRecord(record: DurableRecord) {
     record.event_type === "tool/result" &&
     (!record.data.outcome ||
       !["pending", "known", "unknown"].includes(record.data.outcome.certainty))
+  )
+    return false;
+  if (
+    record.event_type === "tool/result" &&
+    record.data.output_file !== undefined
+  ) {
+    const output = record.data.output_file;
+    if (
+      !output ||
+      !validSeq(output.file_id) ||
+      output.file_id === "0" ||
+      !validSeq(output.size_bytes) ||
+      typeof output.sha256 !== "string" ||
+      !/^[a-f0-9]{64}$/.test(output.sha256)
+    )
+      return false;
+  }
+  if (
+    record.event_type === "tool/output_pruned" &&
+    (!Number.isInteger(record.data.count) ||
+      record.data.count < 1 ||
+      record.data.policy_version !== 1)
   )
     return false;
   if (

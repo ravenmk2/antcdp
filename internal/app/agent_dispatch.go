@@ -60,6 +60,13 @@ func (d *agentToolDispatcher) Dispatch(ctx context.Context, execution agentcore.
 		return d.dispatchSandbox(ctx, execution, permit)
 	}
 	switch permit.Call.Spec.Key {
+	case "read_tool_output":
+		content, err := d.service.ReadToolOutput(ctx, execution.Ref, args)
+		if err != nil {
+			return toolFailure("TOOL_OUTPUT_UNAVAILABLE", &no), nil
+		}
+		yes := true
+		return toolObservation("succeeded", "", content, &yes), nil
 	case "web_search":
 		var input struct {
 			Query string `json:"query"`
@@ -71,7 +78,9 @@ func (d *agentToolDispatcher) Dispatch(ctx context.Context, execution agentcore.
 		if err != nil {
 			return webToolFailure(err, result.Attempts), nil
 		}
-		return toolJSON(result)
+		observation, err := toolJSON(result)
+		observation.Truncated = result.Truncated
+		return observation, err
 	case "web_fetch":
 		var input struct {
 			URL string `json:"url"`
@@ -83,7 +92,9 @@ func (d *agentToolDispatcher) Dispatch(ctx context.Context, execution agentcore.
 		if err != nil {
 			return webToolFailure(err, result.Attempts), nil
 		}
-		return toolJSON(result)
+		observation, err := toolJSON(result)
+		observation.Truncated = result.Truncated
+		return observation, err
 	case "skill":
 		var input struct {
 			Name string `json:"name"`
@@ -198,7 +209,7 @@ func (d *agentToolDispatcher) dispatchMCP(ctx context.Context, execution agentco
 		return toolFailure("MCP_RESOURCE_UNAVAILABLE", &no), nil
 	}
 	var config mcp.Config
-	request := mcp.CallRequest{RemoteName: permit.Call.Spec.MCP.RemoteName, Fingerprint: permit.Call.Spec.MCP.Fingerprint, ResultLimit: 64 << 10}
+	request := mcp.CallRequest{RemoteName: permit.Call.Spec.MCP.RemoteName, Fingerprint: permit.Call.Spec.MCP.Fingerprint, ResultLimit: agentcore.ToolOutputMaxBytes}
 	err = store.Transact(ctx, func(tx identity.Tx) error {
 		var err error
 		config, err = d.resources.ReadAuthorizedMCPRuntime(tx, permit.Call.Spec.MCP.ServerID, authorization.Resource)
@@ -225,7 +236,9 @@ func (d *agentToolDispatcher) dispatchMCP(ctx context.Context, execution agentco
 	if result.IsError {
 		status = "failed"
 	}
-	return toolObservation(status, result.Reason, result.Content, result.Executed), nil
+	observation := toolObservation(status, result.Reason, result.Content, result.Executed)
+	observation.Truncated = result.Truncated
+	return observation, nil
 }
 
 func (*agentToolDispatcher) Cancel(context.Context, agentcore.ExecutionContext, agentcore.PreparedToolCall) error {

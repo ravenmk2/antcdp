@@ -1918,6 +1918,22 @@
   line-height: 20px;
   color: var(--chat-muted);
 }
+.root :global(.agent-tool-output-reference) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  color: var(--chat-muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+.root :global(.agent-tool-output-reference a) {
+  color: var(--chat-process);
+  text-underline-offset: 3px;
+}
+.root :global(.agent-tool-output-reference a:hover) {
+  text-decoration: underline;
+}
 .root :global(.agent-tool-code-heading > div) {
   display: flex;
   align-items: center;

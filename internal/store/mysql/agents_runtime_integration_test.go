@@ -30,6 +30,9 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 	svc.Epoch = "runtime-integration-epoch"
 	svc.Catalog = a.ResourceCatalog{Tool: func(_ context.Context, _ identity.Tx, key string) (*a.ToolDescriptor, error) {
 		class := "backend"
+		if key == "read_tool_output" {
+			class = "read_only"
+		}
 		if key == "delegate" {
 			class = "child"
 		}
@@ -48,6 +51,8 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 	t.Run("session_titles", func(t *testing.T) { runtimeSessionTitles(t, f, agent.ID) })
 	t.Run("turn_lifecycle", func(t *testing.T) { runtimeTurnLifecycle(t, f, agent.ID) })
 	t.Run("model_retry", func(t *testing.T) { runtimeModelRetry(t, f, agent.ID) })
+	t.Run("tool_output", func(t *testing.T) { runtimeToolOutput(t, f, agent.ID) })
+	t.Run("tool_output_replay", func(t *testing.T) { runtimeOutputReplay(t, f, agent.ID) })
 	t.Run("reconciliation_context", func(t *testing.T) { runtimeReconciliationContext(t, f, agent.ID) })
 	t.Run("thinking_prefix", func(t *testing.T) { runtimeThinkingPrefix(t, f) })
 	t.Run("image_files", func(t *testing.T) { runtimeImageFiles(t, f) })
@@ -184,6 +189,11 @@ func runtimeAttempt(t *testing.T, f *agentIntegrationFixture, execution core.Exe
 	if e != nil {
 		t.Fatal("prepare", e)
 	}
+	return runtimePreparedAttempt(t, f, execution, prepared, message)
+}
+
+func runtimePreparedAttempt(t *testing.T, f *agentIntegrationFixture, execution core.ExecutionContext, prepared core.PreparedStep, message modelcore.Message) core.AttemptCommit {
+	t.Helper()
 	hash, e := core.ContentHash(prepared.Request)
 	if e != nil {
 		t.Fatal(e)

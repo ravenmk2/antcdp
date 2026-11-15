@@ -86,8 +86,11 @@ func TestToolTruncationNoticeIsDurableAndNotAddedToPublicText(t *testing.T) {
 				t.Fatal(err)
 			}
 			wantTruncated := test.truncated || test.name == "event_limit"
-			if result.Result.Truncated != wantTruncated || !utf8.ValidString(result.Result.Content) || !strings.HasPrefix(test.text, result.Result.Content) || len(row.Payload) > agentcore.MaxEventBytes {
+			if result.Result.Truncated != wantTruncated || !utf8.ValidString(result.Result.Content) || len(row.Payload) > agentcore.MaxEventBytes {
 				t.Fatal("invalid retained result")
+			}
+			if test.name == "event_limit" && (!strings.HasPrefix(result.Result.Content, "\x01中文") || !strings.HasSuffix(result.Result.Content, "\x01中文") || !strings.Contains(result.Result.Content, "omitted")) {
+				t.Fatal("event limit lost head/tail")
 			}
 			if strings.Contains(result.Result.Content, "Platform notice") || strings.Contains(string(stored.Public), "Platform notice") {
 				t.Fatal("model notice leaked into raw UI output")

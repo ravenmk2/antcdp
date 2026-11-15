@@ -62,7 +62,7 @@ func (s *Service) ProcessFileMaintenance(ctx context.Context, limit int) error {
 			if e != nil {
 				return e
 			}
-			if file == nil || file.Purpose != "user_attachment" && file.Purpose != "agent_artifact" && file.Purpose != "tool_image" || file.UploadOperationID != nil || file.State == "deleted" || file.State == "bound" {
+			if file == nil || file.Purpose != "user_attachment" && file.Purpose != "agent_artifact" && file.Purpose != "tool_image" && file.Purpose != "tool_output" || file.UploadOperationID != nil || file.State == "deleted" || file.State == "bound" {
 				return nil
 			}
 			if file.State != "deleting" && (file.ExpiresAt == nil || now.Before(*file.ExpiresAt)) {

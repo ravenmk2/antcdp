@@ -15,6 +15,7 @@ import (
 
 func TestAgentBuiltinSchemasSupportControlAndRejectExtraArguments(t *testing.T) {
 	valid := map[string]string{
+		"read_tool_output":  `{"file_id":"1","query":"ERROR"}`,
 		"read_file":         `{"path":"note.md"}`,
 		"read_image":        `{"path":"/data/storage/plot.png"}`,
 		"write_file":        `{"path":"note.md","content":"report"}`,

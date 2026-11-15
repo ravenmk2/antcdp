@@ -41,6 +41,10 @@ func (s *Service) fileAccess(st StateRepository, id uint64, a *identity.Auth, lo
 			return nil, "", false, missing()
 		}
 	}
+	if file.Purpose == "tool_output" {
+		bound, err := toolOutputBound(st, file)
+		return file, "tool-output-" + strconv.FormatUint(file.ID, 10) + ".txt", bound, err
+	}
 	attachments, e := st.AttachmentsForFile(id)
 	if e != nil {
 		return nil, "", false, e

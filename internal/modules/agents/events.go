@@ -15,16 +15,17 @@ import (
 // StoredEvent separates public projection from request-compatible native facts.
 // Neither HTTP nor WS serializes this envelope directly.
 type StoredEvent struct {
-	Public        json.RawMessage            `json:"public"`
-	Message       *modelcore.Message         `json:"model,omitempty"`
-	Context       *agentcore.ContextFact     `json:"context,omitempty"`
-	ModelCallID   agentcore.ID               `json:"model_call_id,omitempty"`
-	ToolCallID    string                     `json:"provider_call_id,omitempty"`
-	Ordinal       uint32                     `json:"ordinal,omitempty"`
-	Interrupted   bool                       `json:"interrupted,omitempty"`
-	PartialReason string                     `json:"partial_reason,omitempty"`
-	Surface       *agentcore.SurfaceManifest `json:"surface,omitempty"`
-	ImageOffloads []agentcore.ImageOffload   `json:"image_offloads,omitempty"`
+	Public           json.RawMessage             `json:"public"`
+	Message          *modelcore.Message          `json:"model,omitempty"`
+	Context          *agentcore.ContextFact      `json:"context,omitempty"`
+	ModelCallID      agentcore.ID                `json:"model_call_id,omitempty"`
+	ToolCallID       string                      `json:"provider_call_id,omitempty"`
+	Ordinal          uint32                      `json:"ordinal,omitempty"`
+	Interrupted      bool                        `json:"interrupted,omitempty"`
+	PartialReason    string                      `json:"partial_reason,omitempty"`
+	Surface          *agentcore.SurfaceManifest  `json:"surface,omitempty"`
+	ImageOffloads    []agentcore.ImageOffload    `json:"image_offloads,omitempty"`
+	ToolOutputPrunes []agentcore.ToolOutputPrune `json:"tool_output_prunes,omitempty"`
 	// Retry failures are observable without changing model history. Retained
 	// interrupted or generation-limited text is explicitly admitted instead.
 	ExcludeFromContext bool        `json:"exclude_from_context,omitempty"`
@@ -67,7 +68,7 @@ func appendEvent(st StateRepository, session *SessionRow, runID *uint64, kind, k
 	session.LastSeq = seq
 	session.ProjectionSeq = seq
 	session.LastActivityAt = now
-	if !stored.ExcludeFromContext && (stored.Message != nil || stored.Context != nil || len(stored.ImageOffloads) > 0) {
+	if !stored.ExcludeFromContext && (stored.Message != nil || stored.Context != nil || len(stored.ImageOffloads) > 0 || len(stored.ToolOutputPrunes) > 0) {
 		session.SurfaceRevision++
 	}
 	return seq, nil

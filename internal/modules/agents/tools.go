@@ -3,9 +3,9 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
-	"unicode/utf8"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
@@ -325,6 +325,10 @@ func (s *Service) openInteraction(st StateRepository, x executionRows, row *Tool
 
 func (s *Service) CompleteTool(ctx context.Context, ref agentcore.ExecutionRef, result agentcore.ToolResult) (agentcore.ToolCommit, error) {
 	var out agentcore.ToolCommit
+	outputFile, storageErr := s.stageToolOutput(ctx, ref, result)
+	if storageErr != nil {
+		outputFile = nil
+	}
 	e := s.background(ctx, func(tx identity.Tx, r Repository, st StateRepository) error {
 		x, e := s.lockExecution(tx, r, st, ref, false)
 		if e != nil {
@@ -360,20 +364,31 @@ func (s *Service) CompleteTool(ctx context.Context, ref agentcore.ExecutionRef, 
 			return integrity()
 		}
 		row.ExecutionRef = obs.ExecutionReference
-		truncated := false
+		truncated := obs.Truncated
 		content := obs.Content
 		limit := result.Call.Spec.ResultLimit
 		if limit <= 0 || limit > 64<<10 {
 			limit = 64 << 10
 		}
-		if len(content) > limit {
-			content = content[:limit]
-			for !utf8.ValidString(content) {
-				content = content[:len(content)-1]
-			}
-			truncated = true
-		}
+		inlineLimit := min(limit, toolOutputInlineLimit(row.ToolKey))
 		extra := map[string]any{"truncated": truncated}
+		if obs.Truncated {
+			extra["source_truncated"] = true
+		}
+		if outputFile != nil {
+			output, err := bindToolOutput(st, outputFile, row, x.RootSession.ID, time.Now().UTC().Truncate(time.Millisecond))
+			if err != nil {
+				return err
+			}
+			extra["output_file"] = output
+			notice := fmt.Sprintf("\n\n[Platform notice: full captured output (%d bytes) is retained. Use read_tool_output with file_id=%q, offset/limit or a literal query to inspect it.]", output.Size, idString(outputFile.ID))
+			content = agentcore.HeadTail(content, inlineLimit-len(notice), "\n\n[... middle omitted ...]\n\n") + notice
+			extra["truncated"] = true
+		} else if len(content) > inlineLimit {
+			notice := "\n\n[Platform notice: output retention unavailable; omitted text cannot be recovered from this result. Request a smaller range from the source.]"
+			content = agentcore.HeadTail(content, inlineLimit-len(notice), "\n\n[... middle omitted ...]\n\n") + notice
+			extra["truncated"] = true
+		}
 		if len(obs.Metadata) > 0 {
 			if e = validateToolMetadata(tx, x, row, obs.Metadata, extra); e != nil {
 				return e

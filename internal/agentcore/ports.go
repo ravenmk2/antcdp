@@ -104,6 +104,7 @@ type DispatchObservation struct {
 	Status             string
 	Executed           *bool
 	Content            string
+	Truncated          bool // upstream already omitted content; storage cannot recover it
 	Reason             string
 	ExecutionReference json.RawMessage
 	// Metadata contains optional host-owned result facts. The persistence adapter

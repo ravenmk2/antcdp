@@ -5,12 +5,50 @@ import {
   initialConversationState,
   mergeHistory,
   visibleAttempt,
+  validRecord,
 } from "@/features/agents/data/stream-reducer";
 import type {
   EventFrame,
   SnapshotFrame,
   StreamFrame,
+  DurableRecord,
 } from "@/types/agent-events";
+
+it("accepts durable output pruning and validates retained file references", () => {
+  const base = {
+    seq: "1",
+    schema_version: 1,
+    occurred_at: "2026-11-15T00:00:00Z",
+    run_id: "1",
+  };
+  expect(
+    validRecord({
+      ...base,
+      event_type: "tool/output_pruned",
+      data: { count: 1, policy_version: 1 },
+    } as DurableRecord),
+  ).toBe(true);
+  const result = {
+    ...base,
+    event_type: "tool/result",
+    data: {
+      tool_call_id: "1",
+      status: "succeeded",
+      executed: true,
+      content: [{ type: "text", text: "preview" }],
+      truncated: true,
+      outcome: { certainty: "known", reason: null },
+      output_file: {
+        file_id: "42",
+        size_bytes: "65536",
+        sha256: "a".repeat(64),
+      },
+    },
+  };
+  expect(validRecord(result as DurableRecord)).toBe(true);
+  result.data.output_file.file_id = "../../other";
+  expect(validRecord(result as DurableRecord)).toBe(false);
+});
 
 function snapshot(overrides: Partial<SnapshotFrame> = {}): SnapshotFrame {
   return {

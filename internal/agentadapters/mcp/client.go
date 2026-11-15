@@ -363,7 +363,7 @@ func projectTool(tool *sdk.Tool) (Tool, error) {
 func (c *Client) Call(ctx context.Context, request CallRequest) (CallResult, error) {
 	no := false
 	result := CallResult{Executed: &no}
-	if request.RemoteName == "" || len(request.Fingerprint) != 64 || request.ResultLimit < 1024 || request.ResultLimit > 64<<10 {
+	if request.RemoteName == "" || len(request.Fingerprint) != 64 || request.ResultLimit < 1024 || request.ResultLimit > 4<<20 {
 		return result, &Error{Code: "MCP_ARGUMENTS_INVALID"}
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.config.Timeout)
@@ -378,7 +378,7 @@ func (c *Client) Call(ctx context.Context, request CallRequest) (CallResult, err
 func (c *Client) call(ctx context.Context, session *sdk.ClientSession, guard *guardTransport, request CallRequest) (CallResult, error) {
 	no := false
 	result := CallResult{Executed: &no}
-	if request.RemoteName == "" || len(request.Fingerprint) != 64 || request.ResultLimit < 1024 || request.ResultLimit > 64<<10 {
+	if request.RemoteName == "" || len(request.Fingerprint) != 64 || request.ResultLimit < 1024 || request.ResultLimit > 4<<20 {
 		return result, &Error{Code: "MCP_ARGUMENTS_INVALID"}
 	}
 	result.ProtocolVersion = session.InitializeResult().ProtocolVersion

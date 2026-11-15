@@ -29,6 +29,7 @@ export const builtinToolNames: Record<string, string> = {
   update_plan: "更新任务计划",
   delegate: "委派临时子任务",
   read_file: "读取文件",
+  read_tool_output: "读取工具输出",
   read_image: "读取图片",
   write_file: "写入文件",
   edit_file: "编辑文件",
@@ -363,11 +364,33 @@ export function ToolEvent({
                   )}
                   sessionId={sessionId}
                 />
-                {result.data.truncated && !execution?.truncated && (
-                  <StatusNote label="输出已截断">
-                    工具结果超过显示上限，已按服务端规则截断。
-                  </StatusNote>
+                {result.data.output_file && (
+                  <div className="agent-tool-output-reference">
+                    <span>
+                      已保留输出 ·{" "}
+                      {Math.ceil(
+                        Number(result.data.output_file.size_bytes) / 1024,
+                      )}{" "}
+                      KB
+                    </span>
+                    <a
+                      href={`/api/v1/agents/files/${result.data.output_file.file_id}/content`}
+                      download
+                    >
+                      下载完整记录
+                    </a>
+                    {result.data.source_truncated && (
+                      <span>来源输出已有省略</span>
+                    )}
+                  </div>
                 )}
+                {result.data.truncated &&
+                  !result.data.output_file &&
+                  !execution?.truncated && (
+                    <StatusNote label="输出已截断">
+                      工具结果超过显示上限，已按服务端规则截断。
+                    </StatusNote>
+                  )}
               </>
             )}
             {!result &&

@@ -7,6 +7,7 @@ export const toolSummaries: Record<string, string> = {
   update_plan: "展示任务计划和当前进度，便于跟踪执行过程。",
   delegate: "创建一级临时子任务，共享身份、权限、沙箱和总预算。",
   read_file: "读取沙箱中的文本文件，支持分段继续读取。",
+  read_tool_output: "分段读取或搜索当前会话已保留的工具输出。",
   read_image: "读取图片并提供给支持视觉的会话模型。",
   write_file: "创建或覆盖文本文件；覆盖已有内容需要明确指定。",
   edit_file: "精确替换文件中的一处内容，匹配不唯一时停止。",

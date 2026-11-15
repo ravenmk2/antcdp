@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strconv"
 	"time"
-	"unicode/utf8"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
@@ -55,10 +54,7 @@ func settleToolEvent(st StateRepository, session *SessionRow, call *ToolCallRow,
 		if len(content) == 0 {
 			return agentcore.ToolCommit{}, httpx.E(422, "OUTPUT_LIMIT_EXCEEDED", "工具结果元数据超过事件上限")
 		}
-		content = content[:len(content)/2]
-		for !utf8.ValidString(content) {
-			content = content[:len(content)-1]
-		}
+		content = agentcore.HeadTail(content, len(content)/2, "\n[... omitted ...]\n")
 		data["content"] = []agentcore.ContentBlock{{Type: "text", Text: content}}
 		data["truncated"] = true
 		truncated = true

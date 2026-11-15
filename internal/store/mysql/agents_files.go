@@ -9,7 +9,7 @@ import (
 
 func (t *agentsTx) FileCleanupCandidates(now time.Time, limit int) ([]a.FileRow, error) {
 	rows := []a.FileRow{}
-	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentFileColumns+" FROM agent_file WHERE purpose IN ('user_attachment','agent_artifact','tool_image') AND upload_operation_id IS NULL AND ((state IN ('uploading','staged','orphaned') AND expires_at<=?) OR state='deleting') ORDER BY id LIMIT ?", now, limit)
+	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentFileColumns+" FROM agent_file WHERE purpose IN ('user_attachment','agent_artifact','tool_image','tool_output') AND upload_operation_id IS NULL AND ((state IN ('uploading','staged','orphaned') AND expires_at<=?) OR state='deleting') ORDER BY id LIMIT ?", now, limit)
 	return rows, e
 }
 func (t *agentsTx) FileHasBindings(id uint64) (bool, error) {

@@ -24,6 +24,17 @@ func (s *Service) maybeCompact(ctx context.Context, execution agentcore.Executio
 	if count <= limit/5*4 {
 		return step, nil
 	}
+	step, e = s.pruneToolOutputs(ctx, execution, step, prompt, tools)
+	if e != nil {
+		return step, e
+	}
+	count, e = s.Tokens.Count(step.Request)
+	if e != nil {
+		return step, e
+	}
+	if count <= limit/5*4 {
+		return step, nil
+	}
 	if s.Compactor == nil {
 		return step, httpx.E(409, "CONTEXT_BUDGET_EXCEEDED", "上下文需要压缩")
 	}
