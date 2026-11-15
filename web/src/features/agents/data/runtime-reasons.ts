@@ -18,7 +18,6 @@ export const reasonNames: Record<string, string> = {
   model_attempt_expired: "模型响应超过期限",
   parent_run_ended: "主任务已结束",
   AGENT_ACCESS_REVOKED: "当前已无此智能体的使用权限",
-  PROJECT_CONTEXT_UNAVAILABLE: "所选项目当前不可用",
   EXECUTION_FAILED: "执行失败，可查看运行记录中的诊断信息",
   EXECUTION_INVALID: "执行配置无效",
   MODEL_RESULT_UNCONFIRMED: "模型响应尚未确认",

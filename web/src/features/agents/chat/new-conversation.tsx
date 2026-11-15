@@ -1,15 +1,8 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router";
-import {
-  Bot,
-  ChevronDown,
-  Folder,
-  LockKeyhole,
-  Sparkles,
-  X,
-} from "lucide-react";
-import { Button, IconButton } from "@/components/button";
+import { Bot, ChevronDown, LockKeyhole, Sparkles } from "lucide-react";
+import { Button } from "@/components/button";
 import { Field, Select } from "@/components/fields";
 import {
   AsyncBoundary,
@@ -24,7 +17,6 @@ import type {
   CatalogAgent,
   StartOptions,
 } from "@/types/agents";
-import type { Resource } from "@/types/collaboration";
 import { agentAdminRoot, agentRoot } from "../data/agent-api";
 import {
   useConversationDraft,
@@ -32,7 +24,6 @@ import {
 } from "../data/agent-runtime";
 import { ResourcePicker } from "@/features/agents/resources/resource-picker";
 import { ChatComposer } from "./composer";
-import { ProjectContextPicker } from "./project-context-picker";
 
 export function NewConversation({
   service = false,
@@ -47,8 +38,7 @@ export function NewConversation({
   const id = service ? `new:service:${agentId}` : "new:interactive";
   const { state: draft, draft: editor } = useConversationDraft(id),
     send = useConversationSend(id);
-  const [picking, setPicking] = useState(false),
-    [projectPicker, setProjectPicker] = useState(false);
+  const [picking, setPicking] = useState(false);
   const catalog = useApiQuery<(CatalogAgent | AgentSummary)[]>(
     ["agent-start-catalog", service],
     service
@@ -77,19 +67,6 @@ export function NewConversation({
     ? options.data?.data
     : (agent.data?.data as CatalogAgent | undefined);
   const modelOptions = defaults?.model_options;
-  const projectOptions = defaults?.available_projects ?? [];
-  const ownerScope = !service;
-  const projectID = draft.projectId;
-  const project = useApiQuery<Resource>(
-    ["project", projectID],
-    `/projects/${projectID}`,
-    { enabled: ownerScope && Boolean(projectID) },
-  );
-  const chosen = projectOptions.find(({ id }) => id === projectID);
-  const projectName = chosen?.name ?? project.data?.data.name;
-  const projectAvailable =
-    !projectID ||
-    (ownerScope ? project.data?.data.status === "active" : Boolean(chosen));
   const selected =
     modelOptions?.find((model) => model.binding_id === draft.modelId) ??
     modelOptions?.find(
@@ -107,7 +84,6 @@ export function NewConversation({
   const locked = send.state.phase !== "idle";
   const available =
     value &&
-    projectAvailable &&
     (service
       ? (value as AgentDefinition).enabled &&
         (value as AgentDefinition).agent_type === "service"
@@ -121,7 +97,6 @@ export function NewConversation({
               model_binding_id: selected.binding_id,
               thinking_option_key: thinking,
             },
-            project_context_id: projectID ?? null,
           },
         }
       : null;
@@ -224,52 +199,12 @@ export function NewConversation({
                     </Select>
                   </Field>
                 )}
-                <div className="agent-start-field">
-                  <p>
-                    项目上下文{" "}
-                    <span className="agent-start-optional">可选</span>
-                  </p>
-                  <div className="agent-start-project">
-                    <Button
-                      variant="outline"
-                      className="agent-start-selector"
-                      contentClassName="w-full min-w-0 justify-between"
-                      aria-label={`选择项目上下文，${projectID ? (projectName ?? "已选项目") : "不指定项目"}`}
-                      title={projectName}
-                      disabled={
-                        locked || (!ownerScope && projectOptions.length === 0)
-                      }
-                      onClick={() => setProjectPicker(true)}
-                    >
-                      <Folder className="size-4" />
-                      <span className="min-w-0 flex-1 truncate text-left">
-                        {projectID ? (projectName ?? "已选项目") : "不指定项目"}
-                      </span>
-                      <ChevronDown className="size-4 shrink-0" />
-                    </Button>
-                    {projectID && (
-                      <IconButton
-                        variant="ghost"
-                        label="清除项目上下文"
-                        size="iconSm"
-                        disabled={locked}
-                        onClick={() => editor.patch({ projectId: null })}
-                      >
-                        <X />
-                      </IconButton>
-                    )}
-                  </div>
-                </div>
               </div>
             </ChatComposer>
-            <ErrorNotice
-              error={agent.error || options.error || project.error}
-            />
+            <ErrorNotice error={agent.error || options.error} />
             {value && !available && (
               <Notice tone="warning">
-                {defaults && !projectAvailable
-                  ? "所选项目当前不可用。请选择其他项目或清除项目上下文。"
-                  : "当前智能体暂不可开始会话。请重新选择，或联系管理员核对模型及授权配置。"}
+                当前智能体暂不可开始会话。请重新选择，或联系管理员核对模型及授权配置。
               </Notice>
             )}
           </>
@@ -298,22 +233,10 @@ export function NewConversation({
               agentId: item.id,
               modelId: "",
               thinking: "",
-              projectId: undefined,
             });
             setPicking(false);
           }}
           onClose={() => setPicking(false)}
-        />
-      )}
-      {projectPicker && (
-        <ProjectContextPicker
-          ownerScope={ownerScope}
-          options={projectOptions}
-          onChoose={(projectId) => {
-            editor.patch({ projectId });
-            setProjectPicker(false);
-          }}
-          onClose={() => setProjectPicker(false)}
         />
       )}
     </section>

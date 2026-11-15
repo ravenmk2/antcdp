@@ -31,7 +31,7 @@ func PlanChild(parentSession Session, parent Run, request ChildRequest, now time
 	rootSession := parentSession.ID
 	parentRun := parent.Ref.RunID
 	runID := request.RunID
-	s := Session{ID: request.SessionID, AgentID: parentSession.AgentID, RootSessionID: &rootSession, Principal: parentSession.Principal, ExecutionMode: parentSession.ExecutionMode, ProjectID: parentSession.ProjectID, Model: parentSession.Model, ModelLockedAt: parentSession.ModelLockedAt, ActiveRunID: &runID, Version: 1, SurfaceRevision: 1, NextInputOrder: 1}
+	s := Session{ID: request.SessionID, AgentID: parentSession.AgentID, RootSessionID: &rootSession, Principal: parentSession.Principal, ExecutionMode: parentSession.ExecutionMode, Model: parentSession.Model, ModelLockedAt: parentSession.ModelLockedAt, ActiveRunID: &runID, Version: 1, SurfaceRevision: 1, NextInputOrder: 1}
 	r := Run{Ref: ExecutionRef{SessionID: s.ID, RunID: runID, RootRunID: parent.Ref.RootRunID, Epoch: parent.Ref.Epoch, Fence: 1}, ParentRunID: &parentRun, Principal: parent.Principal, Status: Preparing, Policy: parent.Policy, Deadline: parent.Deadline, Binding: parent.Binding}
 	return ChildPlan{Session: s, Run: r, ParentBudget: budget, Reservation: reservation}, nil
 }

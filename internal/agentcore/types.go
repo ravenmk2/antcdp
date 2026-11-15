@@ -129,7 +129,6 @@ type Session struct {
 	Principal          PrincipalRef `json:"principal"`
 	ExecutionMode      string       `json:"agent_type"`
 	Title              string       `json:"title"`
-	ProjectID          *ID          `json:"project_id"`
 	Model              *LockedModel `json:"model"`
 	ModelLockedAt      *time.Time   `json:"model_locked_at"`
 	ArchivedAt         *time.Time   `json:"archived_at"`

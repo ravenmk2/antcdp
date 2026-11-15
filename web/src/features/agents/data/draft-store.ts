@@ -6,7 +6,6 @@ export interface ConversationDraft {
   agentId: string;
   modelId: string;
   thinking: string;
-  projectId?: string | null;
 }
 export class ConversationDraftEntry {
   private value: ConversationDraft = {

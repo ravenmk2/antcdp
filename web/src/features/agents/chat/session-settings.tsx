@@ -11,10 +11,8 @@ import type {
   SessionDetail,
   StartOptions,
 } from "@/types/agents";
-import type { Resource } from "@/types/collaboration";
 import { agentAdminRoot, agentRoot } from "../data/agent-api";
 import { useResourceSave } from "@/features/agents/resources/admin-shared";
-import { ProjectContextPicker } from "./project-context-picker";
 
 export function SessionSettings({
   session,
@@ -71,16 +69,13 @@ function SessionSettingsForm({
 }) {
   const from = (config: SessionConfiguration) => ({
     title: config.title,
-    project_context_id: config.project_context_id,
     model_selection: config.model_selection,
   });
   const [draft, setDraft] = useState(from(initial.data)),
-    [baseline, setBaseline] = useState(from(initial.data)),
-    [picking, setPicking] = useState(false);
+    [baseline, setBaseline] = useState(from(initial.data));
   const config = initial.data,
     archived = Boolean(config.archived_at),
     service = config.agent_type === "service",
-    ownerScope = !service,
     dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
   const save = useResourceSave({
     initial,
@@ -103,19 +98,9 @@ function SessionSettingsForm({
       : `${agentRoot}/catalog/${config.agent_id}`,
     { enabled: !archived && session.state.agent_access_available },
   );
-  const projectOptions = options.data?.data.available_projects ?? [];
-  const project = useApiQuery<Resource>(
-    ["project", draft.project_context_id],
-    `/projects/${draft.project_context_id}`,
-    { enabled: Boolean(draft.project_context_id) },
-  );
   const currentModel = options.data?.data.model_options.find(
     (model) => model.binding_id === draft.model_selection.model_binding_id,
   );
-  const canContext =
-    !archived &&
-    !session.state.active_run_id &&
-    session.state.pending_input_count === 0;
   return (
     <form
       className="space-y-5"
@@ -123,8 +108,6 @@ function SessionSettingsForm({
         event.preventDefault();
         const body: Record<string, unknown> = {};
         if (draft.title !== baseline.title) body.title = draft.title;
-        if (draft.project_context_id !== baseline.project_context_id)
-          body.project_context_id = draft.project_context_id;
         if (
           JSON.stringify(draft.model_selection) !==
           JSON.stringify(baseline.model_selection)
@@ -208,51 +191,10 @@ function SessionSettingsForm({
             </AsyncBoundary>
           )
         )}
-        {!archived && (
-          <div className="space-y-2">
-            <p className="text-xs font-medium text-muted">项目上下文</p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                disabled={
-                  !canContext ||
-                  !session.state.agent_access_available ||
-                  (!ownerScope && projectOptions.length === 0)
-                }
-                onClick={() => setPicking(true)}
-              >
-                {draft.project_context_id
-                  ? (project.data?.data.name ??
-                    `项目 ${draft.project_context_id}`)
-                  : "选择项目"}
-              </Button>
-              {draft.project_context_id && (
-                <Button
-                  variant="ghost"
-                  disabled={!canContext}
-                  onClick={() =>
-                    setDraft({ ...draft, project_context_id: null })
-                  }
-                >
-                  清除
-                </Button>
-              )}
-            </div>
-            {!session.state.agent_access_available ? (
-              <Notice tone="warning">
-                当前已无此智能体的使用权限，仍可查看会话历史。
-              </Notice>
-            ) : (
-              !session.state.project_context_available && (
-                <Notice tone="warning">
-                  所选项目当前不可用。请在会话空闲时重新选择或清除项目。
-                </Notice>
-              )
-            )}
-            <p className="text-xs leading-5 text-muted">
-              可在没有活动任务和待处理输入时调整项目上下文。
-            </p>
-          </div>
+        {!archived && !session.state.agent_access_available && (
+          <Notice tone="warning">
+            当前已无此智能体的使用权限，仍可查看会话历史。
+          </Notice>
         )}
       </fieldset>
       <Button
@@ -262,17 +204,6 @@ function SessionSettingsForm({
       >
         保存会话设置
       </Button>
-      {picking && (
-        <ProjectContextPicker
-          ownerScope={ownerScope}
-          options={projectOptions}
-          onChoose={(projectId) => {
-            setDraft({ ...draft, project_context_id: projectId });
-            setPicking(false);
-          }}
-          onClose={() => setPicking(false)}
-        />
-      )}
     </form>
   );
 }

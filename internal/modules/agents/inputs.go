@@ -89,7 +89,7 @@ func (s *Service) executionTarget(ctx context.Context, tx identity.Tx, r Reposit
 	if e != nil {
 		return nil, nil, model, selection, e
 	}
-	if e = requireSessionProjects(r, agent, executor, locked.ProjectContextID); e != nil {
+	if e = requireSessionAgent(r, agent, executor); e != nil {
 		return nil, nil, model, selection, e
 	}
 	return locked, agent, model, selection, nil

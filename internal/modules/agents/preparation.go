@@ -68,15 +68,10 @@ func (s *Service) PrepareStep(ctx context.Context, execution agentcore.Execution
 			workspace = x.Execution.Binding.ComputerID
 		}
 		runtime, _ := json.Marshal(map[string]any{"cwd": x.Context.Row.CWD, "cloud_computer_id": workspace, "availability": availability, "restored_file_refs": []any{}})
-		var project *agentcore.ID
-		if x.RootSession.ProjectContextID != nil {
-			project = new(agentcore.ID(*x.RootSession.ProjectContextID))
-		}
 		authorization, _ := json.Marshal(map[string]any{
 			"agent_configuration_revision": agentcore.Version(x.Context.Row.AgentConfigVersion),
 			"agent_type":                   x.Agent.Mode,
 			"scope_kind":                   x.Agent.ScopeKind,
-			"project_context_id":           project,
 			"reason":                       "root_admission",
 		})
 		facts = []agentcore.ContextFact{{Kind: "context/runtime", Content: runtime}, {Kind: "context/authorization", Content: authorization}}

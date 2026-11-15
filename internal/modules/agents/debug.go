@@ -12,7 +12,6 @@ import (
 type DebugStart struct {
 	SessionID      Field[string] `json:"session_id"`
 	Title          Field[string] `json:"title"`
-	ProjectID      Field[string] `json:"project_context_id"`
 	ModelBindingID Field[string] `json:"model_binding_id"`
 	Thinking       Field[string] `json:"thinking_option_key"`
 	Input          InputCreate   `json:"input"`
@@ -37,7 +36,7 @@ func (s *Service) DebugRun(ctx context.Context, raw string, id uint64, tag, key 
 			}
 			var sessionID uint64
 			if w.SessionID.Set {
-				if w.SessionID.Null || w.Title.Set || w.ProjectID.Set || w.ModelBindingID.Set || w.Thinking.Set {
+				if w.SessionID.Null || w.Title.Set || w.ModelBindingID.Set || w.Thinking.Set {
 					return httpx.Invalid("session_id", "existing_session_conflicts")
 				}
 				sessionID, e = idValue(w.SessionID.Value, "session_id")
@@ -55,7 +54,7 @@ func (s *Service) DebugRun(ctx context.Context, raw string, id uint64, tag, key 
 				if len(w.Input.Files) > 0 {
 					return httpx.Invalid("input.file_refs", "session_required")
 				}
-				create := SessionCreate{AgentID: strconv.FormatUint(id, 10), Title: w.Title, ProjectID: w.ProjectID}
+				create := SessionCreate{AgentID: strconv.FormatUint(id, 10), Title: w.Title}
 				if w.ModelBindingID.Set || w.Thinking.Set {
 					if w.ModelBindingID.Null || w.Thinking.Null {
 						return httpx.Invalid("model_binding_id", "null_not_allowed")

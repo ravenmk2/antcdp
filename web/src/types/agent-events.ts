@@ -269,7 +269,6 @@ export interface EventPayloads {
   "context/authorization": {
     agent_configuration_revision: string;
     agent_type?: "interactive" | "service";
-    project_context_id?: string | null;
     scope_kind?: "project" | "team" | "platform";
     resource_scope_kind?: string;
     project_ids?: string[];

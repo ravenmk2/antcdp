@@ -29,7 +29,7 @@ type CloudService struct {
 	Factory             sandboxcore.Factory
 	ProtectedTargets    func() ([]string, error)
 	EndpointTargets     func(string) ([]string, error)
-	PrepareWorkspace    func(context.Context, *SandboxAccess, uint64, uint64) error
+	PrepareWorkspace    func(context.Context, *SandboxAccess, uint64) error
 	VerifyEnvironment   func(context.Context, *SandboxAccess) (SandboxCapabilities, []DiagnosticCheck, error)
 	ExecutionReconciler func(context.Context, uint64) error
 	skillMu             sync.Mutex
@@ -180,7 +180,7 @@ func (s *CloudService) accessRows(repo CloudRepository, computerID uint64, lease
 	if e != nil {
 		return nil, c, e
 	}
-	access := &SandboxAccess{Resource: ref, ComputerID: w.ID, BackendGeneration: w.BackendGeneration, InstanceID: w.InstanceID, StorageGeneration: w.StorageGeneration, CWD: "/data/workspace"}
+	access := &SandboxAccess{Resource: ref, ComputerID: w.ID, BackendGeneration: w.BackendGeneration, InstanceID: w.InstanceID, StorageGeneration: w.StorageGeneration, CWD: "/data/platform"}
 	if lease != nil {
 		if lease.ComputerID != w.ID || lease.State != "active" || lease.ReleasedAt != nil || lease.BackendGeneration != w.BackendGeneration || lease.InstanceID == nil || *lease.InstanceID != w.InstanceID || lease.StorageGeneration != w.StorageGeneration {
 			return nil, c, httpx.E(409, "CLOUD_LEASE_FENCED", "云电脑执行占用已失效")
@@ -240,7 +240,7 @@ func (s *CloudService) PrepareTurn(ctx context.Context, x agentcore.ExecutionCon
 	}
 	var access *SandboxAccess
 	var connection CloudConnection
-	var project, agent uint64
+	var agent uint64
 	e := s.cloudBackground(ctx, func(tx identity.Tx, r Repository, st StateRepository, cr CloudRepository) error {
 		v, e := s.Host.lockExecution(tx, r, st, x.Ref, true)
 		if e != nil {
@@ -259,9 +259,6 @@ func (s *CloudService) PrepareTurn(ctx context.Context, x agentcore.ExecutionCon
 		}
 		access.CWD = v.Context.Row.CWD
 		access.Execution = &x.Ref
-		if v.Context.Row.ProjectContextID != nil {
-			project = *v.Context.Row.ProjectContextID
-		}
 		agent = v.Context.Row.AgentID
 		return nil
 	})
@@ -275,7 +272,7 @@ func (s *CloudService) PrepareTurn(ctx context.Context, x agentcore.ExecutionCon
 	if s.PrepareWorkspace == nil {
 		return unavailable()
 	}
-	if e = s.PrepareWorkspace(ctx, access, project, agent); e != nil {
+	if e = s.PrepareWorkspace(ctx, access, agent); e != nil {
 		return e
 	}
 	return s.prepareSkills(ctx, access, x)

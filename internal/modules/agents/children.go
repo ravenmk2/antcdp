@@ -70,7 +70,7 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		rootSessionID, parentRunID := x.Session.ID, x.Run.ID
-		v := &SessionRow{AgentID: x.Session.AgentID, ExecutionMode: x.Session.ExecutionMode, SessionKind: "child", RootSessionID: &rootSessionID, ParentRunID: &parentRunID, ExecutorUserID: x.Session.ExecutorUserID, Title: "子任务", ProjectContextID: x.Session.ProjectContextID, CloudComputerID: x.RootSession.CloudComputerID, SelectedModelBindingID: x.Session.SelectedModelBindingID, SelectedThinkingOptionKey: x.Session.SelectedThinkingOptionKey, LockedModelConfig: x.Session.LockedModelConfig, ModelSelectionHash: x.Session.ModelSelectionHash, ModelLockedAt: x.Session.ModelLockedAt, NextInputOrder: 1, SurfaceRevision: 1, RowVersion: 1, CreatedByActorKind: "system", CreatedByActorID: "system", CreatedAt: now, UpdatedAt: now, LastActivityAt: now}
+		v := &SessionRow{AgentID: x.Session.AgentID, ExecutionMode: x.Session.ExecutionMode, SessionKind: "child", RootSessionID: &rootSessionID, ParentRunID: &parentRunID, ExecutorUserID: x.Session.ExecutorUserID, Title: "子任务", CloudComputerID: x.RootSession.CloudComputerID, SelectedModelBindingID: x.Session.SelectedModelBindingID, SelectedThinkingOptionKey: x.Session.SelectedThinkingOptionKey, LockedModelConfig: x.Session.LockedModelConfig, ModelSelectionHash: x.Session.ModelSelectionHash, ModelLockedAt: x.Session.ModelLockedAt, NextInputOrder: 1, SurfaceRevision: 1, RowVersion: 1, CreatedByActorKind: "system", CreatedByActorID: "system", CreatedAt: now, UpdatedAt: now, LastActivityAt: now}
 		if e = st.InsertSession(v); e != nil {
 			return e
 		}

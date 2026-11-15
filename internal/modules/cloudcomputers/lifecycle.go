@@ -235,7 +235,7 @@ func (s *Service) provisionCloud(ctx context.Context, c *cloudClaim, p sandboxco
 	if actual.ExpiresAt != nil {
 		return &sandboxcore.Error{Code: "CLOUD_PERSISTENT_LIFETIME_UNSUPPORTED"}
 	}
-	access := &Access{Provider: p, Resource: actual.Ref, ComputerID: c.Computer.ID, BackendGeneration: c.Computer.BackendGeneration, InstanceID: c.Computer.InstanceID, StorageGeneration: c.Computer.StorageGeneration, OperationID: c.Operation.ID, OperationFence: c.Operation.FenceVersion, CWD: "/data/workspace"}
+	access := &Access{Provider: p, Resource: actual.Ref, ComputerID: c.Computer.ID, BackendGeneration: c.Computer.BackendGeneration, InstanceID: c.Computer.InstanceID, StorageGeneration: c.Computer.StorageGeneration, OperationID: c.Operation.ID, OperationFence: c.Operation.FenceVersion, CWD: "/data/platform"}
 	if s.VerifyEnvironment == nil || s.PrepareWorkspace == nil {
 		return unavailable()
 	}
@@ -243,7 +243,7 @@ func (s *Service) provisionCloud(ctx context.Context, c *cloudClaim, p sandboxco
 	if e != nil {
 		return e
 	}
-	if e = s.PrepareWorkspace(ctx, access, 0, 0); e != nil {
+	if e = s.PrepareWorkspace(ctx, access, 0); e != nil {
 		return e
 	}
 	caps.Lifecycle, caps.PersistentWorkspace, caps.FileTransfer, caps.Cancellation = "supported", "supported", "supported", "supported"

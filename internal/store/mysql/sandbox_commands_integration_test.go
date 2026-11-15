@@ -88,7 +88,7 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	}}
 	remote := &commandMemoryProvider{sandboxMemoryProvider: &sandboxMemoryProvider{resources: map[string]sb.Observation{}}, executions: map[string]sb.ExecResult{}}
 	svc := &a.CloudService{Host: host, Epoch: host.Epoch, InstallationID: func() (string, error) { return f.Installation, nil }, Factory: commandMemoryFactory{remote}, Cipher: f.Models.Cipher,
-		PrepareWorkspace: func(context.Context, *a.SandboxAccess, uint64, uint64) error { return nil },
+		PrepareWorkspace: func(context.Context, *a.SandboxAccess, uint64) error { return nil },
 		VerifyEnvironment: func(context.Context, *a.SandboxAccess) (a.SandboxCapabilities, []a.DiagnosticCheck, error) {
 			return a.SandboxCapabilities{Execution: "supported"}, []a.DiagnosticCheck{{Name: "controlled_test_fixture", Status: "succeeded"}}, nil
 		}}

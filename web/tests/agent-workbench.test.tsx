@@ -20,7 +20,6 @@ const mock = vi.mocked(request);
 const time = "2026-11-09T01:00:00Z";
 const agent: CatalogAgent = {
   scope_kind: "platform",
-  available_projects: [],
   id: "1",
   name: "项目协作助手",
   description: "公开测试助手",
@@ -86,7 +85,6 @@ beforeEach(() => {
       });
     if (url.startsWith("/agents/catalog?")) return response([selectedAgent]);
     if (url === "/agents/catalog/1") return response(selectedAgent);
-    if (url === "/projects/23") return response({ id: "23", name: "发布项目" });
     if (url === "/agents/capabilities")
       return response({
         limits: {
@@ -125,19 +123,28 @@ function mount() {
   );
 }
 
-it("does not infer project context from agent ownership", async () => {
+it("starts a project agent without a project selector or project lookup", async () => {
   selectedAgent = {
     ...agent,
     scope_kind: "project",
-    available_projects: [{ id: "23", name: "发布项目" }],
   };
   mount();
   expect(
-    await screen.findByRole("button", { name: "选择项目上下文，不指定项目" }),
+    await screen.findByRole("button", { name: "选择智能体，项目协作助手" }),
   ).toBeVisible();
   expect(
-    screen.queryByRole("button", { name: "清除项目上下文" }),
+    screen.queryByRole("button", { name: /项目上下文/ }),
   ).not.toBeInTheDocument();
+  expect(mock.mock.calls.some(([url]) => url.startsWith("/projects"))).toBe(
+    false,
+  );
+  await userEvent
+    .setup()
+    .type(
+      screen.getByRole("textbox", { name: "消息内容" }),
+      "请处理项目链接中的任务",
+    );
+  expect(screen.getByRole("button", { name: "开始对话" })).toBeEnabled();
 });
 
 it("keeps the real start composer beside two bounded attention previews without creating or viewing a session", async () => {

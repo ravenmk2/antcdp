@@ -24,7 +24,6 @@ type RunContextRow struct {
 	ExecutorUserID     uint64          `db:"executor_user_id"`
 	AgentConfigVersion uint64          `db:"agent_config_version"`
 	SchemaVersion      uint64          `db:"schema_version"`
-	ProjectContextID   *uint64         `db:"project_context_id"`
 	CloudComputerID    *uint64         `db:"cloud_computer_id"`
 	CWD                string          `db:"cwd"`
 	SystemPrompt       string          `db:"system_prompt"`
@@ -135,7 +134,11 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 	if err != nil {
 		return nil, err
 	}
-	row := &RunContextRow{ProjectContextID: session.ProjectContextID, CloudComputerID: session.CloudComputerID, CWD: sessionCWD(session.ProjectContextID), RootRunID: run.ID, AgentID: agent.ID, ExecutorUserID: owner.ID, AgentConfigVersion: agent.RowVersion, SchemaVersion: 1, SystemPrompt: agent.SystemPrompt, RuntimePolicy: run.ExecutionPolicySnapshot, SkillManifest: json.RawMessage(`[]`), CreatedAt: run.CreatedAt}
+	cwd, err := agentCWD(agent)
+	if err != nil {
+		return nil, err
+	}
+	row := &RunContextRow{CloudComputerID: session.CloudComputerID, CWD: cwd, RootRunID: run.ID, AgentID: agent.ID, ExecutorUserID: owner.ID, AgentConfigVersion: agent.RowVersion, SchemaVersion: 1, SystemPrompt: agent.SystemPrompt, RuntimePolicy: run.ExecutionPolicySnapshot, SkillManifest: json.RawMessage(`[]`), CreatedAt: run.CreatedAt}
 	for _, part := range []struct {
 		Value  any
 		Target *json.RawMessage

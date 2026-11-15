@@ -151,6 +151,6 @@ type Service struct {
 	OpenProvider       func(context.Context, Connection) (sandboxcore.Provider, error)
 	ProtectedTargets   func() ([]string, error)
 	EndpointProtection func(string) ([]string, error)
-	PrepareWorkspace   func(context.Context, *Access, uint64, uint64) error
+	PrepareWorkspace   func(context.Context, *Access, uint64) error
 	VerifyEnvironment  func(context.Context, *Access) (Capabilities, []DiagnosticCheck, error)
 }

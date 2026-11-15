@@ -289,7 +289,7 @@ func (s *Service) startSessionTitle(ctx context.Context, id uint64) (titleWork, 
 		if agent == nil || !agent.Enabled || !selection.Availability.Available {
 			return unavailable()
 		}
-		if err = requireSessionProjects(r, agent, owner, initial.ProjectContextID); err != nil {
+		if err = requireSessionAgent(r, agent, owner); err != nil {
 			return err
 		}
 		v, err := st.Session(id, true)

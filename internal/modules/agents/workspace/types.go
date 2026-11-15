@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -18,6 +19,20 @@ const MaxWriteBytes = 32 << 10
 const MaxFileBytes int64 = 100 << 20
 const MaxWalkEntries = 10000
 
+// ValidCWD accepts only canonical default directories derived from Agent scope.
+func ValidCWD(cwd string) bool {
+	if cwd == "/data/platform" {
+		return true
+	}
+	for _, prefix := range []string{"/data/teams/", "/data/projects/"} {
+		if value, ok := strings.CutPrefix(cwd, prefix); ok {
+			id, err := strconv.ParseUint(value, 10, 64)
+			return err == nil && id != 0 && strconv.FormatUint(id, 10) == value
+		}
+	}
+	return false
+}
+
 // Paths are relative to the Agent workspace mount. Provider APIs govern IO semantics.
 type Request struct {
 	Version      int            `json:"version"`
@@ -25,7 +40,6 @@ type Request struct {
 	Token        string         `json:"token,omitempty"`
 	Path         string         `json:"path,omitempty"`
 	AgentID      string         `json:"agent_id,omitempty"`
-	ProjectID    string         `json:"project_id,omitempty"`
 	Offset       int64          `json:"offset,omitempty"`
 	Limit        int            `json:"limit,omitempty"`
 	Data         string         `json:"data_base64,omitempty"`

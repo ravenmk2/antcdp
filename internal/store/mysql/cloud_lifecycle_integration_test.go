@@ -58,7 +58,7 @@ func cloudLifecycleIntegration(t *testing.T, f *agentIntegrationFixture) {
 		return &a.ToolDescriptor{Key: key, Name: key, Source: a.ToolSource{Kind: "builtin"}, ExecutionClass: "sandbox", RequiresSandbox: true, SupportedPolicies: []string{"allow", "deny", "confirm"}, Availability: a.Availability{Available: true}, Definition: modelcore.Tool{Name: key, Description: "Cloud fixture", InputSchema: json.RawMessage(`{"type":"object"}`)}}, nil
 	}}
 	remote := &sandboxMemoryProvider{resources: map[string]sb.Observation{}}
-	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Cipher: f.Models.Cipher, InstallationID: func() (string, error) { return f.Installation, nil }, Factory: sandboxMemoryFactory{remote}, EndpointTargets: func(string) ([]string, error) { return []string{"192.0.2.20"}, nil }, PrepareWorkspace: func(context.Context, *a.SandboxAccess, uint64, uint64) error { return nil }, VerifyEnvironment: func(context.Context, *a.SandboxAccess) (a.SandboxCapabilities, []a.DiagnosticCheck, error) {
+	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Cipher: f.Models.Cipher, InstallationID: func() (string, error) { return f.Installation, nil }, Factory: sandboxMemoryFactory{remote}, EndpointTargets: func(string) ([]string, error) { return []string{"192.0.2.20"}, nil }, PrepareWorkspace: func(context.Context, *a.SandboxAccess, uint64) error { return nil }, VerifyEnvironment: func(context.Context, *a.SandboxAccess) (a.SandboxCapabilities, []a.DiagnosticCheck, error) {
 		return a.SandboxCapabilities{Execution: "supported"}, nil, nil
 	}}
 	host.Sandboxes = svc

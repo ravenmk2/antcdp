@@ -147,13 +147,8 @@ export interface ModelOption {
     model_selection_hash?: string;
   }[];
 }
-export interface AgentProjectOption {
-  id: string;
-  name: string;
-}
 export interface CatalogAgent {
   scope_kind: AgentScope;
-  available_projects?: AgentProjectOption[];
   id: string;
   name: string;
   description: string;
@@ -169,7 +164,6 @@ export interface StartOptions extends Pick<
 > {
   agent_id: string;
   scope_kind: AgentScope;
-  available_projects: AgentProjectOption[];
 }
 export interface CapabilityCatalog {
   limits: Record<
@@ -234,7 +228,6 @@ export interface EffectiveSelection extends ModelSelection {
 export interface SessionCreate {
   agent_id: string;
   title?: string;
-  project_context_id?: string | null;
   model_selection?: ModelSelection;
 }
 export interface SessionConfiguration extends Versioned, Timestamped {
@@ -242,13 +235,12 @@ export interface SessionConfiguration extends Versioned, Timestamped {
   agent_id: string;
   agent_type: AgentType;
   title: string;
-  project_context_id: string | null;
   model_selection: ModelSelection;
   model_locked_at: string | null;
   archived_at: string | null;
 }
 export type SessionConfigurationPatch = Partial<
-  Pick<SessionConfiguration, "title" | "project_context_id" | "model_selection">
+  Pick<SessionConfiguration, "title" | "model_selection">
 >;
 export type TerminalRunStatus =
   "succeeded" | "waiting_input" | "failed" | "cancelled" | "interrupted";
@@ -296,7 +288,6 @@ export interface SessionState {
   last_activity_at: string;
   scope_kind: AgentScope;
   agent_access_available: boolean;
-  project_context_available: boolean;
   workspace: {
     binding_id: string | null;
     cloud_computer_id: string | null;

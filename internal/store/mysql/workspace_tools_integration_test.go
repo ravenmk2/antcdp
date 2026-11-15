@@ -62,6 +62,16 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(err)
 	}
 	x.Binding = binding
+	if binding.CWD != "/data/platform" {
+		t.Fatal("platform binding used a different CWD", binding.CWD)
+	}
+	if err = svc.PrepareTurn(ctx, x); err != nil {
+		t.Fatal("prepare frozen working directory", err)
+	}
+	var frozenCWD string
+	if err = f.Store.db.GetContext(ctx, &frozenCWD, "SELECT cwd FROM agent_run_context WHERE root_run_id=?", uint64(x.Ref.RootRunID)); err != nil || frozenCWD != binding.CWD {
+		t.Fatal("binding differs from frozen CWD", frozenCWD, err)
+	}
 	args := json.RawMessage(`{"path":"note.md","content":"controlled contents"}`)
 	call := commandDeclare(t, f, x, 1, "write_file", string(args))
 	before := remote.launches

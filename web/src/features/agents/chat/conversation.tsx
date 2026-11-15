@@ -907,12 +907,9 @@ export function Conversation({
                           </>
                         }
                         footerLeading={
-                          detail.state.agent_access_available &&
-                          detail.state.project_context_available ? undefined : (
+                          detail.state.agent_access_available ? undefined : (
                             <span role="status" className="text-xs text-muted">
-                              {detail.state.agent_access_available
-                                ? "项目当前不可用，请查看会话设置。"
-                                : "当前已无此智能体的使用权限。"}
+                              当前已无此智能体的使用权限。
                             </span>
                           )
                         }

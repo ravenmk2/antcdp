@@ -53,11 +53,11 @@ func (s *CloudService) product() *cloudcomputers.Service {
 		Transact: func(ctx context.Context, fn func(cloudcomputers.Repository) error) error {
 			return s.cloudBackground(ctx, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository) error { return fn(repo) })
 		},
-		PrepareWorkspace: func(ctx context.Context, v *cloudcomputers.Access, project, agent uint64) error {
+		PrepareWorkspace: func(ctx context.Context, v *cloudcomputers.Access, agent uint64) error {
 			if s.PrepareWorkspace == nil {
 				return unavailable()
 			}
-			return s.PrepareWorkspace(ctx, cloudAccessAdapter(v), project, agent)
+			return s.PrepareWorkspace(ctx, cloudAccessAdapter(v), agent)
 		},
 		VerifyEnvironment: func(ctx context.Context, v *cloudcomputers.Access) (SandboxCapabilities, []DiagnosticCheck, error) {
 			if s.VerifyEnvironment == nil {

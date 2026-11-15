@@ -382,6 +382,14 @@ func runtimeChildren(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 		if e != nil || !child.Created || child.Execution.Principal != x.Principal || child.Execution.Ref.RootRunID != x.Ref.RunID {
 			t.Fatal("child inheritance", e)
 		}
+		var cwd string
+		if e = f.Store.db.GetContext(f.Context, &cwd, "SELECT cwd FROM agent_run_context WHERE root_run_id=?", uint64(x.Ref.RootRunID)); e != nil {
+			t.Fatal(e)
+		}
+		childDetail, e := f.Agents.GetSession(f.Context, f.AdminToken, uint64(child.Execution.Ref.SessionID))
+		if e != nil || childDetail.Data.(a.SessionDetail).State.Workspace.CWD != cwd {
+			t.Fatal("child did not expose the root's frozen CWD", e)
+		}
 		if duplicate, e := f.Agents.CreateChild(f.Context, request); e != nil || duplicate.Created {
 			t.Fatal("child duplicate", e)
 		}

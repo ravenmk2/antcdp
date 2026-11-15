@@ -18,7 +18,6 @@ type SessionRow struct {
 	ParentRunID               *uint64         `db:"parent_run_id"`
 	ExecutorUserID            uint64          `db:"executor_user_id"`
 	Title                     string          `db:"title"`
-	ProjectContextID          *uint64         `db:"project_context_id"`
 	CloudComputerID           *uint64         `db:"cloud_computer_id"`
 	SelectedModelBindingID    uint64          `db:"selected_model_binding_id"`
 	SelectedThinkingOptionKey string          `db:"selected_thinking_option_key"`

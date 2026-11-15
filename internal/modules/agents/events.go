@@ -161,10 +161,6 @@ func coreSession(v *SessionRow) (agentcore.Session, error) {
 		id := agentcore.ID(*v.ActiveCompactionID)
 		out.ActiveCompactionID = &id
 	}
-	if v.ProjectContextID != nil {
-		id := agentcore.ID(*v.ProjectContextID)
-		out.ProjectID = &id
-	}
 	if v.ModelLockedAt != nil {
 		var frozen frozenModel
 		if json.Unmarshal(v.LockedModelConfig, &frozen) != nil || frozen.SelectionHash == "" {

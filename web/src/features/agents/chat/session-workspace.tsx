@@ -22,7 +22,6 @@ import type {
   SessionDetail,
   UsageTotals,
 } from "@/types/agents";
-import type { Resource } from "@/types/collaboration";
 import { agentRoot } from "../data/agent-api";
 import { runtimeReason } from "../data/runtime-reasons";
 import { runStatusNames } from "@/features/agents/resources/admin-shared";
@@ -392,12 +391,6 @@ function SessionContext({
   const id = session.configuration.id,
     selection = session.selection,
     workspace = session.state.workspace;
-  const projectId = session.configuration.project_context_id;
-  const project = useApiQuery<Resource>(
-    ["agent-session", id, "workspace", "project", projectId],
-    `/projects/${projectId}`,
-    { enabled: Boolean(projectId) },
-  );
   const usage = useApiQuery<UsageTotals>(
     ["agent-session", id, "workspace", "usage"],
     `${agentRoot}/sessions/${id}/usage`,
@@ -427,20 +420,6 @@ function SessionContext({
           {selection.locked
             ? "模型与思考已锁定，在这段会话中保持一致。"
             : "首次发送前可在会话设置中调整。"}
-        </p>
-      </section>
-      <section>
-        <h3 className="agent-workspace-section-title">项目上下文</h3>
-        <p className="text-sm leading-6 break-words">
-          {!projectId
-            ? "未指定项目"
-            : (project.data?.data.name ??
-              (project.isError ? "项目当前不可读取" : "正在读取项目…"))}
-        </p>
-        <p className="mt-2 text-xs leading-6 text-muted">
-          {session.state.project_context_available
-            ? "项目资源按执行账号的权限校验；当前轮次使用启动时确定的授权范围。"
-            : "项目当前不可用。请查看会话设置。"}
         </p>
       </section>
       <section>

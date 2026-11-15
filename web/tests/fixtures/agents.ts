@@ -7,7 +7,6 @@ export const session: SessionDetail = {
     agent_id: "4",
     agent_type: "interactive",
     title: "版本问题排查",
-    project_context_id: null,
     model_selection: { model_binding_id: "8", thinking_option_key: "default" },
     model_locked_at: time,
     archived_at: null,
@@ -41,7 +40,6 @@ export const session: SessionDetail = {
     last_activity_at: time,
     scope_kind: "platform",
     agent_access_available: true,
-    project_context_available: true,
     workspace: {
       binding_id: null,
       cloud_computer_id: null,

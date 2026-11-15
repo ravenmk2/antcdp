@@ -26,24 +26,22 @@ type ModelOption struct {
 	Thinking      []ThinkingOption `json:"thinking_options"`
 }
 type CatalogAgent struct {
-	ID                uint64           `json:"id,string"`
-	Name              string           `json:"name"`
-	Description       string           `json:"description"`
-	Models            []ModelOption    `json:"model_options"`
-	DefaultModelID    *uint64          `json:"default_model_binding_id,string"`
-	DefaultThinking   *string          `json:"default_thinking_option_key"`
-	SandboxRequired   bool             `json:"sandbox_required"`
-	Availability      Availability     `json:"availability"`
-	ScopeKind         string           `json:"scope_kind"`
-	AvailableProjects *[]ProjectOption `json:"available_projects,omitempty"`
+	ID              uint64        `json:"id,string"`
+	Name            string        `json:"name"`
+	Description     string        `json:"description"`
+	Models          []ModelOption `json:"model_options"`
+	DefaultModelID  *uint64       `json:"default_model_binding_id,string"`
+	DefaultThinking *string       `json:"default_thinking_option_key"`
+	SandboxRequired bool          `json:"sandbox_required"`
+	Availability    Availability  `json:"availability"`
+	ScopeKind       string        `json:"scope_kind"`
 }
 type StartOptions struct {
-	AgentID           uint64          `json:"agent_id,string"`
-	Models            []ModelOption   `json:"model_options"`
-	DefaultModelID    *uint64         `json:"default_model_binding_id,string"`
-	DefaultThinking   *string         `json:"default_thinking_option_key"`
-	ScopeKind         string          `json:"scope_kind"`
-	AvailableProjects []ProjectOption `json:"available_projects"`
+	AgentID         uint64        `json:"agent_id,string"`
+	Models          []ModelOption `json:"model_options"`
+	DefaultModelID  *uint64       `json:"default_model_binding_id,string"`
+	DefaultThinking *string       `json:"default_thinking_option_key"`
+	ScopeKind       string        `json:"scope_kind"`
 }
 type EffectiveSelection struct {
 	BindingID     uint64          `json:"model_binding_id,string"`
@@ -201,10 +199,6 @@ func (s *Service) GetCatalog(ctx context.Context, raw string, id uint64) (*Resul
 		if v == nil || v.Mode != "interactive" || !v.Enabled {
 			return missing()
 		}
-		ids, e := agentProjectCandidates(r, v, a.User)
-		if e != nil {
-			return e
-		}
 		allowed, e := r.CanUseAgent(v.ID, a.User.ID, a.User.Role == "admin")
 		if e != nil {
 			return e
@@ -219,7 +213,6 @@ func (s *Service) GetCatalog(ctx context.Context, raw string, id uint64) (*Resul
 		if !value.Availability.Available {
 			return missing()
 		}
-		value.AvailableProjects = &ids
 		out.Data = value
 		return nil
 	})
@@ -234,10 +227,6 @@ func (s *Service) StartOptions(ctx context.Context, raw string, id uint64) (*Res
 		if e != nil {
 			return e
 		}
-		ids, e := agentProjectCandidates(r, v, a.User)
-		if e != nil {
-			return e
-		}
 		allowed, e := r.CanUseAgent(v.ID, a.User.ID, a.User.Role == "admin")
 		if e != nil {
 			return e
@@ -245,7 +234,7 @@ func (s *Service) StartOptions(ctx context.Context, raw string, id uint64) (*Res
 		if !allowed {
 			return missing()
 		}
-		out.Data = StartOptions{AgentID: id, Models: value.Models, DefaultModelID: value.DefaultModelID, DefaultThinking: value.DefaultThinking, ScopeKind: v.ScopeKind, AvailableProjects: ids}
+		out.Data = StartOptions{AgentID: id, Models: value.Models, DefaultModelID: value.DefaultModelID, DefaultThinking: value.DefaultThinking, ScopeKind: v.ScopeKind}
 		return nil
 	})
 }

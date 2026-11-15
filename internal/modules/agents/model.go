@@ -172,10 +172,6 @@ type ToolBinding struct {
 type ToolBindingsWrite struct {
 	Items []ToolBindingWrite `json:"items"`
 }
-type ProjectOption struct {
-	ID   uint64 `db:"id" json:"id,string"`
-	Name string `db:"name" json:"name"`
-}
 type ToolSource struct {
 	Kind     string  `json:"kind"`
 	ServerID *uint64 `json:"server_id,string,omitempty"`
@@ -252,8 +248,6 @@ type Repository interface {
 	SaveSkillBindings(uint64, []SkillBinding, time.Time) error
 	CanUseAgent(agentID, userID uint64, admin bool) (bool, error)
 	ScopeExists(kind string, id *uint64) (bool, error)
-	AvailableProjects(userID uint64, admin bool) ([]ProjectOption, error)
-	CanReadActiveProject(projectID, userID uint64, admin bool) (bool, error)
 	AccountResourceGrants(userID uint64, admin bool) ([]agentcore.ResourceGrant, error)
 	AgentHasActiveWork(uint64) (bool, error)
 	AgentSessionIDs(uint64) ([]uint64, error)

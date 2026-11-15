@@ -31,7 +31,6 @@ const plan = (): SendPlan => ({
     create: {
       agent_id: "4",
       title: "故障排查",
-      project_context_id: null,
       model_selection: {
         model_binding_id: "8",
         thinking_option_key: "default",

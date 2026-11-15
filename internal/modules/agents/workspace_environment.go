@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
@@ -116,15 +117,15 @@ func (s *CloudService) environmentRequests(ctx context.Context, original *Sandbo
 	return responses, e
 }
 
-func (s *CloudService) InitializeComputer(ctx context.Context, access *SandboxAccess, projectID, agentID uint64) error {
-	request := workspace.Request{Operation: "initialize"}
+func (s *CloudService) InitializeComputer(ctx context.Context, access *SandboxAccess, agentID uint64) error {
+	if access == nil || !workspace.ValidCWD(access.CWD) {
+		return integrity()
+	}
+	request := workspace.Request{Operation: "initialize", Path: strings.TrimPrefix(access.CWD, "/data/")}
 	if agentID != 0 {
 		request.AgentID = idString(agentID)
 	}
-	if projectID != 0 {
-		request.ProjectID = idString(projectID)
-	}
-	results, e := s.environmentRequests(ctx, access, "workspace_prepare", fmt.Sprintf("initialize/%d/%d", projectID, agentID), []workspace.Request{request})
+	results, e := s.environmentRequests(ctx, access, "workspace_prepare", fmt.Sprintf("initialize/%s/%d", access.CWD, agentID), []workspace.Request{request})
 	if e != nil {
 		return e
 	}
@@ -134,11 +135,7 @@ func (s *CloudService) InitializeComputer(ctx context.Context, access *SandboxAc
 	if len(results) != 1 || json.Unmarshal(results[0].Result, &result) != nil {
 		return integrity()
 	}
-	expected := "/data/workspace"
-	if projectID != 0 {
-		expected = fmt.Sprintf("/data/projects/%d", projectID)
-	}
-	if result.CWD != expected {
+	if result.CWD != access.CWD {
 		return integrity()
 	}
 	return nil

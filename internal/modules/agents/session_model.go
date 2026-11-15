@@ -13,12 +13,10 @@ type ModelSelection struct {
 type SessionCreate struct {
 	AgentID   string          `json:"agent_id"`
 	Title     Field[string]   `json:"title"`
-	ProjectID Field[string]   `json:"project_context_id"`
 	Selection *ModelSelection `json:"model_selection"`
 }
 type SessionPatch struct {
 	Title     Field[string]         `json:"title"`
-	ProjectID Field[string]         `json:"project_context_id"`
 	Selection Field[ModelSelection] `json:"model_selection"`
 }
 type SessionConfiguration struct {
@@ -26,7 +24,6 @@ type SessionConfiguration struct {
 	AgentID       uint64         `json:"agent_id,string"`
 	Mode          string         `json:"agent_type"`
 	Title         string         `json:"title"`
-	ProjectID     *uint64        `json:"project_context_id,string"`
 	Selection     ModelSelection `json:"model_selection"`
 	ModelLockedAt *time.Time     `json:"model_locked_at"`
 	ArchivedAt    *time.Time     `json:"archived_at"`
@@ -74,7 +71,6 @@ type SessionState struct {
 	LastActivityAt          time.Time      `json:"last_activity_at"`
 	ScopeKind               string         `json:"scope_kind"`
 	AgentAccessAvailable    bool           `json:"agent_access_available"`
-	ProjectContextAvailable bool           `json:"project_context_available"`
 	Workspace               WorkspaceState `json:"workspace"`
 }
 type SessionPreference struct {

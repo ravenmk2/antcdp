@@ -208,26 +208,6 @@ func (t *agentsTx) ScopeExists(kind string, id *uint64) (bool, error) {
 	err := t.tx.GetContext(t.ctx, &exists, q, *id)
 	return exists, err
 }
-func activeProjectRead(userID uint64, admin bool) (string, []any) {
-	if admin {
-		return "o.archived_at IS NULL", nil
-	}
-	return "o.archived_at IS NULL AND " + projectMembership, []any{userID, userID}
-}
-func (t *agentsTx) AvailableProjects(userID uint64, admin bool) ([]a.ProjectOption, error) {
-	visible, args := activeProjectRead(userID, admin)
-	items := []a.ProjectOption{}
-	err := t.tx.SelectContext(t.ctx, &items, "SELECT o.id,o.name FROM project o WHERE "+visible+" ORDER BY o.id", args...)
-	return items, err
-}
-
-func (t *agentsTx) CanReadActiveProject(projectID, userID uint64, admin bool) (bool, error) {
-	visible, args := activeProjectRead(userID, admin)
-	var allowed bool
-	e := t.tx.GetContext(t.ctx, &allowed, "SELECT EXISTS(SELECT 1 FROM project o WHERE o.id=? AND "+visible+")", append([]any{projectID}, args...)...)
-	return allowed, e
-}
-
 func (t *agentsTx) AgentHasActiveWork(id uint64) (bool, error) {
 	var busy bool
 	e := t.tx.GetContext(t.ctx, &busy, "SELECT EXISTS(SELECT 1 FROM agent_session s WHERE s.agent_id=? AND (s.active_run_id IS NOT NULL OR s.active_compaction_id IS NOT NULL))", id)

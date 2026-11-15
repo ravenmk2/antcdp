@@ -14,7 +14,7 @@ import (
 
 func (s *Service) PatchSessionConfiguration(ctx context.Context, raw string, id uint64, tag string, w SessionPatch) (*Result, error) {
 	return s.access(ctx, raw, false, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
-		if !w.Title.Set && !w.ProjectID.Set && !w.Selection.Set {
+		if !w.Title.Set && !w.Selection.Set {
 			return httpx.Invalid("body", "empty_patch")
 		}
 		if w.Title.Null || w.Selection.Null {
@@ -48,32 +48,6 @@ func (s *Service) PatchSessionConfiguration(ctx context.Context, raw string, id 
 				return httpx.E(409, "MODEL_UNAVAILABLE", "模型当前不可用")
 			}
 		}
-		var project *uint64
-		if w.ProjectID.Set && !w.ProjectID.Null {
-			n, e := idValue(w.ProjectID.Value, "project_context_id")
-			if e != nil {
-				return e
-			}
-			agent, e := r.Definition(current.AgentID, true)
-			if e != nil {
-				return e
-			}
-			if e = s.definition(agent); e != nil {
-				return e
-			}
-			executor, e := runtimeOwner(tx, current)
-			if e != nil {
-				return e
-			}
-			access, e := checkSessionProjects(r, agent, executor, &n)
-			if e != nil {
-				return e
-			}
-			if !access.AgentAvailable || !access.ContextAvailable {
-				return httpx.E(403, "FORBIDDEN", "无法访问此项目")
-			}
-			project = &n
-		}
 		v, e := s.sessionAccess(st, id, a, true, true)
 		if e != nil {
 			return e
@@ -81,20 +55,11 @@ func (s *Service) PatchSessionConfiguration(ctx context.Context, raw string, id 
 		if e = checkTag(tag, s.tag("session", id, v.RowVersion)); e != nil {
 			return e
 		}
-		if v.ArchivedAt != nil && (w.Selection.Set || w.ProjectID.Set) {
+		if v.ArchivedAt != nil && w.Selection.Set {
 			return httpx.E(409, "SESSION_ARCHIVED", "会话已归档")
 		}
 		if w.Selection.Set && v.ModelLockedAt != nil {
 			return httpx.E(409, "MODEL_SELECTION_LOCKED", "会话模型已经锁定")
-		}
-		if w.ProjectID.Set {
-			counts, e := st.SessionCounts(id)
-			if e != nil {
-				return e
-			}
-			if v.ActiveRunID != nil || v.ActiveCompactionID != nil || counts.Inputs > 0 {
-				return httpx.E(409, "SESSION_NOT_IDLE", "项目上下文只能在会话空闲时修改")
-			}
 		}
 		fields := []string{}
 		if w.Title.Set {
@@ -109,10 +74,6 @@ func (s *Service) PatchSessionConfiguration(ctx context.Context, raw string, id 
 				v.Title = title
 				fields = append(fields, "title")
 			}
-		}
-		if w.ProjectID.Set && !same(v.ProjectContextID, project) {
-			v.ProjectContextID = project
-			fields = append(fields, "project_context_id")
 		}
 		if w.Selection.Set {
 			binding, e := idValue(selection.BindingID, "model_selection.model_binding_id")

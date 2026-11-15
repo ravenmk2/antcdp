@@ -140,7 +140,6 @@ function frame(subscriptionId: string, sessionId = "10"): SnapshotFrame {
         agent_id: "1",
         agent_type: "interactive",
         title: "会话",
-        project_context_id: null,
         model_selection: {
           model_binding_id: "1",
           thinking_option_key: "default",

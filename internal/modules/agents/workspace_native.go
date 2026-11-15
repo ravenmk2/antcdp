@@ -173,19 +173,13 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspace.Request
 	changed := false
 	switch q.Operation {
 	case "initialize":
-		cwd := "/data/workspace"
-		if q.ProjectID != "" {
-			if !validNumericID(q.ProjectID) {
-				return workspace.Response{}, integrity()
-			}
-			cwd = "/data/projects/" + q.ProjectID
+		cwd := name
+		if !workspace.ValidCWD(cwd) || q.AgentID != "" && !validNumericID(q.AgentID) {
+			return workspace.Response{}, integrity()
 		}
 		err = f.MakeDirectory(ctx, a.Resource, cwd, 755)
 		changed = err == nil
 		if err == nil && q.AgentID != "" {
-			if !validNumericID(q.AgentID) {
-				return workspace.Response{}, integrity()
-			}
 			err = f.MakeDirectory(ctx, a.Resource, "/data/agents/"+q.AgentID+"/skills", 755)
 		}
 		value = map[string]any{"cwd": cwd}

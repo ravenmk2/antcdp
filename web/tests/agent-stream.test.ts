@@ -62,7 +62,6 @@ function snapshot(overrides: Partial<SnapshotFrame> = {}): SnapshotFrame {
         agent_id: "1",
         agent_type: "interactive",
         title: "诊断",
-        project_context_id: null,
         model_selection: {
           model_binding_id: "1",
           thinking_option_key: "default",

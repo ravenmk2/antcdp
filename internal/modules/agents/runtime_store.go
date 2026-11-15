@@ -168,15 +168,12 @@ func (s *Service) ClaimRoot(ctx context.Context, request agentcore.ClaimRequest)
 		if !now.Before(input.QueueDeadlineAt) {
 			return nil
 		}
-		access, e := checkSessionProjects(r, agent, owner, v.ProjectContextID)
+		allowed, e := canUseSessionAgent(r, agent, owner)
 		if e != nil {
 			return e
 		}
-		if !access.AgentAvailable || !access.ContextAvailable {
-			reason := "PROJECT_CONTEXT_UNAVAILABLE"
-			if !access.AgentAvailable {
-				reason = "AGENT_ACCESS_REVOKED"
-			}
+		if !allowed {
+			reason := "AGENT_ACCESS_REVOKED"
 			out.Receipt, e = cancelSessionQueue(st, v, reason, now)
 			return e
 		}

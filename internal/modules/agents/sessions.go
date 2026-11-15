@@ -79,7 +79,7 @@ func (s *Service) sessionAccess(st StateRepository, id uint64, a *identity.Auth,
 	return v, nil
 }
 func (s *Service) configuration(v *SessionRow) SessionConfiguration {
-	return SessionConfiguration{ID: v.ID, AgentID: v.AgentID, Mode: v.ExecutionMode, Title: v.Title, ProjectID: v.ProjectContextID, Selection: ModelSelection{strconv.FormatUint(v.SelectedModelBindingID, 10), v.SelectedThinkingOptionKey}, ModelLockedAt: v.ModelLockedAt, ArchivedAt: v.ArchivedAt, Version: strings.Trim(s.tag("session", v.ID, v.RowVersion), `"`), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
+	return SessionConfiguration{ID: v.ID, AgentID: v.AgentID, Mode: v.ExecutionMode, Title: v.Title, Selection: ModelSelection{strconv.FormatUint(v.SelectedModelBindingID, 10), v.SelectedThinkingOptionKey}, ModelLockedAt: v.ModelLockedAt, ArchivedAt: v.ArchivedAt, Version: strings.Trim(s.tag("session", v.ID, v.RowVersion), `"`), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
 }
 func (s *Service) selection(tx identity.Tx, r Repository, v *SessionRow) (agentcore.LockedModel, EffectiveSelection, error) {
 	if s.Models == nil {
@@ -200,7 +200,11 @@ func (s *Service) detail(ctx context.Context, tx identity.Tx, r Repository, st S
 	if e != nil {
 		return SessionDetail{}, e
 	}
-	out := SessionDetail{Configuration: s.configuration(v), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.ExecutorUserID)}, RootSessionID: v.RootSessionID, Selection: selection, State: SessionState{LastSeq: v.LastSeq, ActiveRunID: v.ActiveRunID, QueuePaused: v.QueuePaused, PendingInputCount: counts.Inputs, PendingInteractionCount: counts.Interactions, LastActivityAt: v.LastActivityAt, ScopeKind: agent.ScopeKind, Workspace: WorkspaceState{CWD: sessionCWD(v.ProjectContextID), Availability: "not_allocated"}}, Permissions: Permissions{Read: true}}
+	cwd, e := agentCWD(agent)
+	if e != nil {
+		return SessionDetail{}, e
+	}
+	out := SessionDetail{Configuration: s.configuration(v), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.ExecutorUserID)}, RootSessionID: v.RootSessionID, Selection: selection, State: SessionState{LastSeq: v.LastSeq, ActiveRunID: v.ActiveRunID, QueuePaused: v.QueuePaused, PendingInputCount: counts.Inputs, PendingInteractionCount: counts.Interactions, LastActivityAt: v.LastActivityAt, ScopeKind: agent.ScopeKind, Workspace: WorkspaceState{CWD: cwd, Availability: "not_allocated"}}, Permissions: Permissions{Read: true}}
 	var activeRootID *uint64
 	if v.ActiveRunID != nil {
 		run, e := st.Run(*v.ActiveRunID, false)
@@ -215,6 +219,16 @@ func (s *Service) detail(ctx context.Context, tx identity.Tx, r Repository, st S
 		if run.RootRunID != nil {
 			activeRootID = run.RootRunID
 		}
+	}
+	if activeRootID != nil {
+		frozen, err := st.RunContext(*activeRootID)
+		if err != nil {
+			return out, err
+		}
+		if frozen == nil {
+			return out, integrity()
+		}
+		out.State.Workspace.CWD = frozen.CWD
 	}
 	if v.CloudComputerID != nil {
 		out.State.Workspace.ComputerID = v.CloudComputerID
@@ -239,16 +253,15 @@ func (s *Service) detail(ctx context.Context, tx identity.Tx, r Repository, st S
 	if e != nil {
 		return out, e
 	}
-	access, e := checkSessionProjects(r, agent, executor, v.ProjectContextID)
+	allowed, e := canUseSessionAgent(r, agent, executor)
 	if e != nil {
 		return out, e
 	}
-	out.State.AgentAccessAvailable = access.AgentAvailable
-	out.State.ProjectContextAvailable = access.ContextAvailable
+	out.State.AgentAccessAvailable = allowed
 	if v.RootSessionID == nil {
 		out.Permissions.Manage = true
 		out.Permissions.Control = v.ArchivedAt == nil
-		out.Permissions.Submit = v.ArchivedAt == nil && agent.Enabled && selection.Availability.Available && access.AgentAvailable && access.ContextAvailable
+		out.Permissions.Submit = v.ArchivedAt == nil && agent.Enabled && selection.Availability.Available && allowed
 		out.Permissions.Answer = out.Permissions.Submit
 		out.Permissions.Approve = out.Permissions.Submit && v.ExecutionMode == "interactive"
 		pref, e := st.Preference(a.User.ID, v.ID, false)
@@ -574,8 +587,12 @@ func (s *Service) createSessionTx(ctx context.Context, tx identity.Tx, r Reposit
 			return e
 		}
 	}
-	if e = setInitialProject(r, v, agent, executor, w.ProjectID); e != nil {
+	allowed, e := canUseSessionAgent(r, agent, executor)
+	if e != nil {
 		return e
+	}
+	if !allowed {
+		return missing()
 	}
 	if !agent.Enabled || agent.DefaultModelBindingID == nil {
 		return httpx.E(409, "AGENT_UNAVAILABLE", "智能体当前不可用")
@@ -611,7 +628,7 @@ func (s *Service) createSessionTx(ctx context.Context, tx identity.Tx, r Reposit
 	if !selection.Availability.Available {
 		return httpx.E(409, "MODEL_UNAVAILABLE", "所选模型当前不可用")
 	}
-	if e = requireSessionProjects(r, current, executor, v.ProjectContextID); e != nil {
+	if e = requireSessionAgent(r, current, executor); e != nil {
 		return e
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)

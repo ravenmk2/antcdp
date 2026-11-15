@@ -13,11 +13,24 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-func sessionCWD(project *uint64) string {
-	if project != nil {
-		return "/data/projects/" + idString(*project)
+func agentCWD(agent *Definition) (string, error) {
+	if agent == nil {
+		return "", integrity()
 	}
-	return "/data/workspace"
+	if agent.ScopeKind == "platform" && agent.ScopeID == nil {
+		return "/data/platform", nil
+	}
+	if agent.ScopeID == nil || *agent.ScopeID == 0 {
+		return "", integrity()
+	}
+	switch agent.ScopeKind {
+	case "team":
+		return "/data/teams/" + idString(*agent.ScopeID), nil
+	case "project":
+		return "/data/projects/" + idString(*agent.ScopeID), nil
+	default:
+		return "", integrity()
+	}
 }
 func newComputer(cr CloudRepository, connection *SandboxConnectionRow, owner uint64, agent *uint64, now time.Time) (*CloudComputerRow, error) {
 	v := &CloudComputerRow{OwnerUserID: owner, PoolAgentID: agent, State: "uninitialized", BackendGeneration: connection.BackendGeneration, StorageGeneration: 1, VolumeState: "absent", VolumeCleanupState: "not_requested", EffectiveEnvironment: json.RawMessage(`null`), Capabilities: json.RawMessage(`null`), IdleSince: now, LastActivityAt: now, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
