@@ -253,7 +253,7 @@ func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.Ex
 		if x.Root.DeadlineAt.Before(deadline) {
 			deadline = x.Root.DeadlineAt
 		}
-		out.Operation = FileOperationRow{ToolCallID: callID, ContentSessionID: x.RootSession.ID, RootRunID: x.Root.ID, Kind: kind, OperationToken: NewStorageKey(), Status: "preparing", BindingID: binding.RootRunID, ComputerID: out.Access.ComputerID, BackendGeneration: out.Access.BackendGeneration, InstanceID: out.Access.InstanceID, StorageGeneration: out.Access.StorageGeneration, VolumeID: *computer.VolumeID, BindingFenceVersion: binding.FenceVersion, ExecutorEpoch: s.Epoch, FenceVersion: 1, RequestHash: hash[:], Result: json.RawMessage(`{}`), CommitReceipt: json.RawMessage(`null`), CreatedAt: now, DeadlineAt: deadline, UpdatedAt: now}
+		out.Operation = FileOperationRow{ToolCallID: callID, ContentSessionID: x.RootSession.ID, RootRunID: x.Root.ID, Kind: kind, OperationToken: NewStorageKey(), Status: "preparing", BindingID: binding.RootRunID, ComputerID: out.Access.ComputerID, BackendGeneration: out.Access.BackendGeneration, InstanceID: out.Access.InstanceID, StorageGeneration: out.Access.StorageGeneration, VolumeID: *computer.VolumeID, BindingFenceVersion: binding.FenceVersion, ExecutorEpoch: s.Epoch, FenceVersion: 1, RequestHash: hash[:], Intent: json.RawMessage(`{}`), CommitReceipt: json.RawMessage(`null`), CreatedAt: now, DeadlineAt: deadline, UpdatedAt: now}
 		if e = st.InsertFileOperation(&out.Operation); e != nil {
 			return e
 		}
@@ -303,7 +303,7 @@ func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.Ex
 			}
 			out.Intent.Operations = append(out.Intent.Operations, op.ID)
 		}
-		out.Operation.Result, e = json.Marshal(out.Intent)
+		out.Operation.Intent, e = json.Marshal(out.Intent)
 		if e != nil {
 			return e
 		}
@@ -799,21 +799,9 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 		op.Status = "succeeded"
 		op.FinishedAt = &now
 		op.UpdatedAt = now
-		op.Result, e = json.Marshal(extra)
-		if e != nil {
-			return e
-		}
 		op.CommitReceipt, e = json.Marshal(commit.Receipt)
 		if e != nil {
 			return e
-		}
-		if op.Kind == "present" {
-			op.CommittedFromSeq = &rootFrom
-			through := x.RootSession.LastSeq
-			if x.Session.ID == x.RootSession.ID {
-				through = uint64(commit.Receipt.ToolResultSeq) - 1
-			}
-			op.CommittedThroughSeq = &through
 		}
 		if e = st.SaveFileOperation(op); e != nil {
 			return e
@@ -943,7 +931,7 @@ func (s *CloudService) ProcessFileOperations(ctx context.Context, limit int) err
 }
 func (s *CloudService) retireFileTransfer(ctx context.Context, initial FileOperationRow) error {
 	var intent fileTransferIntent
-	if json.Unmarshal(initial.Result, &intent) != nil {
+	if json.Unmarshal(initial.Intent, &intent) != nil {
 		return integrity()
 	}
 	for _, id := range intent.Operations {

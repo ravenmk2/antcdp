@@ -211,7 +211,7 @@ func (s *CloudService) reserveCommand(ctx context.Context, ref agentcore.Executi
 			return e
 		}
 		hash := sha256.Sum256(encoded)
-		out.Row = CloudExecutionRow{ComputerID: out.Access.ComputerID, BackendGeneration: out.Access.BackendGeneration, InstanceID: out.Access.InstanceID, RootRunID: x.Root.ID, RunID: x.Run.ID, ToolCallID: callID, ExecutionOrdinal: 1, ExecutionToken: NewStorageKey(), IsBackground: w.Background, Status: "prepared", CommandEventSeq: call.ArgumentsEventSeq, CWD: out.Access.CWD, ExecutionSpecHash: hash[:], ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, DeadlineAt: deadline, LastObservation: json.RawMessage(`{}`)}
+		out.Row = CloudExecutionRow{ComputerID: out.Access.ComputerID, BackendGeneration: out.Access.BackendGeneration, InstanceID: out.Access.InstanceID, RootRunID: x.Root.ID, RunID: x.Run.ID, ToolCallID: callID, ExecutionOrdinal: 1, ExecutionToken: NewStorageKey(), IsBackground: w.Background, Status: "prepared", CWD: out.Access.CWD, ExecutionSpecHash: hash[:], ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, DeadlineAt: deadline, LastObservation: json.RawMessage(`{}`)}
 		if e = repo.InsertCloudExecution(&out.Row); e != nil {
 			return e
 		}

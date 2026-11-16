@@ -211,7 +211,7 @@ func (t *agentsTx) CloudExecution(id uint64, lock bool) (*a.CloudExecutionRow, e
 	v.CancelRequestedAt = physical.CancelRequestedAt
 	v.LastObservedAt = physical.LastObservedAt
 	v.FinishedAt = physical.FinishedAt
-	err = t.tx.GetContext(t.ctx, v, "SELECT root_run_id,run_id,tool_call_id,execution_ordinal,command_event_seq FROM agent_sandbox_execution WHERE sandbox_execution_id=?", id)
+	err = t.tx.GetContext(t.ctx, v, "SELECT root_run_id,run_id,tool_call_id,execution_ordinal FROM agent_sandbox_execution WHERE sandbox_execution_id=?", id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -243,7 +243,7 @@ func (t *agentsTx) InsertCloudExecution(v *a.CloudExecutionRow) error {
 		return err
 	}
 	v.ID = physical.ID
-	_, err = t.named("INSERT INTO agent_sandbox_execution(sandbox_execution_id,root_run_id,run_id,tool_call_id,execution_ordinal,command_event_seq) VALUES(:id,:root_run_id,:run_id,:tool_call_id,:execution_ordinal,:command_event_seq)", v)
+	_, err = t.named("INSERT INTO agent_sandbox_execution(sandbox_execution_id,root_run_id,run_id,tool_call_id,execution_ordinal) VALUES(:id,:root_run_id,:run_id,:tool_call_id,:execution_ordinal)", v)
 	return err
 }
 func (t *agentsTx) SaveCloudExecution(v *a.CloudExecutionRow) error {

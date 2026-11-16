@@ -321,32 +321,31 @@ type ArtifactRow struct {
 	DeletedEventSeq  *uint64         `db:"deleted_event_seq"`
 }
 type FileOperationRow struct {
-	ID                  uint64          `db:"id"`
-	ToolCallID          uint64          `db:"tool_call_id"`
-	ContentSessionID    uint64          `db:"content_session_id"`
-	RootRunID           uint64          `db:"root_run_id"`
-	Kind                string          `db:"kind"`
-	OperationToken      string          `db:"operation_token"`
-	Status              string          `db:"status"`
-	BindingID           uint64          `db:"binding_id"`
-	ComputerID          uint64          `db:"cloud_computer_id"`
-	BindingFenceVersion uint64          `db:"binding_fence_version"`
-	BackendGeneration   uint64          `db:"backend_generation"`
-	InstanceID          uint64          `db:"sandbox_instance_id"`
-	StorageGeneration   uint64          `db:"storage_generation"`
-	VolumeID            string          `db:"volume_id"`
-	ExecutorEpoch       string          `db:"executor_epoch"`
-	FenceVersion        uint64          `db:"fence_version"`
-	RequestHash         []byte          `db:"request_hash"`
-	Result              json.RawMessage `db:"result"`
-	CommitReceipt       json.RawMessage `db:"commit_receipt"`
-	CommittedFromSeq    *uint64         `db:"committed_from_seq"`
-	CommittedThroughSeq *uint64         `db:"committed_through_seq"`
-	ErrorCode           *string         `db:"error_code"`
-	CreatedAt           time.Time       `db:"created_at"`
-	DeadlineAt          time.Time       `db:"deadline_at"`
-	FinishedAt          *time.Time      `db:"finished_at"`
-	UpdatedAt           time.Time       `db:"updated_at"`
+	ID                  uint64 `db:"id"`
+	ToolCallID          uint64 `db:"tool_call_id"`
+	ContentSessionID    uint64 `db:"content_session_id"`
+	RootRunID           uint64 `db:"root_run_id"`
+	Kind                string `db:"kind"`
+	OperationToken      string `db:"operation_token"`
+	Status              string `db:"status"`
+	BindingID           uint64 `db:"binding_id"`
+	ComputerID          uint64 `db:"cloud_computer_id"`
+	BindingFenceVersion uint64 `db:"binding_fence_version"`
+	BackendGeneration   uint64 `db:"backend_generation"`
+	InstanceID          uint64 `db:"sandbox_instance_id"`
+	StorageGeneration   uint64 `db:"storage_generation"`
+	VolumeID            string `db:"volume_id"`
+	ExecutorEpoch       string `db:"executor_epoch"`
+	FenceVersion        uint64 `db:"fence_version"`
+	RequestHash         []byte `db:"request_hash"`
+	// Intent preserves recovery inputs; committed results live in tool/result events.
+	Intent        json.RawMessage `db:"intent"`
+	CommitReceipt json.RawMessage `db:"commit_receipt"`
+	ErrorCode     *string         `db:"error_code"`
+	CreatedAt     time.Time       `db:"created_at"`
+	DeadlineAt    time.Time       `db:"deadline_at"`
+	FinishedAt    *time.Time      `db:"finished_at"`
+	UpdatedAt     time.Time       `db:"updated_at"`
 }
 type FileOperationItemRow struct {
 	OperationID       uint64     `db:"operation_id"`

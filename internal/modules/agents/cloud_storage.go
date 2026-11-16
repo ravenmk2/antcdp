@@ -64,7 +64,6 @@ type CloudExecutionRow struct {
 	RemoteExecutionID *string         `db:"remote_execution_id"`
 	IsBackground      bool            `db:"is_background"`
 	Status            string          `db:"status"`
-	CommandEventSeq   uint64          `db:"command_event_seq"`
 	CWD               string          `db:"cwd"`
 	ExecutionSpecHash []byte          `db:"execution_spec_hash"`
 	ExecutorEpoch     string          `db:"executor_epoch"`

@@ -8,6 +8,7 @@ import (
 	"image"
 	"image/png"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -117,7 +118,8 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal("import bytes changed")
 	}
 	before := remote.requests
-	if _, e = svc.ImportFile(ctx, x.Ref, uint64(call.ID), w); e != nil || remote.requests != before {
+	replayed, e := svc.ImportFile(ctx, x.Ref, uint64(call.ID), w)
+	if e != nil || remote.requests != before || replayed.Content != imported.Content || !reflect.DeepEqual(replayed.Committed, imported.Committed) {
 		t.Fatal("import replay performed IO", e)
 	}
 	remote.files[strings.TrimPrefix(binding.CWD, "/data/")+"/report.md"] = []byte("retained report")
@@ -189,6 +191,24 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	if e = childSaved.Committed.ValidateTool(childCall.ID, child.Execution.Ref.SessionID); e != nil {
 		t.Fatal(e)
 	}
+	// Successful publication must retain its recovery intent, while replay reads
+	// the immutable tool event and preserves the complete cross-session receipt.
+	var persistedIntent []byte
+	if e = f.Store.db.GetContext(ctx, &persistedIntent, "SELECT intent FROM agent_file_operation WHERE tool_call_id=?", uint64(childCall.ID)); e != nil {
+		t.Fatal(e)
+	}
+	var intent struct {
+		Present    a.PresentRequest `json:"present"`
+		Operations []uint64         `json:"operations"`
+	}
+	if e = json.Unmarshal(persistedIntent, &intent); e != nil || !reflect.DeepEqual(intent.Present, childRequest) || len(intent.Operations) != 1 {
+		t.Fatal("publication replaced recovery intent with result", e)
+	}
+	before = remote.requests
+	replayed, e = svc.Present(ctx, child.Execution.Ref, uint64(childCall.ID), childRequest)
+	if e != nil || remote.requests != before || replayed.Content != childSaved.Content || !reflect.DeepEqual(replayed.Committed, childSaved.Committed) {
+		t.Fatal("child replay lost committed result or cross-session receipt", e)
+	}
 	if _, e = host.EndChild(ctx, child.Execution.Ref, core.ChildEnd{End: core.RunEnd{Status: core.Succeeded}}); e != nil {
 		t.Fatal(e)
 	}
@@ -220,7 +240,9 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	}
 	runtimeEnd(t, f, x)
 	before = remote.requests
-	if e = svc.ProcessFileOperations(ctx, 25); e != nil {
+	// A replacement worker has only durable intent, never the original claim.
+	recovery := &a.CloudService{Host: host, Epoch: "artifact-transfer-recovery", Cipher: svc.Cipher, InstallationID: svc.InstallationID, Factory: svc.Factory}
+	if e = recovery.ProcessFileOperations(ctx, 25); e != nil {
 		t.Fatal("file reconciliation", e)
 	}
 	if remote.requests != before {
@@ -233,7 +255,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	if _, e = f.Store.db.ExecContext(ctx, "UPDATE cloud_computer SET state='deleted',deleted_at=UTC_TIMESTAMP(3) WHERE id=?", uint64(binding.ComputerID)); e != nil {
 		t.Fatal(e)
 	}
-	if e = svc.ProcessFileOperations(ctx, 25); e != nil {
+	if e = recovery.ProcessFileOperations(ctx, 25); e != nil {
 		t.Fatal("terminated transfer reconciliation", e)
 	}
 	if e = f.Store.db.GetContext(ctx, &held, "SELECT COUNT(*) FROM agent_resource_reference r JOIN agent_file_operation o ON r.holder_kind='file_operation' AND r.holder_id=CAST(o.id AS CHAR) WHERE o.tool_call_id=? AND r.state<>'released'", uint64(uncertainCall.ID)); e != nil || held != 0 {

@@ -46,7 +46,6 @@ CREATE TABLE `agent_sandbox_execution` (
     run_id BIGINT UNSIGNED NOT NULL,
     tool_call_id BIGINT UNSIGNED NOT NULL,
     execution_ordinal BIGINT UNSIGNED NOT NULL,
-    command_event_seq BIGINT UNSIGNED NOT NULL,
     PRIMARY KEY (sandbox_execution_id),
     UNIQUE KEY uq_agent_sandbox_execution_call (tool_call_id,execution_ordinal),
     KEY idx_agent_sandbox_execution_root (root_run_id,sandbox_execution_id)
