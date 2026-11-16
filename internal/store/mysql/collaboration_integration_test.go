@@ -131,6 +131,44 @@ func verifyCollaborationHTTP(t *testing.T, backend *Store, dataDir string, admin
 		t.Fatal("team grant became direct membership")
 	}
 	member.call(t, "PATCH", p, map[string]any{"name": "越权"}, 403, head(p, "etag"))
+	roles := p + "/roles"
+	roleWrite := map[string]any{"name": "Release operator", "description": "发布操作员"}
+	role := testData(admin.call(t, "POST", roles, roleWrite, 201, nil))
+	rolePath := roles + "/" + role["id"].(string)
+	assignment := map[string]any{"user_ids": []string{memberID}}
+	setRoleMembers := func(t *testing.T) {
+		t.Helper()
+		admin.call(t, "PUT", rolePath+"/members", assignment, 204, head(rolePath, "etag"))
+	}
+	if !t.Run("ProjectRolePermissionsAndVersions", func(t *testing.T) {
+		outsider.call(t, "GET", roles, nil, 404, nil)
+		member.call(t, "GET", roles, nil, 200, nil)
+		member.call(t, "POST", roles, roleWrite, 403, nil)
+		member.call(t, "PUT", rolePath+"/members", assignment, 403, head(rolePath, "etag"))
+		expectCode(t, admin.call(t, "POST", roles, map[string]any{"name": "release operator"}, 409, nil), "NAME_CONFLICT")
+		other := create("projects", "QA_Other_Role", "另一个角色范围", []string{adminID})
+		otherRoles := "/projects/" + other["id"].(string) + "/roles"
+		admin.call(t, "POST", otherRoles, roleWrite, 201, nil)
+		admin.call(t, "GET", otherRoles+"/"+role["id"].(string), nil, 404, nil)
+		options := admin.call(t, "GET", p+"/role-member-options?q=member", nil, 200, nil)["data"].([]any)
+		if len(options) != 1 || options[0].(map[string]any)["id"] != memberID {
+			t.Fatal("inherited member missing from role candidates")
+		}
+		invalid := map[string]any{"user_ids": []string{memberID, "9999999"}}
+		admin.call(t, "PUT", rolePath+"/members", invalid, 422, head(rolePath, "etag"))
+		if get(rolePath)["member_count"] != float64(0) {
+			t.Fatal("invalid role update was partially applied")
+		}
+		setRoleMembers(t)
+		firstTag := map[string]string{"If-Match": role["etag"].(string)}
+		admin.call(t, "PUT", rolePath+"/members", assignment, 412, firstTag)
+		updated := testData(admin.call(t, "PATCH", rolePath, map[string]any{"name": "发布操作员"}, 200, head(rolePath, "etag")))
+		if updated["id"] != role["id"] || updated["member_count"] != float64(1) {
+			t.Fatalf("renaming lost the role or its bindings: %v", updated)
+		}
+	}) {
+		return
+	}
 	admin.call(t, "POST", p+"/members", map[string]any{"user_id": memberID, "role": "member"}, 204, head(p, "membership_etag"))
 	page := testData(member.call(t, "GET", p+"/members?page_size=1", nil, 200, nil))
 	if page["total"] != float64(2) || len(page["items"].([]any)) != 1 || page["membership_etag"] == "" {
@@ -140,15 +178,25 @@ func verifyCollaborationHTTP(t *testing.T, backend *Store, dataDir string, admin
 	if filtered["total"] != float64(1) || len(filtered["items"].([]any)[0].(map[string]any)["sources"].([]any)) != 2 {
 		t.Fatal("member sources were not merged before filtering")
 	}
+	memberRoles := filtered["items"].([]any)[0].(map[string]any)["custom_roles"].([]any)
+	if len(memberRoles) != 1 || memberRoles[0].(map[string]any)["name"] != "发布操作员" {
+		t.Fatal("custom role was not projected on the member list")
+	}
 	sidebar := testData(member.call(t, "GET", "/me/sidebar-shortcuts", nil, 200, nil))
 	member.call(t, "PUT", "/me/sidebar-shortcuts/projects", map[string]any{"ids": []string{project["id"].(string)}}, 200, map[string]string{"If-Match": sidebar["projects"].(map[string]any)["etag"].(string)})
 	member.call(t, "POST", p+"/leave", nil, 204, nil)
 	member.call(t, "GET", p, nil, 200, nil)
+	if get(rolePath)["member_count"] != float64(1) {
+		t.Fatal("role removed despite remaining team source")
+	}
 	sidebar = testData(member.call(t, "GET", "/me/sidebar-shortcuts", nil, 200, nil))
 	if len(sidebar["projects"].(map[string]any)["items"].([]any)) != 1 {
 		t.Fatal("pin removed despite remaining team source")
 	}
 	member.call(t, "POST", g+"/leave", nil, 204, nil)
+	if get(rolePath)["member_count"] != float64(0) {
+		t.Fatal("role retained after last source removed")
+	}
 	member.call(t, "GET", p, nil, 404, nil)
 	member.call(t, "GET", g, nil, 404, nil)
 	sidebar = testData(member.call(t, "GET", "/me/sidebar-shortcuts", nil, 200, nil))
@@ -157,13 +205,32 @@ func verifyCollaborationHTTP(t *testing.T, backend *Store, dataDir string, admin
 	}
 	admin.call(t, "POST", g+"/members", map[string]any{"user_id": memberID, "role": "admin"}, 204, head(g, "membership_etag"))
 	member.call(t, "GET", p, nil, 200, nil)
+	if get(rolePath)["member_count"] != float64(0) {
+		t.Fatal("role silently restored after member rejoined")
+	}
+	setRoleMembers(t)
+	admin.call(t, "DELETE", p+"/teams/"+team["id"].(string), nil, 204, head(p, "membership_etag"))
+	if get(rolePath)["member_count"] != float64(0) {
+		t.Fatal("role retained after team was unlinked")
+	}
+	admin.call(t, "POST", p+"/teams", map[string]any{"team_id": team["id"]}, 204, head(p, "membership_etag"))
+	setRoleMembers(t)
 	admin.call(t, "POST", p+"/archive", nil, 204, head(p, "etag"))
 	member.call(t, "GET", p, nil, 200, nil)
 	admin.call(t, "PATCH", p, map[string]any{"summary": "只读"}, 409, head(p, "etag"))
+	admin.call(t, "DELETE", rolePath, nil, 409, head(rolePath, "etag"))
+	if get(rolePath)["member_count"] != float64(1) {
+		t.Fatal("role bindings changed when project was archived")
+	}
 	admin.call(t, "POST", p+"/restore", nil, 204, head(p, "etag"))
 	admin.call(t, "POST", g+"/dissolve", nil, 204, head(g, "dissolve_etag"))
 	member.call(t, "GET", p, nil, 404, nil)
 	if get(p)["member_count"] != float64(1) {
 		t.Fatal("dissolved team still contributes members")
 	}
+	if get(rolePath)["member_count"] != float64(0) {
+		t.Fatal("role retained after team was dissolved")
+	}
+	admin.call(t, "DELETE", rolePath, nil, 204, head(rolePath, "etag"))
+	admin.call(t, "GET", rolePath, nil, 404, nil)
 }

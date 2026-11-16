@@ -9,6 +9,7 @@ export type WorkspaceProjectPage = (typeof workspaceProjectPages)[number];
 export const workspaceProjectSettingSections = [
   "profile",
   "members",
+  "roles",
   "teams",
   "integrations",
   "hosts",

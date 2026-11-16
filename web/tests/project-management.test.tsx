@@ -1,11 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ApiError, request, type RequestOptions } from "@/api/client";
 import { AdminProjectDetail } from "@/areas/console/pages/project-detail";
-import type { Resource } from "@/types/collaboration";
+import type { Resource, RoleDetail } from "@/types/collaboration";
 
 vi.mock("@/app/auth", () => ({
   useAuth: () => ({ settings: { timezone: "Asia/Shanghai" } }),
@@ -38,6 +38,8 @@ vi.mock("@/areas/console/pages/projects/project-profile-editor", () => ({
 
 let project: Resource;
 let lifecycleError: ApiError | undefined;
+let projectRole: RoleDetail | undefined;
+const teamMember = { id: "21", username: "member", display_name: "张三" };
 const mockedRequest = vi.mocked(request);
 beforeEach(() => {
   project = {
@@ -63,6 +65,7 @@ beforeEach(() => {
     can_manage: true,
   };
   lifecycleError = undefined;
+  projectRole = undefined;
   mockedRequest.mockReset();
   mockedRequest.mockImplementation(
     async (path, options: RequestOptions = {}) => {
@@ -76,6 +79,45 @@ beforeEach(() => {
         if (lifecycleError) throw lifecycleError;
         return { data: undefined, etag: "", status: 204 };
       }
+      if (path === "/projects/7/roles") {
+        if (options.method === "POST") {
+          const input = options.body as { name: string; description: string };
+          projectRole = {
+            id: "5",
+            ...input,
+            member_count: 0,
+            etag: '"role-5-v1"',
+            members: [],
+          };
+          return {
+            data: structuredClone(projectRole),
+            etag: projectRole.etag,
+            status: 201,
+          };
+        }
+        return {
+          data: { items: projectRole ? [projectRole] : [] },
+          etag: "",
+          status: 200,
+        };
+      }
+      if (path === "/projects/7/roles/5" && projectRole)
+        return {
+          data: structuredClone(projectRole),
+          etag: projectRole.etag,
+          status: 200,
+        };
+      if (path === "/projects/7/roles/5/members" && projectRole) {
+        projectRole = {
+          ...projectRole,
+          member_count: 1,
+          etag: '"role-5-v2"',
+          members: [teamMember],
+        };
+        return { data: undefined, etag: "", status: 204 };
+      }
+      if (path.startsWith("/projects/7/role-member-options?"))
+        return { data: [teamMember], etag: "", status: 200 };
       throw new Error(`Unexpected request ${path}`);
     },
   );
@@ -107,6 +149,32 @@ function mount(entry = "/admin/projects/7") {
   );
   return { router, user: userEvent.setup() };
 }
+
+it("creates a project role and saves its selected member with the role version", async () => {
+  const { user } = mount("/admin/projects/7?tab=roles");
+  await user.click(await screen.findByRole("button", { name: "新建角色" }));
+  const editor = await screen.findByRole("dialog", { name: "新建角色" });
+  await user.type(
+    within(editor).getByRole("textbox", { name: /角色名称/ }),
+    "发布操作员",
+  );
+  await user.click(within(editor).getByRole("button", { name: "保存" }));
+  await user.click(
+    await screen.findByRole("button", { name: "发布操作员的操作" }),
+  );
+  await user.click(await screen.findByRole("menuitem", { name: "管理成员" }));
+  const roster = await screen.findByRole("dialog", { name: "管理角色成员" });
+  await user.click(within(roster).getByRole("button", { name: /选择用户/ }));
+  await user.click(await screen.findByRole("checkbox", { name: /张三/ }));
+  await user.click(screen.getByRole("button", { name: /确定/ }));
+  await user.click(within(roster).getByRole("button", { name: "保存" }));
+  expect(await screen.findByText("1 人")).toBeInTheDocument();
+  expect(mockedRequest).toHaveBeenCalledWith("/projects/7/roles/5/members", {
+    method: "PUT",
+    etag: '"role-5-v1"',
+    body: { user_ids: ["21"] },
+  });
+});
 
 it("uses a compact project header and separates profile editing from the description", async () => {
   const { user } = mount();

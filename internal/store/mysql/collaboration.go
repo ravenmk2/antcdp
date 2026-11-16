@@ -249,6 +249,20 @@ func (t *identityTx) SetMember(k c.Kind, id, uid uint64, role string, now time.T
 	var err error
 	if role == "" {
 		_, err = t.tx.ExecContext(t.ctx, "DELETE FROM "+table+"_member WHERE "+table+"_id=? AND user_id=?", id, uid)
+		if err != nil {
+			return false, err
+		}
+		projects := []uint64{id}
+		if k == c.Team {
+			if err = t.tx.SelectContext(t.ctx, &projects, "SELECT project_id FROM project_team WHERE team_id=? ORDER BY project_id", id); err != nil {
+				return false, err
+			}
+		}
+		for _, projectID := range projects {
+			if err = t.pruneProjectRoleBindings(projectID, uid, now); err != nil {
+				return false, err
+			}
+		}
 	} else if len(old) == 0 {
 		_, err = t.tx.ExecContext(t.ctx, "INSERT INTO "+table+"_member ("+table+"_id,user_id,role,created_at,updated_at) VALUES (?,?,?,?,?)", id, uid, role, now, now)
 	} else {
@@ -292,6 +306,9 @@ func (t *identityTx) SetProjectTeam(id, team uint64, add bool, now time.Time) (b
 		_, err = t.tx.ExecContext(t.ctx, "INSERT INTO project_team(project_id,team_id,created_at) VALUES (?,?,?)", id, team, now)
 	} else {
 		_, err = t.tx.ExecContext(t.ctx, "DELETE FROM project_team WHERE project_id=? AND team_id=?", id, team)
+		if err == nil {
+			err = t.pruneProjectRoleBindings(id, 0, now)
+		}
 	}
 	return err == nil, err
 }
@@ -311,6 +328,11 @@ func (t *identityTx) EndTeam(id uint64, now time.Time) error {
 	}
 	for _, q := range []string{"DELETE FROM project_team WHERE team_id=?", "DELETE FROM team_member WHERE team_id=?"} {
 		if _, err := t.tx.ExecContext(t.ctx, q, id); err != nil {
+			return err
+		}
+	}
+	for _, projectID := range projects {
+		if err := t.pruneProjectRoleBindings(projectID, 0, now); err != nil {
 			return err
 		}
 	}
@@ -376,7 +398,7 @@ func collaborationDuplicate(message string) error {
 	if strings.Contains(message, "uq_project_code") || strings.Contains(message, "uq_team_code") {
 		return httpx.E(409, "CODE_CONFLICT", "编码已被使用")
 	}
-	if strings.Contains(message, "uq_project_name") || strings.Contains(message, "uq_team_name") {
+	if strings.Contains(message, "uq_project_name") || strings.Contains(message, "uq_team_name") || strings.Contains(message, "uq_role_scope_name") {
 		return httpx.E(409, "NAME_CONFLICT", "名称已被使用")
 	}
 	return httpx.E(409, "USERNAME_TAKEN", "用户名已被使用")

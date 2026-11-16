@@ -8,6 +8,7 @@ import {
   Pencil,
   RotateCcw,
   Settings2,
+  Shield,
   Users,
   UsersRound,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import { useApiQuery } from "@/hooks/use-api";
 import { useSubmission } from "@/hooks/use-form";
 import type { Resource } from "@/types/collaboration";
 import { ResourceMetadata } from "@/features/collaboration/resource-detail";
+import { ProjectRoles } from "@/features/collaboration/project-roles";
 import { ProjectInformation } from "@/areas/console/pages/projects/project-information";
 import { ProjectMembers } from "@/areas/console/pages/projects/project-members";
 import { ProjectTeams } from "@/areas/console/pages/projects/project-teams";
@@ -45,7 +47,7 @@ import { ProjectProfileEditor } from "@/areas/console/pages/projects/project-pro
 import { isRemovedProjectView } from "@/features/collaboration/project-navigation";
 
 type ProjectTab =
-  "overview" | "members" | "teams" | "repositories" | "settings";
+  "overview" | "members" | "roles" | "teams" | "repositories" | "settings";
 
 export function AdminProjectDetail() {
   const { projectId } = useParams();
@@ -80,7 +82,11 @@ function requestedTab(tab: string | null, section: string | null): ProjectTab {
     if (!section || section === "profile") return "overview";
     return "settings";
   }
-  if (["overview", "members", "teams", "repositories"].includes(tab ?? ""))
+  if (
+    ["overview", "members", "roles", "teams", "repositories"].includes(
+      tab ?? "",
+    )
+  )
     return tab as ProjectTab;
   return "overview";
 }
@@ -117,6 +123,15 @@ function DetailContent({
         <span className="inline-flex items-center gap-2">
           <Users className="size-4" />
           成员管理
+        </span>
+      ),
+    },
+    {
+      value: "roles",
+      label: (
+        <span className="inline-flex items-center gap-2">
+          <Shield className="size-4" />
+          角色管理
         </span>
       ),
     },
@@ -267,6 +282,7 @@ function DetailContent({
       <div className="min-w-0">
         {tab === "overview" && <ProjectInformation project={project} />}
         {tab === "members" && <ProjectMembers project={project} />}
+        {tab === "roles" && <ProjectRoles project={project} />}
         {tab === "teams" && <ProjectTeams project={project} />}
 
         {tab === "repositories" && (

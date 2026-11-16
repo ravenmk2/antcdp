@@ -22,6 +22,7 @@ import type {
   UserOption,
 } from "@/types/collaboration";
 import { MemberRoleActions } from "./member-role-actions";
+import { ProjectMemberRoles } from "./project-roles";
 import { authorizeProjectTeam, revokeProjectTeam } from "./project-team-api";
 import { RemoveMemberDialog } from "./remove-member-dialog";
 import { ResourceUserPicker } from "./user-picker";
@@ -110,14 +111,7 @@ export function MembersPanel({
             headers={
               kind === "teams"
                 ? ["成员", "团队角色", "账号状态", "操作"]
-                : [
-                    "成员",
-                    "有效角色",
-                    "直接角色",
-                    "权限来源",
-                    "账号状态",
-                    "操作",
-                  ]
+                : ["成员", "项目身份", "自定义角色", "来源", "账号状态", "操作"]
             }
           >
             {list.data.data.items.map((member) => (
@@ -147,22 +141,22 @@ export function MembersPanel({
                 {kind === "projects" && (
                   <td>
                     {member.effective_role === "admin"
-                      ? kind === "projects"
-                        ? "项目管理员"
-                        : "团队管理员"
-                      : "成员"}
+                      ? "项目管理员"
+                      : "项目成员"}
                   </td>
                 )}
                 <td>
-                  {member.direct_role
-                    ? member.direct_role === "admin"
-                      ? kind === "teams"
-                        ? "团队管理员"
-                        : "项目管理员"
-                      : kind === "teams"
-                        ? "团队成员"
-                        : "项目成员"
-                    : "—"}
+                  {kind === "projects" ? (
+                    <ProjectMemberRoles roles={member.custom_roles} />
+                  ) : member.direct_role ? (
+                    member.direct_role === "admin" ? (
+                      "团队管理员"
+                    ) : (
+                      "团队成员"
+                    )
+                  ) : (
+                    "—"
+                  )}
                 </td>
                 {kind === "projects" && (
                   <td>

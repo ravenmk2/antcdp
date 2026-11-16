@@ -51,6 +51,7 @@ func collaborationFinish(c *gin.Context, o Options, a *identity.Auth, err error)
 func registerCollaboration(b *gin.RouterGroup, o Options) {
 	s := &collab.Service{Identity: o.Identity}
 	registerIcons(b, o, s)
+	registerProjectRoles(b, o, s)
 	b.GET("/icon-catalog", func(c *gin.Context) {
 		_, a, e := o.Identity.Sidebar(c.Request.Context(), rawSession(c))
 		if !collaborationFinish(c, o, a, e) {

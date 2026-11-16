@@ -59,16 +59,17 @@ type Source struct {
 	Name   string `json:"team_name,omitempty"`
 }
 type Member struct {
-	AvatarID      *uint64  `db:"avatar_file_id" json:"avatar_file_id,string,omitempty"`
-	ID            uint64   `db:"id" json:"user_id,string"`
-	Username      string   `db:"username" json:"username"`
-	Name          string   `db:"display_name" json:"display_name"`
-	Status        string   `db:"status" json:"account_status"`
-	Role          string   `db:"role" json:"direct_role"`
-	EffectiveRole string   `json:"effective_role"`
-	TeamID        uint64   `db:"team_id" json:"-"`
-	TeamName      string   `db:"team_name" json:"-"`
-	Sources       []Source `json:"sources"`
+	AvatarID      *uint64       `db:"avatar_file_id" json:"avatar_file_id,string,omitempty"`
+	ID            uint64        `db:"id" json:"user_id,string"`
+	Username      string        `db:"username" json:"username"`
+	Name          string        `db:"display_name" json:"display_name"`
+	Status        string        `db:"status" json:"account_status"`
+	Role          string        `db:"role" json:"direct_role"`
+	EffectiveRole string        `json:"effective_role"`
+	TeamID        uint64        `db:"team_id" json:"-"`
+	TeamName      string        `db:"team_name" json:"-"`
+	Sources       []Source      `json:"sources"`
+	CustomRoles   []RoleSummary `json:"custom_roles,omitempty"`
 }
 type Icon struct {
 	Type   string `json:"type"`
@@ -114,6 +115,7 @@ type TeamOption struct {
 	Summary string `json:"summary"`
 }
 type Repository interface {
+	RoleRepository
 	CollaborationUsers(Kind, uint64) ([]uint64, error)
 	LockCollaboration(Kind, uint64, uint64) error
 	Resource(Kind, uint64, uint64) (*Resource, error)

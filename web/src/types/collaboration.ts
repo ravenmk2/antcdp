@@ -39,7 +39,20 @@ export interface Member {
   account_status: string;
   direct_role: string;
   effective_role: string;
+  custom_roles?: RoleSummary[];
   sources: { type: string; team_id?: string; team_name?: string }[];
+}
+export interface RoleSummary {
+  id: string;
+  name: string;
+}
+export interface ScopedRole extends RoleSummary {
+  description: string;
+  member_count: number;
+  etag: string;
+}
+export interface RoleDetail extends ScopedRole {
+  members: UserOption[];
 }
 export interface MemberPage extends Page<Member> {
   membership_etag: string;

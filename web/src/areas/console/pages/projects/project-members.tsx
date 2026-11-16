@@ -12,6 +12,7 @@ import { Avatar } from "@/components/resource-icon";
 import { SimpleTable } from "@/components/table";
 import { TableToolbar } from "@/components/table-toolbar";
 import { MemberRoleActions } from "@/features/collaboration/member-role-actions";
+import { ProjectMemberRoles } from "@/features/collaboration/project-roles";
 import { RemoveMemberDialog } from "@/features/collaboration/remove-member-dialog";
 import { ResourceUserPicker } from "@/features/collaboration/user-picker";
 import { useApiQuery } from "@/hooks/use-api";
@@ -94,9 +95,9 @@ export function ProjectMembers({ project }: { project: Resource }) {
             label={`${project.name}成员`}
             headers={[
               "成员",
-              "有效角色",
-              "直接角色",
-              "权限来源",
+              "项目身份",
+              "自定义角色",
+              "来源",
               "账号状态",
               "操作",
             ]}
@@ -129,11 +130,7 @@ export function ProjectMembers({ project }: { project: Resource }) {
                     : "项目成员"}
                 </td>
                 <td>
-                  {member.direct_role
-                    ? member.direct_role === "admin"
-                      ? "项目管理员"
-                      : "项目成员"
-                    : "—"}
+                  <ProjectMemberRoles roles={member.custom_roles} />
                 </td>
                 <td>
                   <div className="flex max-w-md flex-wrap gap-1">

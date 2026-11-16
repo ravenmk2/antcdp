@@ -13,6 +13,7 @@ import {
   Cable,
   FileText,
   Server,
+  Shield,
   Users,
   UsersRound,
 } from "lucide-react";
@@ -31,6 +32,7 @@ import { recordRecent } from "@/lib/recent";
 import type { Resource } from "@/types/collaboration";
 import { ProjectRepositories } from "@/features/repositories/repositories";
 import { ProjectTeams } from "@/features/collaboration/members";
+import { ProjectRoles } from "@/features/collaboration/project-roles";
 import { MembersPanel } from "@/areas/workspace/pages/member-panels";
 import { WorkspaceResourceProfileEditor } from "@/areas/workspace/pages/resource-profile-editor";
 import { ProjectDescription } from "@/areas/workspace/pages/project-description";
@@ -206,6 +208,7 @@ function WorkspaceProjectSettings({
   const links = [
     { key: "profile", label: "基本资料", icon: FileText },
     { key: "members", label: "成员管理", icon: Users },
+    { key: "roles", label: "角色管理", icon: Shield },
     { key: "teams", label: "团队授权", icon: UsersRound },
 
     { key: "integrations", label: "服务凭证", icon: Cable },
@@ -285,6 +288,7 @@ function WorkspaceProjectSettings({
         {section === "members" && (
           <MembersPanel kind="projects" resource={project} />
         )}
+        {section === "roles" && <ProjectRoles project={project} />}
         {section === "teams" && <ProjectTeams resource={project} />}
 
         {section === "integrations" && (

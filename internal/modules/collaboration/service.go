@@ -32,10 +32,13 @@ func conflict() error {
 	return httpx.E(412, "VERSION_CONFLICT", "内容已更新，请重新加载后重试")
 }
 func precondition(got, want string) error {
+	return checkPrecondition(got, want, tagPattern)
+}
+func checkPrecondition(got, want string, pattern *regexp.Regexp) error {
 	if got == "" {
 		return httpx.E(428, "PRECONDITION_REQUIRED", "请先加载当前资料")
 	}
-	if !tagPattern.MatchString(got) {
+	if !pattern.MatchString(got) {
 		return httpx.Invalid("If-Match", "invalid_format")
 	}
 	if got != want {
@@ -351,6 +354,9 @@ func ptrEqual[T comparable](a, b *T) bool {
 	}
 	return *a == *b
 }
+func matchesMember(m Member, search string) bool {
+	return strings.Contains(strings.ToLower(m.Name), search) || strings.Contains(strings.ToLower(m.Username), search)
+}
 func (s *Service) Members(ctx context.Context, raw string, k Kind, id uint64, q Query) (MemberPage, *identity.Auth, error) {
 	out := MemberPage{Items: []Member{}, Page: q.Page, PageSize: q.Size}
 	if q.Page < 1 || q.Page > 1000000 || q.Size < 1 || q.Size > 100 || utf8.RuneCountInString(q.Search) > 100 {
@@ -370,11 +376,24 @@ func (s *Service) Members(ctx context.Context, raw string, k Kind, id uint64, q 
 		}
 		search := strings.ToLower(strings.TrimSpace(q.Search))
 		rows = slices.DeleteFunc(rows, func(m Member) bool {
-			return search != "" && !strings.Contains(strings.ToLower(m.Name), search) && !strings.Contains(strings.ToLower(m.Username), search)
+			return !matchesMember(m, search)
 		})
 		out.Total = len(rows)
 		start := min((q.Page-1)*q.Size, len(rows))
 		out.Items = rows[start:min(start+q.Size, len(rows))]
+		if k == Project && len(out.Items) != 0 {
+			ids := make([]uint64, 0, len(out.Items))
+			for _, member := range out.Items {
+				ids = append(ids, member.ID)
+			}
+			roles, err := r.MemberRoles(k, id, ids)
+			if err != nil {
+				return err
+			}
+			for i := range out.Items {
+				out.Items[i].CustomRoles = roles[out.Items[i].ID]
+			}
+		}
 		obj.Decorate(k, false)
 		out.MembershipETag = obj.MembershipETag
 		return nil
