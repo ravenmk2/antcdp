@@ -136,12 +136,7 @@ it.each([
   },
 );
 
-it("selects appearance through the keyboard submenu and restores focus on close", async () => {
-  vi.stubGlobal("matchMedia", () => ({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }));
+it("selects all three appearance segments without closing the menu and restores focus on escape", async () => {
   localStorage.setItem("antcdp.appearance", "system");
   const user = userEvent.setup();
   render(
@@ -157,27 +152,73 @@ it("selects appearance through the keyboard submenu and restores focus on close"
   trigger.focus();
   await user.keyboard("{Enter}");
   expect(screen.getAllByRole("separator")).toHaveLength(1);
-  await user.keyboard("{End}{ArrowUp}{ArrowRight}");
   expect(
-    await screen.findByRole("menuitemradio", { name: "跟随系统" }),
+    await screen.findByRole("menuitemradio", { name: "跟随" }),
   ).toHaveAttribute("aria-checked", "true");
-  await user.keyboard("{Home}{ArrowDown}{Enter}");
+  await user.keyboard("{Home}{ArrowDown}{ArrowDown}{Enter}");
   await waitFor(() =>
     expect(localStorage.getItem("antcdp.appearance")).toBe("dark"),
   );
-  await waitFor(() => expect(trigger).toHaveFocus());
-  await user.keyboard("{Enter}");
-  expect(
-    await screen.findByRole("menuitem", { name: /外观\s*深色/ }),
-  ).toBeInTheDocument();
-  await user.keyboard("{End}{ArrowUp}{ArrowRight}");
+  expect(await screen.findByRole("menu")).toBeVisible();
   expect(
     await screen.findByRole("menuitemradio", { name: "深色" }),
   ).toHaveAttribute("aria-checked", "true");
+  expect(document.documentElement).toHaveClass("dark");
+  await user.click(screen.getByRole("menuitemradio", { name: "浅色" }));
+  expect(localStorage.getItem("antcdp.appearance")).toBe("light");
+  expect(document.documentElement).not.toHaveClass("dark");
+  await user.click(screen.getByRole("menuitemradio", { name: "跟随" }));
+  expect(localStorage.getItem("antcdp.appearance")).toBe("system");
+  expect(screen.getByRole("menu")).toBeVisible();
   await user.keyboard("{Escape}");
   await waitFor(() => expect(trigger).toHaveFocus());
-  expect(localStorage.getItem("antcdp.appearance")).toBe("dark");
+  await user.click(trigger);
+  expect(
+    await screen.findByRole("menuitemradio", { name: "跟随" }),
+  ).toHaveAttribute("aria-checked", "true");
 });
+
+it.each([false, true])(
+  "toggles the header between light and dark from system preference (dark=%s)",
+  async (systemDark) => {
+    vi.stubGlobal("matchMedia", () => ({
+      matches: systemDark,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    localStorage.setItem("antcdp.appearance", "system");
+    renderMenu("/admin");
+    const user = userEvent.setup();
+    expect(
+      screen.queryByRole("button", { name: "快速创建" }),
+    ).not.toBeInTheDocument();
+    const nextLabel = systemDark ? "浅色" : "深色";
+    const previousLabel = systemDark ? "深色" : "浅色";
+    await user.click(
+      screen.getByRole("button", { name: `切换为${nextLabel}主题` }),
+    );
+    expect(localStorage.getItem("antcdp.appearance")).toBe(
+      systemDark ? "light" : "dark",
+    );
+    await user.click(
+      screen.getByRole("button", { name: `切换为${previousLabel}主题` }),
+    );
+    expect(localStorage.getItem("antcdp.appearance")).toBe(
+      systemDark ? "dark" : "light",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "用户菜单，测试用户" }),
+    );
+    expect(
+      await screen.findByRole("menuitemradio", { name: previousLabel }),
+    ).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("menuitemradio", { name: "跟随" }));
+    expect(localStorage.getItem("antcdp.appearance")).toBe("system");
+    expect(document.documentElement.classList.contains("dark")).toBe(
+      systemDark,
+    );
+  },
+);
 
 it("explains the identity icon on keyboard focus and returns focus after closing", async () => {
   renderMenu("/account");
@@ -198,7 +239,9 @@ it("explains the identity icon on keyboard focus and returns focus after closing
     await screen.findByRole("menuitem", { name: "创始人" }),
   ).toHaveAttribute("data-keyboard", "false");
   await user.keyboard("{ArrowDown}");
-  expect(await screen.findByRole("menuitem", { name: "工作区" })).toHaveFocus();
+  expect(
+    await screen.findByRole("menuitemradio", { name: "浅色" }),
+  ).toHaveFocus();
   await user.keyboard("{ArrowUp}");
   expect(await screen.findByRole("menuitem", { name: "创始人" })).toHaveFocus();
   expect(

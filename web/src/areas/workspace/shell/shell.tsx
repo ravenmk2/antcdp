@@ -160,7 +160,7 @@ export function Shell() {
         onOpenNavigation={() => setMobile(true)}
         actions={
           <>
-            <ShellActions projectId={projectId} />
+            <ShellActions />
           </>
         }
         overlays={

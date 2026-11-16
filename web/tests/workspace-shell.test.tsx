@@ -228,20 +228,21 @@ it.each([
   ).not.toBeInTheDocument();
 });
 
-it("keeps only implemented topbar actions and real administrator creation links", async () => {
-  const user = userEvent.setup();
-  mount("/home");
-  expect(
-    screen.queryByRole("button", { name: /消息/ }),
-  ).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "快速创建" }));
-  expect(
-    await screen.findByRole("menuitem", { name: "创建项目" }),
-  ).toHaveAttribute("href", "/admin/projects?create=1");
-  expect(
-    await screen.findByRole("menuitem", { name: "创建团队" }),
-  ).toHaveAttribute("href", "/admin/teams?create=1");
-});
+it.each(["/home", "/projects/7"])(
+  "keeps theme switching without a creation menu at %s",
+  (route) => {
+    mount(route);
+    expect(
+      screen.queryByRole("button", { name: /消息/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "快速创建" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /切换为(浅色|深色)主题/ }),
+    ).toBeVisible();
+  },
+);
 
 it("omits an empty creation menu for a member outside a project", () => {
   identity.role = "user";

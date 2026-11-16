@@ -7,7 +7,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
@@ -16,15 +15,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Check,
   ChevronDown,
-  ChevronRight,
   Home,
   LayoutDashboard,
   LogOut,
   Monitor,
   Moon,
-  Palette,
   ShieldCheck,
   Sun,
   UserRound,
@@ -170,6 +166,30 @@ export function UserMenu({
               <small className="text-muted">@{session.user.username}</small>
             </div>
           </div>
+          <DropdownMenu.RadioGroup
+            value={appearance}
+            onValueChange={(value) => setAppearance(value as Appearance)}
+            aria-label="外观"
+            className="mb-2 grid grid-cols-3 gap-1 rounded-lg bg-surface-subtle p-1"
+          >
+            {(["light", "dark", "system"] as Appearance[]).map((value) => (
+              <DropdownMenu.RadioItem
+                closeOnClick={false}
+                key={value}
+                value={value}
+                className="flex min-h-9 cursor-pointer items-center justify-center gap-1.5 rounded-md px-1 py-2 text-xs outline-none select-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring data-[checked]:bg-surface data-[checked]:text-foreground data-[checked]:shadow-sm"
+              >
+                {value === "light" ? (
+                  <Sun className="size-3.5" aria-hidden />
+                ) : value === "dark" ? (
+                  <Moon className="size-3.5" aria-hidden />
+                ) : (
+                  <Monitor className="size-3.5" aria-hidden />
+                )}
+                {value === "system" ? "跟随" : appearanceLabels[value]}
+              </DropdownMenu.RadioItem>
+            ))}
+          </DropdownMenu.RadioGroup>
           {areaEntries
             .filter(
               (entry) =>
@@ -186,50 +206,6 @@ export function UserMenu({
                 className="text-navigation focus:text-navigation"
               />
             ))}
-          <DropdownMenu.SubmenuRoot closeParentOnEsc>
-            <DropdownMenu.SubmenuTrigger className="flex min-h-9 cursor-pointer items-center gap-2 rounded-sm px-2 py-2 text-sm outline-hidden select-none focus:bg-surface-hover data-[open]:bg-surface-hover">
-              <Palette className="size-4" aria-hidden />
-              <span>外观</span>
-              <span className="ml-auto text-xs">
-                {appearanceLabels[appearance]}
-              </span>
-              <ChevronRight className="size-4 text-current" aria-hidden />
-            </DropdownMenu.SubmenuTrigger>
-            <DropdownMenuSubContent
-              sideOffset={6}
-              collisionPadding={8}
-              className="min-w-40 text-navigation"
-            >
-              <DropdownMenu.RadioGroup
-                value={appearance}
-                onValueChange={(value) => setAppearance(value as Appearance)}
-                aria-label="外观"
-              >
-                {(["light", "dark", "system"] as Appearance[]).map((value) => (
-                  <DropdownMenu.RadioItem
-                    closeOnClick
-                    key={value}
-                    value={value}
-                    className="flex min-h-9 cursor-pointer items-center gap-2 rounded-sm px-2 py-2 text-sm outline-hidden select-none focus:bg-surface-hover data-[open]:bg-surface-hover"
-                  >
-                    {value === "light" ? (
-                      <Sun className="size-4" aria-hidden />
-                    ) : value === "dark" ? (
-                      <Moon className="size-4" aria-hidden />
-                    ) : (
-                      <Monitor className="size-4" aria-hidden />
-                    )}
-                    {appearanceLabels[value]}
-                    <span className="ml-auto size-4">
-                      <DropdownMenu.RadioItemIndicator>
-                        <Check className="size-4" aria-hidden />
-                      </DropdownMenu.RadioItemIndicator>
-                    </span>
-                  </DropdownMenu.RadioItem>
-                ))}
-              </DropdownMenu.RadioGroup>
-            </DropdownMenuSubContent>
-          </DropdownMenu.SubmenuRoot>
           <DropdownMenuSeparator className="my-2" />
           <DropdownMenuItem
             className="flex min-h-9 items-center gap-2 rounded-sm px-2 py-2 text-sm text-navigation outline-hidden select-none focus:bg-surface-hover focus:text-navigation data-[open]:bg-surface-hover"
