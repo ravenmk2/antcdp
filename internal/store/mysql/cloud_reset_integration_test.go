@@ -70,6 +70,9 @@ func TestCloudBackendResetAndVerifiedDeletion(t *testing.T) {
 	if before.State != "ready" || before.VolumeID == nil {
 		t.Fatal("computer not prepared")
 	}
+	t.Run("synchronous_file_mutations", func(t *testing.T) {
+		testSynchronousWorkspaceMutations(t, f, svc, before.ID, remote.sandboxMemoryProvider)
+	})
 	agent := runtimeTestAgent(t, f)
 	session := runtimeSession(t, f, agent.ID)
 	x := runtimeClaim(t, f, session.Configuration.ID, "hold reset")

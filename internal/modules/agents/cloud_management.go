@@ -8,7 +8,6 @@ import (
 
 	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
-	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
@@ -87,18 +86,6 @@ func (s *CloudService) GetOperation(ctx context.Context, raw string, id uint64) 
 		out.Data = operationView(cloudPublicOperation(op))
 		return nil
 	})
-}
-func (s *CloudService) enqueueFileOperation(_ StateRepository, cr CloudRepository, a *identity.Auth, receipt *Receipt, kind string, computer *CloudComputerRow, intent any) (*PublicOperationRow, error) {
-	now := time.Now().UTC().Truncate(time.Millisecond)
-	config, e := json.Marshal(intent)
-	if e != nil {
-		return nil, e
-	}
-	op := &CloudOperationRow{ComputerID: computer.ID, Kind: kind, Status: "queued", OperationToken: cryptox.ID(), CommandReceiptID: &receipt.ID, BackendGeneration: computer.BackendGeneration, InstanceID: computer.InstanceID, StorageGeneration: computer.StorageGeneration, Intent: config, Observation: json.RawMessage(`{}`), ActorKind: "user", ActorID: idString(a.User.ID), ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, DeadlineAt: now.Add(time.Minute), UpdatedAt: now}
-	if e = cr.InsertCloudOperation(op); e != nil {
-		return nil, e
-	}
-	return cloudPublicOperation(op), nil
 }
 func (s *CloudService) cloudView(cr CloudRepository, v *CloudComputerRow) (CloudView, error) {
 	activity, e := cr.CloudActivity(v.ID)

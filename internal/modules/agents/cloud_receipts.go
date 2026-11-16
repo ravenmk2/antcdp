@@ -46,11 +46,45 @@ func (s *CloudService) getReceipt(ctx context.Context, raw, key, command, scope 
 		if json.Unmarshal(receipt.Result, &saved) != nil {
 			return integrity()
 		}
+		status := receipt.ResponseStatus
+		if isWorkspaceMutationReceipt(receipt) {
+			op, readErr := workspaceReceiptOperation(repo, receipt)
+			if readErr != nil {
+				return readErr
+			}
+			saved.Data, err = json.Marshal(operationView(cloudPublicOperation(op)))
+			if err != nil {
+				return err
+			}
+			status = workspaceResponseStatus(op)
+		}
 		refs := []ResourceRef{}
 		if receipt.TargetKind != nil && receipt.TargetID != nil {
 			refs = append(refs, ResourceRef{Kind: *receipt.TargetKind, ID: idString(*receipt.TargetID)})
 		}
-		out.Data = CommandReceipt{Command: command, Scope: scope, Key: key, ResponseStatus: receipt.ResponseStatus, ResponseData: saved.Data, Resources: refs, CreatedAt: receipt.CreatedAt}
+		out.Data = CommandReceipt{Command: command, Scope: scope, Key: key, ResponseStatus: status, ResponseData: saved.Data, Resources: refs, CreatedAt: receipt.CreatedAt}
 		return nil
 	})
+}
+
+func isWorkspaceMutationReceipt(receipt *Receipt) bool {
+	return receipt.OperationID != nil && (receipt.Command == "workspace.mkdir" || receipt.Command == "workspace.remove")
+}
+
+func workspaceReceiptOperation(repo CloudRepository, receipt *Receipt) (*CloudOperationRow, error) {
+	op, err := repo.CloudOperation(*receipt.OperationID, false)
+	if err != nil {
+		return nil, err
+	}
+	if op == nil || op.CommandReceiptID == nil || *op.CommandReceiptID != receipt.ID {
+		return nil, integrity()
+	}
+	return op, nil
+}
+
+func workspaceResponseStatus(op *CloudOperationRow) int {
+	if op.Status == "queued" || op.Status == "running" {
+		return 202
+	}
+	return 200
 }

@@ -7,6 +7,7 @@ export const sandboxReasons: Record<string, string> = {
   WORKSPACE_BUSY: "工作空间仍有活动任务或传输，请结束后重试",
   WORKSPACE_RECONCILING: "工作空间有尚未核实的执行，需先核实结果",
   FILE_STATE_CHANGED: "文件状态已变化，请刷新目录后重新选择",
+  WORKSPACE_ENTRY_CHANGED: "文件状态已变化，请刷新目录后重新选择",
   SANDBOX_ACTION_UNSUPPORTED: "该类型工作空间不支持此维护操作",
   NETWORK_POLICY_TOO_COMPLEX: "网络策略超出执行后端支持的复杂度，请精简范围",
   NETWORK_TARGET_UNSUPPORTED: "该网络目标不受当前后端支持",

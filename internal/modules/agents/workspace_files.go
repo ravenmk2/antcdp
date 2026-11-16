@@ -261,7 +261,8 @@ func (s *CloudService) RemoveWorkspaceFiles(ctx context.Context, raw string, id 
 	})
 }
 func (s *CloudService) workspaceMutation(ctx context.Context, raw string, id uint64, tag, key, command, kind string, input any, makeIntent func(*CloudComputerRow) (workspaceFileIntent, error)) (*Result, error) {
-	return s.cloudAccess(ctx, raw, false, func(tx identity.Tx, r Repository, st StateRepository, repo CloudRepository, a *identity.Auth, out *Result) error {
+	var execution *workspaceClaim
+	out, err := s.cloudAccess(ctx, raw, false, func(tx identity.Tx, _ Repository, st StateRepository, repo CloudRepository, a *identity.Auth, out *Result) error {
 		w, err := repo.Computer(id, true)
 		if err != nil {
 			return err
@@ -275,7 +276,7 @@ func (s *CloudService) workspaceMutation(ctx context.Context, raw string, id uin
 					return err
 				}
 			}
-			_, _, err := s.accessRows(repo, id, nil)
+			access, connection, err := s.accessRows(repo, id, nil)
 			if err != nil {
 				return err
 			}
@@ -286,20 +287,13 @@ func (s *CloudService) workspaceMutation(ctx context.Context, raw string, id uin
 			if err != nil {
 				return err
 			}
-			op, err := s.enqueueFileOperation(st, repo, a, receipt, kind, w, intent)
+			op, err := s.startWorkspaceOperation(st, repo, access, kind, "user", idString(a.User.ID), intent)
 			if err != nil {
 				return err
 			}
-			op.DeadlineAt = op.CreatedAt.Add(60 * time.Second)
-			physical, err := repo.CloudOperation(op.ID, true)
-			if err != nil {
-				return err
-			}
-			if physical == nil {
-				return integrity()
-			}
-			physical.DeadlineAt = op.DeadlineAt
-			if err = repo.SaveCloudOperation(physical); err != nil {
+			op.CommandReceiptID = &receipt.ID
+			receipt.OperationID = &op.ID
+			if err = repo.SaveCloudOperation(op); err != nil {
 				return err
 			}
 			w.RowVersion++
@@ -308,11 +302,32 @@ func (s *CloudService) workspaceMutation(ctx context.Context, raw string, id uin
 				return err
 			}
 			out.Status = 202
-			out.Data = operationView(op)
+			out.Data = operationView(cloudPublicOperation(op))
 			out.Location = fmt.Sprintf("/api/v1/agents/cloud-computers/operations/%d", op.ID)
+			execution = &workspaceClaim{op: op, access: access, connection: connection, intent: intent}
 			return nil
 		})
 	})
+	if err != nil || execution == nil {
+		return out, err
+	}
+	// The journal and references commit before remote IO. The request executes
+	// the mutation itself; recovery only observes interrupted executions.
+	if err = s.executeWorkspaceMutation(ctx, execution); err != nil {
+		return out, err
+	}
+	err = s.cloudBackground(ctx, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository) error {
+		op, readErr := repo.CloudOperation(execution.op.ID, false)
+		if readErr != nil {
+			return readErr
+		}
+		if op == nil {
+			return integrity()
+		}
+		out.Data, out.Status = operationView(cloudPublicOperation(op)), workspaceResponseStatus(op)
+		return nil
+	})
+	return out, err
 }
 
 func downloadFilename(value string) string { return path.Base(value) }

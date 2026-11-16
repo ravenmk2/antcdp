@@ -68,6 +68,13 @@ func (s *CloudService) cloudReceipt(ctx context.Context, tx identity.Tx, cr Clou
 			return integrity()
 		}
 		out.Data, out.Tag, out.Location, out.Status, out.Replayed = saved.Data, saved.Tag, saved.Location, receipt.ResponseStatus, true
+		if isWorkspaceMutationReceipt(receipt) {
+			op, readErr := workspaceReceiptOperation(cr, receipt)
+			if readErr != nil {
+				return readErr
+			}
+			out.Data, out.Status = operationView(cloudPublicOperation(op)), workspaceResponseStatus(op)
+		}
 		return nil
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)

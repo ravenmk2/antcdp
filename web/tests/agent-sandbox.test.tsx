@@ -342,11 +342,90 @@ it("deletes the observed file using its token and freshly read maintenance ETag"
       }),
     ),
   );
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("dialog", { name: "删除文件？" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(
+    mocked.mock.calls.some(([path]) => path.includes("/operations/")),
+  ).toBe(false);
+});
+it("keeps deletion in its dialog until the synchronous request completes", async () => {
+  let finish: (() => void) | undefined;
+  override = async (path, options) => {
+    if (path.endsWith("/file-removals") && options.method === "POST") {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      return response(operation());
+    }
+  };
+  const { user } = mount("/files");
+  await screen.findByText("report.txt");
+  await user.click(screen.getByRole("button", { name: "删除" }));
+  await user.click(screen.getByRole("button", { name: "确认删除" }));
+  expect(
+    await screen.findByRole("button", { name: "正在删除" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("dialog", { name: "删除文件？" })).toBeVisible();
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  await act(async () => finish!());
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(screen.queryByText("操作进度")).not.toBeInTheDocument();
+  expect(
+    mocked.mock.calls.some(([path]) => path.includes("/operations/")),
+  ).toBe(false);
+});
+it("checks an uncertain file result without submitting the deletion again", async () => {
+  override = async (path, options) => {
+    if (path.endsWith("/file-removals") && options.method === "POST")
+      return response(operation("outcome_unknown"));
+    if (path.endsWith("/operations/31")) return response(operation());
+  };
+  const { user } = mount("/files");
+  await screen.findByText("report.txt");
+  await user.click(screen.getByRole("button", { name: "删除" }));
+  await user.click(screen.getByRole("button", { name: "确认删除" }));
+  await screen.findByText("操作结果尚未确认，请先核实结果，不要重复执行。");
+  expect(screen.getByRole("button", { name: "确认删除" })).toBeDisabled();
+  expect(
+    mocked.mock.calls.some(([path]) => path.includes("/operations/")),
+  ).toBe(false);
+  await user.click(screen.getByRole("button", { name: "核实结果" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(
+    mocked.mock.calls.filter(([path]) => path.endsWith("/file-removals")),
+  ).toHaveLength(1);
+});
+it("closes directory creation only after the synchronous result succeeds", async () => {
+  override = async (path, options) =>
+    path.endsWith("/directories") && options.method === "POST"
+      ? response(operation())
+      : undefined;
+  const { user } = mount("/files");
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "新建目录" })).toBeEnabled(),
+  );
+  await user.click(screen.getByRole("button", { name: "新建目录" }));
+  await user.type(screen.getByLabelText("目录名称"), "notes");
+  await user.click(screen.getByRole("button", { name: "创建目录" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(screen.queryByText("操作进度")).not.toBeInTheDocument();
+  expect(
+    mocked.mock.calls.some(([path]) => path.includes("/operations/")),
+  ).toBe(false);
 });
 it("shows confirmed changed paths when file maintenance partially fails", async () => {
   const failed = {
     ...operation("failed", { affected_paths: ["storage/first-report.txt"] }),
-    error_code: "WORKSPACE_RESULT_UNAVAILABLE",
+    error_code: "WORKSPACE_ENTRY_CHANGED",
   };
   override = async (path, options) =>
     (path.endsWith("/file-removals") && options.method === "POST") ||
@@ -358,9 +437,11 @@ it("shows confirmed changed paths when file maintenance partially fails", async 
   await user.click(screen.getByRole("button", { name: "删除" }));
   await user.click(screen.getByRole("button", { name: "确认删除" }));
   await screen.findByText("已确认发生变化的路径");
+  expect(screen.getByRole("dialog", { name: "删除文件？" })).toBeVisible();
+  expect(screen.queryByText("操作进度")).not.toBeInTheDocument();
   expect(screen.getByText("storage/first-report.txt")).toBeInTheDocument();
   expect(
-    screen.getByText(/文件可能已变化，请重新检查目录/),
+    screen.getByText("文件状态已变化，请刷新目录后重新选择"),
   ).toBeInTheDocument();
 });
 it("does not allocate a sandbox when visiting an empty personal environment", async () => {
@@ -371,4 +452,62 @@ it("does not allocate a sandbox when visiting an empty personal environment", as
       ([, options]) => !options?.method || options.method === "GET",
     ),
   ).toBe(true);
+});
+it("browses nested personal directories and keeps environment details collapsed initially", async () => {
+  override = async (path) => {
+    if (path === "/agents/cloud-computer") return response(computer);
+    if (path.includes("/entries?")) {
+      const parent = new URLSearchParams(path.split("?")[1]).get("path");
+      return {
+        ...response(
+          parent
+            ? [
+                {
+                  name: "report.md",
+                  path: "reports/report.md",
+                  kind: "file",
+                  size_bytes: "100",
+                  modified_at: null,
+                  entry_token: "v1",
+                },
+              ]
+            : [
+                {
+                  name: "reports",
+                  path: "reports",
+                  kind: "directory",
+                  size_bytes: null,
+                  modified_at: null,
+                  entry_token: "v1",
+                },
+              ],
+        ),
+        pagination: { total: 1 },
+      };
+    }
+  };
+  const { user } = mount("/cloud-computer");
+  const details = (await screen.findByText("环境与存储")).closest("details");
+  expect(details).not.toHaveAttribute("open");
+  await user.click(screen.getByText("环境与存储"));
+  expect(details).toHaveAttribute("open");
+  await user.click(await screen.findByRole("button", { name: "reports" }));
+  expect(
+    await screen.findByRole("button", { name: "report.md" }),
+  ).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "新建目录" })).toBeEnabled(),
+  );
+  await user.click(screen.getByRole("button", { name: "新建目录" }));
+  expect(await screen.findByText("创建位置：/data/reports")).toBeVisible();
+});
+it("prevents directory creation after a personal directory read fails", async () => {
+  override = async (path) => {
+    if (path === "/agents/cloud-computer") return response(computer);
+    if (path.includes("/entries?"))
+      throw new ApiError("READ_FAILED", "目录不可读取", 503);
+  };
+  mount("/cloud-computer");
+  await screen.findByText("目录不可读取");
+  expect(screen.getByRole("button", { name: "新建目录" })).toBeDisabled();
 });

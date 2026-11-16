@@ -27,7 +27,7 @@ import type {
 } from "@/types/cloud-computer";
 import { agentRoot } from "../data/agent-api";
 import { useAgentCommand, useCommandResult } from "../data/agent-runtime";
-import { OccupancyView, SandboxOperationView, sandboxKeys } from "./shared";
+import { OccupancyView, sandboxReason, sandboxKeys } from "./shared";
 
 export function WorkspaceFilesDrawer({
   computerId,
@@ -67,8 +67,7 @@ export function WorkspaceFiles({
     [page, setPage] = useState(1),
     [size, setSize] = useState(20),
     [create, setCreate] = useState(false),
-    [remove, setRemove] = useState<CloudFileEntry | null>(null),
-    [operation, setOperation] = useState<string | null>(null);
+    [remove, setRemove] = useState<CloudFileEntry | null>(null);
   const cache = useQueryClient();
   const query = useApiQuery<CloudFileEntry[]>(
     [...sandboxKeys, "entries", computerId, path, page, size],
@@ -294,21 +293,12 @@ export function WorkspaceFiles({
           }}
         />
       </AsyncBoundary>
-      {operation && (
-        <SandboxOperationView
-          domain={agentRoot}
-          id={operation}
-          onSettled={() => refresh()}
-          onClose={() => setOperation(null)}
-        />
-      )}
       {create && (
         <DirectoryCreate
           computerId={computerId}
           parentPath={path}
           onClose={() => setCreate(false)}
-          onAccepted={(id) => {
-            setOperation(id);
+          onCompleted={() => {
             setCreate(false);
             refresh();
           }}
@@ -319,8 +309,7 @@ export function WorkspaceFiles({
           computerId={computerId}
           entry={remove}
           onClose={() => setRemove(null)}
-          onAccepted={(id) => {
-            setOperation(id);
+          onCompleted={() => {
             setRemove(null);
             refresh();
           }}
@@ -329,31 +318,31 @@ export function WorkspaceFiles({
     </div>
   );
 }
-function DirectoryCreate({
+export function DirectoryCreate({
   computerId,
   parentPath,
   onClose,
-  onAccepted,
+  onCompleted,
 }: {
   computerId: string;
   parentPath: string;
   onClose: () => void;
-  onAccepted: (id: string) => void;
+  onCompleted: () => void;
 }) {
   const [name, setName] = useState("");
-  const action = useAgentCommand<Operation>(`workspace:${computerId}:mkdir`);
-  useCommandResult(action.state, (result) => {
-    action.command.reset();
-    onAccepted(result.id);
-  });
+  const mutation = useFileMutation(
+    `workspace:${computerId}:mkdir:${parentPath}`,
+    onCompleted,
+  );
+  const { action } = mutation;
   return (
     <Modal
       open
       title="新建目录"
       description={`创建位置：/data${parentPath ? `/${parentPath}` : ""}`}
       dirty={Boolean(name)}
-      pending={action.pending || action.uncertain}
-      onClose={onClose}
+      pending={action.pending || action.uncertain || mutation.checking}
+      onClose={() => mutation.close(onClose)}
       footer={
         <>
           <OverlayCancelButton />
@@ -361,9 +350,9 @@ function DirectoryCreate({
             type="submit"
             form="workspace-directory"
             pending={action.pending}
-            disabled={action.uncertain}
+            disabled={action.uncertain || Boolean(mutation.result)}
           >
-            创建目录
+            {action.pending ? "正在创建" : "创建目录"}
           </Button>
         </>
       }
@@ -373,6 +362,7 @@ function DirectoryCreate({
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
+          if (mutation.result) return;
           void action.command.run({
             domain: agentRoot,
             path: `/cloud-computers/${computerId}/directories`,
@@ -388,6 +378,7 @@ function DirectoryCreate({
         }}
       >
         {action.recovery}
+        {mutation.feedback}
         <Field
           label="目录名称"
           hint="不覆盖已有文件，不允许使用 /、反斜杠、. 或 ..。"
@@ -396,7 +387,9 @@ function DirectoryCreate({
             required
             pattern="[^/\\\\]+"
             maxLength={255}
-            disabled={action.pending || action.uncertain}
+            disabled={
+              action.pending || action.uncertain || Boolean(mutation.result)
+            }
             value={name}
             onChange={(event) => setName(event.target.value)}
           />
@@ -405,28 +398,27 @@ function DirectoryCreate({
     </Modal>
   );
 }
-function WorkspaceMutation({
+export function WorkspaceMutation({
   computerId,
   entry,
   onClose,
-  onAccepted,
+  onCompleted,
 }: {
   computerId: string;
   entry: CloudFileEntry;
   onClose: () => void;
-  onAccepted: (id: string) => void;
+  onCompleted: () => void;
 }) {
-  const action = useAgentCommand<Operation<CloudOperationResult>>(
-    `cloud-files:${computerId}:remove`,
+  const mutation = useFileMutation(
+    `cloud-files:${computerId}:remove:${entry.path}`,
+    onCompleted,
   );
+  const { action } = mutation;
   const [reading, setReading] = useState(false),
     [error, setError] = useState<unknown>();
-  useCommandResult(action.state, (result) => {
-    action.command.reset();
-    onAccepted(result.id);
-  });
   async function execute() {
-    if (reading || action.pending || action.uncertain) return;
+    if (reading || action.pending || action.uncertain || mutation.result)
+      return;
     setReading(true);
     setError(undefined);
     try {
@@ -459,13 +451,94 @@ function WorkspaceMutation({
       danger
       title={`删除${entry.kind === "directory" ? "目录及其内容" : "文件"}？`}
       description={`将删除 /data/${entry.path}。服务端会再次检查文件是否变化及活动引用；此操作无法撤销。`}
-      confirmLabel="确认删除"
-      pending={reading || action.pending || action.uncertain}
+      confirmLabel={reading || action.pending ? "正在删除" : "确认删除"}
+      confirmDisabled={Boolean(mutation.result)}
+      pending={reading || action.pending || action.uncertain || mutation.checking}
       onConfirm={() => void execute()}
-      onClose={onClose}
+      onClose={() => mutation.close(onClose)}
     >
       <ErrorNotice error={error} />
       {action.recovery}
+      {mutation.feedback}
     </ConfirmDialog>
   );
+}
+
+function useFileMutation(intent: string, onCompleted: () => void) {
+  const action = useAgentCommand<Operation<CloudOperationResult>>(intent);
+  const cache = useQueryClient();
+  const [observed, setObserved] =
+    useState<Operation<CloudOperationResult> | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<unknown>();
+  const result = observed || action.state.response?.data || null;
+  const unresolved =
+    result && ["queued", "running", "outcome_unknown"].includes(result.status);
+  function accept(value: Operation<CloudOperationResult>) {
+    void cache.invalidateQueries({ queryKey: sandboxKeys });
+    if (value.status === "succeeded") {
+      action.command.reset();
+      onCompleted();
+    } else setObserved(value);
+  }
+  useCommandResult(action.state, accept);
+  async function check() {
+    if (!result || checking) return;
+    setChecking(true);
+    setError(undefined);
+    try {
+      const response = await request<Operation<CloudOperationResult>>(
+        `${agentRoot}/cloud-computers/operations/${result.id}`,
+      );
+      accept(response.data);
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setChecking(false);
+    }
+  }
+  return {
+    action,
+    result,
+    checking,
+    close: (onClose: () => void) => {
+      if (!unresolved) action.command.reset();
+      onClose();
+    },
+    feedback: (
+      <>
+        {result && result.status !== "succeeded" && (
+          <Notice tone={unresolved ? "warning" : "danger"}>
+            {unresolved
+              ? "操作结果尚未确认，请先核实结果，不要重复执行。"
+              : sandboxReason(
+                  result.error_code || "WORKSPACE_RESULT_UNAVAILABLE",
+                )}
+            {unresolved && (
+              <div className="mt-3">
+                <Button
+                  variant="outline"
+                  pending={checking}
+                  onClick={() => void check()}
+                >
+                  核实结果
+                </Button>
+              </div>
+            )}
+          </Notice>
+        )}
+        {!!result?.result?.affected_paths?.length && (
+          <div className="space-y-2 text-sm">
+            <p>已确认发生变化的路径</p>
+            <ul className="space-y-1 font-mono text-xs">
+              {result.result.affected_paths.map((path) => (
+                <li key={path}>{path}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <ErrorNotice error={error} />
+      </>
+    ),
+  };
 }

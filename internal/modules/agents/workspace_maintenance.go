@@ -208,6 +208,12 @@ func (s *CloudService) processWorkspaceOperation(ctx context.Context, id uint64)
 	if c.recovery {
 		return s.recoverWorkspaceOperation(ctx, c)
 	}
+	return s.executeWorkspaceMutation(ctx, c)
+}
+
+func (s *CloudService) executeWorkspaceMutation(ctx context.Context, c *workspaceClaim) error {
+	id := c.op.ID
+	var err error
 	affected := []string{}
 	if c.terminated && c.cause == nil {
 		c.cause = httpx.E(409, "SANDBOX_NOT_READY", "实例已停止，未派发操作")
