@@ -2,12 +2,14 @@ package mysql
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	driver "github.com/go-sql-driver/mysql"
+	"github.com/ravenmk2/antcdp/internal/modules/install"
 	"github.com/ravenmk2/antcdp/internal/platform/config"
 )
 
@@ -46,8 +48,18 @@ func TestInitialMigration(t *testing.T) {
 	if err = s.db.GetContext(ctx, &applied, "SELECT COUNT(*) FROM goose_db_version WHERE is_applied=1 AND version_id>0"); err != nil || applied != 1 {
 		t.Fatal("expected one initial migration", applied, err)
 	}
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 80 {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 82 {
 		t.Fatal("expected baseline tables and goose history", tables, err)
+	}
+	t.Run("state store", func(t *testing.T) { stateStoreIntegration(t, ctx, s) })
+	if _, err = s.db.ExecContext(ctx, "ALTER TABLE `state_store` DROP INDEX `uq_state_store_namespace_name`"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SchemaReady(ctx); !errors.Is(err, install.ErrIncompleteSchema) {
+		t.Fatal("missing state store uniqueness was accepted", err)
+	}
+	if _, err = s.db.ExecContext(ctx, "ALTER TABLE `state_store` ADD UNIQUE KEY `uq_state_store_namespace_name` (`namespace`,`name`)"); err != nil {
+		t.Fatal(err)
 	}
 	var constraints int
 	if err = s.db.GetContext(ctx, &constraints, "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_TYPE IN ('FOREIGN KEY','CHECK')"); err != nil || constraints != 0 {

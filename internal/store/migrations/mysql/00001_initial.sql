@@ -1739,6 +1739,27 @@ CREATE TABLE `agent_model_file` (
     KEY idx_agent_model_file_expiry (last_used_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE `state_store` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `namespace` VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
+    `name` VARBINARY(64) NOT NULL,
+    `display_name` VARCHAR(128) NOT NULL,
+    `created_at` DATETIME(3) NOT NULL,
+    `updated_at` DATETIME(3) NOT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_state_store_namespace_name` (`namespace`, `name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE `state_entry` (
+    `store_id` BIGINT UNSIGNED NOT NULL,
+    `entry_key` VARBINARY(255) NOT NULL,
+    `value` MEDIUMBLOB NOT NULL,
+    `etag` BINARY(16) NOT NULL,
+    `created_at` DATETIME(3) NOT NULL,
+    `updated_at` DATETIME(3) NOT NULL,
+    PRIMARY KEY (`store_id`, `entry_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- +goose Down
 DROP TABLE project_repository_label_binding;
 DROP TABLE project_repository_label;
