@@ -57,6 +57,7 @@ export const session: SessionDetail = {
   },
   preference: { pinned: false, version: "p1" },
   view_state: {
+    continuation: null,
     session_id: "10",
     viewed_through_seq: "0",
     viewed_at: null,

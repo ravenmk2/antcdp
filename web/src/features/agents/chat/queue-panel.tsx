@@ -214,7 +214,7 @@ function QueuedInput({
       message: "附件消息",
       question_reply: "补充回答",
       approval_reply: "审批回应",
-      continue: "继续执行",
+      continue: "继续生成",
     }[input.kind];
   const action = useAgentCommand<AgentInput | null>(
       `session:${sessionId}:input:${input.id}:control`,
@@ -323,7 +323,7 @@ function QueuedInput({
                   message: "消息",
                   question_reply: "补充回答",
                   approval_reply: "审批回应",
-                  continue: "继续执行",
+                  continue: "继续生成",
                 }[input.kind]
               }
             </StatusBadge>
@@ -333,7 +333,7 @@ function QueuedInput({
             {input.content.map((block) => block.text).join("\n") ||
               (input.kind === "question_reply"
                 ? "对先前问题的补充回答"
-                : "从已结束的任务继续")}
+                : "重新尝试当前会话中失败的生成")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {input.file_refs.map((ref) => (

@@ -19,9 +19,6 @@ func isImage(media string) bool {
 }
 func inputText(view InputView) string {
 	parts := []string{}
-	if view.Kind == "continue" {
-		parts = append(parts, "[Explicit continuation request] Continue the prior task from its committed context. Do not automatically repeat any external action whose result remains unknown.")
-	}
 	for _, block := range view.Content {
 		parts = append(parts, block.Text)
 	}

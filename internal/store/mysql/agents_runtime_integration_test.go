@@ -52,6 +52,7 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 	t.Run("turn_lifecycle", func(t *testing.T) { runtimeTurnLifecycle(t, f, agent.ID) })
 	t.Run("diagnostics", func(t *testing.T) { runtimeDiagnostics(t, f, agent.ID) })
 	t.Run("model_retry", func(t *testing.T) { runtimeModelRetry(t, f, agent.ID) })
+	t.Run("manual_continuation", func(t *testing.T) { runtimeContinuation(t, f, agent.ID) })
 	t.Run("step_statistics", func(t *testing.T) { runtimeStepStatistics(t, f, agent.ID) })
 	t.Run("tool_output", func(t *testing.T) { runtimeToolOutput(t, f, agent.ID) })
 	t.Run("tool_output_replay", func(t *testing.T) { runtimeOutputReplay(t, f, agent.ID) })

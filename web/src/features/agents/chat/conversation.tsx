@@ -98,7 +98,9 @@ export function Conversation({
     `${agentRoot}/sessions/${sessionId}`,
     { enabled: !revoked },
   );
-  const { draft } = useConversationDraft(`session:${sessionId}`);
+  const { draft, state: draftState } = useConversationDraft(
+    `session:${sessionId}`,
+  );
   const [panel, setPanel] = useState<
       "files" | "runs" | "settings" | "interactions" | null
     >(null),
@@ -165,6 +167,18 @@ export function Conversation({
   const handingOff =
     submissions.sending.phase === "sending" &&
     submissions.sending.plan?.placement === "transcript";
+  const continuation = detail?.view_state?.continuation;
+  const canContinue = Boolean(
+    continuation &&
+    !activeRunId &&
+    !queuePaused &&
+    pendingInputs === 0 &&
+    !handingOff &&
+    !submissions.visible.length &&
+    !draftState.text.trim() &&
+    !draftState.files.length &&
+    !draftState.file_refs.length,
+  );
   const queuedInputs =
     handingOff && queueExpanded !== true
       ? 0
@@ -420,9 +434,9 @@ export function Conversation({
       | "title/refresh",
   ) {
     if (!config || !permissions || action.pending || action.uncertain) return;
-    const latest = detail?.view_state?.latest_result;
+    const latest = continuation;
     if (kind === "stop" && !activeRunId) return;
-    if (kind === "retry" && !latest) return;
+    if (kind === "retry" && !canContinue) return;
     const path =
       kind === "stop"
         ? `/runs/${activeRunId}/stop`
@@ -815,13 +829,7 @@ export function Conversation({
                           (queueOpen ||
                             queuedInputs > 0 ||
                             queuePaused ||
-                            (!activeRunId &&
-                              !handingOff &&
-                              !submissions.visible.length &&
-                              detail.view_state?.latest_result &&
-                              ["failed", "cancelled", "interrupted"].includes(
-                                detail.view_state.latest_result.status,
-                              ))) && (
+                            canContinue) && (
                             <div className="agent-chat-queuebar">
                               <div className="flex min-w-0 flex-wrap items-center gap-2">
                                 <button
@@ -854,14 +862,8 @@ export function Conversation({
                                   )}
                               </div>
                               {permissions.control &&
-                                !activeRunId &&
-                                !handingOff &&
-                                !submissions.visible.length &&
-                                !archived &&
-                                detail.view_state?.latest_result &&
-                                ["failed", "cancelled", "interrupted"].includes(
-                                  detail.view_state.latest_result.status,
-                                ) && (
+                                canContinue &&
+                                !archived && (
                                   <Button
                                     variant="outline"
                                     size="sm"
@@ -870,7 +872,7 @@ export function Conversation({
                                     }
                                     onClick={() => control("retry")}
                                   >
-                                    继续上次任务
+                                    继续生成
                                   </Button>
                                 )}
                             </div>

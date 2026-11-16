@@ -106,6 +106,7 @@ type ViewState struct {
 	ViewedThroughSeq uint64        `json:"viewed_through_seq,string"`
 	ViewedAt         *time.Time    `json:"viewed_at"`
 	LatestResult     *RunResultRef `json:"latest_result"`
+	Continuation     *RunResultRef `json:"continuation"`
 	UnviewedCount    int           `json:"unviewed_run_count"`
 	HasUnviewed      bool          `json:"has_unviewed_result"`
 }

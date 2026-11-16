@@ -271,6 +271,7 @@ export interface ViewState {
   viewed_through_seq: string;
   viewed_at: string | null;
   latest_result: RunResultRef | null;
+  continuation: RunResultRef | null;
   unviewed_run_count: number;
   has_unviewed_result: boolean;
 }

@@ -428,6 +428,7 @@ function Timeline({
           ]
             .filter(Boolean)
             .join("\n");
+          if (!text && !record.data.file_refs.length) return null;
           return (
             <UserBubble
               key={`input:${record.data.input_id}`}

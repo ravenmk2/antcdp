@@ -781,8 +781,71 @@ it("requires answering a waiting turn instead of retrying the ended run", async 
   mount(<AgentSessionPage />);
   await screen.findByText("已完成配置核对。");
   expect(
-    screen.queryByRole("button", { name: "继续上次任务" }),
+    screen.queryByRole("button", { name: "继续生成" }),
   ).not.toBeInTheDocument();
+});
+
+it.each(["failed", "cancelled", "interrupted"])(
+  "does not infer generation continuation from %s status",
+  async (status) => {
+    current.view_state!.latest_result!.status = status as "failed";
+    mount(<AgentSessionPage />);
+    await screen.findByText("已完成配置核对。");
+    expect(screen.queryByRole("button", { name: "继续生成" })).toBeNull();
+  },
+);
+
+it("continues only the offered failure and preserves a nonempty draft", async () => {
+  current.view_state!.continuation = {
+    ...current.view_state!.latest_result!,
+    status: "failed",
+    end_seq: "90",
+  };
+  const { user } = mount(<AgentSessionPage />);
+  await screen.findByRole("button", { name: "继续生成" });
+  const input = screen.getByRole("textbox", { name: "消息内容" });
+  await user.type(input, "new request");
+  expect(screen.queryByRole("button", { name: "继续生成" })).toBeNull();
+  expect(input).toHaveValue("new request");
+  await user.clear(input);
+  await user.click(await screen.findByRole("button", { name: "继续生成" }));
+  await waitFor(() =>
+    expect(
+      mock.mock.calls.some(
+        ([url, options]) =>
+          url === "/agents/runs/20/retry" &&
+          options?.method === "POST" &&
+          JSON.stringify(options.body) ===
+            JSON.stringify({ expected_end_seq: "90" }),
+      ),
+    ).toBe(true),
+  );
+});
+
+it("does not render an empty retry control as a user message", () => {
+  const input = records.find(
+    (record) => record.event_type === "input/message",
+  )!;
+  mount(
+    <ConversationTimeline
+      sessionId="10"
+      attempt={null}
+      records={[
+        ...records,
+        {
+          ...input,
+          seq: "90",
+          data: {
+            ...input.data,
+            input_id: "retry",
+            content: [],
+            file_refs: [],
+          },
+        },
+      ]}
+    />,
+  );
+  expect(screen.getAllByRole("button", { name: "复制消息" })).toHaveLength(1);
 });
 
 it.each([false, true])(

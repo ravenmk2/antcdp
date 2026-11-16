@@ -179,11 +179,19 @@ func (s *Service) RetryRun(ctx context.Context, raw string, id uint64, key strin
 			if row == nil || row.RootRunID != nil {
 				return missing()
 			}
-			if row.Status != "failed" && row.Status != "cancelled" && row.Status != "interrupted" {
-				return httpx.E(409, "RUN_NOT_RETRYABLE", "运行不允许重试")
-			}
 			if row.EndedSeq == nil || *row.EndedSeq != uint64(w.ExpectedEndSeq) {
 				return httpx.E(409, "RUN_END_CHANGED", "运行终态边界不匹配")
+			}
+			latest, e := st.LatestResult(v.ID)
+			if e != nil {
+				return e
+			}
+			eligible, e := continuation(st, v, latest)
+			if e != nil {
+				return e
+			}
+			if eligible == nil || eligible.ID != row.ID {
+				return httpx.E(409, "RUN_NOT_RETRYABLE", "当前没有可继续的失败生成，或已有待处理输入")
 			}
 			now := time.Now().UTC().Truncate(time.Millisecond)
 			from := v.LastSeq + 1

@@ -181,6 +181,10 @@ func (s *Service) viewState(st StateRepository, v *SessionRow, user uint64) (Vie
 	if e != nil {
 		return out, e
 	}
+	out.Continuation, e = continuation(st, v, out.LatestResult)
+	if e != nil {
+		return out, e
+	}
 	out.UnviewedCount, e = st.UnviewedResults(v.ID, out.ViewedThroughSeq)
 	out.HasUnviewed = out.UnviewedCount > 0
 	return out, e

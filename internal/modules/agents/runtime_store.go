@@ -264,7 +264,13 @@ func (s *Service) ClaimRoot(ctx context.Context, request agentcore.ClaimRequest)
 				message.Images = append(message.Images, sourceImagePart(file, ref.SourceSHA256, ""))
 			}
 		}
-		seq, e := appendEvent(st, v, &row.ID, "input/message", "input-message:"+strconv.FormatUint(input.ID, 10), inputMessageData(view), &StoredEvent{Message: &message}, now)
+		facts := &StoredEvent{Message: &message}
+		if input.InputKind == "continue" {
+			// Persist the retry control without adding a task or an empty wire
+			// message. The existing session surface remains the model's input.
+			facts.Message = nil
+		}
+		seq, e := appendEvent(st, v, &row.ID, "input/message", "input-message:"+strconv.FormatUint(input.ID, 10), inputMessageData(view), facts, now)
 		if e != nil {
 			return e
 		}
