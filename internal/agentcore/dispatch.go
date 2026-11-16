@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 )
 
 var ErrWaitingInput = errors.New("turn ended awaiting human input")
@@ -61,6 +63,9 @@ func (r *ToolRunner) Invoke(ctx context.Context, execution ExecutionContext, cal
 			dispatchCtx, cancel := context.WithDeadline(ctx, admission.Permit.Deadline)
 			observation, dispatchErr := r.Dispatcher.Dispatch(dispatchCtx, execution, admission.Permit)
 			cancel()
+			if observation.Diagnostic == nil {
+				observation.Diagnostic = diagnostic.From(diagnostic.With(dispatchErr, diagnostic.Detail{Source: "tool", Stage: "execute", Code: observation.Reason}))
+			}
 			if pooled {
 				<-r.Workers
 			}

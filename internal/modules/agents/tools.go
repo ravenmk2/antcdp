@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -372,6 +373,9 @@ func (s *Service) CompleteTool(ctx context.Context, ref agentcore.ExecutionRef, 
 		}
 		inlineLimit := min(limit, toolOutputInlineLimit(row.ToolKey))
 		extra := map[string]any{"truncated": truncated}
+		if detail := diagnostic.Copy(obs.Diagnostic); detail != nil {
+			extra["diagnostic"] = detail
+		}
 		if obs.Truncated {
 			extra["source_truncated"] = true
 		}

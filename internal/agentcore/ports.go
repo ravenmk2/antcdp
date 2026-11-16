@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 )
 
@@ -101,6 +102,7 @@ type DispatchPermit struct {
 	ProjectID     ID
 }
 type DispatchObservation struct {
+	Diagnostic         *diagnostic.Detail
 	Status             string
 	Executed           *bool
 	Content            string
@@ -139,8 +141,9 @@ type ClaimResult struct {
 	Receipt   CommitReceipt
 }
 type RunEnd struct {
-	Status RunStatus
-	Reason string
+	Diagnostic *diagnostic.Detail
+	Status     RunStatus
+	Reason     string
 }
 type ChildRequest struct {
 	Parent    PreparedToolCall

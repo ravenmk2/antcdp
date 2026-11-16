@@ -6,10 +6,13 @@ import (
 	"context"
 	"io"
 	"time"
+
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 )
 
 type Error struct {
-	Code string
+	Code   string
+	Detail *diagnostic.Detail
 	// Unknown means a side effect may have occurred. It never authorizes replay.
 	Unknown bool
 }
@@ -32,6 +35,15 @@ type Factory interface {
 }
 
 func (e *Error) Error() string { return e.Code }
+func (e *Error) Diagnostic() *diagnostic.Detail {
+	d := diagnostic.Copy(e.Detail)
+	if d == nil {
+		d = &diagnostic.Detail{}
+	}
+	d.Code = e.Code
+	d.Source = "sandbox"
+	return diagnostic.Copy(d)
+}
 
 type Ownership struct {
 	InstallationID string `json:"installation_id"`

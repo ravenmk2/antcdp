@@ -1,3 +1,4 @@
+import type { DiagnosticDetail } from "./agent-events";
 import type { JsonObject, ModelProtocol } from "./models";
 
 export type AgentType = "interactive" | "service";
@@ -295,6 +296,8 @@ export interface SessionState {
   scope_kind: AgentScope;
   agent_access_available: boolean;
   workspace: {
+    diagnostic?: DiagnosticDetail | null;
+    operation_status?: string;
     binding_id: string | null;
     cloud_computer_id: string | null;
     cwd: string | null;
@@ -719,6 +722,7 @@ export interface RunMetadata {
   can_open_content: boolean;
 }
 export interface ModelCallMetadata {
+  diagnostic?: DiagnosticDetail | null;
   id: string;
   session_id: string;
   run_id: string | null;

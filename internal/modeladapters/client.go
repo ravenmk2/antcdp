@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 )
 
@@ -40,8 +41,13 @@ type Client struct {
 type RemoteError struct {
 	Status    int
 	Kind      string
+	Network   string
 	Delay     time.Duration
 	ImageFile bool
+}
+
+func (e *RemoteError) Diagnostic() *diagnostic.Detail {
+	return diagnostic.Copy(&diagnostic.Detail{Source: "model", Stage: "request", HTTPStatus: e.Status, Network: e.Network})
 }
 
 func (e *RemoteError) RetryDelay() time.Duration { return e.Delay }
@@ -92,9 +98,9 @@ func (e *RemoteError) Unwrap() error {
 func transportError(err error) error {
 	var timeout net.Error
 	if errors.As(err, &timeout) && timeout.Timeout() {
-		return &RemoteError{Kind: "timeout"}
+		return &RemoteError{Kind: "timeout", Network: diagnostic.NetworkClass(err)}
 	}
-	return &RemoteError{Kind: "transport"}
+	return &RemoteError{Kind: "transport", Network: diagnostic.NetworkClass(err)}
 }
 
 // NewClient clones an injected client before enforcing redirect rejection. An

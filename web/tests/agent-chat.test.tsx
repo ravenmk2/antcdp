@@ -508,7 +508,7 @@ it("keeps the diagnostic beside the duration and independent of the process fold
   expect(fold).toHaveAttribute("aria-expanded", "false");
 });
 
-it("opens the same turn diagnostic from a failed tool marker", async () => {
+it("keeps tool failure details local without turning them into a turn warning", async () => {
   const call: Extract<DurableRecord, { event_type: "tool/call" }> = {
     ...records[0],
     seq: "5",
@@ -536,6 +536,12 @@ it("opens the same turn diagnostic from a failed tool marker", async () => {
       content: [],
       truncated: false,
       outcome: { certainty: "known", reason: "workspace_unavailable" },
+      diagnostic: {
+        source: "sandbox",
+        stage: "execute",
+        code: "SANDBOX_AUTHENTICATION_FAILED",
+        http_status: 403,
+      },
     },
   };
   const end = records[2] as Extract<DurableRecord, { event_type: "run/ended" }>;
@@ -549,8 +555,8 @@ it("opens the same turn diagnostic from a failed tool marker", async () => {
           seq: "7",
           data: {
             ...end.data,
-            status: "failed",
-            reason_code: "EXECUTION_FAILED",
+            status: "succeeded",
+            reason_code: null,
           },
         },
       ]}
@@ -559,13 +565,14 @@ it("opens the same turn diagnostic from a failed tool marker", async () => {
     />,
   );
   expect(screen.queryByRole("button", { name: "已使用工具 1 次" })).toBeNull();
-  await user.click(screen.getByRole("button", { name: "失败 · 执行过程" }));
-  await user.click(screen.getByRole("button", { name: "查看本轮工具异常" }));
-  const dialog = await screen.findByRole("dialog", { name: "本轮异常" });
-  expect(dialog).toHaveTextContent("读取文件");
-  expect(dialog).toHaveTextContent("工作空间当前不可用");
-  expect(screen.getAllByRole("dialog")).toHaveLength(1);
-  expect(screen.queryByRole("button", { name: "工具调用失败原因" })).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: /本轮异常|本轮过程记录/ }),
+  ).toBeNull();
+  await user.click(screen.getByRole("button", { name: "已完成 · 执行过程" }));
+  expect(screen.queryByRole("button", { name: "查看本轮工具异常" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "工具调用失败原因" }));
+  expect(await screen.findByRole("tooltip")).toHaveTextContent("HTTP 403");
+  expect(screen.queryByRole("dialog", { name: "本轮异常" })).toBeNull();
 });
 
 it("does not attribute recovered attempts or another run's failures to the final result", () => {
@@ -2202,4 +2209,52 @@ it("collapses the newest ended process even when paged history starts with an ol
   await user.click(turn);
   expect(screen.getByRole("button", { name: /思考.*用时 1 秒/ })).toBeVisible();
   expect(screen.getByText("本轮最终回复")).toBeVisible();
+});
+
+it("shows durable sandbox creation diagnostics even without a run", async () => {
+  const cancelled: DurableRecord = {
+    ...records[0],
+    run_id: null,
+    event_type: "input/cancelled",
+    data: {
+      input_id: "41",
+      revision: "1",
+      reason: "CLOUD_UNAVAILABLE",
+      actor_ref: null,
+      diagnostic: {
+        source: "sandbox",
+        stage: "create",
+        code: "SANDBOX_AUTHENTICATION_FAILED",
+        http_status: 403,
+        operation_id: "71",
+        instance_id: "81",
+      },
+    },
+  };
+  const { user, unmount } = mount(
+    <ConversationTimeline
+      records={[cancelled]}
+      sessionId="10"
+      attempt={null}
+    />,
+  );
+  await user.click(
+    screen.getByRole("button", { name: "消息未执行原因 · 1 项" }),
+  );
+  expect(await screen.findByText("服务返回 HTTP 403")).toBeVisible();
+  expect(screen.getByText("失败阶段：创建沙箱")).toBeVisible();
+  expect(screen.getByText("环境操作：71")).toBeVisible();
+  expect(screen.getByText("服务认证失败，请检查认证配置")).toBeVisible();
+  unmount();
+  const replay = mount(
+    <ConversationTimeline
+      records={JSON.parse(JSON.stringify([cancelled]))}
+      sessionId="10"
+      attempt={null}
+    />,
+  );
+  await replay.user.click(
+    screen.getByRole("button", { name: "消息未执行原因 · 1 项" }),
+  );
+  expect(await screen.findByText("服务返回 HTTP 403")).toBeVisible();
 });

@@ -16,6 +16,17 @@ import type {
   ToolCall,
   ViewState,
 } from "./agents";
+
+export interface DiagnosticDetail {
+  source?: string;
+  stage?: string;
+  code?: string;
+  http_status?: number;
+  network?: string;
+  operation_id?: string;
+  instance_id?: string;
+}
+
 import type { JsonObject } from "./models";
 
 export interface SandboxExecution {
@@ -64,6 +75,7 @@ export interface EventPayloads {
     actor_ref: ActorRef;
   };
   "input/removed": {
+    diagnostic?: DiagnosticDetail | null;
     input_id: string;
     revision: string;
     reason: string;
@@ -104,6 +116,7 @@ export interface EventPayloads {
     reason_code: string | null;
   };
   "run/ended": {
+    diagnostic?: DiagnosticDetail | null;
     run_id: string;
     status:
       "succeeded" | "waiting_input" | "failed" | "cancelled" | "interrupted";
@@ -121,6 +134,7 @@ export interface EventPayloads {
     finish_reason: string;
   };
   "assistant/attempt": {
+    diagnostic?: DiagnosticDetail | null;
     step_no?: number;
     attempt_no?: number;
     attempt_id: string;
@@ -163,6 +177,7 @@ export interface EventPayloads {
     status?: ToolCall["status"];
   };
   "tool/result": {
+    diagnostic?: DiagnosticDetail | null;
     tool_call_id: string;
     status: ToolCall["status"];
     executed: boolean | null;

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -56,6 +57,9 @@ func cloudPublicOperation(op *CloudOperationRow) *PublicOperationRow {
 		var observation workspaceOperationObservation
 		if json.Unmarshal(op.Observation, &observation) == nil {
 			result = observation.Result
+			if enriched, err := diagnostic.Put(result, observation.Diagnostic); err == nil {
+				result = enriched
+			}
 		}
 	}
 	return &PublicOperationRow{ID: op.ID, Kind: kind, SubjectKind: "cloud_computer", SubjectID: &op.ComputerID, Status: status, Result: result, ErrorCode: op.ErrorCode, CreatedAt: op.CreatedAt, StartedAt: op.StartedAt, DeadlineAt: op.DeadlineAt, FinishedAt: op.FinishedAt, UpdatedAt: op.UpdatedAt}

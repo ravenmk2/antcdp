@@ -3,7 +3,7 @@ import type { Question } from "@/types/agents";
 import { useState } from "react";
 import { Circle, CircleCheck, LoaderCircle, X } from "lucide-react";
 import { StatusHint, StatusNote } from "./status-hint";
-import { runtimeReason } from "../data/runtime-reasons";
+import { diagnosticLines, diagnosticReason } from "../data/diagnostics";
 import {
   toolNeedsAttention,
   type ToolNode,
@@ -195,8 +195,11 @@ export function ToolEvent({
               >
                 {[
                   label,
-                  result?.data.outcome.reason &&
-                    runtimeReason(result.data.outcome.reason),
+                  diagnosticReason(
+                    result?.data.diagnostic,
+                    result?.data.outcome.reason,
+                  ),
+                  ...diagnosticLines(result?.data.diagnostic),
                 ]
                   .filter(Boolean)
                   .join("\n")}
@@ -354,6 +357,20 @@ export function ToolEvent({
             )}
             {result && (
               <>
+                {result.data.diagnostic && (
+                  <div className="space-y-1 text-xs text-muted">
+                    {reconciliation && <p>原工具调用诊断（核实前）</p>}
+                    <p>
+                      {diagnosticReason(
+                        result.data.diagnostic,
+                        result.data.outcome.reason,
+                      )}
+                    </p>
+                    {diagnosticLines(result.data.diagnostic).map((line) => (
+                      <p key={line}>{line}</p>
+                    ))}
+                  </div>
+                )}
                 {(!specialized || status !== "succeeded") && !execution && (
                   <ToolTextResult blocks={result.data.content} />
                 )}

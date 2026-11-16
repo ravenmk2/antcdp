@@ -18,6 +18,10 @@ import type {
 } from "@/types/cloud-computer";
 import type { AgentApiDomain } from "../data/agent-api";
 import { operationNames } from "../resources/resource-actions";
+import { diagnosticLines } from "../data/diagnostics";
+import { sandboxReason } from "../data/sandbox-reasons";
+export { sandboxReason, sandboxReasons } from "../data/sandbox-reasons";
+
 export const sandboxKeys = ["cloud-computers"] as const;
 const capabilityNames: Record<keyof CloudCapabilities, string> = {
   lifecycle: "运行环境管理",
@@ -48,65 +52,6 @@ export function OccupancyView({
       </span>
     </div>
   );
-}
-export const sandboxReasons: Record<string, string> = {
-  not_configured: "尚未配置沙箱服务连接",
-  provider_disabled: "连接已停用",
-  secret_unavailable: "连接认证不可用",
-  capability_unavailable: "尚未通过所需能力验证",
-  SANDBOX_UNAVAILABLE: "沙箱暂不可用，请核对连接与诊断结果",
-  WORKSPACE_BUSY: "工作空间仍有活动任务或传输，请结束后重试",
-  WORKSPACE_RECONCILING: "工作空间有尚未核实的执行，需先核实结果",
-  FILE_STATE_CHANGED: "文件状态已变化，请刷新目录后重新选择",
-  SANDBOX_ACTION_UNSUPPORTED: "该类型工作空间不支持此维护操作",
-  NETWORK_POLICY_TOO_COMPLEX: "网络策略超出执行后端支持的复杂度，请精简范围",
-  NETWORK_TARGET_UNSUPPORTED: "该网络目标不受当前后端支持",
-  RESOURCE_IN_USE: "资源仍被引用，不能删除",
-  SANDBOX_CONFIGURATION_INVALID: "沙箱配置无效",
-  SANDBOX_PROVIDER_NOT_CONFIGURED: "尚未配置沙箱服务连接",
-  SANDBOX_NOT_CONFIGURED: "尚未配置沙箱服务连接",
-  SANDBOX_PROVIDER_UNAVAILABLE: "沙箱连接已停用或当前不可用",
-  SANDBOX_CONFIG_INVALID: "沙箱配置无效，请重新检查连接设置",
-  SANDBOX_CONFIG_CHANGED: "连接配置已变化，请刷新后重试",
-  SANDBOX_PROVIDER_IN_USE: "已有实例或工作空间引用此连接，不能删除",
-  SANDBOX_AUTHENTICATION_FAILED: "服务认证失败，请检查认证配置",
-  CREDENTIAL_MISSING: "尚未配置所需认证",
-  SANDBOX_NOT_READY: "实例尚未就绪",
-  SANDBOX_UNHEALTHY: "实例健康检查未通过",
-  SANDBOX_TERMINATED: "实例已回收",
-  SANDBOX_CREATION_UNCONFIRMED: "实例创建结果尚未核实",
-  SANDBOX_TERMINATION_UNCONFIRMED: "尚未核实实例已停止",
-  SANDBOX_DUPLICATE_RESOURCES: "发现多个可能对应的远端实例，需要人工核实",
-  SANDBOX_SEARCH_INCOMPLETE: "远端实例查询未完成，暂不能确认结果",
-  SANDBOX_ENVIRONMENT_UNVERIFIED: "运行环境安全条件尚未验证",
-  SANDBOX_CAPABILITY_UNVERIFIED: "所需沙箱能力尚未验证",
-  SANDBOX_EXECUTION_UNVERIFIED: "命令执行能力尚未验证",
-  SANDBOX_EXECUTION_UNCONFIRMED: "远端命令结果尚未核实",
-  SANDBOX_OUTCOME_UNKNOWN: "远端操作结果待核实，请勿重复执行",
-  SANDBOX_OPERATION_TIMEOUT: "沙箱服务请求超时，需根据结果核实状态",
-  SANDBOX_OPERATION_CANCELLED: "沙箱服务请求已取消",
-  SANDBOX_RATE_LIMITED: "沙箱服务暂时限流，请稍后重试",
-  SANDBOX_REMOTE_NOT_FOUND: "未找到对应的远端实例",
-  SANDBOX_REMOTE_REJECTED: "沙箱服务拒绝了本次请求",
-  SANDBOX_PROBE_INTERRUPTED: "诊断已中断，需核实残留资源后重新测试",
-  WORKSPACE_UNAVAILABLE: "工作空间当前不可用",
-  WORKSPACE_RETIRED: "此工作空间已退出使用",
-  WORKSPACE_HELPER_UNAVAILABLE: "可信文件辅助程序尚未配置或验证",
-  WORKSPACE_IO_OUTCOME_UNKNOWN:
-    "文件操作的实际结果待核实，请勿重复执行；工作空间占用继续保留",
-  WORKSPACE_RESULT_UNAVAILABLE:
-    "已确认操作停止，但无法恢复完整结果；文件可能已变化，请重新检查目录",
-  WORKSPACE_OPERATION_INTERRUPTED:
-    "操作已中断，未继续处理剩余文件；请根据已确认的结果重新检查目录",
-  WORKSPACE_OPERATION_EXPIRED: "文件维护等待期限已到，未派发操作",
-  remote_resource_unconfirmed: "远端资源状态尚未核实",
-  termination_unconfirmed: "实例停止结果尚未核实",
-  instance_termination_verified: "已核实实例停止；存储清理状态单独显示",
-  dedicated_data_plane_verification_unconfigured:
-    "尚未配置相应的数据面能力验证",
-};
-export function sandboxReason(reason: string | null | undefined) {
-  return reason ? (sandboxReasons[reason] ?? `诊断标识：${reason}`) : "";
 }
 export function CapabilitiesView({ value }: { value: CloudCapabilities }) {
   return (
@@ -152,9 +97,12 @@ export function SandboxOperationView({
   const query = useQuery({
     queryKey: ["sandbox", "operation", domain, id],
     queryFn: ({ signal }) =>
-      request<Operation<CloudOperationResult>>(`${domain}/cloud-computers/operations/${id}`, {
-        signal,
-      }),
+      request<Operation<CloudOperationResult>>(
+        `${domain}/cloud-computers/operations/${id}`,
+        {
+          signal,
+        },
+      ),
     retry: false,
     refetchInterval: (query) =>
       ["queued", "running", "outcome_unknown"].includes(
@@ -225,6 +173,11 @@ export function SandboxOperationView({
                   : undefined
               }
             />
+            {diagnosticLines(operation.result?.diagnostic).map((line) => (
+              <p key={line} className="text-xs text-muted break-all">
+                {line}
+              </p>
+            ))}
             {Boolean(operation.result?.affected_paths?.length) && (
               <details open>
                 <summary className="cursor-pointer text-sm">

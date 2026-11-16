@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 )
 
 type Detail struct {
@@ -17,6 +18,10 @@ type Error struct {
 	Code    string   `json:"code"`
 	Message string   `json:"message"`
 	Details []Detail `json:"details"`
+}
+
+func (e *Error) Diagnostic() *diagnostic.Detail {
+	return diagnostic.Copy(&diagnostic.Detail{Code: e.Code})
 }
 
 func (e *Error) Error() string                  { return e.Code }

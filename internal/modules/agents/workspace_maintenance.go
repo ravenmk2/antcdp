@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -365,6 +366,9 @@ func (s *CloudService) settleWorkspaceOperation(ctx context.Context, id uint64, 
 		} else {
 			code := "WORKSPACE_IO_OUTCOME_UNKNOWN"
 			row.Status, row.ErrorCode = "outcome_unknown", &code
+		}
+		if cause != nil {
+			observation.Diagnostic = diagnostic.From(diagnostic.With(cause, diagnostic.Detail{Source: "sandbox", Stage: row.Kind, Code: remoteSandboxError(cause), OperationID: idString(row.ID), InstanceID: idString(row.InstanceID)}))
 		}
 		observation.Result, err = json.Marshal(result)
 		if err != nil {

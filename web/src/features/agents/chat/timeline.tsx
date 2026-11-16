@@ -16,6 +16,7 @@ import {
   type PresentedNode,
   type PresentedProcess,
 } from "../data/conversation-presentation";
+import { diagnosticReason, diagnosticLines } from "../data/diagnostics";
 import { turnIssues } from "../data/turn-issues";
 import { TurnIssues } from "./turn-issues";
 import { MessageContent, FileReference } from "./content";
@@ -303,6 +304,11 @@ function Timeline({
                       sessionId={sessionId}
                       historical={Boolean(turn?.end)}
                       closed={closed}
+                      issueToolIds={(
+                        issues.get(node.runId ?? "") ?? []
+                      ).flatMap((issue) =>
+                        issue.toolId ? [issue.toolId] : [],
+                      )}
                       onIssue={(toolId) => {
                         if (turn)
                           setDiagnostic({
@@ -363,6 +369,45 @@ function Timeline({
           !record.data.question_answer
         )
           return null;
+        if (
+          record.event_type === "input/cancelled" &&
+          (record.data.diagnostic ||
+            /^(CLOUD|SANDBOX|WORKSPACE|CREDENTIAL|NETWORK)_/.test(
+              record.data.reason,
+            ))
+        ) {
+          const id = `input:${record.data.input_id}`;
+          return (
+            <div key={record.seq} className="agent-turn-heading">
+              <span className="text-xs text-muted">
+                消息未执行 · 输入 {record.data.input_id}
+              </span>
+              <TurnIssues
+                label="消息未执行原因"
+                issues={[
+                  {
+                    id,
+                    source: "运行环境",
+                    state: "failed",
+                    summary: "环境不可用，消息未进入运行",
+                    reasons: [
+                      diagnosticReason(
+                        record.data.diagnostic,
+                        record.data.reason,
+                      ),
+                    ],
+                    details: diagnosticLines(record.data.diagnostic),
+                    count: 1,
+                  },
+                ]}
+                open={diagnostic?.runId === id}
+                onOpenChange={(open) =>
+                  setDiagnostic(open ? { runId: id } : null)
+                }
+              />
+            </div>
+          );
+        }
         if (record.event_type === "input/message") {
           const source = record.data.source_ref;
           const sourceId =
@@ -632,12 +677,14 @@ const ProcessGroup = memo(function ProcessGroup({
   historical,
   closed,
   onIssue,
+  issueToolIds,
 }: {
   node: PresentedProcess;
   sessionId: string;
   historical: boolean;
   closed: boolean;
   onIssue: (toolId: string) => void;
+  issueToolIds: string[];
 }) {
   const grouped =
     node.entries.reduce(
@@ -706,7 +753,9 @@ const ProcessGroup = memo(function ProcessGroup({
         reconciliation={tool.reconciliation}
         status={tool.status}
         question={tool.question}
-        onIssue={() => onIssue(tool.id)}
+        onIssue={
+          issueToolIds.includes(tool.id) ? () => onIssue(tool.id) : undefined
+        }
         sessionId={sessionId}
       />
     );

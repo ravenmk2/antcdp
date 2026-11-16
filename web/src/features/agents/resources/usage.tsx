@@ -12,6 +12,8 @@ import { useApiQuery } from "@/hooks/use-api";
 import type { ModelCallMetadata, UsageTotals } from "@/types/agents";
 import { useState } from "react";
 
+import { diagnosticLines } from "../data/diagnostics";
+
 export const completenessNames = {
   complete: "完整",
   partial: "部分已知",
@@ -189,6 +191,10 @@ export function ModelCallList({
               ["归一化版本", selected.usage.normalization_version],
               ["诊断标识", selected.error_code ?? "无"],
               ["诊断说明", runtimeReason(selected.error_code) || "无"],
+              [
+                "诊断详情",
+                diagnosticLines(selected.diagnostic).join("；") || "未记录",
+              ],
               ["配置摘要", selected.request_config_hash],
             ].map(([label, value]) => (
               <div key={label}>

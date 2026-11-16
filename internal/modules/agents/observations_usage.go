@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -224,6 +225,23 @@ func (s *Service) ModelCalls(ctx context.Context, raw string, q UsageQuery, admi
 			v, e := modelCallMetadata(row)
 			if e != nil {
 				return e
+			}
+			if row.ResponseEventSeq != nil {
+				st, err := StateFor(tx)
+				if err != nil {
+					return err
+				}
+				event, err := st.EventAt(row.SessionID, *row.ResponseEventSeq)
+				if err != nil {
+					return err
+				}
+				if event != nil {
+					saved, err := decodeEvent(*event)
+					if err != nil {
+						return err
+					}
+					v["diagnostic"] = diagnostic.Read(saved.Public)
+				}
 			}
 			items = append(items, v)
 		}

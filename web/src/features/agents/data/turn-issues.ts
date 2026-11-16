@@ -1,6 +1,7 @@
 import type { DurableRecord } from "@/types/agent-events";
 import type { PresentedNode } from "./conversation-presentation";
 import { runtimeReason } from "./runtime-reasons";
+import { diagnosticLines, diagnosticReason } from "./diagnostics";
 import { modelRetryStates } from "./model-retries";
 
 export interface TurnIssue {
@@ -9,6 +10,7 @@ export interface TurnIssue {
   state: "failed" | "pending" | "recovered" | "past";
   summary: string;
   reasons: string[];
+  details?: string[];
   count: number;
   toolId?: string;
   step?: number;
@@ -54,7 +56,16 @@ export function turnIssues(records: DurableRecord[], nodes: PresentedNode[]) {
         attempts.set(key, issue);
       }
       issue.count++;
-      const reason = runtimeReason(data.reason_code) || "模型响应未完整结束";
+      const reason =
+        diagnosticReason(data.diagnostic, data.reason_code) ||
+        "模型响应未完整结束";
+      const lines = diagnosticLines(data.diagnostic);
+      if (lines.length) {
+        issue.details ??= [];
+        issue.details.push(
+          `第 ${data.attempt_no ?? issue.count} 次调用（${data.model_call_id}）\n${lines.join("\n")}`,
+        );
+      }
       if (!issue.reasons.includes(reason)) issue.reasons.push(reason);
       issue.state = data.retry ? "pending" : "failed";
       issue.summary = data.retry
@@ -114,16 +125,19 @@ export function turnIssues(records: DurableRecord[], nodes: PresentedNode[]) {
       const historical = Boolean(
         reconciled && data?.outcome.certainty === "unknown",
       );
-      if (
-        !unknown &&
-        !failed &&
-        status !== "blocked" &&
-        status !== "cancelled" &&
-        !historical
-      )
-        continue;
+      // A known tool failure belongs to its tool record, not the turn warning.
+      // Only unresolved physical work and its later reconciliation belong here.
+      if (!unknown && !historical) continue;
       const reason = reconciled?.reason ?? data?.outcome.reason;
-      const reasons = reason ? [runtimeReason(reason)] : [];
+      const reasons =
+        reason || data?.diagnostic
+          ? [
+              diagnosticReason(
+                reconciled ? undefined : data?.diagnostic,
+                reason,
+              ),
+            ]
+          : [];
       if (
         execution?.state === "completed" &&
         execution.exit_code !== null &&
@@ -137,23 +151,10 @@ export function turnIssues(records: DurableRecord[], nodes: PresentedNode[]) {
         id: `tool:${tool.id}`,
         toolId: tool.id,
         source: tool.call?.data.tool_key ?? "工具调用",
-        state: unknown
-          ? "pending"
-          : historical && !failed
-            ? "recovered"
-            : ends.get(run)?.data.status === "succeeded"
-              ? "past"
-              : "failed",
-        summary: unknown
-          ? "结果待核实"
-          : historical && !failed
-            ? "已核实结束"
-            : failed
-              ? "工具执行失败"
-              : status === "blocked"
-                ? "未获准执行"
-                : "工具已取消",
+        state: unknown ? "pending" : "recovered",
+        summary: unknown ? "结果待核实" : failed ? "已核实失败" : "已核实结束",
         reasons,
+        details: reconciled ? [] : diagnosticLines(data?.diagnostic),
         count: 1,
       });
     }
@@ -175,6 +176,9 @@ export function turnIssues(records: DurableRecord[], nodes: PresentedNode[]) {
         (item) =>
           item.state !== "recovered" &&
           item.state !== "past" &&
+          diagnosticLines(end.data.diagnostic).every((line) =>
+            item.details?.some((detail) => detail.split("\n").includes(line)),
+          ) &&
           (item.reasons.includes(runtimeReason(reason)) ||
             !reason ||
             ["EXECUTION_FAILED", "MODEL_REQUEST_FAILED"].includes(reason)),
@@ -186,7 +190,11 @@ export function turnIssues(records: DurableRecord[], nodes: PresentedNode[]) {
           state: end.data.status === "cancelled" ? "past" : "failed",
           summary:
             end.data.status === "cancelled" ? "本轮已停止" : "本轮未完成",
-          reasons: [runtimeReason(reason) || "本次任务未完整结束"],
+          reasons: [
+            diagnosticReason(end.data.diagnostic, reason) ||
+              "本次任务未完整结束",
+          ],
+          details: diagnosticLines(end.data.diagnostic),
           count: 1,
         });
     }

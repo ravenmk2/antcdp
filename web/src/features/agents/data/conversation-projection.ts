@@ -249,6 +249,7 @@ export class ConversationProjector {
     if (
       [
         "input/message",
+        "input/cancelled",
         "assistant/message",
         "assistant/attempt",
         "run/ended",

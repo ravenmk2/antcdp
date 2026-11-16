@@ -7,6 +7,7 @@ import (
 	"time"
 
 	core "github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	a "github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
@@ -226,6 +227,44 @@ func cloudLifecycleIntegration(t *testing.T, f *agentIntegrationFixture) {
 			t.Fatal("adoption created another instance")
 		}
 		finish(claim.Execution)
+	})
+
+	t.Run("creation_diagnostic_before_run", func(t *testing.T) {
+		agent := sandboxServiceAgent(t, f, "diagnostic")
+		session := runtimeSession(t, f, agent.ID)
+		input, err := host.SubmitInput(ctx, f.AdminToken, session.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []core.TextBlock{{Type: "text", Text: "creation rejected"}}, ExpectedHash: session.Selection.Hash})
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := core.ClaimRequest{Candidate: core.Candidate{SessionID: core.ID(session.Configuration.ID), InputID: core.ID(input.Data.(a.InputAccepted).InputID)}, Epoch: host.Epoch}
+		claim, err := host.ClaimRoot(ctx, request)
+		if err != nil || claim.Claimed {
+			t.Fatal("expected queued environment", err)
+		}
+		remote.createError = &sb.Error{Code: "SANDBOX_AUTHENTICATION_FAILED", Detail: &diagnostic.Detail{HTTPStatus: 403}}
+		if err = svc.ProcessPending(ctx, 50); err != nil {
+			t.Fatal(err)
+		}
+		count := len(remote.specs)
+		claim, err = host.ClaimRoot(ctx, request)
+		if err != nil || claim.Claimed {
+			t.Fatal("rejected environment admitted a run", err)
+		}
+		var seq core.Seq
+		if err = f.Store.db.GetContext(ctx, &seq, "SELECT seq FROM agent_event WHERE session_id=? AND event_type='input/cancelled'", session.Configuration.ID); err != nil {
+			t.Fatal(err)
+		}
+		assertDiagnosticEvent(t, f, core.ID(session.Configuration.ID), seq, 403)
+		var runs int
+		if err = f.Store.db.GetContext(ctx, &runs, "SELECT COUNT(*) FROM agent_run WHERE session_id=?", session.Configuration.ID); err != nil || runs != 0 {
+			t.Fatal("created synthetic failed run", runs, err)
+		}
+		if _, err = host.ClaimRoot(ctx, request); err != nil {
+			t.Fatal(err)
+		}
+		if len(remote.specs) != count {
+			t.Fatal("diagnostic replay recreated sandbox")
+		}
 	})
 	t.Run("pinned_skills_wait_for_old_turns", func(t *testing.T) { cloudSkillBindingsIntegration(t, f, svc, remote) })
 }

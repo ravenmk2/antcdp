@@ -28,6 +28,7 @@ type sandboxMemoryProvider struct {
 	specs       []sb.CreateSpec
 	unknownNext bool
 	rejectNext  bool
+	createError error
 	hideFind    bool
 	terminated  int
 }
@@ -36,6 +37,11 @@ func (p *sandboxMemoryProvider) Create(_ context.Context, spec sb.CreateSpec) (s
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.specs = append(p.specs, spec)
+	if p.createError != nil {
+		err := p.createError
+		p.createError = nil
+		return sb.Observation{}, err
+	}
 	if p.rejectNext || spec.Mount.Kind == "ephemeral" && spec.Mount.CreateIfMissing {
 		p.rejectNext = false
 		return sb.Observation{}, &sb.Error{Code: "SANDBOX_VOLUME_INVALID"}

@@ -3,12 +3,14 @@ package sandboxes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
@@ -19,6 +21,7 @@ type remote struct {
 	state                            string
 	creates, execs, cancels, deletes int
 	lostCreate                       bool
+	createError                      error
 	running                          bool
 	lostExec                         bool
 	beforeStarted                    func()
@@ -33,6 +36,9 @@ func (p *remote) PutFile(context.Context, sandboxcore.ResourceRef, sandboxcore.F
 
 func (p *remote) Create(_ context.Context, spec sandboxcore.CreateSpec) (sandboxcore.Observation, error) {
 	p.creates++
+	if p.createError != nil {
+		return sandboxcore.Observation{}, p.createError
+	}
 	p.ref = sandboxcore.ResourceRef{BackendGeneration: spec.BackendGeneration, RemoteID: "remote", Ownership: spec.Ownership}
 	p.state = "ready"
 	if p.lostCreate {
@@ -445,5 +451,24 @@ func TestPendingCancellationWithoutHandleSettlesAfterInstanceTermination(t *test
 	}
 	if err = s.Release(ctx, *lease, "terminated"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCreationDiagnosticPersistsWithoutReplayingFailure(t *testing.T) {
+	s, m, p, v := fixture(t)
+	p.createError = &sandboxcore.Error{Code: "SANDBOX_AUTHENTICATION_FAILED", Detail: &diagnostic.Detail{HTTPStatus: 403}}
+	if _, err := s.Create(t.Context(), v.ID, sandboxcore.CreateSpec{}); err == nil {
+		t.Fatal("expected failure")
+	}
+	for _, op := range m.operations {
+		d := diagnostic.Read(op.Observation)
+		if op.Status != "failed" || d == nil || d.HTTPStatus != 403 || d.Stage != "create" {
+			t.Fatal("missing durable cause", op, d)
+		}
+	}
+	_, err := s.Create(t.Context(), v.ID, sandboxcore.CreateSpec{})
+	var control *sandboxcore.Error
+	if p.creates != 1 || !errors.As(err, &control) || control.Code != "SANDBOX_CREATION_FAILED" || diagnostic.From(err).HTTPStatus != 403 {
+		t.Fatal("replay lost diagnostic or changed control", err, p.creates)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
@@ -300,6 +301,7 @@ func (s *Service) deleteCloud(ctx context.Context, c *cloudClaim, p sandboxcore.
 	return nil
 }
 func (s *Service) finishCloudOperation(ctx context.Context, c *cloudClaim, cause error) error {
+	cause = diagnostic.With(cause, diagnostic.Detail{Source: "sandbox", Stage: c.Operation.Kind, Code: remoteSandboxError(cause), OperationID: idString(c.Operation.ID), InstanceID: idString(c.Operation.InstanceID)})
 	return s.Transact(ctx, func(cr Repository) error {
 		connection, e := cr.Connection(true)
 		if e != nil {
@@ -384,12 +386,18 @@ func (s *Service) finishCloudOperation(ctx context.Context, c *cloudClaim, cause
 		if e = cr.SaveComputer(v); e != nil {
 			return e
 		}
+		if op.Observation, e = diagnostic.Put(op.Observation, diagnostic.From(cause)); e != nil {
+			return e
+		}
 		if e = cr.SaveCloudOperation(op); e != nil {
 			return e
 		}
 		if maintenanceKind(op.Kind) {
 			op.Observation, e = json.Marshal(map[string]any{"cloud_computer_id": idString(v.ID), "state": v.State, "volume_cleanup_state": v.VolumeCleanupState})
 			if e != nil {
+				return e
+			}
+			if op.Observation, e = diagnostic.Put(op.Observation, diagnostic.From(cause)); e != nil {
 				return e
 			}
 			return cr.SaveCloudOperation(op)

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 )
 
 type ModelSelection struct {
@@ -56,10 +57,12 @@ type Permissions struct {
 	Approve bool `json:"approve"`
 }
 type WorkspaceState struct {
-	BindingID    *uint64 `json:"binding_id,string"`
-	ComputerID   *uint64 `json:"cloud_computer_id,string"`
-	CWD          string  `json:"cwd"`
-	Availability string  `json:"availability"`
+	Diagnostic      *diagnostic.Detail `json:"diagnostic,omitempty"`
+	OperationStatus string             `json:"operation_status,omitempty"`
+	BindingID       *uint64            `json:"binding_id,string"`
+	ComputerID      *uint64            `json:"cloud_computer_id,string"`
+	CWD             string             `json:"cwd"`
+	Availability    string             `json:"availability"`
 }
 type SessionState struct {
 	LastSeq                 uint64         `json:"last_seq,string"`

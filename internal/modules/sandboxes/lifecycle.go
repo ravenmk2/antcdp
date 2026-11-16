@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
@@ -146,6 +147,9 @@ func (s *Service) Transition(ctx context.Context, id uint64, kind, token string,
 		v.LastObservedAt = &now
 		v.RowVersion++
 		row.Observation, _ = json.Marshal(actual)
+		if row.Observation, e = diagnostic.Put(row.Observation, diagnostic.From(diagnostic.With(cause, diagnostic.Detail{Source: "sandbox", Stage: kind, Code: errorCode(cause)}))); e != nil {
+			return e
+		}
 		if done() && cause == nil {
 			row.Status = "completed"
 			row.FinishedAt = &now

@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -458,7 +459,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 			// already shown to the user must remain available to "continue".
 			// Never replay its native thinking signatures or unfinished tool calls.
 			keepPartial := status == "interrupted" || reason == "MODEL_GENERATION_LIMIT" && message.Content != ""
-			seq, e := appendEvent(st, x.Session, &x.Run.ID, "assistant/attempt", "model-result:"+strconv.FormatUint(call.ID, 10), map[string]any{"attempt_id": agentcore.ID(call.ID), "model_call_id": agentcore.ID(call.ID), "step_no": call.StepNo, "attempt_no": call.AttemptNo, "status": status, "content": uiAssistant(message, nil, result.ReasoningDurationMS), "partial": partial, "reason_code": reason, "retry": retry}, &StoredEvent{Message: &message, ModelCallID: agentcore.ID(call.ID), Interrupted: partial, PartialReason: reason, ExcludeFromContext: !keepPartial, Retry: retry}, now)
+			seq, e := appendEvent(st, x.Session, &x.Run.ID, "assistant/attempt", "model-result:"+strconv.FormatUint(call.ID, 10), map[string]any{"attempt_id": agentcore.ID(call.ID), "model_call_id": agentcore.ID(call.ID), "step_no": call.StepNo, "attempt_no": call.AttemptNo, "status": status, "content": uiAssistant(message, nil, result.ReasoningDurationMS), "partial": partial, "reason_code": reason, "diagnostic": diagnostic.From(diagnostic.With(outcome.Err, diagnostic.Detail{Source: "model", Stage: "response", Code: reason})), "retry": retry}, &StoredEvent{Message: &message, ModelCallID: agentcore.ID(call.ID), Interrupted: partial, PartialReason: reason, ExcludeFromContext: !keepPartial, Retry: retry}, now)
 			if e != nil {
 				return e
 			}

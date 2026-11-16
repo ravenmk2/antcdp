@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -422,7 +423,7 @@ func (s *Service) endOne(st StateRepository, session *SessionRow, row, root *Run
 	if plan.Run.Reason != "" {
 		row.EndReason = &plan.Run.Reason
 	}
-	seq, e := appendEvent(st, session, &row.ID, "run/ended", "run-ended:"+strconv.FormatUint(row.ID, 10), map[string]any{"run_id": agentcore.ID(row.ID), "status": row.Status, "reason_code": row.EndReason, "finished_at": now, "usage_completeness": row.UsageCompleteness, "physical_activity_state": physical}, nil, now)
+	seq, e := appendEvent(st, session, &row.ID, "run/ended", "run-ended:"+strconv.FormatUint(row.ID, 10), map[string]any{"run_id": agentcore.ID(row.ID), "status": row.Status, "reason_code": row.EndReason, "diagnostic": diagnostic.Copy(end.Diagnostic), "finished_at": now, "usage_completeness": row.UsageCompleteness, "physical_activity_state": physical}, nil, now)
 	if e != nil {
 		return e
 	}

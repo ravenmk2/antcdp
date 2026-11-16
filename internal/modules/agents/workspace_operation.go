@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -19,6 +20,7 @@ type workspaceExecution struct {
 	State    string              `json:"state"`
 }
 type workspaceOperationObservation struct {
+	Diagnostic          *diagnostic.Detail   `json:"diagnostic,omitempty"`
 	Executions          []workspaceExecution `json:"executions"`
 	LocalStorageKey     string               `json:"local_storage_key,omitempty"`
 	LocalCleanupPending bool                 `json:"local_cleanup_pending,omitempty"`

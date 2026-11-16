@@ -19,6 +19,7 @@ import (
 	"time"
 
 	sdk "github.com/alibaba/OpenSandbox/sdks/sandbox/go"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
@@ -395,7 +396,7 @@ func remoteError(err error, mutation bool) error {
 	}
 	var own *sandboxcore.Error
 	if errors.As(err, &own) {
-		return &sandboxcore.Error{Code: own.Code, Unknown: own.Unknown || mutation}
+		return &sandboxcore.Error{Code: own.Code, Unknown: own.Unknown || mutation, Detail: diagnostic.From(err)}
 	}
 	code, unknown := "SANDBOX_UNAVAILABLE", mutation
 	switch statusCode(err) {
@@ -420,5 +421,5 @@ func remoteError(err error, mutation bool) error {
 	}
 	// Deliberately do not retain an SDK error, URL, header, response body or
 	// arbitrary remote message in an error that can cross the host boundary.
-	return failure(code, unknown)
+	return &sandboxcore.Error{Code: code, Unknown: unknown, Detail: &diagnostic.Detail{HTTPStatus: statusCode(err), Network: diagnostic.NetworkClass(err)}}
 }

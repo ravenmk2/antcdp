@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 )
 
@@ -48,6 +49,9 @@ func TestRemoteFailuresExposeOnlySafeClasses(t *testing.T) {
 				response, err := client.Generate(t.Context(), testRequest(protocol), nil)
 				if !errors.Is(err, test.want) || calls.Load() != 1 || len(response.Message.ToolCalls) != 0 {
 					t.Fatalf("classification or retry behavior changed: %v, calls=%d", err, calls.Load())
+				}
+				if d := diagnostic.From(err); d == nil || d.HTTPStatus != test.status {
+					t.Fatal("HTTP diagnostic lost", d)
 				}
 				for current := err; current != nil; current = errors.Unwrap(current) {
 					for _, secret := range []string{"synthetic-secret", "private-response", server.URL} {

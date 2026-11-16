@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modules/cloudcomputers"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/sandboxes"
@@ -70,7 +71,7 @@ func sandboxFailure(e error) error {
 		if strings.HasPrefix(failure.Code, "NETWORK_") {
 			status = 422
 		}
-		return httpx.E(status, failure.Code, "云电脑执行服务当前不可用")
+		return diagnostic.With(httpx.E(status, failure.Code, "云电脑执行服务当前不可用"), *failure.Diagnostic())
 	}
 	return e
 }
@@ -234,7 +235,8 @@ func (s *CloudService) Acquire(ctx context.Context, x agentcore.ExecutionContext
 	})
 	return out, e
 }
-func (s *CloudService) PrepareTurn(ctx context.Context, x agentcore.ExecutionContext) error {
+func (s *CloudService) PrepareTurn(ctx context.Context, x agentcore.ExecutionContext) (err error) {
+	defer func() { err = diagnostic.With(err, diagnostic.Detail{Source: "sandbox", Stage: "prepare"}) }()
 	if x.Binding == nil || x.Binding.InstanceID == 0 {
 		return nil
 	}

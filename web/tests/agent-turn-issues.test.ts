@@ -160,7 +160,7 @@ it("keeps a recovered attempt from hiding a later unrelated terminal failure", (
   expect(issues.map((item) => item.state)).toEqual(["failed", "recovered"]);
 });
 
-it("keeps historical tool failures quiet after success without inventing a successful tool result", () => {
+it("keeps known tool failures out of turn diagnostics without changing tool results", () => {
   const failure = {
     ...tool,
     data: {
@@ -169,10 +169,19 @@ it("keeps historical tool failures quiet after success without inventing a succe
       outcome: { certainty: "known" as const, reason: "file_missing" },
     },
   };
-  expect(project([failure, end]).get("20")![0]).toMatchObject({
-    state: "past",
-    summary: "工具执行失败",
-  });
+  expect(project([failure, end]).get("20") ?? []).toEqual([]);
+  expect(project([failure]).get("20") ?? []).toEqual([]);
+  const runFailure = {
+    ...end,
+    data: {
+      ...end.data,
+      status: "failed" as const,
+      reason_code: "EXECUTION_FAILED",
+    },
+  };
+  const issues = project([failure, runFailure]).get("20")!;
+  expect(issues).toHaveLength(1);
+  expect(issues[0].source).toBe("本轮执行");
   expect(failure.data.status).toBe("failed");
 });
 
@@ -185,4 +194,42 @@ it("keeps identical errors in separate runs and does not merge legacy attempts w
   ]);
   expect(issues.get("20")).toHaveLength(2);
   expect(issues.get("21")).toHaveLength(1);
+});
+
+it("keeps structured model causes across replay without including known tool failures", () => {
+  const detailed = {
+    ...failed,
+    data: {
+      ...failed.data,
+      retry: null,
+      diagnostic: {
+        source: "model",
+        stage: "request",
+        code: "MODEL_REQUEST_REJECTED",
+        http_status: 422,
+      },
+    },
+  };
+  const events: DurableRecord[] = [
+    detailed,
+    {
+      ...tool,
+      data: {
+        ...tool.data,
+        status: "failed",
+        executed: true,
+        content: [
+          {
+            type: "text",
+            text: "stderr: missing executable\n" + "x".repeat(4000),
+          },
+        ],
+        outcome: { certainty: "known", reason: "COMMAND_FAILED" },
+      },
+    },
+  ];
+  const issues = project(events).get("20")!;
+  expect(issues[0].details?.join("\n")).toContain("HTTP 422");
+  expect(issues).toHaveLength(1);
+  expect(project(JSON.parse(JSON.stringify(events)))).toEqual(project(events));
 });

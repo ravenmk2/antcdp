@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modules/cloudcomputers"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/sandboxes"
@@ -177,7 +178,30 @@ func (s *CloudService) prepareCloudAdmission(ctx context.Context, tx identity.Tx
 		return v, false, nil
 	}
 	if v.State == "unavailable" {
-		return v, false, httpx.E(409, "CLOUD_UNAVAILABLE", "原云电脑需要管理员处理后才能继续")
+		cause := httpx.E(409, "CLOUD_UNAVAILABLE", "原云电脑需要管理员处理后才能继续")
+		detail := &diagnostic.Detail{Source: "sandbox", Stage: "admission", Code: "CLOUD_UNAVAILABLE", InstanceID: idString(v.InstanceID)}
+		op, err := cr.LatestCloudOperation(v.ID)
+		if err != nil {
+			return v, false, err
+		}
+		if op != nil && op.InstanceID == v.InstanceID && op.BackendGeneration == v.BackendGeneration && op.StorageGeneration == v.StorageGeneration && op.Status == "failed" && op.ErrorCode != nil && v.ErrorCode != nil && *op.ErrorCode == *v.ErrorCode {
+			detail = &diagnostic.Detail{}
+			if saved := diagnostic.Read(op.Observation); saved != nil {
+				detail = saved
+			}
+			detail.Source = "sandbox"
+			if detail.Code == "" {
+				detail.Code = *op.ErrorCode
+			}
+			if detail.Stage == "" {
+				detail.Stage = op.Kind
+			}
+			detail.OperationID, detail.InstanceID = idString(op.ID), idString(op.InstanceID)
+		} else if v.ErrorCode != nil {
+			detail.Code = *v.ErrorCode
+		}
+		// Keep the admission control code; the cause is explanatory only.
+		return v, false, diagnostic.Attach(cause, detail)
 	}
 	skills, e := s.Host.freezeSkills(tx, r, agent.ID)
 	if e != nil {

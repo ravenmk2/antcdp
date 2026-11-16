@@ -1,3 +1,4 @@
+import type { DiagnosticDetail } from "./agent-events";
 import type { SandboxNetworkPolicy, Versioned } from "./agents";
 import type { ResourceAuthentication } from "./agent-resources";
 
@@ -88,6 +89,7 @@ export interface CloudComputer extends Versioned {
 }
 export type CloudAction = "create" | "rebuild" | "pause" | "resume" | "delete";
 export interface CloudOperationResult {
+  diagnostic?: DiagnosticDetail | null;
   cloud_computer_id?: string;
   state?: CloudState;
   affected_paths?: string[];

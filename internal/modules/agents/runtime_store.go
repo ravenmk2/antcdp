@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -191,7 +192,7 @@ func (s *Service) ClaimRoot(ctx context.Context, request agentcore.ClaimRequest)
 			if e != nil {
 				var public *httpx.Error
 				if errors.As(e, &public) && public.Status < 500 {
-					_, e = cancelSessionQueue(st, v, public.Code, now)
+					_, e = cancelSessionQueue(st, v, public.Code, now, diagnostic.From(e))
 					out.Receipt = eventReceipt(v.ID, initial.LastSeq+1, v.LastSeq)
 					return e
 				}

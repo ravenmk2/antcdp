@@ -221,7 +221,13 @@ func TestWorkspaceRecoveryObservesOnceAndDoesNotResumeRemainingRemoval(t *testin
 	if err := s.recoverWorkspaceOperation(context.Background(), c); err != nil {
 		t.Fatal(err)
 	}
-	if p.execs != 0 || m.public.Status != "failed" || m.refs[0].State != "released" || m.public.ErrorCode == nil || *m.public.ErrorCode != "WORKSPACE_OPERATION_INTERRUPTED" || string(m.public.Result) != `{"affected_paths":["first"]}` {
+	var result struct {
+		AffectedPaths []string `json:"affected_paths"`
+	}
+	if err := json.Unmarshal(m.public.Result, &result); err != nil {
+		t.Fatal(err)
+	}
+	if p.execs != 0 || m.public.Status != "failed" || m.refs[0].State != "released" || m.public.ErrorCode == nil || *m.public.ErrorCode != "WORKSPACE_OPERATION_INTERRUPTED" || len(result.AffectedPaths) != 1 || result.AffectedPaths[0] != "first" {
 		t.Fatalf("replayed or lost partial result: %s %s", m.public.Status, m.public.Result)
 	}
 }

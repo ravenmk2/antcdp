@@ -31,6 +31,8 @@ import { readPlan } from "./timeline";
 
 type WorkspaceTab = "progress" | "files" | "context";
 
+import { diagnosticLines, diagnosticReason } from "../data/diagnostics";
+
 export function SessionWorkspace({
   session,
   records,
@@ -439,6 +441,19 @@ function SessionContext({
             }[workspace.availability]
           }
         </p>
+        {workspace.diagnostic && (
+          <div className="mt-3 space-y-1 text-xs text-muted">
+            <p>{diagnosticReason(workspace.diagnostic)}</p>
+            {diagnosticLines(workspace.diagnostic).map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
+        )}
+        {workspace.operation_status === "outcome_unknown" && (
+          <p className="mt-3 text-xs text-muted">
+            操作结果尚未核实，相关占用继续保留。
+          </p>
+        )}
         {workspace.cwd && (
           <code className="agent-workspace-path">{workspace.cwd}</code>
         )}

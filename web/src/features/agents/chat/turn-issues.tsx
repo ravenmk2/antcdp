@@ -12,8 +12,10 @@ export function TurnIssues({
   open,
   selected,
   onOpenChange,
+  label,
 }: {
   issues: TurnIssue[];
+  label?: string;
   open: boolean;
   selected?: string;
   onOpenChange: (open: boolean) => void;
@@ -24,7 +26,7 @@ export function TurnIssues({
     : issues.some((item) => item.state === "pending")
       ? "pending"
       : "past";
-  const title = tone === "past" ? "本轮过程记录" : "本轮异常";
+  const title = label ?? (tone === "past" ? "本轮过程记录" : "本轮异常");
   const summary = issues
     .map((item) => item.summary)
     .filter((value, index, values) => values.indexOf(value) === index)
@@ -32,7 +34,7 @@ export function TurnIssues({
   const text = issues
     .map(
       (item) =>
-        `${builtinToolNames[item.source] ?? item.source} · ${item.summary}${item.count > 1 ? ` · 异常 ${item.count} 次` : ""}\n${item.reasons.join("\n")}`,
+        `${builtinToolNames[item.source] ?? item.source} · ${item.summary}${item.count > 1 ? ` · 异常 ${item.count} 次` : ""}\n${[...item.reasons, ...(item.details ?? [])].filter(Boolean).join("\n")}`,
     )
     .join("\n\n");
   return (
@@ -99,7 +101,7 @@ export function TurnIssues({
                     {item.count > 1 && <span>异常 {item.count} 次</span>}
                   </div>
                   <p className={styles.summary}>{item.summary}</p>
-                  {item.reasons.map((reason) => (
+                  {[...item.reasons, ...(item.details ?? [])].map((reason) => (
                     <p key={reason} className={styles.reason}>
                       {reason}
                     </p>

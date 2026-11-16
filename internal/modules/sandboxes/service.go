@@ -6,8 +6,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
@@ -181,7 +183,7 @@ func (s *Service) Create(ctx context.Context, id uint64, spec sandboxcore.Create
 	}
 	if op.FinishedAt != nil {
 		if op.Status != "completed" {
-			return v, fail("SANDBOX_CREATION_FAILED")
+			return v, diagnostic.Attach(fail("SANDBOX_CREATION_FAILED"), diagnostic.Read(op.Observation))
 		}
 		return v, nil
 	}
@@ -251,6 +253,9 @@ func (s *Service) Create(ctx context.Context, id uint64, spec sandboxcore.Create
 			}
 		}
 		row.Observation, _ = json.Marshal(actual)
+		if row.Observation, e = diagnostic.Put(row.Observation, diagnostic.From(diagnostic.With(err, diagnostic.Detail{Source: "sandbox", Stage: "create", Code: errorCode(err), InstanceID: strconv.FormatUint(id, 10)}))); e != nil {
+			return e
+		}
 		row.UpdatedAt = now
 		if e = r.SaveOperation(row); e != nil {
 			return e

@@ -50,6 +50,7 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 	agent := runtimeTestAgent(t, f)
 	t.Run("session_titles", func(t *testing.T) { runtimeSessionTitles(t, f, agent.ID) })
 	t.Run("turn_lifecycle", func(t *testing.T) { runtimeTurnLifecycle(t, f, agent.ID) })
+	t.Run("diagnostics", func(t *testing.T) { runtimeDiagnostics(t, f, agent.ID) })
 	t.Run("model_retry", func(t *testing.T) { runtimeModelRetry(t, f, agent.ID) })
 	t.Run("step_statistics", func(t *testing.T) { runtimeStepStatistics(t, f, agent.ID) })
 	t.Run("tool_output", func(t *testing.T) { runtimeToolOutput(t, f, agent.ID) })

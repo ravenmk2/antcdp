@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 )
 
@@ -274,7 +275,8 @@ func (r *Runtime) execute(ctx context.Context, execution ExecutionContext) RunEn
 		return executionEnd(runCtx.Err())
 	}
 }
-func executionEnd(err error) RunEnd {
+func executionEnd(err error) (end RunEnd) {
+	defer func() { end.Diagnostic = diagnostic.From(err) }()
 	if errors.Is(err, ErrWaitingInput) {
 		return RunEnd{Status: WaitingInput, Reason: "human_input_required"}
 	}

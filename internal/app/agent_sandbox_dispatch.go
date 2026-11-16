@@ -7,12 +7,16 @@ import (
 	"strings"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
-func sandboxToolFailure(err error) agentcore.DispatchObservation {
+func sandboxToolFailure(err error) (out agentcore.DispatchObservation) {
+	defer func() {
+		out.Diagnostic = diagnostic.From(diagnostic.With(err, diagnostic.Detail{Source: "sandbox", Stage: "execute"}))
+	}()
 	var remote *sandboxcore.Error
 	if errors.As(err, &remote) && remote.Unknown {
 		return toolFailure(remote.Code, nil)
@@ -101,6 +105,7 @@ func (d *agentToolDispatcher) dispatchSandbox(ctx context.Context, execution age
 		// File services may have already atomically committed a failed result,
 		// or hold positive execution evidence despite a later cleanup failure.
 		if output.Status != "" {
+			output.Diagnostic = diagnostic.From(diagnostic.With(err, diagnostic.Detail{Source: "sandbox", Stage: key}))
 			return output, nil
 		}
 		return sandboxToolFailure(err), nil

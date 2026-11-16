@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
@@ -244,6 +245,16 @@ func (s *Service) detail(ctx context.Context, tx identity.Tx, r Repository, st S
 			return out, integrity()
 		}
 		out.State.Workspace.Availability = computer.State
+		if computer.State != "ready" {
+			operation, err := cr.LatestCloudOperation(computer.ID)
+			if err != nil {
+				return out, err
+			}
+			if operation != nil && operation.InstanceID == computer.InstanceID && operation.BackendGeneration == computer.BackendGeneration && operation.StorageGeneration == computer.StorageGeneration {
+				out.State.Workspace.Diagnostic = diagnostic.Read(operation.Observation)
+				out.State.Workspace.OperationStatus = operation.Status
+			}
+		}
 		if computer.State == "ready" {
 			out.State.Workspace.Availability = "available"
 		}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
@@ -93,7 +94,11 @@ func (s *CloudService) environmentRequests(ctx context.Context, original *Sandbo
 			if op.ErrorCode != nil {
 				reason = *op.ErrorCode
 			}
-			return nil, httpx.E(409, reason, "原环境操作失败，请核实实例后再重新运行")
+			cause := httpx.E(409, reason, "原环境操作失败，请核实实例后再重新运行")
+			if detail := diagnostic.Read(op.Observation); detail != nil {
+				return nil, diagnostic.With(cause, *detail)
+			}
+			return nil, cause
 		}
 		var observation workspaceOperationObservation
 		var result environmentOperationResult
@@ -114,7 +119,7 @@ func (s *CloudService) environmentRequests(ctx context.Context, original *Sandbo
 	if finish := s.finishWorkspaceOperation(ctx, op.ID, &access, environmentOperationResult{Responses: responses}, e); e == nil {
 		e = finish
 	}
-	return responses, e
+	return responses, diagnostic.With(e, diagnostic.Detail{Source: "sandbox", Stage: kind, Code: remoteSandboxError(e), OperationID: idString(op.ID), InstanceID: idString(access.InstanceID)})
 }
 
 func (s *CloudService) InitializeComputer(ctx context.Context, access *SandboxAccess, agentID uint64) error {

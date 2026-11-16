@@ -1,6 +1,15 @@
+import { sandboxReasons } from "./sandbox-reasons";
 import type { DurableRecord } from "@/types/agent-events";
 
 export const reasonNames: Record<string, string> = {
+  ...sandboxReasons,
+  CLOUD_UNAVAILABLE: "云电脑当前不可用，需要处理环境异常",
+  CLOUD_NOT_READY: "云电脑尚未就绪，无法访问工作环境",
+  CLOUD_LEASE_FENCED: "云电脑执行占用已失效",
+  CLOUD_COMPUTER_DELETED: "原云电脑已删除或正在删除",
+  MODEL_IMAGE_FILE_REJECTED: "模型服务拒绝访问引用的图像文件",
+  CANCELLED: "调用已取消",
+  DEADLINE_EXCEEDED: "达到运行期限",
   human_input_required: "本轮已结束，等待补充信息",
   physical_execution_ended: "已确认相关命令结束",
   deadline_exceeded: "达到运行期限",
@@ -18,7 +27,7 @@ export const reasonNames: Record<string, string> = {
   model_attempt_expired: "模型响应超过期限",
   parent_run_ended: "主任务已结束",
   AGENT_ACCESS_REVOKED: "当前已无此智能体的使用权限",
-  EXECUTION_FAILED: "执行失败，可查看运行记录中的诊断信息",
+  EXECUTION_FAILED: "执行未完成；该记录未提供更具体的原因",
   EXECUTION_INVALID: "执行配置无效",
   MODEL_RESULT_UNCONFIRMED: "模型响应尚未确认",
   MODEL_RATE_LIMITED: "模型提供商限流，请稍后再试或由管理员核对调用配额",
@@ -29,7 +38,7 @@ export const reasonNames: Record<string, string> = {
   MODEL_REMOTE_SERVICE_ERROR: "模型提供商服务异常，请稍后再试",
   MODEL_CONNECTION_FAILED:
     "连接模型服务失败。可稍后重试；若持续失败，请管理员检查网络和服务地址。",
-  MODEL_REQUEST_FAILED: "模型请求失败，请查看运行记录中的诊断信息",
+  MODEL_REQUEST_FAILED: "模型请求失败；该记录未提供更具体的原因",
   MODEL_REQUEST_TIMEOUT: "模型提供商连接或响应超时",
   MODEL_ATTEMPT_TIMEOUT: "本次模型调用超过期限",
   MODEL_RESPONSE_INVALID: "模型返回内容不符合当前协议，未执行其中的工具调用",

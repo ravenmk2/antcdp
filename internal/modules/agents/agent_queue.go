@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 )
 
@@ -37,7 +38,11 @@ func (s *Service) cancelAgentQueue(tx identity.Tx, r Repository, out *Result, id
 	return nil
 }
 
-func cancelSessionQueue(st StateRepository, session *SessionRow, reason string, now time.Time) (agentcore.CommitReceipt, error) {
+func cancelSessionQueue(st StateRepository, session *SessionRow, reason string, now time.Time, details ...*diagnostic.Detail) (agentcore.CommitReceipt, error) {
+	var detail *diagnostic.Detail
+	if len(details) > 0 {
+		detail = diagnostic.Copy(details[0])
+	}
 	from := session.LastSeq + 1
 	for {
 		rows, _, err := st.Inputs(session.ID, InputQuery{Page: 1, PageSize: 100, State: "pending"})
@@ -57,7 +62,7 @@ func cancelSessionQueue(st StateRepository, session *SessionRow, reason string, 
 			if err = st.SaveInput(input); err != nil {
 				return agentcore.CommitReceipt{}, err
 			}
-			if _, err = appendEvent(st, session, nil, "input/cancelled", "", map[string]any{"input_id": agentcore.ID(input.ID), "revision": agentcore.Version(input.ContentRevision), "reason": reason, "actor_ref": nil}, nil, now); err != nil {
+			if _, err = appendEvent(st, session, nil, "input/cancelled", "", map[string]any{"input_id": agentcore.ID(input.ID), "revision": agentcore.Version(input.ContentRevision), "reason": reason, "actor_ref": nil, "diagnostic": detail}, nil, now); err != nil {
 				return agentcore.CommitReceipt{}, err
 			}
 		}
