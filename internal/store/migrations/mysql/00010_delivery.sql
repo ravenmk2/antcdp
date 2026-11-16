@@ -25,6 +25,7 @@ CREATE TABLE `project_repository` (
     KEY idx_project_repository_project (project_id, id),
     KEY idx_project_repository_project_connection (project_id, connection_id, id),
     KEY idx_project_repository_connection (connection_id, id),
+    KEY idx_project_repository_event_target (connection_id, repo_id, project_id),
     KEY idx_project_repository_creator (created_by_user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 

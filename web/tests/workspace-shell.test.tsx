@@ -189,7 +189,7 @@ it("keeps credential details inside project settings and breadcrumbs", () => {
   expect(within(sidebar).queryByRole("link", { name: "项目设置" })).toBeNull();
   const navigation = screen.getByRole("navigation", { name: "当前位置" });
   expect(
-    within(navigation).getByRole("link", { name: "项目服务凭证" }),
+    within(navigation).getByRole("link", { name: "项目服务连接" }),
   ).toHaveAttribute("href", "/projects/7/integrations");
   expect(within(navigation).getByText("连接详情")).toHaveAttribute(
     "aria-current",

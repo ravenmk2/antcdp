@@ -207,7 +207,6 @@ func (s *Service) Credentials(ctx context.Context, raw string, id, cid uint64, o
 			cr.Version++
 			if !cr.Enabled {
 				cr.Preferred = false
-				clearFallback(v, cid)
 			}
 			if err := r.SaveCredential(cr); err != nil {
 				return err
@@ -239,7 +238,13 @@ func (s *Service) Credentials(ctx context.Context, raw string, id, cid uint64, o
 			if err := check(collectionTag, s.collectionTag(v, owner)); err != nil {
 				return err
 			}
-			clearFallback(v, cid)
+			refs, err := r.ConnectionJobReferences(id, cid)
+			if err != nil {
+				return err
+			}
+			if refs > 0 {
+				return httpx.E(409, "CREDENTIAL_REFERENCED", "请先撤销作业资源授权")
+			}
 			if err := r.DeleteCredential(cid); err != nil {
 				return err
 			}
@@ -262,10 +267,4 @@ func (s *Service) Credentials(ctx context.Context, raw string, id, cid uint64, o
 		return audit(tx, a, "service_credential", cr.ID, cr.Name, action, map[string]any{"ownership_type": owner.Type, "enabled": cr.Enabled}, meta)
 	})
 	return out, a, err
-}
-func clearFallback(v *ServiceConnection, id uint64) {
-	if sameID(v.FallbackID, &id) {
-		v.FallbackID = nil
-		v.FallbackVersion++
-	}
 }

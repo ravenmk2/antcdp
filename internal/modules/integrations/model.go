@@ -13,15 +13,16 @@ type ServiceConnection struct {
 	ConfigSchemaVersion uint64          `db:"config_schema_version" json:"-"`
 	ID                  uint64          `db:"id" json:"id,string"`
 	Type                string          `db:"service_type" json:"service_type"`
+	Ownership           string          `db:"ownership_type" json:"ownership_type"`
+	ProjectID           *uint64         `db:"project_id" json:"project_id,string"`
 	Code                string          `db:"code" json:"code"`
 	Name                string          `db:"name" json:"name"`
 	Description         string          `db:"description" json:"description"`
 	Enabled             bool            `db:"enabled" json:"enabled"`
-	FallbackID          *uint64         `db:"fallback_credential_id" json:"-"`
 	Version             uint64          `db:"row_version" json:"-"`
 	ConfigVersion       uint64          `db:"config_version" json:"-"`
 	CredentialsVersion  uint64          `db:"credentials_version" json:"-"`
-	FallbackVersion     uint64          `db:"fallback_version" json:"-"`
+	GrantsVersion       uint64          `db:"grants_version" json:"-"`
 	Creator             uint64          `db:"created_by_user_id" json:"-"`
 	CreatedAt           time.Time       `db:"created_at" json:"created_at"`
 	UpdatedAt           time.Time       `db:"updated_at" json:"updated_at"`
@@ -66,8 +67,25 @@ type ServiceCredential struct {
 	EditVersion       string          `db:"-" json:"version"`
 }
 type CredentialOwnership struct {
-	Type  string
-	Owner uint64
+	Type  string `db:"kind"`
+	Owner uint64 `db:"owner_id"`
+}
+
+type ConnectionGrant struct {
+	ConnectionID uint64    `db:"connection_id" json:"connection_id,string"`
+	SubjectKind  string    `db:"subject_kind" json:"subject_kind"`
+	SubjectID    uint64    `db:"subject_id" json:"subject_id,string"`
+	SubjectName  string    `db:"subject_name" json:"subject_name"`
+	Enabled      bool      `db:"enabled" json:"enabled"`
+	Version      uint64    `db:"row_version" json:"-"`
+	Creator      uint64    `db:"created_by_user_id" json:"created_by_user_id,string"`
+	Updater      uint64    `db:"updated_by_user_id" json:"updated_by_user_id,string"`
+	CreatedAt    time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at" json:"updated_at"`
+}
+
+func (v *ServiceConnection) ValidOwnership() bool {
+	return v.Ownership == "platform" && v.ProjectID == nil || v.Ownership == "project" && v.ProjectID != nil && *v.ProjectID != 0
 }
 
 // WebhookSettings is a singleton value owned by a service connection, not an entity.
@@ -108,8 +126,8 @@ func (s *Service) collectionTag(v *ServiceConnection, owner CredentialOwnership)
 func (s *Service) preferredTag(v *ServiceConnection, owner CredentialOwnership) string {
 	return s.tag("preferred", v.ID, "/", owner.Type, "/", owner.Owner, "/", v.CredentialsVersion)
 }
-func (s *Service) fallbackTag(v *ServiceConnection) string {
-	return s.tag("fallback", v.ID, "/", v.FallbackVersion)
+func (s *Service) grantsTag(v *ServiceConnection) string {
+	return s.tag("grants", v.ID, "/", v.GrantsVersion)
 }
 
 type Repository interface {
@@ -118,6 +136,11 @@ type Repository interface {
 	InsertConnection(*ServiceConnection) error
 	SaveConnection(*ServiceConnection) error
 	DeleteConnection(uint64) error
+	ConnectionGrants(uint64) ([]ConnectionGrant, error)
+	SaveConnectionGrant(*ConnectionGrant) error
+	ConnectionGranted(uint64, CredentialOwnership, bool) (bool, error)
+	ConnectionUserScopes(uint64) ([]CredentialOwnership, error)
+	ConnectionJobReferences(uint64, uint64) (int, error)
 	Credentials(uint64, CredentialOwnership) ([]ServiceCredential, error)
 	Credential(uint64) (*ServiceCredential, error)
 	InsertCredential(*ServiceCredential) error
@@ -141,7 +164,7 @@ func (c *ServiceCredential) ValidRecord() bool {
 		return false
 	}
 	switch c.Ownership {
-	case "system":
+	case "platform":
 		return c.ProjectID == nil && c.UserID == nil
 	case "project":
 		return c.UserID == nil && c.ProjectID != nil && *c.ProjectID != 0

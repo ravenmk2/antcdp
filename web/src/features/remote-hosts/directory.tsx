@@ -56,13 +56,13 @@ import {
 import { HostDescription } from "@/features/remote-hosts/host-description";
 
 export type RemoteHostContext =
-  { kind: "system" } | { kind: "account" } | { kind: "project" };
+  { kind: "platform" } | { kind: "account" } | { kind: "project" };
 export function useHostDirectory(context: RemoteHostContext) {
   const { hostId, projectId: routeProjectId } = useParams();
   const projectId = context.kind === "project" ? routeProjectId : undefined;
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const admin = context.kind === "system";
+  const admin = context.kind === "platform";
   const directory = useApiQuery<{ items: ServiceConnection[] }>(
     ["remote-host-directory"],
     "/remote-hosts",
@@ -378,7 +378,7 @@ export function HostDetail({
             label: (
               <span className="inline-flex items-center gap-2">
                 <KeyRound className="size-4" aria-hidden />
-                {admin ? "系统凭证" : "访问凭证"}
+                {admin ? "平台凭证" : "访问凭证"}
               </span>
             ),
           },

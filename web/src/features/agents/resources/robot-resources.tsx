@@ -225,9 +225,12 @@ function RobotCredentials({
 }) {
   const [kind, setKind] = useState<"services" | "hosts">("services"),
     [selected, setSelected] = useState<string>("");
-  const path = kind === "services" ? "/service-connections" : "/remote-hosts";
+  const path =
+    kind === "services"
+      ? `/admin/agents/${agentId}/service-connections`
+      : "/remote-hosts";
   const query = useApiQuery<{ items: ServiceConnection[] }>(
-    ["robot-credential-directory", kind],
+    ["robot-credential-directory", agentId, kind],
     path,
   );
   const item = query.data?.data.items.find((v) => v.id === selected);

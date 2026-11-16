@@ -12,7 +12,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-const connectionColumns = "id,service_type,code,name,description,enabled,fallback_credential_id,row_version,config_version,credentials_version,fallback_version,created_by_user_id,created_at,updated_at"
+const connectionColumns = "id,service_type,ownership_type,project_id,code,name,description,enabled,row_version,config_version,credentials_version,grants_version,created_by_user_id,created_at,updated_at"
 const secretProjection = "secret_ciphertext IS NOT NULL AS has_secret,COALESCE(((secret_ciphertext IS NULL AND secret_format_version IS NULL AND secret_key_version IS NULL) OR (secret_ciphertext IS NOT NULL AND secret_format_version=1 AND secret_key_version='v1')),FALSE) AS secret_valid"
 const credentialColumns = "id,connection_id,service_type,code,ownership_type,project_id,user_id,name,description,auth_method,auth_schema_version,identity_config,enabled,is_preferred," + secretProjection + ",expires_at,row_version,material_version,created_by_user_id,created_at,updated_at"
 
@@ -39,7 +39,7 @@ func (t *identityTx) InsertConnection(v *i.ServiceConnection) error {
 	}
 	v.CreatedAt = time.Now().UTC().Truncate(time.Millisecond)
 	v.UpdatedAt = v.CreatedAt
-	result, err := t.tx.NamedExecContext(t.ctx, "INSERT INTO service_connection(service_type,code,name,description,enabled,config,config_schema_version,created_by_user_id,created_at,updated_at) VALUES(:service_type,:code,:name,:description,:enabled,:config,:config_schema_version,:created_by_user_id,:created_at,:updated_at)", v)
+	result, err := t.tx.NamedExecContext(t.ctx, "INSERT INTO service_connection(service_type,ownership_type,project_id,code,name,description,enabled,config,config_schema_version,created_by_user_id,created_at,updated_at) VALUES(:service_type,:ownership_type,:project_id,:code,:name,:description,:enabled,:config,:config_schema_version,:created_by_user_id,:created_at,:updated_at)", v)
 	if err != nil {
 		return err
 	}
@@ -57,13 +57,16 @@ func (t *identityTx) SaveConnection(v *i.ServiceConnection) error {
 	if _, err := i.DecodeConnectionConfig(v.Type, v.ConfigSchemaVersion, v.ConfigJSON); err != nil {
 		return err
 	}
-	_, err := t.tx.NamedExecContext(t.ctx, "UPDATE service_connection SET updated_at=IF(row_version<>:row_version,UTC_TIMESTAMP(3),updated_at),name=:name,description=:description,enabled=:enabled,config=:config,config_schema_version=:config_schema_version,fallback_credential_id=:fallback_credential_id,row_version=:row_version,config_version=:config_version,credentials_version=:credentials_version,fallback_version=:fallback_version WHERE id=:id", v)
+	_, err := t.tx.NamedExecContext(t.ctx, "UPDATE service_connection SET updated_at=IF(row_version<>:row_version,UTC_TIMESTAMP(3),updated_at),name=:name,description=:description,enabled=:enabled,config=:config,config_schema_version=:config_schema_version,row_version=:row_version,config_version=:config_version,credentials_version=:credentials_version,grants_version=:grants_version WHERE id=:id", v)
 	if err != nil {
 		return err
 	}
 	return t.tx.GetContext(t.ctx, &v.UpdatedAt, "SELECT updated_at FROM service_connection WHERE id=?", v.ID)
 }
 func (t *identityTx) DeleteConnection(id uint64) error {
+	if _, err := t.tx.ExecContext(t.ctx, "DELETE FROM service_connection_grant WHERE connection_id=?", id); err != nil {
+		return err
+	}
 	if _, err := t.tx.ExecContext(t.ctx, "DELETE FROM service_connection_gitlab WHERE connection_id=?", id); err != nil {
 		return err
 	}

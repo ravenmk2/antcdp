@@ -13,7 +13,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	c "github.com/ravenmk2/antcdp/internal/modules/collaboration"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
@@ -226,7 +225,7 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 			return httpx.E(503, "SERVICE_UNAVAILABLE", "版本服务暂不可用")
 		}
 		switch owner.Type {
-		case "system":
+		case "platform":
 			if a.User.Role != "admin" {
 				return forbidden()
 			}
@@ -240,29 +239,18 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 			}
 			owner.Type, owner.Owner = "personal", robot.ID
 		case "project":
-			cr, ok := tx.(c.Repository)
-			if !ok {
-				return forbidden()
-			}
-			if err = cr.LockCollaboration(c.Project, owner.Owner, 0); err != nil {
+			if err := authorizeSubject(tx, a, owner, true, write); err != nil {
 				return err
-			}
-			p, err := cr.Resource(c.Project, owner.Owner, a.User.ID)
-			if err != nil {
-				return err
-			}
-			if p == nil {
-				return fail()
-			}
-			if a.User.Role != "admin" && p.Role != "admin" {
-				return forbidden()
-			}
-			if write && p.EndedAt != nil {
-				return httpx.E(409, "PROJECT_ARCHIVED", "项目已归档")
 			}
 		case "directory":
 			if write {
 				return forbidden()
+			}
+			scope := routeScope(ctx)
+			if scope.Type != "platform" {
+				if err := authorizeSubject(tx, a, scope, false, false); err != nil {
+					return err
+				}
 			}
 		default:
 			return forbidden()
@@ -276,8 +264,34 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 			if v == nil || v.Type != s.serviceType() {
 				return fail()
 			}
-			if v.Version == 0 || v.ConfigVersion == 0 || v.CredentialsVersion == 0 || v.FallbackVersion == 0 {
+			if v.Version == 0 || v.ConfigVersion == 0 || v.CredentialsVersion == 0 || v.GrantsVersion == 0 || !v.ValidOwnership() {
 				return integrity()
+			}
+			var allowed bool
+			switch owner.Type {
+			case "platform":
+				allowed = v.Ownership == "platform"
+			case "project":
+				allowed, err = r.ConnectionGranted(v.ID, owner, write)
+			case "personal":
+				allowed, err = userConnectionAllowed(r, v, owner.Owner)
+			default:
+				return forbidden()
+			}
+			if err != nil {
+				return err
+			}
+			if !allowed {
+				return fail()
+			}
+			if write && owner.Type == "personal" && v.Ownership == "project" {
+				active, err := ConnectionAllowed(r, v, CredentialOwnership{Type: "project", Owner: *v.ProjectID})
+				if err != nil {
+					return err
+				}
+				if !active {
+					return httpx.E(409, "RESOURCE_READ_ONLY", "项目已结束，不能修改")
+				}
 			}
 			g, err := config(r, v)
 			if err != nil {
@@ -315,23 +329,70 @@ func selection(id *uint64, tag string) Result {
 	}
 	return Result{Data: map[string]any{"credential_id": value, "version": unquote(tag)}, Tag: tag}
 }
-func (s *Service) List(ctx context.Context, raw string, admin bool) (Result, *identity.Auth, error) {
-	out := Result{}
-	owner := CredentialOwnership{Type: "directory"}
-	if admin {
-		owner.Type = "system"
+
+func connectionSummary(v *ServiceConnection) map[string]any {
+	var project any
+	if v.ProjectID != nil {
+		project = fmt.Sprint(*v.ProjectID)
 	}
-	a, err := s.access(ctx, raw, owner, 0, false, func(_ identity.Tx, r Repository, _ *identity.Auth, _ *ServiceConnection, _ CredentialOwnership) error {
+	return map[string]any{"id": fmt.Sprint(v.ID), "code": v.Code, "service_type": v.Type, "ownership_type": v.Ownership, "project_id": project, "name": v.Name, "description": v.Description, "enabled": v.Enabled}
+}
+
+func (s *Service) RobotConnections(ctx context.Context, raw string, agent uint64) (Result, *identity.Auth, error) {
+	var out Result
+	a, err := s.access(ctx, raw, CredentialOwnership{Type: "robot", Owner: agent}, 0, false, func(_ identity.Tx, r Repository, _ *identity.Auth, _ *ServiceConnection, owner CredentialOwnership) error {
 		rows, err := r.Connections()
 		if err != nil {
 			return err
 		}
 		items := []map[string]any{}
 		for _, v := range rows {
-			if admin && v.Type != s.serviceType() {
+			allowed, err := userConnectionAllowed(r, &v, owner.Owner)
+			if err != nil {
+				return err
+			}
+			if allowed {
+				items = append(items, connectionSummary(&v))
+			}
+		}
+		out.Data = map[string]any{"items": items}
+		return nil
+	})
+	return out, a, err
+}
+
+func (s *Service) List(ctx context.Context, raw string, admin bool) (Result, *identity.Auth, error) {
+	var out Result
+	owner := CredentialOwnership{Type: "directory"}
+	if admin {
+		owner = routeScope(ctx)
+	}
+	a, err := s.access(ctx, raw, owner, 0, false, func(_ identity.Tx, r Repository, a *identity.Auth, _ *ServiceConnection, _ CredentialOwnership) error {
+		rows, err := r.Connections()
+		if err != nil {
+			return err
+		}
+		items := []map[string]any{}
+		for _, v := range rows {
+			if s.Type != "" && v.Type != s.serviceType() {
 				continue
 			}
-			items = append(items, map[string]any{"id": fmt.Sprint(v.ID), "code": v.Code, "service_type": v.Type, "name": v.Name, "description": v.Description, "enabled": v.Enabled})
+			var allowed bool
+			scope := routeScope(ctx)
+			if admin {
+				allowed = managedConnection(&v, scope)
+			} else if scope.Type != "platform" {
+				allowed, err = r.ConnectionGranted(v.ID, scope, false)
+			} else {
+				allowed, err = userConnectionAllowed(r, &v, a.User.ID)
+			}
+			if err != nil {
+				return err
+			}
+			if !allowed {
+				continue
+			}
+			items = append(items, connectionSummary(&v))
 		}
 		out.Data = map[string]any{"items": items}
 		return nil
@@ -340,7 +401,10 @@ func (s *Service) List(ctx context.Context, raw string, admin bool) (Result, *id
 }
 func (s *Service) Create(ctx context.Context, raw string, w ConnectionCreate, meta identity.Metadata) (Result, *identity.Auth, error) {
 	out := Result{}
-	a, err := s.access(ctx, raw, CredentialOwnership{Type: "system"}, 0, true, func(tx identity.Tx, r Repository, a *identity.Auth, _ *ServiceConnection, _ CredentialOwnership) error {
+	a, err := s.access(ctx, raw, routeScope(ctx), 0, true, func(tx identity.Tx, r Repository, a *identity.Auth, _ *ServiceConnection, owner CredentialOwnership) error {
+		if owner.Type != "platform" && owner.Type != "project" {
+			return forbidden()
+		}
 		if w.Config == nil {
 			return httpx.Invalid("config", "required")
 		}
@@ -348,7 +412,10 @@ func (s *Service) Create(ctx context.Context, raw string, w ConnectionCreate, me
 		if err != nil {
 			return err
 		}
-		v := &ServiceConnection{Type: s.serviceType(), ConfigSchemaVersion: 1, Code: code, Enabled: true, Version: 1, ConfigVersion: 1, CredentialsVersion: 1, FallbackVersion: 1, Creator: a.User.ID}
+		v := &ServiceConnection{Type: s.serviceType(), ConfigSchemaVersion: 1, Code: code, Enabled: true, Version: 1, ConfigVersion: 1, CredentialsVersion: 1, GrantsVersion: 1, Ownership: owner.Type, Creator: a.User.ID}
+		if owner.Type == "project" {
+			v.ProjectID = &owner.Owner
+		}
 		v.Name = strings.TrimSpace(w.Name)
 		if err = applyCommon(CommonWrite{Description: w.Description, Enabled: w.Enabled}, &v.Name, &v.Description, &v.Enabled); err != nil {
 			return err
@@ -386,14 +453,17 @@ func (s *Service) Create(ctx context.Context, raw string, w ConnectionCreate, me
 			return err
 		}
 		out = s.connectionResult(v)
-		out.Location = fmt.Sprintf("/api/v1/admin/service-connections/%s/%d", v.Type, v.ID)
+		out.Location = fmt.Sprintf("/api/v1%s/%d", connectionPath(owner, v.Type), v.ID)
 		return audit(tx, a, "service_connection", v.ID, v.Name, "created", map[string]any{}, meta)
 	})
 	return out, a, err
 }
 func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag string, input any, meta identity.Metadata) (Result, *identity.Auth, error) {
 	out := Result{}
-	a, err := s.access(ctx, raw, CredentialOwnership{Type: "system"}, id, op != "get" && op != "fallback" && op != "diagnostics", func(tx identity.Tx, r Repository, a *identity.Auth, v *ServiceConnection, _ CredentialOwnership) error {
+	a, err := s.access(ctx, raw, routeScope(ctx), id, op != "get" && op != "diagnostics", func(tx identity.Tx, r Repository, a *identity.Auth, v *ServiceConnection, _ CredentialOwnership) error {
+		if !managedConnection(v, routeScope(ctx)) {
+			return forbidden()
+		}
 		out = s.connectionResult(v)
 		switch op {
 		case "get":
@@ -512,57 +582,28 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 			if n != 0 {
 				return httpx.E(409, "CONNECTION_NOT_EMPTY", "请先移除该连接的全部凭证")
 			}
+			refs, err := r.ConnectionJobReferences(id, 0)
+			if err != nil {
+				return err
+			}
+			if refs > 0 {
+				return httpx.E(409, "CONNECTION_REFERENCED", "请先撤销作业资源授权")
+			}
+			grants, err := r.ConnectionGrants(id)
+			if err != nil {
+				return err
+			}
+			for _, grant := range grants {
+				if grant.Enabled {
+					return httpx.E(409, "CONNECTION_REFERENCED", "请先撤销连接授权")
+				}
+			}
 			if err = r.DeleteConnection(id); err != nil {
 				return err
 			}
 			out = Result{}
 			return audit(tx, a, "service_connection", v.ID, v.Name, "deleted", map[string]any{}, meta)
-		case "fallback", "set_fallback", "clear_fallback":
-			// A broken reference is an integrity error, never an implicit absence/fallback.
-			if v.FallbackID != nil {
-				cr, err := r.Credential(*v.FallbackID)
-				if err != nil {
-					return err
-				}
-				if !owned(cr, v, CredentialOwnership{Type: "system"}) {
-					return integrity()
-				}
-			}
-			if op != "fallback" {
-				if err := check(tag, s.fallbackTag(v)); err != nil {
-					return err
-				}
-				var target *uint64
-				if op == "set_fallback" {
-					cid, err := c.ID(input.(SelectionWrite).CredentialID)
-					if err != nil {
-						return err
-					}
-					cr, err := r.Credential(cid)
-					if err != nil {
-						return err
-					}
-					if !owned(cr, v, CredentialOwnership{Type: "system"}) {
-						return fail()
-					}
-					if !cr.Usable() {
-						return unavailable()
-					}
-					target = &cid
-				}
-				if !sameID(v.FallbackID, target) {
-					v.FallbackID = target
-					v.FallbackVersion++
-					if err := r.SaveConnection(v); err != nil {
-						return err
-					}
-					if err := audit(tx, a, "service_connection", id, v.Name, "fallback_changed", map[string]any{}, meta); err != nil {
-						return err
-					}
-				}
-			}
-			out = selection(v.FallbackID, s.fallbackTag(v))
-			return nil
+
 		}
 		return fail()
 	})
@@ -577,7 +618,7 @@ func owned(cr *ServiceCredential, v *ServiceConnection, o CredentialOwnership) b
 		return false
 	}
 	switch o.Type {
-	case "system":
+	case "platform":
 		return cr.UserID == nil && cr.ProjectID == nil
 	case "personal":
 		return cr.ProjectID == nil && cr.UserID != nil && *cr.UserID == o.Owner

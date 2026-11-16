@@ -26,7 +26,7 @@ export function RemoteHostsPage({
     selected,
     creating,
     closeCreate,
-  } = useHostDirectory({ kind: projectScope ? "project" : "system" });
+  } = useHostDirectory({ kind: projectScope ? "project" : "platform" });
   if (hostId && selected)
     return (
       <div className="page">

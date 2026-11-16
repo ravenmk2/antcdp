@@ -19,21 +19,25 @@ import {
 } from "react-router";
 
 export type IntegrationContext =
-  { kind: "system" } | { kind: "account" } | { kind: "project" };
+  { kind: "platform" } | { kind: "account" } | { kind: "project" };
 export function useIntegrationDirectory(context: IntegrationContext) {
   const { connectionId, projectId: routeProjectId } = useParams();
   const projectId = context.kind === "project" ? routeProjectId : undefined;
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const admin = context.kind === "system";
+  const admin = context.kind === "platform";
   const types = useApiQuery<{ items: ServiceType[] }>(
     ["service-types"],
     "/service-types",
   );
   const directory = useApiQuery<{ items: ServiceConnection[] }>(
-    ["service-directory"],
-    "/service-connections",
+    ["service-directory", context.kind, projectId],
+    admin
+      ? "/admin/service-connections"
+      : projectId
+        ? `/projects/${projectId}/service-connections`
+        : "/service-connections",
   );
   const project = useApiQuery<Resource>(
     ["project", projectId],
@@ -43,13 +47,17 @@ export function useIntegrationDirectory(context: IntegrationContext) {
   const summary = directory.data?.data.items.find(
     (item) => item.id === connectionId,
   );
+  const canCreate = admin || Boolean(project.data?.data.can_manage);
+  const listPath = connectionId
+    ? location.pathname.slice(0, -(connectionId.length + 1))
+    : location.pathname;
   const creating =
-    admin && (params.get("create") === "1" || connectionId === "new");
+    canCreate && (params.get("create") === "1" || connectionId === "new");
   function closeCreate() {
     const next = new URLSearchParams(params);
     next.delete("create");
     navigate(
-      { pathname: "/admin/integrations", search: next.toString() },
+      { pathname: listPath, search: next.toString() },
       { replace: true },
     );
   }
@@ -66,6 +74,8 @@ export function useIntegrationDirectory(context: IntegrationContext) {
     project,
     summary,
     creating,
+    canCreate,
+    listPath,
     closeCreate,
   };
 }
@@ -173,13 +183,13 @@ export function Directory({
         emptyDescription={
           q || type || status
             ? "请调整关键词、服务类型或状态筛选。"
-            : "服务连接由系统管理员添加，添加后可在此配置访问凭证。"
+            : "项目管理员可以创建项目连接，平台管理员可以授权共享连接。"
         }
       >
         <SimpleTable
           actions
           label="服务连接"
-          headers={["连接", "编码", "服务类型", "启停", "操作"]}
+          headers={["连接", "编码", "归属", "服务类型", "启停", "操作"]}
         >
           {filtered.map((item) => (
             <tr key={item.id}>
@@ -214,6 +224,7 @@ export function Directory({
                   />
                 </div>
               </td>
+              <td>{item.ownership_type === "project" ? "项目" : "平台"}</td>
               <td>
                 {providerFor(item.service_type)?.name ?? item.service_type}
               </td>

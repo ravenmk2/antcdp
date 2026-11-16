@@ -1,4 +1,5 @@
 import { ApiError, request, type RequestOptions } from "@/api/client";
+import { IntegrationsPage as ProjectIntegrationsPage } from "@/areas/workspace/pages/integrations";
 import { IntegrationsPage as SystemIntegrationsPage } from "@/areas/console/pages/integrations";
 import { NavigationGuardProvider } from "@/components/navigation-guard";
 import { serviceProviders } from "@/domain/service-providers";
@@ -28,6 +29,13 @@ beforeEach(() => {
   deferred = undefined;
   persistedCredential = undefined;
   mocked.mockImplementation(async (path, options: RequestOptions = {}) => {
+    if (path === "/projects/7")
+      return response({
+        id: "7",
+        name: "测试项目",
+        status: "active",
+        can_manage: true,
+      });
     if (path === "/service-types")
       return response({
         items: serviceProviders.map((p) => ({
@@ -40,7 +48,13 @@ beforeEach(() => {
           operations: [],
         })),
       });
-    if (path === "/service-connections")
+    if (
+      [
+        "/service-connections",
+        "/admin/service-connections",
+        "/projects/7/service-connections",
+      ].includes(path)
+    )
       return response({ items: [...connections] });
     if (path.endsWith("/credentials")) {
       if (options.method === "POST") {
@@ -52,7 +66,10 @@ beforeEach(() => {
       });
     }
     if (
-      path === "/admin/service-connections/gitlab" &&
+      [
+        "/admin/service-connections/gitlab",
+        "/projects/7/service-connections/gitlab",
+      ].includes(path) &&
       options.method === "POST"
     ) {
       await deferred;
@@ -60,6 +77,8 @@ beforeEach(() => {
       const connection = {
         ...(options.body as object),
         service_type: "gitlab",
+        ownership_type: path.startsWith("/projects/") ? "project" : "platform",
+        project_id: path.startsWith("/projects/") ? "7" : null,
         id: "1",
       } as ServiceConnection;
       connections.push(connection);
@@ -80,6 +99,10 @@ function setup(entry = "/admin/integrations?create=1&q=kept") {
           </NavigationGuardProvider>
         ),
         children: [
+          {
+            path: "/projects/:projectId/integrations/:connectionId?",
+            element: <ProjectIntegrationsPage />,
+          },
           {
             path: "/admin/integrations/:connectionId?",
             element: <SystemIntegrationsPage />,
@@ -123,12 +146,12 @@ async function fill(
   if (advance) {
     await user.click(screen.getByRole("button", { name: "下一步" }));
     await screen.findByRole("checkbox", {
-      name: "同时添加系统凭证（可选）",
+      name: "同时添加访问凭证（可选）",
     });
   }
   if (credential)
     await user.click(
-      screen.getByRole("checkbox", { name: "同时添加系统凭证（可选）" }),
+      screen.getByRole("checkbox", { name: "同时添加访问凭证（可选）" }),
     );
 }
 const writes = (suffix: string) =>
@@ -159,7 +182,7 @@ it("validates the optional credential before creating the connection and focuses
     screen.queryByRole("button", { name: "上一步" }),
   ).not.toBeInTheDocument();
   credentialFailure = undefined;
-  await user.click(screen.getByRole("button", { name: "创建系统凭证" }));
+  await user.click(screen.getByRole("button", { name: "创建访问凭证" }));
   await waitFor(() =>
     expect(
       screen.queryByRole("dialog", { name: "添加服务连接" }),
@@ -205,6 +228,8 @@ it("keeps an absent uncertain result locked, then reconciles a persisted connect
   connections.push({
     ...(writes("/gitlab")[0][1]?.body as object),
     service_type: "gitlab",
+    ownership_type: "platform",
+    project_id: null,
     id: "1",
   } as ServiceConnection);
   await user.click(screen.getByRole("button", { name: "核实创建结果" }));
@@ -267,12 +292,12 @@ it("keeps connection and credential fields in separate steps with visible codes 
   const { user } = setup();
   await fill(user, false, false);
   expect(screen.getByLabelText(/^连接编码/)).toBeVisible();
-  expect(screen.getByLabelText("同时添加系统凭证（可选）")).not.toBeVisible();
+  expect(screen.getByLabelText("同时添加访问凭证（可选）")).not.toBeVisible();
   await user.type(screen.getByLabelText(/^连接编码/), "test-integration");
   await user.click(screen.getByRole("button", { name: "下一步" }));
   expect(writes("/gitlab")).toHaveLength(0);
   expect(screen.getByLabelText(/^连接名称/)).not.toBeVisible();
-  await user.click(screen.getByLabelText("同时添加系统凭证（可选）"));
+  await user.click(screen.getByLabelText("同时添加访问凭证（可选）"));
   expect(screen.getByLabelText(/^凭证编码/)).toBeVisible();
   await user.type(screen.getByLabelText(/^凭证编码/), "test-credential");
   await user.click(screen.getByRole("button", { name: "上一步" }));
@@ -294,7 +319,7 @@ it("returns a connection error from final submission to the second step and focu
   await waitFor(() => expect(screen.getByLabelText(/^连接编码/)).toHaveFocus());
   expect(screen.getByLabelText(/^连接名称/)).toBeVisible();
   expect(screen.getByRole("button", { name: "下一步" })).toBeVisible();
-  expect(screen.getByLabelText("同时添加系统凭证（可选）")).not.toBeVisible();
+  expect(screen.getByLabelText("同时添加访问凭证（可选）")).not.toBeVisible();
 });
 
 it("does not let a pending step-focus callback overwrite active input", async () => {
@@ -312,4 +337,36 @@ it("does not let a pending step-focus callback overwrite active input", async ()
   for (const callback of frames.splice(0)) callback(0);
   await user.keyboard("成测试");
   expect(name).toHaveValue("集成测试");
+});
+
+it("creates a project connection when a shared platform connection already has the same code", async () => {
+  connections = [
+    {
+      id: "shared",
+      name: "共享 GitLab",
+      code: "same-code",
+      ownership_type: "platform",
+      project_id: null,
+      service_type: "gitlab",
+      enabled: true,
+      description: "",
+    },
+  ];
+  const { user, router } = setup("/projects/7/integrations?create=1");
+  await fill(user, false);
+  // Back to connection fields to specify a scoped code.
+  await user.click(screen.getByRole("button", { name: "上一步" }));
+  await user.type(screen.getByLabelText(/^连接编码/), "same-code");
+  await user.click(screen.getByRole("button", { name: "下一步" }));
+  await user.click(screen.getByRole("button", { name: "创建连接" }));
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe("/projects/7/integrations/1"),
+  );
+  expect(
+    mocked.mock.calls.some(
+      ([path, options]) =>
+        path === "/projects/7/service-connections/gitlab" &&
+        options?.method === "POST",
+    ),
+  ).toBe(true);
 });

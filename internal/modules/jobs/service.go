@@ -163,6 +163,13 @@ func (s *Service) configure(tx identity.Tx, r Repository, j *Job, actor uint64, 
 		if conn == nil {
 			return nil, httpx.Invalid("bindings", "missing_connection")
 		}
+		allowed, err := integrations.ConnectionAllowed(ir, conn, integrations.CredentialOwnership{Type: "project", Owner: j.ProjectID})
+		if err != nil {
+			return nil, err
+		}
+		if !allowed || !conn.Enabled {
+			return nil, httpx.Invalid("bindings", "connection_unavailable")
+		}
 		b.ConnectionID = conn.ID
 		b.ConnectionCode = conn.Code
 	}
@@ -567,6 +574,13 @@ func (s *Service) Resource(ctx context.Context, raw string, project, job, id, co
 			}
 			if conn == nil || cred == nil || cred.ConnectionID != connection || cred.Ownership != "project" || cred.ProjectID == nil || *cred.ProjectID != project {
 				return httpx.Invalid("credential_id", "not_project_credential")
+			}
+			allowed, err := integrations.ConnectionAllowed(ir, conn, integrations.CredentialOwnership{Type: "project", Owner: project})
+			if err != nil {
+				return err
+			}
+			if !allowed || !conn.Enabled || !cred.Usable() {
+				return forbidden()
 			}
 			existing, err := r.Resources(job)
 			if err != nil {

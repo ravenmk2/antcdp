@@ -39,7 +39,20 @@ function draftCode() {
 const validCode = (value: string) =>
   !value.trim() || /^[a-z0-9][a-z0-9_-]{0,63}$/.test(value.trim());
 
-export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
+export function ConnectionCreateDrawer({
+  onClose,
+  projectId,
+  listPath = "/admin/integrations",
+}: {
+  onClose: () => void;
+  projectId?: string;
+  listPath?: string;
+}) {
+  const apiPrefix = projectId ? `/projects/${projectId}` : "/admin";
+  const owns = (item: ServiceConnection) =>
+    projectId
+      ? item.ownership_type === "project" && item.project_id === projectId
+      : item.ownership_type === "platform";
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const queryClient = useQueryClient();
@@ -153,7 +166,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
     next.delete("create");
     navigate(
       {
-        pathname: `/admin/integrations/${connection.id}`,
+        pathname: `${listPath}/${connection.id}`,
         search: next.toString(),
       },
       { state: { connectionCreated: true } },
@@ -244,14 +257,16 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
           let connection = created;
           if (!connection) {
             const before = await request<{ items: ServiceConnection[] }>(
-              "/service-connections",
+              `${apiPrefix}/service-connections`,
             );
             excludedConnections.current = new Set(
               before.data.items.map((item) => item.id),
             );
             if (
               before.data.items.some(
-                (item) => item.code === (form.code.trim() || codes.connection),
+                (item) =>
+                  owns(item) &&
+                  item.code === (form.code.trim() || codes.connection),
               )
             ) {
               throw new ApiError(
@@ -262,7 +277,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
             }
             connection = (
               await request<ServiceConnection>(
-                `/admin/service-connections/${type}`,
+                `${apiPrefix}/service-connections/${type}`,
                 {
                   method: "POST",
                   body: {
@@ -281,7 +296,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
           }
           if (credentialEnabled && method) {
             stage = "credential";
-            const base = `/admin/service-connections/${type}/${connection.id}/credentials`;
+            const base = `${apiPrefix}/service-connections/${type}/${connection.id}/credentials`;
             const collection = await request<{ items: Credential[] }>(base);
             excludedCredentials.current = new Set(
               collection.data.items.map((item) => item.id),
@@ -376,11 +391,12 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
     try {
       if (uncertain === "connection") {
         const directory = await request<{ items: ServiceConnection[] }>(
-          "/service-connections",
+          `${apiPrefix}/service-connections`,
         );
         const found = directory.data.items.find(
           (item) =>
             item.service_type === type &&
+            owns(item) &&
             item.code === (form.code.trim() || codes.connection),
         );
         if (!found || excludedConnections.current.has(found.id)) {
@@ -399,7 +415,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
         void queryClient.invalidateQueries({ queryKey: ["service-directory"] });
       } else if (created) {
         const collection = await request<{ items: Credential[] }>(
-          `/admin/service-connections/${type}/${created.id}/credentials`,
+          `${apiPrefix}/service-connections/${type}/${created.id}/credentials`,
         );
         const found = collection.data.items.find(
           (item) => item.code === (credential.code.trim() || codes.credential),
@@ -437,7 +453,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
         description={
           created
             ? "连接已保留，关闭不会删除已创建的连接。"
-            : "配置服务地址，可同时添加系统凭证；创建后再进行验证。"
+            : "配置服务地址，可同时添加访问凭证；创建后再进行验证。"
         }
         dirty={dirty || Boolean(uncertain)}
         pending={busy}
@@ -488,7 +504,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
                 {step < 2
                   ? "下一步"
                   : created
-                    ? "创建系统凭证"
+                    ? "创建访问凭证"
                     : credentialEnabled
                       ? "创建连接和凭证"
                       : "创建连接"}
@@ -498,7 +514,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
         }
       >
         <WizardSteps
-          steps={["选择类型", "连接信息", "系统凭证"]}
+          steps={["选择类型", "连接信息", "访问凭证"]}
           current={step}
         />
         <h3
@@ -510,7 +526,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
             ? "选择要连接的服务"
             : step === 1
               ? `${provider?.name} 连接信息`
-              : "系统凭证（可选）"}
+              : "访问凭证（可选）"}
         </h3>
         <form
           id="connection-create-form"
@@ -561,7 +577,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
                 setChecking(true);
                 setCheckError(null);
                 void request(
-                  `/admin/service-connections/${type}/${created.id}/credentials`,
+                  `${apiPrefix}/service-connections/${type}/${created.id}/credentials`,
                 )
                   .then((result) => {
                     if (!result.etag)
@@ -585,7 +601,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
               {uncertain === "credential"
                 ? "凭证结果待核实。"
                 : credentialEnabled
-                  ? "系统凭证尚未完成，可继续创建或进入详情。"
+                  ? "访问凭证尚未完成，可继续创建或进入详情。"
                   : "可进入详情查看配置。"}
               关闭后连接仍会保留。
             </Notice>
@@ -671,7 +687,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
                   </Field>
                   <Field
                     label="连接编码（可选）"
-                    hint="留空自动生成，创建后不可修改。"
+                    hint="在当前归属范围内唯一；留空自动生成，创建后不可修改。"
                     error={errors.fields.code}
                   >
                     <Input
@@ -829,7 +845,7 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
                   </label>
                 </fieldset>
                 {step === 2 && (!capability?.credentials || !method) && (
-                  <Notice>此服务无需添加系统凭证，可以直接创建连接。</Notice>
+                  <Notice>此服务无需添加访问凭证，可以直接创建连接。</Notice>
                 )}
                 {capability?.credentials && method && (
                   <fieldset
@@ -848,11 +864,11 @@ export function ConnectionCreateDrawer({ onClose }: { onClose: () => void }) {
                           submission.setError(null);
                         }}
                       />
-                      同时添加系统凭证（可选）
+                      同时添加访问凭证（可选）
                     </label>
                     <p className="text-xs leading-5 text-muted">
-                      也可创建连接后添加。不会自动设为首选或兜底；访问凭证与
-                      Webhook 秘密独立。
+                      也可创建连接后添加。首选凭证需单独设置；访问凭证与 Webhook
+                      秘密独立。
                     </p>
                     {withCredential && (
                       <>

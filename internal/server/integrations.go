@@ -101,55 +101,37 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 		r, a, err := s.List(c.Request.Context(), rawSession(c), false)
 		finish(c, r, a, err, 200)
 	})
-	for _, kind := range []string{"gitlab", "jenkins", "openobserve", "elasticsearch", "mysql", "postgresql"} {
-		s := s.ForType(kind)
-		base := "/admin/service-connections/" + kind
-		api.GET(base, func(c *gin.Context) {
+	api.GET("/admin/agents/:agent_id/service-connections", func(c *gin.Context) {
+		if !noQuery(c) {
+			return
+		}
+		id, ok := collaborationID(c, "agent_id")
+		if !ok {
+			return
+		}
+		r, a, err := s.RobotConnections(c.Request.Context(), rawSession(c), id)
+		finish(c, r, a, err, 200)
+	})
+	for _, route := range []struct{ path, kind string }{{"/admin/service-connections", "platform"}, {"/projects/:id/service-connections", "project"}, {"/teams/:id/service-connections", "team"}} {
+		api.GET(route.path, func(c *gin.Context) {
 			if !noQuery(c) {
 				return
 			}
-			r, a, err := s.List(c.Request.Context(), rawSession(c), true)
+			ctx := c.Request.Context()
+			if route.kind != "platform" {
+				id, ok := collaborationID(c, "id")
+				if !ok {
+					return
+				}
+				ctx = i.WithScope(ctx, route.kind, id)
+			}
+			r, a, err := s.List(ctx, rawSession(c), route.kind == "platform")
 			finish(c, r, a, err, 200)
 		})
-		api.POST(base, func(c *gin.Context) {
-			var w i.ConnectionCreate
-			if !httpx.Decode(c, &w) {
-				return
-			}
-			r, a, err := s.Create(c.Request.Context(), rawSession(c), w, metadata(c))
-			finish(c, r, a, err, 201)
-		})
-		for _, route := range []struct{ method, path, op string }{
-			{"GET", "", "get"}, {"PATCH", "", "update"}, {"DELETE", "", "delete"},
-			{"GET", "/fallback-credential", "fallback"}, {"PUT", "/fallback-credential", "set_fallback"}, {"DELETE", "/fallback-credential", "clear_fallback"}, {"GET", "/diagnostics", "diagnostics"},
-		} {
-			api.Handle(route.method, base+"/:connection_id"+route.path, func(c *gin.Context) {
-				if !noQuery(c) {
-					return
-				}
-				id, ok := collaborationID(c, "connection_id")
-				if !ok {
-					return
-				}
-				var input any
-				switch route.op {
-				case "update":
-					input = &i.ConnectionWrite{}
-				case "set_fallback":
-					input = &i.SelectionWrite{}
-				}
-				input, ok = integrationInput(c, input)
-				if !ok {
-					return
-				}
-				r, a, err := s.Admin(c.Request.Context(), rawSession(c), id, route.op, c.GetHeader("If-Match"), input, metadata(c))
-				status := 200
-				if route.method == "DELETE" {
-					status = 204
-				}
-				finish(c, r, a, err, status)
-			})
-		}
+	}
+	for _, kind := range []string{"gitlab", "jenkins", "openobserve", "elasticsearch", "mysql", "postgresql"} {
+		s := s.ForType(kind)
+		base := "/admin/service-connections/" + kind
 		verifyLimiter := newLimiter(20, time.Minute)
 		allowVerify := func(c *gin.Context) bool {
 			if !verifyLimiter.Allow(c.ClientIP()) {
@@ -159,7 +141,105 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 			}
 			return true
 		}
-		api.POST(base+"/:connection_id/test", func(c *gin.Context) {
+		for _, prefix := range []string{base, "/projects/:id/service-connections/" + kind} {
+			routes := api.Group(prefix, integrationScopeMiddleware)
+			routes.GET("", func(c *gin.Context) {
+				if !noQuery(c) {
+					return
+				}
+				r, a, err := s.List(c.Request.Context(), rawSession(c), true)
+				finish(c, r, a, err, 200)
+			})
+			routes.POST("", func(c *gin.Context) {
+				var w i.ConnectionCreate
+				if !httpx.Decode(c, &w) {
+					return
+				}
+				r, a, err := s.Create(c.Request.Context(), rawSession(c), w, metadata(c))
+				finish(c, r, a, err, 201)
+			})
+			for _, route := range []struct{ method, path, op string }{
+				{"GET", "", "get"}, {"PATCH", "", "update"}, {"DELETE", "", "delete"},
+				{"GET", "/diagnostics", "diagnostics"},
+			} {
+				routes.Handle(route.method, "/:connection_id"+route.path, func(c *gin.Context) {
+					if !noQuery(c) {
+						return
+					}
+					id, ok := collaborationID(c, "connection_id")
+					if !ok {
+						return
+					}
+					var input any
+					switch route.op {
+					case "update":
+						input = &i.ConnectionWrite{}
+					}
+					input, ok = integrationInput(c, input)
+					if !ok {
+						return
+					}
+					r, a, err := s.Admin(c.Request.Context(), rawSession(c), id, route.op, c.GetHeader("If-Match"), input, metadata(c))
+					status := 200
+					if route.method == "DELETE" {
+						status = 204
+					}
+					finish(c, r, a, err, status)
+				})
+			}
+			routes.POST("/:connection_id/test", func(c *gin.Context) {
+				if !noQuery(c) {
+					return
+				}
+				id, ok := collaborationID(c, "connection_id")
+				if !ok {
+					return
+				}
+				if _, ok = integrationInput(c, &struct{}{}); !ok {
+					return
+				}
+				if !allowVerify(c) {
+					return
+				}
+				r, a, err := s.Verify(c.Request.Context(), rawSession(c), id, 0, integrationScope(c), c.GetHeader("If-Match"))
+				finish(c, r, a, err, 200)
+			})
+
+			if kind == "gitlab" {
+				webhook := "/:connection_id/webhook"
+				for _, route := range []struct{ method, path, op string }{
+					{"GET", "", "get"}, {"PATCH", "", "update"},
+					{"PUT", "/verification", "verification"}, {"POST", "/verification/generate", "generate"}, {"GET", "/receiver", "receiver"}, {"GET", "/diagnostics", "diagnostics"},
+				} {
+					routes.Handle(route.method, webhook+route.path, func(c *gin.Context) {
+						if !noQuery(c) {
+							return
+						}
+						id, ok := collaborationID(c, "connection_id")
+						if !ok {
+							return
+						}
+						var input any
+						switch route.op {
+						case "update":
+							input = &i.WebhookWrite{}
+						case "verification":
+							input = &i.VerificationWrite{}
+						case "generate":
+							input = &struct{}{}
+						}
+						input, ok = integrationInput(c, input)
+						if !ok {
+							return
+						}
+						r, a, err := s.Webhook(c.Request.Context(), rawSession(c), id, route.op, c.GetHeader("If-Match"), input, metadata(c))
+						finish(c, r, a, err, 200)
+					})
+				}
+			}
+
+		}
+		api.GET(base+"/:connection_id/grants", func(c *gin.Context) {
 			if !noQuery(c) {
 				return
 			}
@@ -167,16 +247,33 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 			if !ok {
 				return
 			}
-			if _, ok = integrationInput(c, &struct{}{}); !ok {
-				return
-			}
-			if !allowVerify(c) {
-				return
-			}
-			r, a, err := s.Verify(c.Request.Context(), rawSession(c), id, 0, i.CredentialOwnership{Type: "system"}, c.GetHeader("If-Match"))
+			r, a, err := s.Grants(c.Request.Context(), rawSession(c), id, i.CredentialOwnership{}, "", nil, metadata(c))
 			finish(c, r, a, err, 200)
 		})
-		for _, group := range []struct{ path, ownership string }{{base, "system"}, {"/me/service-connections/" + kind, "personal"}, {"/projects/:id/service-connections/" + kind, "project"}, {"/admin/agents/:agent_id/service-connections/" + kind, "robot"}} {
+		api.PUT(base+"/:connection_id/grants/:subject_kind/:subject_id", func(c *gin.Context) {
+			if !noQuery(c) {
+				return
+			}
+			id, ok := collaborationID(c, "connection_id")
+			if !ok {
+				return
+			}
+			subject, ok := collaborationID(c, "subject_id")
+			if !ok {
+				return
+			}
+			var w i.GrantWrite
+			if !httpx.Decode(c, &w) {
+				return
+			}
+			if w.Enabled == nil {
+				httpx.Write(c, httpx.Invalid("enabled", "required"))
+				return
+			}
+			r, a, err := s.Grants(c.Request.Context(), rawSession(c), id, i.CredentialOwnership{Type: c.Param("subject_kind"), Owner: subject}, c.GetHeader("If-Match"), w.Enabled, metadata(c))
+			finish(c, r, a, err, 200)
+		})
+		for _, group := range []struct{ path, ownership string }{{base, "platform"}, {"/me/service-connections/" + kind, "personal"}, {"/projects/:id/service-connections/" + kind, "project"}, {"/admin/agents/:agent_id/service-connections/" + kind, "robot"}} {
 			prefix := group.path + "/:connection_id/credentials"
 			for _, route := range []struct{ method, path, op string }{
 				{"GET", "", "list"}, {"POST", "", "create"}, {"GET", "/preferred", "get_preferred"}, {"PUT", "/preferred", "preferred"}, {"DELETE", "/preferred", "clear_preferred"},
@@ -247,39 +344,7 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 				})
 			}
 		}
-		if kind != "gitlab" {
-			continue
-		}
-		webhook := base + "/:connection_id/webhook"
-		for _, route := range []struct{ method, path, op string }{
-			{"GET", "", "get"}, {"PATCH", "", "update"},
-			{"PUT", "/verification", "verification"}, {"POST", "/verification/generate", "generate"}, {"GET", "/receiver", "receiver"}, {"GET", "/diagnostics", "diagnostics"},
-		} {
-			api.Handle(route.method, webhook+route.path, func(c *gin.Context) {
-				if !noQuery(c) {
-					return
-				}
-				id, ok := collaborationID(c, "connection_id")
-				if !ok {
-					return
-				}
-				var input any
-				switch route.op {
-				case "update":
-					input = &i.WebhookWrite{}
-				case "verification":
-					input = &i.VerificationWrite{}
-				case "generate":
-					input = &struct{}{}
-				}
-				input, ok = integrationInput(c, input)
-				if !ok {
-					return
-				}
-				r, a, err := s.Webhook(c.Request.Context(), rawSession(c), id, route.op, c.GetHeader("If-Match"), input, metadata(c))
-				finish(c, r, a, err, 200)
-			})
-		}
+
 	}
 	webhookLimiter := newLimiter(120, time.Minute)
 	api.POST("/webhooks/gitlab/:connection_id", func(c *gin.Context) {
@@ -310,4 +375,24 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 		result := gin.H{"status": d.Status}
 		httpx.Data(c, 200, result)
 	})
+}
+
+func integrationScope(c *gin.Context) i.CredentialOwnership {
+	if c.Param("id") != "" {
+		id, _ := collaborationID(c, "id")
+		return i.CredentialOwnership{Type: "project", Owner: id}
+	}
+	return i.CredentialOwnership{Type: "platform"}
+}
+
+func integrationScopeMiddleware(c *gin.Context) {
+	if c.Param("id") != "" {
+		id, ok := collaborationID(c, "id")
+		if !ok {
+			c.Abort()
+			return
+		}
+		c.Request = c.Request.WithContext(i.WithScope(c.Request.Context(), "project", id))
+	}
+	c.Next()
 }

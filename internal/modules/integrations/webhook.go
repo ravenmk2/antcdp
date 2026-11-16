@@ -32,7 +32,10 @@ func webhookFor(r Repository, id uint64) (*WebhookSettings, error) {
 func (s *Service) Webhook(ctx context.Context, raw string, id uint64, op, tag string, input any, meta identity.Metadata) (Result, *identity.Auth, error) {
 	out := Result{}
 	write := op != "get" && op != "receiver" && op != "diagnostics"
-	a, err := s.access(ctx, raw, CredentialOwnership{Type: "system"}, id, write, func(tx identity.Tx, r Repository, a *identity.Auth, v *ServiceConnection, _ CredentialOwnership) error {
+	a, err := s.access(ctx, raw, routeScope(ctx), id, write, func(tx identity.Tx, r Repository, a *identity.Auth, v *ServiceConnection, _ CredentialOwnership) error {
+		if !managedConnection(v, routeScope(ctx)) {
+			return forbidden()
+		}
 		w, err := webhookFor(r, id)
 		if err != nil {
 			return err

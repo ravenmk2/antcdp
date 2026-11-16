@@ -343,7 +343,7 @@ export function HostCreateDrawer({ onClose }: { onClose: () => void }) {
                   checked={withCredential}
                   onChange={(event) => setWithCredential(event.target.checked)}
                 />
-                同时创建首个系统凭证
+                同时创建首个平台凭证
               </label>
               {withCredential && method && (
                 <div className="form-grid">

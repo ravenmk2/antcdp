@@ -27,6 +27,13 @@ let diagnostic: Diagnostic;
 let webhookEnabled: boolean;
 let webhookSecret: boolean;
 let pendingWrite: Promise<void> | undefined;
+let projectCanManage: boolean;
+let grants: {
+  subject_kind: string;
+  subject_id: string;
+  subject_name: string;
+  enabled: boolean;
+}[];
 const response = (data: unknown) => ({
   data: structuredClone(data),
   etag: `"v${version}"`,
@@ -39,6 +46,15 @@ beforeEach(() => {
   webhookEnabled = true;
   webhookSecret = true;
   pendingWrite = undefined;
+  projectCanManage = false;
+  grants = [
+    {
+      subject_kind: "project",
+      subject_id: "7",
+      subject_name: "交付平台",
+      enabled: true,
+    },
+  ];
   diagnostic = {
     id: "diag-1",
     kind: "connection_check",
@@ -64,10 +80,27 @@ beforeEach(() => {
           operations: [],
         })),
       });
-    if (path === "/service-connections")
+    if (
+      [
+        "/service-connections",
+        "/admin/service-connections",
+        "/projects/7/service-connections",
+      ].includes(path)
+    )
       return response({ items: [connection] });
     if (path === "/projects/7")
-      return response({ id: "7", name: "交付平台", status: "active" });
+      return response({
+        id: "7",
+        name: "交付平台",
+        status: "active",
+        can_manage: projectCanManage,
+      });
+    if (path.endsWith("/grants")) return response({ items: grants });
+    if (path.endsWith("/grants/project/7")) {
+      grants[0].enabled = (options.body as { enabled: boolean }).enabled;
+      version++;
+      return response({ items: grants });
+    }
     if (path.endsWith("/webhook/receiver"))
       return response({
         receive_url: "https://app.example.test/api/v1/webhooks/gitlab/1",
@@ -119,6 +152,7 @@ function setup(
   scope = "admin",
   enabled = true,
   entry?: string,
+  ownership: "platform" | "project" = "platform",
 ) {
   const provider = serviceProviders.find((p) => p.type === type)!;
   const config = {
@@ -134,6 +168,8 @@ function setup(
     description: "第一行说明\n第二行说明",
     enabled,
     service_type: type,
+    ownership_type: ownership,
+    project_id: ownership === "project" ? "7" : null,
     config: provider.configBody(
       config,
     ) as unknown as ServiceConnection["config"],
@@ -442,7 +478,7 @@ it("keeps console project credential details out of system configuration", async
 it("uses nested console project links without offering system connection creation", async () => {
   setup("gitlab", "", "admin", true, "/admin/projects/7/integrations");
   expect(
-    await screen.findByRole("heading", { name: "项目服务凭证" }),
+    await screen.findByRole("heading", { name: "项目服务连接" }),
   ).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "添加连接" }),
@@ -451,4 +487,45 @@ it("uses nested console project links without offering system connection creatio
   expect(link.getAttribute("href")).toContain(
     "/admin/projects/7/integrations/1",
   );
+});
+
+it("lets project administrators maintain owned connection configuration without platform grants", async () => {
+  projectCanManage = true;
+  setup(
+    "mysql",
+    "",
+    "admin",
+    true,
+    "/admin/projects/7/integrations/1",
+    "project",
+  );
+  expect(await screen.findByRole("tab", { name: "连接配置" })).toBeVisible();
+  expect(
+    screen.queryByRole("tab", { name: "项目与团队授权" }),
+  ).not.toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "编辑配置" })).toBeEnabled();
+  expect(
+    mocked.mock.calls.some(
+      ([path]) => path === "/projects/7/service-connections/mysql/1",
+    ),
+  ).toBe(true);
+  expect(mocked.mock.calls.some(([path]) => path.startsWith("/admin/"))).toBe(
+    false,
+  );
+});
+
+it("revokes and restores a platform connection grant with the current collection version", async () => {
+  setup("gitlab", "?tab=grants");
+  await userEvent.click(
+    await screen.findByRole("button", { name: "撤销授权" }),
+  );
+  expect(await screen.findByRole("button", { name: "重新授权" })).toBeEnabled();
+  expect(
+    mocked.mock.calls.find(
+      ([path, options]) =>
+        path.endsWith("/grants/project/7") && options?.method === "PUT",
+    )?.[1],
+  ).toMatchObject({ etag: '"v1"', body: { enabled: false } });
+  await userEvent.click(screen.getByRole("button", { name: "重新授权" }));
+  expect(await screen.findByRole("button", { name: "撤销授权" })).toBeEnabled();
 });

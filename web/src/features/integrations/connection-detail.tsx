@@ -41,6 +41,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { ConnectionEditor, IntegrationError } from "./connection-editor";
+import { ConnectionGrants } from "./connection-grants";
 import { WebhookPanel } from "./webhook-panel";
 
 export function ConnectionDetail({
@@ -71,19 +72,29 @@ export function ConnectionDetail({
   const saving = useRef(false);
   const submission = useSubmission();
   const queryClient = useQueryClient();
-  const path = `/admin/service-connections/${summary.service_type}/${summary.id}`;
-  const detail = useApiQuery<ServiceConnection>(
-    ["connection", summary.id],
-    path,
-    { enabled: admin },
+  const canManage =
+    admin ||
+    Boolean(
+      project?.can_manage &&
+      summary.ownership_type === "project" &&
+      summary.project_id === project.id,
+    );
+  const apiPrefix = project ? `/projects/${project.id}` : "/admin";
+  const path = `${apiPrefix}/service-connections/${summary.service_type}/${summary.id}`;
+  const listPath = location.pathname.slice(
+    0,
+    location.pathname.lastIndexOf("/"),
   );
+  const detail = useApiQuery<ServiceConnection>(["connection", path], path, {
+    enabled: canManage,
+  });
   const connection = detail.data?.data ?? summary;
   const provider = providerFor(connection.service_type);
   const capability = capabilities.find(
     (item) => item.service_type === connection.service_type,
   );
   const tabs = [
-    ...(admin
+    ...(canManage
       ? [
           {
             value: "config",
@@ -103,13 +114,13 @@ export function ConnectionDetail({
             label: (
               <span className="inline-flex items-center gap-2">
                 <KeyRound className="size-4" />
-                {admin ? "系统凭证" : "访问凭证"}
+                {admin ? "平台凭证" : "访问凭证"}
               </span>
             ),
           },
         ]
       : []),
-    ...(admin && capability?.webhook.supported
+    ...(canManage && capability?.webhook.supported
       ? [
           {
             value: "webhook",
@@ -123,6 +134,7 @@ export function ConnectionDetail({
         ]
       : []),
   ];
+  if (admin) tabs.push({ value: "grants", label: <span>项目与团队授权</span> });
   const tab = tabs.some((item) => item.value === params.get("tab"))
     ? params.get("tab")!
     : tabs[0]?.value;
@@ -150,7 +162,7 @@ export function ConnectionDetail({
     next.delete("tab");
     next.delete("create");
     navigate(
-      { pathname: "/admin/integrations", search: next.toString() },
+      { pathname: listPath, search: next.toString() },
       { replace: true },
     );
   }
@@ -185,7 +197,7 @@ export function ConnectionDetail({
     setRecoveryError(null);
     try {
       const result = await request<ServiceConnection>(path);
-      queryClient.setQueryData(["connection", summary.id], result);
+      queryClient.setQueryData(["connection", path], result);
       await refresh();
       if (
         !submission.uncertain ||
@@ -231,7 +243,7 @@ export function ConnectionDetail({
       <IntegrationError error={recoveryError} />
     </>
   );
-  if (admin && !detail.data)
+  if (canManage && !detail.data)
     return (
       <>
         <AsyncBoundary
@@ -261,7 +273,7 @@ export function ConnectionDetail({
             </StatusBadge>
           </span>
         ),
-        actions: admin && (
+        actions: canManage && (
           <RowActions
             label="连接"
             disabled={
@@ -347,7 +359,11 @@ export function ConnectionDetail({
         }
       />
       <div className="mt-5 min-w-0">
-        {admin && provider && (
+        {admin && tab === "grants" && <ConnectionGrants path={path} />}
+        {project && summary.ownership_type === "platform" && (
+          <Notice>此连接由平台维护；当前项目只管理自己的访问凭证。</Notice>
+        )}
+        {canManage && provider && (
           <div hidden={tab !== "config"} role="tabpanel" aria-label="连接配置">
             <ConnectionConfig
               connection={connection}
@@ -362,16 +378,15 @@ export function ConnectionDetail({
           </div>
         )}
         {tab === "credentials" && capability?.credentials && provider && (
-          <div role="tabpanel" aria-label={admin ? "系统凭证" : "访问凭证"}>
+          <div role="tabpanel" aria-label={admin ? "平台凭证" : "访问凭证"}>
             <CredentialPanel
               base={credentialsBase}
               provider={provider}
-              fallbackPath={admin ? `${path}/fallback-credential` : undefined}
-              readonly={project?.status === "archived"}
+              readonly={Boolean(project && !project.can_manage)}
             />
           </div>
         )}
-        {admin &&
+        {canManage &&
           capability?.webhook.supported &&
           (tab === "webhook" || webhookVisited) && (
             <div
@@ -416,7 +431,7 @@ export function ConnectionDetail({
         <div className="grid gap-3">
           {recovery}
           <p className="text-sm text-muted">
-            仅当所有归属凭证与仓库引用已清空时可删除。Webhook
+            仅当凭证、仓库引用和有效授权已清空时可删除。Webhook
             设置和秘密一并删除，远端 Hook 需自行移除。
           </p>
         </div>

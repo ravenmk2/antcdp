@@ -9,6 +9,8 @@ export interface ConnectionConfig {
   host_keys?: string[];
 }
 export interface ServiceConnection {
+  ownership_type?: "platform" | "project";
+  project_id?: string | null;
   id: string;
   code: string;
   service_type: string;

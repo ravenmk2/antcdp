@@ -1,0 +1,30 @@
+-- Reading copy of 00009_sandboxes.sql; execute embedded migrations instead.
+
+CREATE TABLE `sandbox_execution` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `sandbox_instance_id` BIGINT UNSIGNED NOT NULL,
+    `lease_id` BIGINT UNSIGNED NOT NULL,
+    `execution_token` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    `remote_execution_id` VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    `is_background` BOOLEAN NOT NULL,
+    `status` VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    `cwd` VARCHAR(2048) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    `execution_spec_hash` BINARY(32) NOT NULL,
+    `executor_epoch` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    `fence_version` BIGINT UNSIGNED NOT NULL,
+    `exit_code` INT NULL,
+    `output_cursor` VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    `last_observation` JSON NOT NULL,
+    `error_code` VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    `created_at` DATETIME(3) NOT NULL,
+    `started_at` DATETIME(3) NULL,
+    `deadline_at` DATETIME(3) NOT NULL,
+    `cancel_requested_at` DATETIME(3) NULL,
+    `last_observed_at` DATETIME(3) NULL,
+    `finished_at` DATETIME(3) NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_sandbox_execution_token (execution_token),
+    KEY idx_sandbox_execution_instance (sandbox_instance_id,finished_at,id),
+    KEY idx_sandbox_execution_lease (lease_id,finished_at,id),
+    KEY idx_sandbox_execution_due (status,deadline_at,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

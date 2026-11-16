@@ -215,7 +215,7 @@ it.each([
   ["?tab=releases", "项目介绍", "项目目标"],
   ["?tab=repositories", "Git 仓库", "仓库列表内容"],
   ["?tab=settings&section=branch-model", "项目介绍", "项目目标"],
-  ["?tab=settings&section=unknown", "项目设置", "项目服务凭证"],
+  ["?tab=settings&section=unknown", "项目设置", "项目服务连接"],
 ])(
   "normalizes %s without a blank content area",
   async (search, tab, content) => {
@@ -231,7 +231,7 @@ it.each([
 
 it("keeps credential management inside the console project context", async () => {
   const { user } = mount("/admin/projects/7?tab=settings&section=integrations");
-  const link = await screen.findByRole("link", { name: "管理服务凭证" });
+  const link = await screen.findByRole("link", { name: "管理服务连接" });
   expect(link).toHaveAttribute("href", "/admin/projects/7/integrations");
 
   await user.click(screen.getByRole("button", { name: "SSH 凭证" }));

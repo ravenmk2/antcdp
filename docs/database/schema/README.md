@@ -1,26 +1,29 @@
 # 数据库结构脚本
 
-本目录按业务范围提供 DDL 阅读副本。实际安装与升级执行[嵌入式 Goose 迁移](../../../internal/store/migrations/mysql/)；不要将本目录脚本导入现有安装，也不要将文件顺序视为升级顺序。
+本目录按表提供 DDL 阅读副本，每张表对应一个与表名一致的 `.sql` 文件。实际安装与升级执行[嵌入式 Goose 迁移](../../../internal/store/migrations/mysql/)；不要将本目录脚本导入已有安装，也不要将文件名排序视为建表或升级顺序。
 
-结构以[嵌入式迁移](../../../internal/store/migrations/mysql/)为准，本目录的领域分组不对应迁移版本。必需模块种子保留在迁移中，不写入结构阅读副本。
+结构以嵌入式迁移为准。字段类型、可空性、生成列、默认值和索引须与迁移保持一致；不包含种子、升级数据修正或秘密。跨领域引用涉及的表仍只有一份定义。MySQL DDL 隐式提交，不能作为整批操作可回滚的承诺。
 
-## 领域分组
+## 表索引
 
-| 脚本 | 范围 |
-| --- | --- |
-| [platform.sql](platform.sql) | 用户、凭据、会话、设置、安装与审计 |
-| [collaboration.sql](collaboration.sql) | 项目、团队、成员、图标及快捷方式 |
-| [delivery.sql](delivery.sql) | 仓库关联、项目内标签及标签绑定 |
-| [integrations.sql](integrations.sql) | 服务连接、凭证与入站验证配置 |
-| [remote_hosts.sql](remote_hosts.sql) | SSH 主机、公钥信任与凭证 |
-| [messaging.sql](messaging.sql) | 邮件、短信与钉钉 |
-| [models.sql](models.sql) | 模型提供商与模型定义 |
-| [web_access.sql](web_access.sql) | 检索提供商与搜索、读取设置 |
-| [agents.sql](agents.sql) | 智能体、技能、MCP、会话、运行、文件、成果、图像缓存及沙箱调用关联 |
-| [sandboxes.sql](sandboxes.sql) | 基础连接、实例、租约、物理执行及操作 |
-| [cloud-computers.sql](cloud-computers.sql) | 云电脑模板、持久工作空间及产品操作 |
-| [state_store.sql](state_store.sql) | 通用状态存储与 KV 条目 |
+以下仅按领域组织阅读入口，依赖顺序以迁移为准。
 
-按业务领域分组，不按表数量继续拆分配置、运行或文件等技术分类。智能体使用的模型文件缓存归智能体领域，模型提供商与模型定义归模型领域。分文件只用于阅读，不改变模块依赖或事务边界。跨领域资源引用只定义一次；字段类型、可空性、生成列、默认值和索引须与迁移保持一致。SQL 不包含种子、升级数据修正或秘密；MySQL DDL 隐式提交，不能作为整批操作可回滚的承诺。
+| 领域 | 表 | 基线来源 |
+| --- | --- | --- |
+| 平台基础 | [user](user.sql)、[user_password](user_password.sql)、[avatar_file](avatar_file.sql)、[session](session.sql)、[system_setting](system_setting.sql)、[system_instance](system_instance.sql)、[audit_event](audit_event.sql) | [00001_platform.sql](../../../internal/store/migrations/mysql/00001_platform.sql) |
+| 状态存储 | [state_store](state_store.sql)、[state_entry](state_entry.sql) | [00002_state_store.sql](../../../internal/store/migrations/mysql/00002_state_store.sql) |
+| 协作 | [icon_file](icon_file.sql)、[project](project.sql)、[team](team.sql)、[project_member](project_member.sql)、[team_member](team_member.sql)、[project_team](project_team.sql)、[role](role.sql)、[role_binding](role_binding.sql)、[user_sidebar_preference](user_sidebar_preference.sql)、[user_project_shortcut](user_project_shortcut.sql)、[user_team_shortcut](user_team_shortcut.sql) | [00003_collaboration.sql](../../../internal/store/migrations/mysql/00003_collaboration.sql) |
+| 服务集成 | [service_connection](service_connection.sql)、[service_connection_grant](service_connection_grant.sql)、[service_connection_gitlab](service_connection_gitlab.sql)、[service_credential](service_credential.sql) | [00004_integrations.sql](../../../internal/store/migrations/mysql/00004_integrations.sql) |
+| 远程主机 | [remote_host](remote_host.sql)、[remote_host_key](remote_host_key.sql)、[remote_host_credential](remote_host_credential.sql) | [00005_remote_hosts.sql](../../../internal/store/migrations/mysql/00005_remote_hosts.sql) |
+| 消息 | [email_profile](email_profile.sql)、[email_sender_name](email_sender_name.sql)、[email_template](email_template.sql)、[email_send_log](email_send_log.sql)、[sms_profile](sms_profile.sql)、[sms_template](sms_template.sql)、[sms_send_log](sms_send_log.sql)、[dingtalk_robot](dingtalk_robot.sql) | [00006_messaging.sql](../../../internal/store/migrations/mysql/00006_messaging.sql) |
+| 模型 | [model_provider](model_provider.sql)、[model_definition](model_definition.sql) | [00007_models.sql](../../../internal/store/migrations/mysql/00007_models.sql) |
+| Web 访问 | [web_access_provider](web_access_provider.sql)、[web_access_setting](web_access_setting.sql) | [00008_web_access.sql](../../../internal/store/migrations/mysql/00008_web_access.sql) |
+| 沙箱 | [sandbox_connection](sandbox_connection.sql)、[sandbox_instance](sandbox_instance.sql)、[sandbox_lease](sandbox_lease.sql)、[sandbox_execution](sandbox_execution.sql)、[sandbox_operation](sandbox_operation.sql) | [00009_sandboxes.sql](../../../internal/store/migrations/mysql/00009_sandboxes.sql) |
+| 交付 | [project_repository](project_repository.sql)、[project_repository_label](project_repository_label.sql)、[project_repository_label_binding](project_repository_label_binding.sql) | [00010_delivery.sql](../../../internal/store/migrations/mysql/00010_delivery.sql) |
+| 智能体定义 | [agent](agent.sql)、[agent_favorite](agent_favorite.sql)、[agent_model_binding](agent_model_binding.sql)、[agent_mcp_binding](agent_mcp_binding.sql)、[agent_tool_binding](agent_tool_binding.sql)、[agent_skill_binding](agent_skill_binding.sql)、[agent_skill](agent_skill.sql)、[agent_skill_version](agent_skill_version.sql)、[agent_mcp_server](agent_mcp_server.sql) | [00011_agent_definitions.sql](../../../internal/store/migrations/mysql/00011_agent_definitions.sql) |
+| 云电脑 | [cloud_computer_template](cloud_computer_template.sql)、[cloud_computer](cloud_computer.sql) | [00012_cloud_computers.sql](../../../internal/store/migrations/mysql/00012_cloud_computers.sql) |
+| 智能体运行 | [agent_operation](agent_operation.sql)、[agent_session](agent_session.sql)、[agent_session_preference](agent_session_preference.sql)、[agent_input](agent_input.sql)、[agent_input_file](agent_input_file.sql)、[agent_run](agent_run.sql)、[agent_run_context](agent_run_context.sql)、[agent_event](agent_event.sql)、[agent_model_call](agent_model_call.sql)、[agent_tool_call](agent_tool_call.sql)、[agent_interaction](agent_interaction.sql)、[agent_command_receipt](agent_command_receipt.sql)、[agent_compaction](agent_compaction.sql)、[agent_file](agent_file.sql)、[agent_attachment](agent_attachment.sql)、[agent_artifact](agent_artifact.sql)、[agent_file_operation](agent_file_operation.sql)、[agent_file_operation_item](agent_file_operation_item.sql)、[agent_resource_reference](agent_resource_reference.sql)、[agent_session_projection](agent_session_projection.sql)、[agent_image_variant](agent_image_variant.sql)、[agent_model_file](agent_model_file.sql) | [00013_agent_runtime.sql](../../../internal/store/migrations/mysql/00013_agent_runtime.sql) |
+| 智能体与云环境关联 | [agent_cloud_computer_lease](agent_cloud_computer_lease.sql)、[agent_cloud_computer_skill_state](agent_cloud_computer_skill_state.sql)、[agent_sandbox_execution](agent_sandbox_execution.sql)、[cloud_computer_operation](cloud_computer_operation.sql) | [00014_agent_cloud_and_sandbox.sql](../../../internal/store/migrations/mysql/00014_agent_cloud_and_sandbox.sql) |
+| 作业 | [job](job.sql)、[job_revision](job_revision.sql)、[job_run_grant](job_run_grant.sql)、[job_resource_grant](job_resource_grant.sql)、[job_run](job_run.sql)、[job_run_log](job_run_log.sql)、[job_resource_call](job_resource_call.sql)、[job_trigger_request](job_trigger_request.sql)、[job_schedule](job_schedule.sql)、[job_schedule_fire](job_schedule_fire.sql) | [00015_jobs.sql](../../../internal/store/migrations/mysql/00015_jobs.sql) |
 
-后端结构变更时，在同一开发任务中同步更新对应阅读副本，反映全部迁移执行后的结构。副本通过开发审核维护，CI 和检查脚本不校验其内容或一致性；实际安装与迁移行为通过 MySQL 集成测试验证。测试方法见[测试与验证](../../development/testing.md)，通用存储和迁移规则见[数据库约定](../README.md)。
+后端结构变更时，经审核在同一开发任务中同步维护对应表的阅读副本和本索引。副本不加入 CI 或检查脚本；实际安装与迁移行为通过 MySQL 集成测试验证。测试方法见[测试与验证](../../development/testing.md)，通用存储和迁移规则见[数据库约定](../README.md)。

@@ -23,6 +23,9 @@ func TestPaginationAndFilter(t *testing.T) {
 }
 
 func TestDetailAllowlist(t *testing.T) {
+	if got := string(PublicDetail("service_connection.grant_changed", json.RawMessage(`{"subject_kind":"team","subject_id":"7","enabled":false,"token":"secret"}`))); got != `{"enabled":false,"subject_id":"7","subject_kind":"team"}` {
+		t.Fatal(got)
+	}
 	raw := json.RawMessage(`{"password":"secret","changes":{"display_name":{"before":"甲","after":"乙","token":"secret"},"password":{"before":"secret","after":"secret"}},"cookie":"secret"}`)
 	got := string(PublicDetail("user.profile_updated", raw))
 	if strings.Contains(got, "secret") || !strings.Contains(got, "甲") || !strings.Contains(got, "乙") {

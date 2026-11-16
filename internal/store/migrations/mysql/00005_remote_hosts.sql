@@ -46,7 +46,7 @@ CREATE TABLE `remote_host_credential` (
     project_id BIGINT UNSIGNED NULL,
     user_id BIGINT UNSIGNED NULL,
     owner_key BIGINT UNSIGNED GENERATED ALWAYS AS (
-        CASE ownership_type WHEN 'system' THEN 0 WHEN 'project' THEN project_id WHEN 'personal' THEN user_id ELSE NULL END
+        CASE ownership_type WHEN 'platform' THEN 0 WHEN 'project' THEN project_id WHEN 'personal' THEN user_id ELSE NULL END
     ) STORED,
     name VARCHAR(100) COLLATE utf8mb4_0900_as_ci NOT NULL,
     description VARCHAR(1000) NOT NULL DEFAULT '',

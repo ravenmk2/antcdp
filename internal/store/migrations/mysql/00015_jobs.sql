@@ -51,7 +51,7 @@ CREATE TABLE job_resource_grant (
  created_at DATETIME(3) NOT NULL,
  revoked_by_user_id BIGINT UNSIGNED NULL,
  revoked_at DATETIME(3) NULL,
- PRIMARY KEY(id), UNIQUE KEY uq_job_resource_active(job_id,connection_id,credential_id,active_slot), KEY idx_job_resource(job_id,id)
+ PRIMARY KEY(id), UNIQUE KEY uq_job_resource_active(job_id,connection_id,credential_id,active_slot), KEY idx_job_resource(job_id,id), KEY idx_job_resource_connection(connection_id,status,job_id), KEY idx_job_resource_credential(credential_id,status,job_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE job_run (

@@ -215,7 +215,7 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 			return httpx.E(503, "SERVICE_UNAVAILABLE", "版本服务暂不可用")
 		}
 		switch owner.Type {
-		case "system":
+		case "platform":
 			if a.User.Role != "admin" {
 				return forbidden()
 			}
@@ -312,7 +312,7 @@ func (s *Service) List(ctx context.Context, raw string, admin bool) (Result, *id
 	out := Result{}
 	owner := CredentialOwnership{Type: "directory"}
 	if admin {
-		owner.Type = "system"
+		owner.Type = "platform"
 	}
 	a, err := s.access(ctx, raw, owner, 0, false, func(_ identity.Tx, r Repository, _ *identity.Auth, _ *Host, _ CredentialOwnership) error {
 		rows, err := r.Connections()
@@ -333,7 +333,7 @@ func (s *Service) List(ctx context.Context, raw string, admin bool) (Result, *id
 }
 func (s *Service) Create(ctx context.Context, raw string, w ConnectionCreate, meta identity.Metadata) (Result, *identity.Auth, error) {
 	out := Result{}
-	a, err := s.access(ctx, raw, CredentialOwnership{Type: "system"}, 0, true, func(tx identity.Tx, r Repository, a *identity.Auth, _ *Host, _ CredentialOwnership) error {
+	a, err := s.access(ctx, raw, CredentialOwnership{Type: "platform"}, 0, true, func(tx identity.Tx, r Repository, a *identity.Auth, _ *Host, _ CredentialOwnership) error {
 		if w.Config == nil {
 			return httpx.Invalid("config", "required")
 		}
@@ -368,7 +368,7 @@ func (s *Service) Create(ctx context.Context, raw string, w ConnectionCreate, me
 }
 func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag string, input any, meta identity.Metadata) (Result, *identity.Auth, error) {
 	out := Result{}
-	a, err := s.access(ctx, raw, CredentialOwnership{Type: "system"}, id, op != "get" && op != "fallback" && op != "diagnostics", func(tx identity.Tx, r Repository, a *identity.Auth, v *Host, _ CredentialOwnership) error {
+	a, err := s.access(ctx, raw, CredentialOwnership{Type: "platform"}, id, op != "get" && op != "fallback" && op != "diagnostics", func(tx identity.Tx, r Repository, a *identity.Auth, v *Host, _ CredentialOwnership) error {
 		out = s.connectionResult(v)
 		switch op {
 		case "get":
@@ -461,7 +461,7 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 				if err != nil {
 					return err
 				}
-				if !owned(cr, v, CredentialOwnership{Type: "system"}) {
+				if !owned(cr, v, CredentialOwnership{Type: "platform"}) {
 					return integrity()
 				}
 			}
@@ -479,7 +479,7 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 					if err != nil {
 						return err
 					}
-					if !owned(cr, v, CredentialOwnership{Type: "system"}) {
+					if !owned(cr, v, CredentialOwnership{Type: "platform"}) {
 						return fail()
 					}
 					if !cr.Usable() {
@@ -511,7 +511,7 @@ func owned(cr *Credential, v *Host, o CredentialOwnership) bool {
 		return false
 	}
 	switch o.Type {
-	case "system":
+	case "platform":
 		return cr.UserID == nil && cr.ProjectID == nil
 	case "personal":
 		return cr.ProjectID == nil && cr.UserID != nil && *cr.UserID == o.Owner

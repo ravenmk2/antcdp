@@ -169,7 +169,7 @@ it("keeps project credential links in the workspace", async () => {
   const { user } = mountProject(
     "/projects/7?tab=settings&section=integrations",
   );
-  expect(screen.getByRole("link", { name: "管理服务凭证" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "管理服务连接" })).toHaveAttribute(
     "href",
     "/projects/7/integrations",
   );

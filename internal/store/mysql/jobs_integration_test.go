@@ -151,6 +151,7 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	admin.call(t, "POST", path+"/clear-debug-state", map[string]any{}, 200, nil)
 	// Service access validates the exact project credential but never decrypts it.
 	conn := testData(admin.call(t, "POST", "/admin/service-connections/jenkins", map[string]any{"name": "Job 未实现适配器", "code": "job-jenkins", "config": map[string]string{"base_url": "https://jenkins.example.com"}}, 201, nil))
+	grantServiceConnection(t, admin, "/admin/service-connections/jenkins/"+conn["id"].(string), "project", strings.TrimPrefix(project, "/projects/"), true)
 	credentials := project + "/service-connections/jenkins/" + conn["id"].(string) + "/credentials"
 	admin.call(t, "GET", credentials, nil, 200, nil)
 	cred := testData(admin.call(t, "POST", credentials, map[string]any{"name": "Job 凭证", "authentication": map[string]any{"auth_method": "jenkins_api_token", "identity_config": map[string]string{"username": "build-bot"}, "secret": map[string]string{"token": "must-never-be-decrypted"}}}, 201, map[string]string{"If-Match": admin.last.Header().Get("ETag")}))
@@ -167,6 +168,17 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	if err := db.db.Get(&actual, "SELECT COUNT(*) FROM job_resource_call WHERE job_run_id=? AND (credential_id IS NOT NULL OR credential_material_version IS NOT NULL)", resourceID); err != nil || actual != 0 {
 		t.Fatal("unused credential marked used", err)
 	}
+	// Revocation is checked at the call, including runs accepted before revocation.
+	delayed := config(`async function main(ctx){await ctx.sleep(2000);try {await ctx.resources.call("job-jenkins","build",{target:"example",operation:"build",params:{}})}catch(e){return e.code}}`)
+	delayed["bindings"] = bound["bindings"]
+	pending := submit(admin, "connection-revoked", true, map[string]any{"config": delayed})["run_id"].(string)
+	wait(pending, "running")
+	grantServiceConnection(t, admin, "/admin/service-connections/jenkins/"+conn["id"].(string), "project", p, false)
+	if result := wait(pending, "succeeded")["run"].(map[string]any)["result"]; result != "RESOURCE_ACCESS_DENIED" {
+		t.Fatal("revoked connection remained callable", result)
+	}
+	admin.call(t, "POST", path+"/debug", map[string]any{"request_key": "connection-revoked-new", "config": bound, "inputs": map[string]any{}}, 422, nil)
+	grantServiceConnection(t, admin, "/admin/service-connections/jenkins/"+conn["id"].(string), "project", p, true)
 	admin.call(t, "DELETE", path+"/resource-grants/"+grant["id"].(string), nil, 200, nil)
 	newGrant := testData(admin.call(t, "POST", path+"/resource-grants", grantBody, 200, nil))
 	if newGrant["id"] == grant["id"] {

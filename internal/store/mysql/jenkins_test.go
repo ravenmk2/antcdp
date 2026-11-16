@@ -105,7 +105,7 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 	admin.call(t, "PUT", cp+"/authentication", map[string]any{"auth_method": method, "identity_config": map[string]string{"username": "bot", "extra": "forbidden"}, "secret": map[string]string{"token": "test-token"}}, 422, tag(admin, cp))
 	admin.call(t, "GET", "/admin/service-connections/gitlab/"+id+"/credentials/"+cid, nil, 404, nil)
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": cid}, 200, tag(admin, sys+"/preferred"))
-	admin.call(t, "PUT", path+"/fallback-credential", map[string]string{"credential_id": cid}, 200, tag(admin, path+"/fallback-credential"))
+	admin.call(t, "GET", path+"/fallback-credential", nil, 404, nil)
 	store := func() (identity.Store, error) { return db, nil }
 	svc := (&integrations.Service{Identity: identity.New(store), Store: store, Cipher: installer.IntegrationSecret, ETag: installer.IntegrationETag}).ForType(kind)
 	connectionID, _ := strconv.ParseUint(id, 10, 64)
@@ -122,7 +122,7 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 		}
 		return integrations.Diagnostic{ID: "jenkins-verified", Kind: "credential_verification", Status: "succeeded", StartedAt: started, FinishedAt: time.Now(), Summary: map[string]any{"authentication": "valid", "permissions": "unknown"}}
 	}
-	if _, _, err := svc.Verify(context.Background(), raw, connectionID, credentialID, integrations.CredentialOwnership{Type: "system"}, credentialTag); err != nil {
+	if _, _, err := svc.Verify(context.Background(), raw, connectionID, credentialID, integrations.CredentialOwnership{Type: "platform"}, credentialTag); err != nil {
 		t.Fatal(err)
 	}
 	if tag(admin, cp)["If-Match"] != credentialTag {
@@ -156,7 +156,7 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 		}
 		return integrations.Diagnostic{ID: "jenkins-stale", StartedAt: started, FinishedAt: time.Now(), Summary: map[string]any{}}
 	}
-	_, _, err := svc.Verify(context.Background(), raw, connectionID, credentialID, integrations.CredentialOwnership{Type: "system"}, credentialTag)
+	_, _, err := svc.Verify(context.Background(), raw, connectionID, credentialID, integrations.CredentialOwnership{Type: "platform"}, credentialTag)
 	var apiErr *httpx.Error
 	if !errors.As(err, &apiErr) || apiErr.Code != "STATE_CHANGED" {
 		t.Fatal("stale result accepted", err)
@@ -183,18 +183,20 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 		t.Fatal("cross-type decryption succeeded")
 	}
 	admin.call(t, "PATCH", cp, map[string]any{"enabled": false}, 200, tag(admin, cp))
-	if testData(admin.call(t, "GET", sys+"/preferred", nil, 200, nil))["credential_id"] != nil || testData(admin.call(t, "GET", path+"/fallback-credential", nil, 200, nil))["credential_id"] != nil {
+	if testData(admin.call(t, "GET", sys+"/preferred", nil, 200, nil))["credential_id"] != nil {
 		t.Fatal("disabled selections retained")
 	}
 	admin.call(t, "POST", cp+"/verify", map[string]any{}, 409, tag(admin, cp))
 	admin.call(t, "PATCH", path, map[string]any{"enabled": false}, 200, tag(admin, path))
 	admin.call(t, "POST", path+"/test", map[string]any{}, 409, tag(admin, path))
+	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": label + "_Project", "name": label + " 项目权限", "admin_user_ids": []string{memberID}}, 201, nil))
+	projectPath := "/projects/" + project["id"].(string)
+	grantServiceConnection(t, admin, path, "project", project["id"].(string), true)
 	mine := "/me/service-connections/" + kind + "/" + id + "/credentials"
 	personal := create(member, mine, "个人构建账号")
 	admin.call(t, "GET", mine+"/"+personal, nil, 404, nil)
 	other.call(t, "GET", mine+"/"+personal, nil, 404, nil)
-	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": label + "_Project", "name": label + " 项目权限", "admin_user_ids": []string{memberID}}, 201, nil))
-	projectPath := "/projects/" + project["id"].(string)
+
 	pp := projectPath + "/service-connections/" + kind + "/" + id + "/credentials"
 	pc := create(member, pp, "项目构建账号")
 	other.call(t, "GET", pp, nil, 403, nil)
@@ -211,6 +213,7 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 		headers["X-Collection-If-Match"] = tag(item.client, item.collection)["If-Match"]
 		item.client.call(t, "DELETE", item.collection+"/"+item.id, nil, 204, headers)
 	}
+	grantServiceConnection(t, admin, path, "project", project["id"].(string), false)
 	admin.call(t, "DELETE", path, nil, 204, tag(admin, path))
 	var count int
 	if err := db.db.GetContext(context.Background(), &count, "SELECT COUNT(*) FROM service_connection WHERE id=?", id); err != nil || count != 0 {

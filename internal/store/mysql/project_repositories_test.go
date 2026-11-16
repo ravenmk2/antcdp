@@ -69,16 +69,17 @@ func verifyProjectRepositories(t *testing.T, db *Store, admin, member, other *ap
 	cv := testData(admin.call(t, "POST", "/admin/service-connections/gitlab", map[string]any{"name": "仓库专用 GitLab", "config": map[string]any{"base_url": remoteURL}}, 201, nil))
 	cid := cv["id"].(string)
 	connection := "/admin/service-connections/gitlab/" + cid
+	grantServiceConnection(t, admin, connection, "project", pid, true)
 	member.call(t, "GET", base, nil, 200, nil)
 	other.call(t, "GET", base, nil, 404, nil)
-	member.call(t, "GET", catalog, nil, 403, nil)
-	member.call(t, "POST", base, map[string]any{"connection_id": cid, "repo_ids": []string{"123"}}, 403, nil)
+	member.call(t, "GET", catalog, nil, 200, nil)
+	member.call(t, "POST", base, map[string]any{"connection_id": cid, "repo_ids": []string{"123"}}, 409, nil)
 	admin.call(t, "GET", catalog+"/"+cid+"/repos", nil, 409, nil)
 	etag := func(path string) map[string]string {
 		admin.call(t, "GET", path, nil, 200, nil)
 		return map[string]string{"If-Match": admin.last.Header().Get("ETag")}
 	}
-	sys := connection + "/credentials"
+	sys := "/projects/" + pid + "/service-connections/gitlab/" + cid + "/credentials"
 	cred := testData(admin.call(t, "POST", sys, map[string]any{"name": "repository token", "authentication": map[string]any{"auth_method": "gitlab_access_token", "identity_config": map[string]any{}, "secret": map[string]string{"token": "repository-fixture-token"}}}, 201, etag(sys)))
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": cred["id"].(string)}, 200, etag(sys+"/preferred"))
 	browse := testData(admin.call(t, "GET", catalog+"/"+cid+"/repos?q=remote", nil, 200, nil))
@@ -131,7 +132,7 @@ func verifyProjectRepositories(t *testing.T, db *Store, admin, member, other *ap
 			t.Fatal("private data leaked")
 		}
 	}
-	member.call(t, "POST", base+"/"+id+"/refresh", map[string]any{}, 403, nil)
+	member.call(t, "POST", base+"/"+id+"/refresh", map[string]any{}, 428, nil)
 	admin.call(t, "GET", connection, nil, 200, nil)
 	ct := admin.last.Header().Get("ETag")
 	admin.call(t, "PATCH", connection, map[string]any{"config": map[string]any{"base_url": "https://other.example.com"}}, 409, map[string]string{"If-Match": ct})

@@ -1,0 +1,31 @@
+-- Reading copy of 00011_agent_definitions.sql; execute embedded migrations instead.
+
+CREATE TABLE `agent_mcp_server` (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description VARCHAR(1000) NOT NULL DEFAULT '',
+    url VARCHAR(2048) NOT NULL,
+    auth_method VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    auth_header_name VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    identity_config JSON NOT NULL,
+    timeout_seconds INT UNSIGNED NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    config JSON NOT NULL,
+    config_schema_version INT UNSIGNED NOT NULL DEFAULT 1,
+    secret_ciphertext BLOB NULL,
+    secret_format_version INT UNSIGNED NULL,
+    secret_key_version VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    secret_revision BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    config_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    last_diagnostic JSON NULL,
+    last_diagnostic_at DATETIME(3) NULL,
+    created_by_user_id BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_agent_mcp_server_code (code),
+    UNIQUE KEY uq_agent_mcp_server_name (name),
+    KEY idx_agent_mcp_server_enabled (enabled, id)
+) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

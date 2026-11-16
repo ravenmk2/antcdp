@@ -98,10 +98,19 @@ func TestInitialMigration(t *testing.T) {
 		t.Fatal("unexpected baseline migration history", versions, err)
 	}
 	var tables int
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 94 {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 95 {
 		t.Fatal("expected baseline tables and goose history", tables, err)
 	}
 	t.Run("state store", func(t *testing.T) { stateStoreIntegration(t, ctx, s) })
+	if _, err = s.db.ExecContext(ctx, "ALTER TABLE service_connection_grant DROP INDEX idx_service_connection_grant_subject"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.SchemaReady(ctx); !errors.Is(err, install.ErrIncompleteSchema) {
+		t.Fatal("missing connection grant lookup index was accepted", err)
+	}
+	if _, err = s.db.ExecContext(ctx, "ALTER TABLE service_connection_grant ADD KEY idx_service_connection_grant_subject (subject_kind,subject_id,enabled,connection_id)"); err != nil {
+		t.Fatal(err)
+	}
 	if _, err = s.db.ExecContext(ctx, "ALTER TABLE `state_store` DROP INDEX `uq_state_store_namespace_name`"); err != nil {
 		t.Fatal(err)
 	}

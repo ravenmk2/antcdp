@@ -143,7 +143,7 @@ it("selects the current page from the table header and clears selection on pagin
   expect(screen.getByText("已选择 0 项")).toBeInTheDocument();
 });
 
-it("keeps workspace repositories read-only even for an administrator", async () => {
+it("keeps workspace repositories read-only for project members", async () => {
   const user = userEvent.setup();
   render(
     <QueryClientProvider
@@ -153,7 +153,7 @@ it("keeps workspace repositories read-only even for an administrator", async () 
         })
       }
     >
-      <ProjectRepositories project={project} />
+      <ProjectRepositories project={{ ...project, can_manage: false }} />
     </QueryClientProvider>,
   );
   await screen.findByText("group/api");

@@ -18,6 +18,7 @@ import (
 )
 
 func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Service, admin, member, other *apiClient, adminID, memberID string) {
+	t.Run("connection_scopes", func(t *testing.T) { verifyConnectionScopes(t, admin, member, other, memberID) })
 	t.Run("message_management", func(t *testing.T) { verifyMessageManagement(t, db, installer, admin, member) })
 	t.Run("project_repositories", func(t *testing.T) { verifyProjectRepositories(t, db, admin, member, other, adminID, memberID) })
 	verifyJenkinsIntegrations(t, db, installer, admin, member, other, memberID)
@@ -33,6 +34,9 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	}
 	id := createConnection("GitLab 重构测试")
 	path := base + "/" + id
+	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": "Service_Project", "name": "服务权限测试", "admin_user_ids": []string{memberID}}, 201, nil))
+	pid := project["id"].(string)
+	grantServiceConnection(t, admin, path, "project", pid, true)
 	member.call(t, "GET", path, nil, 403, nil)
 	directory := member.call(t, "GET", "/service-connections", nil, 200, nil)
 	for _, private := range []string{"base_url", "fallback_credential_id", "created_by_user_id", "credentials_version"} {
@@ -200,7 +204,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 		admin.call(t, "POST", sys, map[string]any{"name": "code test", "code": code, "authentication": auth}, 422, tag(admin, sys))
 	}
 	oneData := testData(admin.call(t, "GET", sys+"/"+one, nil, 200, nil))
-	member.call(t, "POST", "/me/service-connections/gitlab/"+id+"/credentials", map[string]any{"name": "duplicate", "code": oneData["code"], "authentication": auth}, 409, tag(member, "/me/service-connections/gitlab/"+id+"/credentials"))
+	member.call(t, "POST", "/me/service-connections/gitlab/"+id+"/credentials", map[string]any{"name": "duplicate", "code": oneData["code"], "authentication": auth}, 201, tag(member, "/me/service-connections/gitlab/"+id+"/credentials"))
 	admin.call(t, "PATCH", sys+"/"+one, map[string]string{"code": "renamed"}, 422, tag(admin, sys+"/"+one))
 	admin.call(t, "PUT", sys+"/"+one+"/authentication", map[string]any{"auth_method": "gitlab_access_token", "identity_config": map[string]string{"token_type": "personal"}, "secret": map[string]string{"token": "new-token-value"}}, 422, tag(admin, sys+"/"+one))
 	beforeCredential := tag(admin, sys+"/"+one)["If-Match"]
@@ -211,11 +215,9 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	oldPreferred := tag(admin, sys+"/preferred")
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": two}, 200, oldPreferred)
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": one}, 412, oldPreferred)
-	admin.call(t, "PUT", path+"/fallback-credential", map[string]string{"credential_id": two}, 200, tag(admin, path+"/fallback-credential"))
+	admin.call(t, "GET", path+"/fallback-credential", nil, 404, nil)
 	admin.call(t, "PATCH", sys+"/"+two, map[string]bool{"enabled": false}, 200, tag(admin, sys+"/"+two))
-	if testData(admin.call(t, "GET", path+"/fallback-credential", nil, 200, nil))["credential_id"] != nil {
-		t.Fatal("disabled fallback not cleared")
-	}
+
 	if testData(admin.call(t, "GET", sys+"/preferred", nil, 200, nil))["credential_id"] != nil {
 		t.Fatal("disabled preferred not cleared")
 	}
@@ -258,7 +260,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 		}
 		return integrations.Diagnostic{ID: "probe-success", Kind: "credential_verification", StartedAt: started, FinishedAt: time.Now(), Status: "succeeded", Summary: map[string]any{"authentication": "valid"}}
 	}
-	if _, _, err := svc.Verify(context.Background(), raw, connectionID, credentialID, integrations.CredentialOwnership{Type: "system"}, credentialTag); err != nil {
+	if _, _, err := svc.Verify(context.Background(), raw, connectionID, credentialID, integrations.CredentialOwnership{Type: "platform"}, credentialTag); err != nil {
 		t.Fatal(err)
 	}
 	if tag(admin, sys+"/"+one)["If-Match"] != credentialTag || tag(admin, sys)["If-Match"] != collectionTag {
@@ -273,7 +275,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 		}
 		return integrations.Diagnostic{ID: "stale-probe", StartedAt: started, FinishedAt: time.Now(), Status: "failed", Summary: map[string]any{}}
 	}
-	_, _, verifyErr := svc.Verify(context.Background(), raw, connectionID, credentialID, integrations.CredentialOwnership{Type: "system"}, credentialTag)
+	_, _, verifyErr := svc.Verify(context.Background(), raw, connectionID, credentialID, integrations.CredentialOwnership{Type: "platform"}, credentialTag)
 	var apiErr *httpx.Error
 	if !errors.As(verifyErr, &apiErr) || apiErr.Code != "STATE_CHANGED" {
 		t.Fatal("stale verification accepted", verifyErr)
@@ -300,9 +302,6 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	personal := create(member, mine, "个人令牌")
 	admin.call(t, "GET", mine+"/"+personal, nil, 404, nil)
 	other.call(t, "GET", mine+"/"+personal, nil, 404, nil)
-	admin.call(t, "PUT", path+"/fallback-credential", map[string]string{"credential_id": personal}, 404, tag(admin, path+"/fallback-credential"))
-	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": "Service_Project", "name": "服务权限测试", "admin_user_ids": []string{memberID}}, 201, nil))
-	pid := project["id"].(string)
 	pp := "/projects/" + pid + "/service-connections/gitlab/" + id + "/credentials"
 	projectCred := create(member, pp, "项目令牌")
 	other.call(t, "GET", pp, nil, 403, nil)

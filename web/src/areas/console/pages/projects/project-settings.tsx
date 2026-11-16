@@ -22,7 +22,7 @@ export function ProjectSettings({
 }) {
   const [, setParams] = useSearchParams();
   const links = [
-    { key: "integrations", label: "服务凭证", icon: Cable },
+    { key: "integrations", label: "服务连接", icon: Cable },
     { key: "hosts", label: "SSH 凭证", icon: Server },
   ] as const;
   function select(key: ProjectSettingSection) {
@@ -51,12 +51,12 @@ export function ProjectSettings({
       <div className="min-w-0">
         {section === "integrations" && (
           <Panel
-            title="项目服务凭证"
+            title="项目服务连接"
             action={
               <Button
                 render={
                   <Link to={`/admin/projects/${project.id}/integrations`}>
-                    管理服务凭证 <ArrowRight />
+                    管理服务连接 <ArrowRight />
                   </Link>
                 }
                 nativeButton={false}
@@ -66,7 +66,7 @@ export function ProjectSettings({
             }
           >
             <p className="text-sm text-muted">
-              维护当前项目归属的访问凭证；连接配置与系统秘密仍由系统级服务集成管理。
+              维护项目自己的连接和凭证，并使用平台授权的共享连接。
             </p>
           </Panel>
         )}

@@ -1,0 +1,31 @@
+-- Reading copy of 00015_jobs.sql; execute embedded migrations instead.
+
+CREATE TABLE job_run (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ job_id BIGINT UNSIGNED NOT NULL,
+ revision_id BIGINT UNSIGNED NOT NULL,
+ trigger_kind VARCHAR(16) NOT NULL,
+ actor_user_id BIGINT UNSIGNED NULL,
+ trigger_context JSON NOT NULL,
+ inputs JSON NOT NULL,
+ timeout_ms BIGINT UNSIGNED NOT NULL,
+ state_mode VARCHAR(16) NOT NULL,
+ state_store_id BIGINT UNSIGNED NULL,
+ rerun_of_run_id BIGINT UNSIGNED NULL,
+ status VARCHAR(16) NOT NULL,
+ stop_reason VARCHAR(64) NOT NULL DEFAULT '',
+ error_code VARCHAR(64) NOT NULL DEFAULT '',
+ error_summary TEXT NOT NULL,
+ result JSON NULL,
+ has_result BOOLEAN NOT NULL DEFAULT FALSE,
+ queued_at DATETIME(3) NOT NULL,
+ started_at DATETIME(3) NULL,
+ finished_at DATETIME(3) NULL,
+ stop_requested_by_user_id BIGINT UNSIGNED NULL,
+ stop_requested_at DATETIME(3) NULL,
+ last_log_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ script_log_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ script_log_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ script_logs_truncated BOOLEAN NOT NULL DEFAULT FALSE,
+ PRIMARY KEY(id), KEY idx_job_run_history(job_id,id), KEY idx_job_run_queue(status,queued_at,id), KEY idx_job_run_slots(job_id,status,queued_at,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

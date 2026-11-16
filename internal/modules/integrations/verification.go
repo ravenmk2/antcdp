@@ -142,6 +142,7 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 	}
 	var g HTTPConfig
 	var token, username string
+	var grantsVersion uint64
 	snapshot := storedDiagnostic{}
 	a, err := s.access(ctx, raw, owner, id, true, func(_ identity.Tx, r Repository, _ *identity.Auth, v *ServiceConnection, owner CredentialOwnership) error {
 		if !v.Enabled {
@@ -149,8 +150,12 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 		}
 		snapshot.ConnectionVersion = v.Version
 		snapshot.ConfigVersion = v.ConfigVersion
+		grantsVersion = v.GrantsVersion
 		g = v.Config
 		if cid == 0 {
+			if !managedConnection(v, owner) {
+				return forbidden()
+			}
 			return check(tag, s.connectionTag(v))
 		}
 		cr, err := r.Credential(cid)
@@ -192,7 +197,7 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 	}
 	var out Result
 	a, err = s.access(ctx, raw, owner, id, true, func(_ identity.Tx, r Repository, _ *identity.Auth, v *ServiceConnection, owner CredentialOwnership) error {
-		if !v.Enabled || v.Version != snapshot.ConnectionVersion || v.ConfigVersion != snapshot.ConfigVersion {
+		if !v.Enabled || v.Version != snapshot.ConnectionVersion || v.ConfigVersion != snapshot.ConfigVersion || v.GrantsVersion != grantsVersion {
 			return changedState()
 		}
 		kind, target := "connection", id

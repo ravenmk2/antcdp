@@ -121,7 +121,7 @@ func (c *Credential) ValidRecord() bool {
 		return false
 	}
 	switch c.Ownership {
-	case "system":
+	case "platform":
 		return c.ProjectID == nil && c.UserID == nil
 	case "project":
 		return c.UserID == nil && c.ProjectID != nil && *c.ProjectID != 0

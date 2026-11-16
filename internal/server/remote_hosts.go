@@ -147,10 +147,10 @@ func registerRemoteHosts(api *gin.RouterGroup, o Options) {
 			if !allowVerify(c) {
 				return
 			}
-			r, a, err := s.Verify(c.Request.Context(), rawSession(c), id, 0, i.CredentialOwnership{Type: "system"}, c.GetHeader("If-Match"), metadata(c))
+			r, a, err := s.Verify(c.Request.Context(), rawSession(c), id, 0, i.CredentialOwnership{Type: "platform"}, c.GetHeader("If-Match"), metadata(c))
 			finish(c, r, a, err, 200)
 		})
-		for _, group := range []struct{ path, ownership string }{{base, "system"}, {personal, "personal"}, {project, "project"}, {"/admin/agents/:agent_id/remote-hosts", "robot"}} {
+		for _, group := range []struct{ path, ownership string }{{base, "platform"}, {personal, "personal"}, {project, "project"}, {"/admin/agents/:agent_id/remote-hosts", "robot"}} {
 			prefix := group.path + "/:connection_id/credentials"
 			for _, route := range []struct{ method, path, op string }{
 				{"GET", "", "list"}, {"POST", "", "create"}, {"GET", "/preferred", "get_preferred"}, {"PUT", "/preferred", "preferred"}, {"DELETE", "/preferred", "clear_preferred"},

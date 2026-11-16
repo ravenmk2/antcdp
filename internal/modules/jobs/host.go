@@ -213,6 +213,13 @@ func (h *runHost) resource(ctx context.Context, args []json.RawMessage) (any, er
 			if conn == nil || cred == nil || !conn.Enabled || !cred.Usable() || !cred.ValidRecord() || cred.Ownership != "project" || cred.ProjectID == nil || *cred.ProjectID != h.job.ProjectID || cred.ConnectionID != conn.ID {
 				break
 			}
+			allowed, err := integrations.ConnectionAllowed(ir, conn, integrations.CredentialOwnership{Type: "project", Owner: h.job.ProjectID})
+			if err != nil {
+				return err
+			}
+			if !allowed {
+				break
+			}
 			call.ResourceID = &conn.ID
 			call.ConnectionID = &conn.ID
 			call.GrantID = &g.ID

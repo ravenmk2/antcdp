@@ -1,0 +1,30 @@
+-- Reading copy of 00011_agent_definitions.sql; execute embedded migrations instead.
+
+CREATE TABLE `agent` (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description VARCHAR(1000) NOT NULL DEFAULT '',
+    agent_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'interactive | service',
+    scope_kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    scope_id BIGINT UNSIGNED NULL,
+    robot_user_id BIGINT UNSIGNED NULL,
+    enabled BOOLEAN NOT NULL DEFAULT FALSE,
+    system_prompt MEDIUMTEXT NOT NULL,
+    config_schema_version INT UNSIGNED NOT NULL DEFAULT 1,
+    default_model_binding_id BIGINT UNSIGNED NULL,
+    runtime_policy JSON NOT NULL,
+    pool_capacity SMALLINT UNSIGNED NULL,
+    config_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    created_by_user_id BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    deleted_at DATETIME(3) NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_agent_code (code),
+    UNIQUE KEY uq_agent_robot (robot_user_id),
+    KEY idx_agent_catalog (agent_type, enabled, deleted_at, id),
+    KEY idx_agent_scope (scope_kind, scope_id, deleted_at, id),
+    KEY idx_agent_model (default_model_binding_id)
+) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

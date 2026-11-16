@@ -23,10 +23,10 @@ func verifyRepositoryLabels(t *testing.T, db *Store, admin, member, other *apiCl
 	create := map[string]any{"code": "backend", "name": " 后端服务 ", "color": "#3b82f6"}
 	member.call(t, "GET", base, nil, 200, nil)
 	other.call(t, "GET", base, nil, 404, nil)
-	member.call(t, "POST", base, create, 403, collection())
+	other.call(t, "POST", base, create, 404, collection())
 	admin.call(t, "POST", base, create, 428, nil)
 	stale := collection()
-	item := testData(admin.call(t, "POST", base, create, 201, stale))["item"].(map[string]any)
+	item := testData(member.call(t, "POST", base, create, 201, stale))["item"].(map[string]any)
 	lid := item["id"].(string)
 	label := base + "/" + lid
 	if item["name"] != "后端服务" || item["color"] != "#3B82F6" {
@@ -39,10 +39,10 @@ func verifyRepositoryLabels(t *testing.T, db *Store, admin, member, other *apiCl
 	admin.call(t, "PATCH", label, map[string]any{"color": "red"}, 422, collection())
 	old := object()
 	admin.call(t, "PUT", repo+"/labels", map[string]any{}, 422, old)
-	member.call(t, "PUT", repo+"/labels", map[string]any{"label_ids": []string{lid}}, 403, old)
+	other.call(t, "PUT", repo+"/labels", map[string]any{"label_ids": []string{lid}}, 404, old)
 	admin.call(t, "PUT", repo+"/labels", map[string]any{"label_ids": []string{lid, lid}}, 422, old)
 	admin.call(t, "PUT", repo+"/labels", map[string]any{"label_ids": []string{lid, "999999999"}}, 422, old)
-	bound := testData(admin.call(t, "PUT", repo+"/labels", map[string]any{"label_ids": []string{lid}}, 200, old))
+	bound := testData(member.call(t, "PUT", repo+"/labels", map[string]any{"label_ids": []string{lid}}, 200, old))
 	if len(bound["labels"].([]any)) != 1 {
 		t.Fatal("missing labels", bound)
 	}

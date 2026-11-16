@@ -62,7 +62,7 @@ export function workspaceBreadcrumbs(
       const [, section, objectId] = credentialMatch;
       const sectionPath = `/projects/${project.id}/${section}`;
       items.push({
-        label: section === "integrations" ? "项目服务凭证" : "项目 SSH 凭证",
+        label: section === "integrations" ? "项目服务连接" : "项目 SSH 凭证",
         ...(objectId ? { to: sectionPath } : {}),
       });
       if (objectId)

@@ -85,9 +85,6 @@ func (s *Service) decorateRepo(v *ProjectRepo) {
 }
 func (s *Service) projectRepoAccess(ctx context.Context, raw string, pid uint64, write bool, fn func(identity.Tx, Repository, ProjectRepoStore, *identity.Auth, *c.Resource) error) (*identity.Auth, error) {
 	return s.Identity.BusinessAccess(ctx, raw, nil, func(tx identity.Tx, a *identity.Auth) error {
-		if write && a.User.Role != "admin" {
-			return forbidden()
-		}
 		cr, ok := tx.(c.Repository)
 		if !ok {
 			return integrity()
@@ -109,6 +106,9 @@ func (s *Service) projectRepoAccess(ctx context.Context, raw string, pid uint64,
 		}
 		if p == nil || (!p.IsMember && a.User.Role != "admin") {
 			return fail()
+		}
+		if write && a.User.Role != "admin" && p.Role != "admin" {
+			return forbidden()
 		}
 		if write && p.EndedAt != nil {
 			return httpx.E(409, "PROJECT_ARCHIVED", "归档项目只读")
@@ -149,7 +149,11 @@ func (s *Service) RepoConnections(ctx context.Context, raw string, pid uint64) (
 		}
 		items := []map[string]any{}
 		for _, v := range rows {
-			if v.Type == "gitlab" {
+			allowed, err := ConnectionAllowed(r, &v, CredentialOwnership{Type: "project", Owner: pid})
+			if err != nil {
+				return err
+			}
+			if v.Type == "gitlab" && allowed {
 				items = append(items, map[string]any{"id": fmt.Sprint(v.ID), "name": v.Name, "service_type": v.Type, "enabled": v.Enabled})
 			}
 		}
@@ -167,8 +171,8 @@ type repoSnapshot struct {
 	Token          string
 }
 
-func (s *Service) repoSnapshot(r Repository, id uint64, decrypt bool) (repoSnapshot, error) {
-	return s.ownedRepoSnapshot(r, id, decrypt, CredentialOwnership{Type: "system"})
+func (s *Service) repoSnapshot(r Repository, id, project uint64, decrypt bool) (repoSnapshot, error) {
+	return s.ownedRepoSnapshot(r, id, decrypt, CredentialOwnership{Type: "project", Owner: project})
 }
 func (s *Service) ownedRepoSnapshot(r Repository, id uint64, decrypt bool, owner CredentialOwnership) (repoSnapshot, error) {
 	var snap repoSnapshot
@@ -177,6 +181,13 @@ func (s *Service) ownedRepoSnapshot(r Repository, id uint64, decrypt bool, owner
 		return snap, e
 	}
 	if v == nil || v.Type != "gitlab" {
+		return snap, fail()
+	}
+	allowed, err := ConnectionAllowed(r, v, owner)
+	if err != nil {
+		return snap, err
+	}
+	if !allowed {
 		return snap, fail()
 	}
 	if !v.Enabled {
@@ -204,7 +215,7 @@ func (s *Service) ownedRepoSnapshot(r Repository, id uint64, decrypt bool, owner
 		if owner.Type == "personal" {
 			return snap, httpx.E(409, "PERSONAL_PREFERRED_REQUIRED", "请先设置此连接的个人首选 GitLab 凭证")
 		}
-		return snap, httpx.E(409, "SYSTEM_PREFERRED_REQUIRED", "请先为该连接设置系统首选凭证")
+		return snap, httpx.E(409, "PROJECT_PREFERRED_REQUIRED", "请先为该连接设置当前项目的首选凭证")
 	}
 	if !selected.Usable() {
 		return snap, unavailable()
@@ -224,13 +235,13 @@ func (s *Service) ownedRepoSnapshot(r Repository, id uint64, decrypt bool, owner
 	return snap, nil
 }
 func sameRepoSnapshot(x, y repoSnapshot) bool {
-	return x.Connection.Version == y.Connection.Version && x.Connection.ConfigVersion == y.Connection.ConfigVersion && x.Connection.CredentialsVersion == y.Connection.CredentialsVersion && x.Credential.ID == y.Credential.ID && x.Credential.Version == y.Credential.Version && x.Credential.MaterialVersion == y.Credential.MaterialVersion
+	return x.Connection.Version == y.Connection.Version && x.Connection.ConfigVersion == y.Connection.ConfigVersion && x.Connection.CredentialsVersion == y.Connection.CredentialsVersion && x.Connection.GrantsVersion == y.Connection.GrantsVersion && x.Credential.ID == y.Credential.ID && x.Credential.Version == y.Credential.Version && x.Credential.MaterialVersion == y.Credential.MaterialVersion
 }
 func (s *Service) repoStart(ctx context.Context, raw string, pid, cid uint64) (repoSnapshot, *identity.Auth, error) {
 	var snap repoSnapshot
 	a, e := s.projectRepoAccess(ctx, raw, pid, true, func(_ identity.Tx, r Repository, _ ProjectRepoStore, a *identity.Auth, p *c.Resource) error {
 		var e error
-		snap, e = s.repoSnapshot(r, cid, true)
+		snap, e = s.repoSnapshot(r, cid, pid, true)
 		snap.ProjectVersion = p.Version
 		snap.Actor = a.User.ID
 		return e
@@ -301,7 +312,7 @@ func (s *Service) LinkRepos(ctx context.Context, raw string, pid uint64, w RepoW
 		infos = append(infos, v)
 	}
 	a, e = s.projectRepoAccess(ctx, raw, pid, true, func(tx identity.Tx, r Repository, pr ProjectRepoStore, a *identity.Auth, p *c.Resource) error {
-		current, e := s.repoSnapshot(r, cid, false)
+		current, e := s.repoSnapshot(r, cid, pid, false)
 		if e != nil {
 			return e
 		}
@@ -427,7 +438,7 @@ func (s *Service) RefreshRepo(ctx context.Context, raw string, pid, id uint64, t
 	if e != nil {
 		remoteErr := e
 		a, e = s.projectRepoAccess(ctx, raw, pid, true, func(_ identity.Tx, r Repository, pr ProjectRepoStore, _ *identity.Auth, p *c.Resource) error {
-			current, err := s.repoSnapshot(r, row.ConnectionID, false)
+			current, err := s.repoSnapshot(r, row.ConnectionID, pid, false)
 			if err != nil {
 				return err
 			}
@@ -453,7 +464,7 @@ func (s *Service) RefreshRepo(ctx context.Context, raw string, pid, id uint64, t
 		return out, a, remoteErr
 	}
 	a, e = s.projectRepoAccess(ctx, raw, pid, true, func(tx identity.Tx, r Repository, pr ProjectRepoStore, a *identity.Auth, p *c.Resource) error {
-		current, e := s.repoSnapshot(r, row.ConnectionID, false)
+		current, e := s.repoSnapshot(r, row.ConnectionID, pid, false)
 		if e != nil {
 			return e
 		}
@@ -496,7 +507,7 @@ func (s *Service) RefreshRepo(ctx context.Context, raw string, pid, id uint64, t
 
 // Keep the platform ID a string all the way through JSON and storage.
 func repoCursorPayload(snap repoSnapshot, q RepoBrowseQuery, page int, expires int64) string {
-	b, _ := json.Marshal([]any{snap.Actor, snap.ProjectVersion, snap.Connection.ID, snap.Connection.Version, snap.Connection.CredentialsVersion, snap.Credential.ID, snap.Credential.MaterialVersion, q.Kind, q.Search, q.Container, q.Recursive, page, expires})
+	b, _ := json.Marshal([]any{snap.Actor, snap.ProjectVersion, snap.Connection.ID, snap.Connection.Version, snap.Connection.CredentialsVersion, snap.Connection.GrantsVersion, snap.Credential.ID, snap.Credential.MaterialVersion, q.Kind, q.Search, q.Container, q.Recursive, page, expires})
 	if q.Size != 20 {
 		return string(b) + ":size=" + strconv.Itoa(q.Size)
 	}
@@ -551,7 +562,7 @@ func (s *Service) BrowseRepos(ctx context.Context, raw string, pid, cid uint64, 
 		return out, a, e
 	}
 	a, e = s.projectRepoAccess(ctx, raw, pid, true, func(_ identity.Tx, r Repository, pr ProjectRepoStore, _ *identity.Auth, p *c.Resource) error {
-		current, e := s.repoSnapshot(r, cid, false)
+		current, e := s.repoSnapshot(r, cid, pid, false)
 		if e != nil {
 			return e
 		}
@@ -667,7 +678,11 @@ func (s *Service) GetProjectRepo(ctx context.Context, raw string, pid, id uint64
 		if e != nil {
 			return e
 		}
-		outdated := !connection.Enabled || connection.Version != d.ConnectionVersion || connection.ConfigVersion != d.ConfigVersion || connection.CredentialsVersion != d.CredentialsVersion || credential == nil || !credential.Usable() || !credential.Preferred || credential.MaterialVersion != d.MaterialVersion
+		allowed, err := ConnectionAllowed(r, connection, CredentialOwnership{Type: "project", Owner: pid})
+		if err != nil {
+			return err
+		}
+		outdated := !allowed || !connection.Enabled || connection.Version != d.ConnectionVersion || connection.ConfigVersion != d.ConfigVersion || connection.CredentialsVersion != d.CredentialsVersion || credential == nil || !credential.Usable() || !credential.Preferred || credential.MaterialVersion != d.MaterialVersion
 		out.Data = map[string]any{"latest": map[string]any{"status": d.Status, "reason": d.Reason, "finished_at": d.FinishedAt, "outdated": outdated}}
 		return nil
 	})

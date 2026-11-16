@@ -1,0 +1,31 @@
+-- Reading copy of 00013_agent_runtime.sql; execute embedded migrations instead.
+
+CREATE TABLE `agent_interaction` (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    session_id BIGINT UNSIGNED NOT NULL,
+    run_id BIGINT UNSIGNED NOT NULL,
+    origin_child_run_id BIGINT UNSIGNED NULL,
+    tool_call_id BIGINT UNSIGNED NOT NULL,
+    kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    status VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    request_event_seq BIGINT UNSIGNED NOT NULL,
+    request_hash BINARY(32) NOT NULL,
+    specification JSON NOT NULL,
+    wait_deadline_at DATETIME(3) NOT NULL,
+    pending_reply_input_id BIGINT UNSIGNED NULL,
+    answer_event_seq BIGINT UNSIGNED NULL,
+    decided_by_kind VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    decided_by_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    decided_at DATETIME(3) NULL,
+    approval_consumed_at DATETIME(3) NULL,
+    continue_reason VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
+    row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    projection_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_agent_interaction_call (tool_call_id),
+    UNIQUE KEY uq_agent_interaction_reply (pending_reply_input_id),
+    KEY idx_agent_interaction_session (session_id, kind, status, id),
+    KEY idx_agent_interaction_due (kind, status, wait_deadline_at, id)
+) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

@@ -71,6 +71,7 @@ var labels = map[string]string{
 	"service_connection.created":                       "创建服务连接",
 	"service_connection.updated":                       "更新服务连接",
 	"service_connection.deleted":                       "删除服务连接",
+	"service_connection.grant_changed":                 "修改连接授权",
 	"service_connection.fallback_changed":              "修改兜底凭证",
 	"service_credential.created":                       "创建访问凭证",
 	"service_credential.updated":                       "更新访问凭证",
@@ -154,6 +155,15 @@ func PublicDetail(action string, raw json.RawMessage) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	result := map[string]any{}
+	if action == "service_connection.grant_changed" {
+		var kind, id string
+		if json.Unmarshal(src["subject_kind"], &kind) == nil && (kind == "project" || kind == "team") {
+			result["subject_kind"] = kind
+		}
+		if json.Unmarshal(src["subject_id"], &id) == nil && len(id) <= 20 {
+			result["subject_id"] = id
+		}
+	}
 	if strings.HasPrefix(action, "project_repository_label.") {
 		for key, limit := range map[string]int{"project_id": 20, "code": 64, "name": 100, "color": 7} {
 			var value string
@@ -198,7 +208,10 @@ func PublicDetail(action string, raw json.RawMessage) json.RawMessage {
 			}
 		}
 		var owner string
-		if json.Unmarshal(src["ownership_type"], &owner) == nil && (owner == "system" || owner == "project" || owner == "personal") {
+		if json.Unmarshal(src["ownership_type"], &owner) == nil && (owner == "system" || owner == "platform" || owner == "project" || owner == "personal") {
+			if owner == "system" {
+				owner = "platform"
+			}
 			result["ownership_type"] = owner
 		}
 	}

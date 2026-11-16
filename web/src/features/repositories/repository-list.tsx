@@ -724,7 +724,7 @@ function SyncDialog({
       }
     >
       <Notice>
-        同步使用连接当前的系统首选凭证。成功、失败与结果未知逐仓记录，不提供跨仓原子回滚。
+        同步使用连接当前的项目首选凭证。成功、失败与结果未知逐仓记录，不提供跨仓原子回滚。
       </Notice>
       <ul className="mt-4 max-h-80 divide-y divide-border-subtle overflow-y-auto rounded-lg border">
         {results.map((result) => (
@@ -919,7 +919,7 @@ function RepositoryPicker({
       <Field
         label="服务连接"
         required
-        hint="远端操作只使用该连接当前的系统首选凭证"
+        hint="远端操作只使用该连接当前的项目首选凭证"
       >
         <Select
           value={connection}
