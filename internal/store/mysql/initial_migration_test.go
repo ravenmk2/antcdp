@@ -44,7 +44,7 @@ func TestInitialMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	sources := p.ListSources()
-	const baselineMigrations = 14
+	const baselineMigrations = 15
 	if len(sources) < baselineMigrations {
 		t.Fatal("missing baseline migrations", len(sources))
 	}
@@ -98,7 +98,7 @@ func TestInitialMigration(t *testing.T) {
 		t.Fatal("unexpected baseline migration history", versions, err)
 	}
 	var tables int
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 82 {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 94 {
 		t.Fatal("expected baseline tables and goose history", tables, err)
 	}
 	t.Run("state store", func(t *testing.T) { stateStoreIntegration(t, ctx, s) })

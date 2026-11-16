@@ -17,6 +17,21 @@ func registerDingTalk(api *gin.RouterGroup, o Options) {
 		}
 		return st, nil
 	}}
+	registerDingTalkRoutes(api, o, s, "/admin/dingtalk/robots")
+	project := api.Group("/projects/:id/dingtalk")
+	project.Use(func(c *gin.Context) {
+		id, ok := collaborationID(c, "id")
+		if !ok {
+			c.Abort()
+			return
+		}
+		c.Request = c.Request.WithContext(dingtalk.WithProject(c.Request.Context(), id))
+		c.Next()
+	})
+	registerDingTalkRoutes(project, o, s, "/robots")
+}
+
+func registerDingTalkRoutes(api *gin.RouterGroup, o Options, s *dingtalk.Service, base string) {
 	finish := func(c *gin.Context, r dingtalk.Result, a *identity.Auth, e error, status int) {
 		if !collaborationFinish(c, o, a, e) {
 			return
@@ -30,7 +45,6 @@ func registerDingTalk(api *gin.RouterGroup, o Options) {
 		}
 		httpx.Data(c, status, r.Data)
 	}
-	base := "/admin/dingtalk/robots"
 	api.GET(base, func(c *gin.Context) {
 		f := dingtalk.Filter{Page: 1, PageSize: 20}
 		for key, values := range c.Request.URL.Query() {
@@ -80,8 +94,8 @@ func registerDingTalk(api *gin.RouterGroup, o Options) {
 		finish(c, r, a, e, 201)
 	})
 	for _, route := range []struct{ method, path, op string }{{"GET", "", "get"}, {"PATCH", "", "update"}, {"DELETE", "", "delete"}, {"PUT", "/authentication", "authentication"}, {"GET", "/diagnostics", "diagnostics"}} {
-		api.Handle(route.method, base+"/:id"+route.path, func(c *gin.Context) {
-			id, ok := collaborationID(c, "id")
+		api.Handle(route.method, base+"/:robotID"+route.path, func(c *gin.Context) {
+			id, ok := collaborationID(c, "robotID")
 			if !ok {
 				return
 			}
@@ -106,8 +120,8 @@ func registerDingTalk(api *gin.RouterGroup, o Options) {
 			finish(c, r, a, e, status)
 		})
 	}
-	api.POST(base+"/:id/test", func(c *gin.Context) {
-		id, ok := collaborationID(c, "id")
+	api.POST(base+"/:robotID/test", func(c *gin.Context) {
+		id, ok := collaborationID(c, "robotID")
 		if !ok {
 			return
 		}

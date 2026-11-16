@@ -54,6 +54,9 @@ const RemoteHostsPage = lazy(() =>
   })),
 );
 const Root = lazy(() => import("./root"));
+const ProjectJobsPage = lazy(() =>
+  import("./pages/jobs").then((m) => ({ default: m.ProjectJobsPage })),
+);
 const ConversationsPage = lazy(() =>
   import("./pages/conversations-page").then((m) => ({
     default: m.ConversationsPage,
@@ -100,6 +103,18 @@ export const workspaceRoutes: RouteObject[] = [
         ),
       },
       { path: "projects/:projectId", element: <WorkspaceProjectDetail /> },
+      {
+        path: "projects/:projectId/jobs/:jobId?",
+        element: <ProjectJobsPage />,
+      },
+      {
+        path: "projects/:projectId/jobs/:jobId/runs/:runId",
+        element: <ProjectJobsPage />,
+      },
+      {
+        path: "projects/:projectId/dingtalk/:robotId?",
+        element: <ProjectJobsPage robots />,
+      },
       { path: "teams/:teamId", element: <WorkspaceTeamDetail /> },
       { path: "projects/:projectId/variants", element: <RemovedProjectPage /> },
       {

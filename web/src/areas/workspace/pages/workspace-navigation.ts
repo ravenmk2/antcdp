@@ -1,6 +1,7 @@
 export const workspaceProjectPages = [
   "overview",
   "repositories",
+  "jobs",
   "description",
   "settings",
 ] as const;
@@ -43,6 +44,10 @@ export function resolveWorkspaceProjectView(
   const remainder = match[2]?.replace(/\/$/, "") ?? "";
   if (remainder === "description/edit")
     return { projectId, page: "description", section: "profile" };
+  if (/^jobs(?:\/(?:new|[1-9]\d*)(?:\/runs\/[1-9]\d*)?)?$/.test(remainder))
+    return { projectId, page: "jobs", section: "profile" };
+  if (/^dingtalk(?:\/[1-9]\d*)?$/.test(remainder))
+    return { projectId, page: "settings", section: "profile" };
   if (/^variants(?:\/[1-9]\d*)?$/.test(remainder))
     return { projectId, page: "overview", section: "profile" };
   if (/^integrations(?:\/[1-9]\d*)?$/.test(remainder))

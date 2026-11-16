@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/modules/collaboration"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -24,7 +25,26 @@ func repository(tx identity.Tx) (Repository, error) {
 }
 func (s *Service) access(ctx context.Context, raw string, fn func(identity.Tx, Repository, *identity.Auth) error) (*identity.Auth, error) {
 	return s.Identity.BusinessAccess(ctx, raw, nil, func(tx identity.Tx, a *identity.Auth) error {
-		if a.User.Role != "admin" {
+		scope := scopeFrom(ctx)
+		if scope.Kind == "project" {
+			projects, ok := tx.(collaboration.Repository)
+			if !ok {
+				return httpx.E(503, "SERVICE_UNAVAILABLE", "项目服务暂不可用")
+			}
+			project, err := projects.Resource(collaboration.Project, scope.ID, a.User.ID)
+			if err != nil {
+				return err
+			}
+			if project == nil || (!project.IsMember && a.User.Role != "admin") {
+				return missing()
+			}
+			if !project.IsMember || (project.Role != "admin" && a.User.Role != "admin") {
+				return httpx.E(403, "FORBIDDEN", "需要项目管理员权限")
+			}
+			if project.EndedAt != nil {
+				return httpx.E(409, "RESOURCE_READ_ONLY", "项目已归档")
+			}
+		} else if a.User.Role != "admin" {
 			return httpx.E(403, "FORBIDDEN", "需要管理员权限")
 		}
 		r, err := repository(tx)
@@ -68,6 +88,8 @@ func (s *Service) present(p *Robot) {
 	}
 }
 func (s *Service) List(ctx context.Context, raw string, f Filter) (Result, *identity.Auth, error) {
+	scope := scopeFrom(ctx)
+	f.ScopeKind, f.ScopeID = scope.Kind, scope.ID
 	var out Result
 	a, e := s.access(ctx, raw, func(_ identity.Tx, r Repository, _ *identity.Auth) error {
 		rows, count, err := r.List(f)
@@ -88,13 +110,14 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 		var p *Robot
 		var err error
 		if op == "create" {
-			p = &Robot{Enabled: true, RowVersion: 1}
+			scope := scopeFrom(ctx)
+			p = &Robot{Enabled: true, RowVersion: 1, MaterialVersion: 1, ScopeKind: scope.Kind, ScopeID: scope.ID}
 		} else {
 			p, err = r.Robot(id)
 			if err != nil {
 				return err
 			}
-			if p == nil {
+			if p == nil || !inScope(ctx, p) {
 				return missing()
 			}
 		}
@@ -161,6 +184,9 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 				return err
 			}
 			p.HasSecret = true
+			if op != "create" {
+				p.MaterialVersion++
+			}
 		}
 		if op != "create" && w.Authentication == nil && reflect.DeepEqual(before, *p) {
 			s.present(p)
@@ -251,7 +277,7 @@ func (s *Service) Test(ctx context.Context, raw string, id uint64, tag string, w
 		if e != nil {
 			return e
 		}
-		if v == nil {
+		if v == nil || !inScope(ctx, v) {
 			return missing()
 		}
 		if e = checkTag(tag, s.tag(v)); e != nil {

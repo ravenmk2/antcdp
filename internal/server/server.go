@@ -19,6 +19,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/install"
+	"github.com/ravenmk2/antcdp/internal/modules/jobs"
 	"github.com/ravenmk2/antcdp/internal/modules/media"
 	"github.com/ravenmk2/antcdp/internal/modules/models"
 	"github.com/ravenmk2/antcdp/internal/modules/webaccess"
@@ -28,6 +29,7 @@ import (
 )
 
 type Options struct {
+	Jobs           *jobs.Service
 	Runtime        config.Runtime
 	Installer      *install.Service
 	Static         fs.FS
@@ -155,6 +157,7 @@ func New(o Options) http.Handler {
 	registerEmail(api, o)
 	registerSMS(api, o)
 	registerDingTalk(api, o)
+	registerJobs(api, o)
 	registerModels(api, o)
 	registerWebAccess(api, o)
 	registerAgents(api, o)

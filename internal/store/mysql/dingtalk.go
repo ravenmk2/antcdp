@@ -14,25 +14,31 @@ type dingtalkTx struct{ *identityTx }
 func (t *identityTx) DingTalk() e.Repository { return &dingtalkTx{t} }
 
 type dingtalkRow struct {
-	Latest        []byte    `db:"last_test"`
-	ID            uint64    `db:"id"`
-	Code          string    `db:"code"`
-	Name          string    `db:"name"`
-	Description   string    `db:"description"`
-	Enabled       bool      `db:"enabled"`
-	Config        []byte    `db:"config"`
-	Version       uint64    `db:"row_version"`
-	SchemaVersion uint64    `db:"config_schema_version"`
-	CreatedAt     time.Time `db:"created_at"`
-	UpdatedAt     time.Time `db:"updated_at"`
-	HasSecret     bool      `db:"has_secret"`
+	ScopeKind       string    `db:"scope_kind"`
+	ScopeID         uint64    `db:"scope_id"`
+	MaterialVersion uint64    `db:"material_version"`
+	Latest          []byte    `db:"last_test"`
+	ID              uint64    `db:"id"`
+	Code            string    `db:"code"`
+	Name            string    `db:"name"`
+	Description     string    `db:"description"`
+	Enabled         bool      `db:"enabled"`
+	Config          []byte    `db:"config"`
+	Version         uint64    `db:"row_version"`
+	SchemaVersion   uint64    `db:"config_schema_version"`
+	CreatedAt       time.Time `db:"created_at"`
+	UpdatedAt       time.Time `db:"updated_at"`
+	HasSecret       bool      `db:"has_secret"`
 }
 
-const dingtalkColumns = "id,code,name,description,enabled,config,config_schema_version,row_version,created_at,updated_at"
+const dingtalkColumns = "id,scope_kind,scope_id,material_version,code,name,description,enabled,config,config_schema_version,row_version,created_at,updated_at"
 
 func dingtalkWhere(f e.Filter) (string, []any) {
-	where := "1=1"
-	args := []any{}
+	if f.ScopeKind == "" {
+		f.ScopeKind = "platform"
+	}
+	where := "scope_kind=? AND scope_id=?"
+	args := []any{f.ScopeKind, f.ScopeID}
 	if f.Query != "" {
 		where += " AND (LOCATE(?,name)>0 OR LOCATE(?,code)>0)"
 		args = append(args, f.Query, f.Query)
@@ -52,6 +58,7 @@ func (t *dingtalkTx) decodeRobot(row dingtalkRow) (*e.Robot, error) {
 		return nil, err
 	}
 	p.ID = row.ID
+	p.ScopeKind, p.ScopeID, p.MaterialVersion = row.ScopeKind, row.ScopeID, row.MaterialVersion
 	p.Code = row.Code
 	p.Name = row.Name
 	p.Description = row.Description
@@ -107,7 +114,7 @@ func (t *dingtalkTx) Save(p *e.Robot, create bool) error {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	if create {
 		p.CreatedAt = now
-		result, err := t.tx.ExecContext(t.ctx, "INSERT INTO dingtalk_robot(code,name,description,enabled,config,config_schema_version,row_version,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?,?)", p.Code, p.Name, p.Description, p.Enabled, b, p.RowVersion, now, now)
+		result, err := t.tx.ExecContext(t.ctx, "INSERT INTO dingtalk_robot(scope_kind,scope_id,material_version,code,name,description,enabled,config,config_schema_version,row_version,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,1,?,?,?)", p.ScopeKind, p.ScopeID, p.MaterialVersion, p.Code, p.Name, p.Description, p.Enabled, b, p.RowVersion, now, now)
 		if err != nil {
 			return err
 		}
@@ -117,12 +124,23 @@ func (t *dingtalkTx) Save(p *e.Robot, create bool) error {
 		}
 		p.ID = uint64(id)
 	} else {
-		if _, err = t.tx.ExecContext(t.ctx, "UPDATE dingtalk_robot SET name=?,description=?,enabled=?,config=?,row_version=?,updated_at=? WHERE id=?", p.Name, p.Description, p.Enabled, b, p.RowVersion, now, p.ID); err != nil {
+		if _, err = t.tx.ExecContext(t.ctx, "UPDATE dingtalk_robot SET name=?,description=?,enabled=?,config=?,row_version=?,material_version=?,updated_at=? WHERE id=?", p.Name, p.Description, p.Enabled, b, p.RowVersion, p.MaterialVersion, now, p.ID); err != nil {
 			return err
 		}
 	}
 	p.UpdatedAt = now
 	return nil
+}
+func (t *dingtalkTx) RobotByCode(kind string, scopeID uint64, code string) (*e.Robot, error) {
+	var id uint64
+	err := t.tx.GetContext(t.ctx, &id, "SELECT id FROM dingtalk_robot WHERE scope_kind=? AND scope_id=? AND code=?", kind, scopeID, code)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return t.Robot(id)
 }
 func (t *dingtalkTx) Delete(id uint64) error {
 	_, err := t.tx.ExecContext(t.ctx, "DELETE FROM dingtalk_robot WHERE id=?", id)

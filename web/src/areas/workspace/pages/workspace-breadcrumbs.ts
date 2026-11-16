@@ -47,6 +47,7 @@ export function workspaceBreadcrumbs(
     const view = resolveWorkspaceProjectView(path, search);
     const labels: Record<string, string> = {
       repositories: "Git 仓库",
+      jobs: "任务",
       settings: "项目设置",
       description: "项目介绍",
     };
@@ -68,6 +69,11 @@ export function workspaceBreadcrumbs(
         items.push({
           label: section === "integrations" ? "连接详情" : "主机详情",
         });
+    } else if (path.includes("/dingtalk")) {
+      items.push({
+        label: "钉钉机器人",
+        to: `/projects/${project.id}/dingtalk`,
+      });
     } else if (path.endsWith("/description/edit")) {
       items.push(
         {

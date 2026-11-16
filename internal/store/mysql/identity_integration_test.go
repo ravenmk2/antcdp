@@ -139,7 +139,8 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	if installer.Status(context.Background()).State != install.SetupRequired {
 		t.Fatal("test data directory must be fresh")
 	}
-	h := server.New(server.Options{Runtime: runtime, Installer: installer, Static: web.DistFS(), Version: "integration-test"})
+	jobService := testJobService(installer)
+	h := server.New(server.Options{Runtime: runtime, Installer: installer, Jobs: jobService, Static: web.DistFS(), Version: "integration-test"})
 	founder := clientFor(h, 1)
 	expectCode(t, founder.call(t, "GET", "/admin/overview", nil, 503, nil), "INSTANCE_NOT_READY")
 	founder.call(t, "POST", "/setup/database-check", database, 200, nil)
@@ -239,6 +240,7 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	t.Run("ServiceIntegrations", func(t *testing.T) {
 		verifyServiceIntegrations(t, backend, installer, founder, member, visitor, founderID, userID)
 	})
+	t.Run("Jobs", func(t *testing.T) { verifyJobs(t, backend, jobService, founder, member, visitor, founderID, userID) })
 	_, tag = founder.user(t, userID)
 	founder.call(t, "DELETE", "/admin/users/"+userID, nil, 204, map[string]string{"If-Match": tag, "X-Confirm-Username": "member"})
 	var personalCount int

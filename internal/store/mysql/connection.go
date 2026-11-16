@@ -238,6 +238,9 @@ func (s *Store) schemaReady(ctx context.Context, target int64) error {
 	if err = s.stateStoreSchemaReady(ctx); err != nil {
 		return err
 	}
+	if err = s.jobsSchemaReady(ctx); err != nil {
+		return err
+	}
 	var tables int
 	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event','icon_file','project','team','project_member','team_member','project_team','role','role_binding','user_sidebar_preference','user_project_shortcut','user_team_shortcut','service_connection','service_connection_gitlab','service_credential','remote_host','remote_host_key','remote_host_credential','project_repository','project_repository_label','project_repository_label_binding','email_profile','email_sender_name','email_template','email_send_log','sms_profile','sms_template','sms_send_log','dingtalk_robot')"); err != nil {
 		return err

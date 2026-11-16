@@ -10,17 +10,20 @@ import (
 )
 
 type Robot struct {
-	ID          uint64      `json:"id,string"`
-	Code        string      `json:"code"`
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Enabled     bool        `json:"enabled"`
-	HasSecret   bool        `json:"has_secret"`
-	RowVersion  uint64      `json:"-"`
-	Version     string      `json:"version"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
-	Latest      *Diagnostic `json:"latest"`
+	ScopeKind       string      `json:"scope_kind"`
+	ScopeID         uint64      `json:"scope_id,string"`
+	MaterialVersion uint64      `json:"-"`
+	ID              uint64      `json:"id,string"`
+	Code            string      `json:"code"`
+	Name            string      `json:"name"`
+	Description     string      `json:"description"`
+	Enabled         bool        `json:"enabled"`
+	HasSecret       bool        `json:"has_secret"`
+	RowVersion      uint64      `json:"-"`
+	Version         string      `json:"version"`
+	CreatedAt       time.Time   `json:"created_at"`
+	UpdatedAt       time.Time   `json:"updated_at"`
+	Latest          *Diagnostic `json:"latest"`
 }
 type Authentication struct {
 	Token  string `json:"access_token"`
@@ -50,6 +53,8 @@ type TestInput struct {
 	Body   string `json:"body"`
 }
 type Filter struct {
+	ScopeKind      string
+	ScopeID        uint64
 	Page, PageSize int
 	Query, Status  string
 }
@@ -66,6 +71,7 @@ type Result struct {
 type Repository interface {
 	List(Filter) ([]Robot, int, error)
 	Robot(uint64) (*Robot, error)
+	RobotByCode(string, uint64, string) (*Robot, error)
 	Save(*Robot, bool) error
 	Delete(uint64) error
 	Secret(uint64) (string, error)

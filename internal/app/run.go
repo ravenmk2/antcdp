@@ -98,11 +98,12 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 	})
 	modelService := newModelService(installer, accounts)
 	webAccessService := newWebAccessService(installer, accounts)
+	jobService := newJobService(installer, accounts)
 	agentApp, err := newAgentApplication(r.DataDir, installer, accounts, modelService, webAccessService)
 	if err != nil {
 		return err
 	}
-	handler := server.New(server.Options{Runtime: r, Installer: installer, Static: web.DistFS(), Version: version, Identity: accounts, Media: files, Icons: icons, Models: modelService, WebAccess: webAccessService, Agents: agentApp.Service, AgentResources: agentApp.Resources, AgentHub: agentApp.Hub, Sandboxes: agentApp.Sandboxes})
+	handler := server.New(server.Options{Runtime: r, Installer: installer, Static: web.DistFS(), Version: version, Identity: accounts, Media: files, Icons: icons, Models: modelService, WebAccess: webAccessService, Agents: agentApp.Service, AgentResources: agentApp.Resources, AgentHub: agentApp.Hub, Sandboxes: agentApp.Sandboxes, Jobs: jobService})
 	listener, err := net.Listen("tcp", r.Server.Listen)
 	if err != nil {
 		return err
@@ -117,6 +118,7 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 		var workers sync.WaitGroup
 		workers.Go(func() { maintainAvatars(maintenanceCtx, installer, accounts, files, icons, logger) })
 		workers.Go(func() { runAgents(maintenanceCtx, installer, agentApp, logger) })
+		workers.Go(func() { jobService.Work(maintenanceCtx, logger) })
 		workers.Go(func() { maintainAgentResources(maintenanceCtx, installer, agentApp, logger) })
 		workers.Wait()
 	}()

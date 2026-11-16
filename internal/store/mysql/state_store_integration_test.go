@@ -11,6 +11,25 @@ import (
 
 func stateStoreIntegration(t *testing.T, ctx context.Context, db *Store) {
 	backend := db.StateStore()
+	t.Run("human-readable binary strings", func(t *testing.T) {
+		for _, name := range []string{"部署", "Deploy", "deploy", "deploy ", "é", "e\u0301"} {
+			_, kv := createStateTestStore(t, ctx, backend, "test:string-collation", name)
+			for _, key := range []string{"部署", "Key", "key", "key ", "é", "e\u0301"} {
+				if _, err := kv.Put(ctx, key, []byte(key), statestore.PutOptions{IfAbsent: true}); err != nil {
+					t.Fatal(name, key, err)
+				}
+			}
+			for _, key := range []string{"部署", "Key", "key", "key ", "é", "e\u0301"} {
+				entry, err := kv.Get(ctx, key)
+				if err != nil || string(entry.Value) != key {
+					t.Fatal(name, key, entry, err)
+				}
+			}
+		}
+		if err := backend.DeleteNamespace(ctx, "test:string-collation"); err != nil {
+			t.Fatal(err)
+		}
+	})
 	const namespace = "job:部署:Deploy"
 	const neighbor = "job:部署:deploy"
 	first, kv := createStateTestStore(t, ctx, backend, namespace, "a")

@@ -4,7 +4,7 @@
 CREATE TABLE `state_store` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `namespace` VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
-    `name` VARBINARY(64) NOT NULL,
+    `name` VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
     `display_name` VARCHAR(128) NOT NULL,
     `created_at` DATETIME(3) NOT NULL,
     `updated_at` DATETIME(3) NOT NULL,
@@ -14,7 +14,7 @@ CREATE TABLE `state_store` (
 
 CREATE TABLE `state_entry` (
     `store_id` BIGINT UNSIGNED NOT NULL,
-    `entry_key` VARBINARY(255) NOT NULL,
+    `entry_key` VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_bin NOT NULL,
     `value` MEDIUMBLOB NOT NULL,
     `etag` BINARY(16) NOT NULL,
     `created_at` DATETIME(3) NOT NULL,

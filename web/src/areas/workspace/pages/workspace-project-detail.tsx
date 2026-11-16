@@ -113,6 +113,8 @@ function ProjectContent({
 
   if (isRemovedProjectView(params))
     return <Navigate replace to={`/projects/${project.id}`} />;
+  if (view.page === "jobs")
+    return <Navigate replace to={`/projects/${project.id}/jobs`} />;
 
   const actions = (
     <WorkspaceResourceActions
@@ -228,6 +230,14 @@ function WorkspaceProjectSettings({
   return (
     <div className="settings-layout workspace-project-settings">
       <nav className="settings-nav" aria-label="项目设置分类">
+        {project.can_manage && (
+          <Link
+            className="link p-3 text-sm"
+            to={`/projects/${project.id}/dingtalk`}
+          >
+            钉钉机器人
+          </Link>
+        )}
         {links.map(({ key, label, icon: Icon }) => (
           <button
             key={key}

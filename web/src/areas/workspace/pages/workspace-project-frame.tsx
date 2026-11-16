@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
-import { FileText, FolderGit2, LayoutDashboard, Settings } from "lucide-react";
+import {
+  FileText,
+  FolderGit2,
+  LayoutDashboard,
+  Settings,
+  Play,
+} from "lucide-react";
 import { StatusBadge } from "@/components/feedback";
 import { ResourceDetailShell, ResourceHeader, Tabs } from "@/components/layout";
 import { ResourceIcon } from "@/components/resource-icon";
@@ -27,6 +33,7 @@ export function WorkspaceProjectFrame({
     { value: "overview", label: "项目总览", icon: LayoutDashboard },
 
     { value: "repositories", label: "Git 仓库", icon: FolderGit2 },
+    { value: "jobs", label: "任务", icon: Play },
     { value: "description", label: "项目介绍", icon: FileText },
     { value: "settings", label: "项目设置", icon: Settings },
   ].map(({ value, label, icon: Icon }) => ({
@@ -41,6 +48,10 @@ export function WorkspaceProjectFrame({
 
   function select(value: string) {
     const base = `/projects/${project.id}`;
+    if (value === "jobs") {
+      navigate(`${base}/jobs`);
+      return;
+    }
     if (value === "overview") {
       navigate(base);
       return;
