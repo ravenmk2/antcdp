@@ -4,8 +4,6 @@
 
 AI Native Team Collaboration & Development Platform
 
-项目以成员与团队协作、Git 仓库关联和项目内仓库标签组织资源；智能体通过项目上下文开展工作。环境、产品分支和发布由仓库及智能体工作方式管理，平台不预设固定交付流程。
-
 ## Quick Start
 
 Prepare an empty MySQL 8.x database (8.0.17 or later) and a database user, then run:

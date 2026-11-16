@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -38,16 +39,65 @@ func TestInitialMigration(t *testing.T) {
 	if err = s.Check(ctx, true); err != nil {
 		t.Fatal("requires empty schema", err)
 	}
+	p, err := s.migrationProvider()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sources := p.ListSources()
+	const baselineMigrations = 14
+	if len(sources) < baselineMigrations {
+		t.Fatal("missing baseline migrations", len(sources))
+	}
+	for i, source := range sources[:baselineMigrations] {
+		if source.Version != int64(i+1) {
+			t.Fatal("unexpected baseline version order", i, source)
+		}
+	}
+	target := sources[len(sources)-1].Version
+	if !t.Run("version_one_transition", func(t *testing.T) {
+		if _, err := p.UpTo(ctx, 1); err != nil {
+			t.Fatal("applying the platform migration", err)
+		}
+		if err := s.SchemaReady(ctx); err == nil {
+			t.Fatal("platform-only schema was marked ready")
+		}
+		// A project table with only version 1 recorded identifies a pre-split layout.
+		if _, err := s.db.ExecContext(ctx, "CREATE TABLE `project` (`id` BIGINT UNSIGNED PRIMARY KEY) ENGINE=InnoDB"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.SchemaReady(ctx); !errors.Is(err, errVersionOneLayout) {
+			t.Fatal("legacy V1 layout was not identified during startup", err)
+		}
+		if err := s.Migrate(ctx); !errors.Is(err, errVersionOneLayout) {
+			t.Fatal("legacy V1 layout was not rejected before migration", err)
+		}
+		var version int64
+		if err := s.db.GetContext(ctx, &version, "SELECT MAX(version_id) FROM goose_db_version WHERE is_applied=1"); err != nil || version != 1 {
+			t.Fatal("rejected migration changed version history", version, err)
+		}
+		var pendingTables int
+		if err := s.db.GetContext(ctx, &pendingTables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('state_store','state_entry')"); err != nil || pendingTables != 0 {
+			t.Fatal("rejected migration executed later DDL", pendingTables, err)
+		}
+		if _, err := s.db.ExecContext(ctx, "DROP TABLE `project`"); err != nil {
+			t.Fatal(err)
+		}
+	}) {
+		return
+	}
 	if err = s.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	var version, applied, tables int
-	if err = s.db.GetContext(ctx, &version, "SELECT MAX(version_id) FROM goose_db_version WHERE is_applied=1"); err != nil || version != 1 {
-		t.Fatal("wrong baseline version", version, err)
+	expectedVersions := make([]int64, len(sources))
+	for i, source := range sources {
+		expectedVersions[i] = source.Version
 	}
-	if err = s.db.GetContext(ctx, &applied, "SELECT COUNT(*) FROM goose_db_version WHERE is_applied=1 AND version_id>0"); err != nil || applied != 1 {
-		t.Fatal("expected one initial migration", applied, err)
+	const selectVersions = "SELECT version_id FROM goose_db_version WHERE is_applied=1 AND version_id>0 ORDER BY id"
+	var versions []int64
+	if err = s.db.SelectContext(ctx, &versions, selectVersions); err != nil || !slices.Equal(versions, expectedVersions) {
+		t.Fatal("unexpected baseline migration history", versions, err)
 	}
+	var tables int
 	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 82 {
 		t.Fatal("expected baseline tables and goose history", tables, err)
 	}
@@ -84,10 +134,11 @@ func TestInitialMigration(t *testing.T) {
 	if err = s.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM user_sidebar_preference"); err != nil || count != 1 {
 		t.Fatal("repeated migration changed data", err)
 	}
-	if err = s.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM goose_db_version WHERE is_applied=1 AND version_id>0"); err != nil || count != 1 {
-		t.Fatal("repeated migration changed history", err)
+	if err = s.db.SelectContext(ctx, &versions, selectVersions); err != nil || !slices.Equal(versions, expectedVersions) {
+		t.Fatal("repeated migration changed history", versions, err)
 	}
-	if _, err = s.db.ExecContext(ctx, "UPDATE goose_db_version SET version_id=2 WHERE version_id=1"); err != nil {
+	const setVersion = "UPDATE goose_db_version SET version_id=? WHERE version_id=?"
+	if _, err = s.db.ExecContext(ctx, setVersion, target+1, target); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Migrate(ctx); err == nil {
@@ -96,10 +147,11 @@ func TestInitialMigration(t *testing.T) {
 	if err = s.SchemaReady(ctx); err == nil {
 		t.Fatal("wrong version accepted")
 	}
-	if err = s.db.GetContext(ctx, &version, "SELECT MAX(version_id) FROM goose_db_version WHERE is_applied=1"); err != nil || version != 2 {
+	var version int64
+	if err = s.db.GetContext(ctx, &version, "SELECT MAX(version_id) FROM goose_db_version WHERE is_applied=1"); err != nil || version != target+1 {
 		t.Fatal("rejected migration changed version", version, err)
 	}
-	if _, err = s.db.ExecContext(ctx, "UPDATE goose_db_version SET version_id=1 WHERE version_id=2"); err != nil {
+	if _, err = s.db.ExecContext(ctx, setVersion, target, target+1); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.db.ExecContext(ctx, "UPDATE web_access_setting SET id=2 WHERE id=1"); err != nil {

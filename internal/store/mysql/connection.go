@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"regexp"
@@ -147,8 +148,12 @@ func (s *Store) Lock(ctx context.Context) (func(), error) {
 	}, nil
 }
 
+func (s *Store) migrationProvider() (*goose.Provider, error) {
+	return goose.NewProvider(goose.DialectMySQL, s.db.DB, migrations.FS, goose.WithDisableGlobalRegistry(true), goose.WithLogger(discardGooseLogger{}))
+}
+
 func (s *Store) Migrate(ctx context.Context) error {
-	p, err := goose.NewProvider(goose.DialectMySQL, s.db.DB, migrations.FS, goose.WithDisableGlobalRegistry(true), goose.WithLogger(discardGooseLogger{}))
+	p, err := s.migrationProvider()
 	if err != nil {
 		return err
 	}
@@ -159,11 +164,14 @@ func (s *Store) Migrate(ctx context.Context) error {
 	if current > target {
 		return errors.New("database is newer than this executable")
 	}
+	if err = s.checkMigrationLayout(ctx, current); err != nil {
+		return err
+	}
 	_, err = p.Up(ctx)
 	if err != nil {
 		return err
 	}
-	return s.SchemaReady(ctx)
+	return s.schemaReady(ctx, target)
 }
 
 type discardGooseLogger struct{}
@@ -171,7 +179,38 @@ type discardGooseLogger struct{}
 func (discardGooseLogger) Printf(string, ...any) {}
 func (discardGooseLogger) Fatalf(string, ...any) {}
 
+var errVersionOneLayout = errors.New("migration version 1 contains tables from later migrations; reconcile the schema and migration history before migrating")
+
+func (s *Store) checkMigrationLayout(ctx context.Context, version int64) error {
+	if version != 1 {
+		return nil
+	}
+	// The split version 1 contains only platform tables. A monolithic V1
+	// contains project, and a partially applied version 2 may contain state tables.
+	var overlaps bool
+	err := s.db.GetContext(ctx, &overlaps, `SELECT EXISTS (
+    SELECT 1 FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('project','state_store','state_entry')
+)`)
+	if err != nil {
+		return err
+	}
+	if overlaps {
+		return errVersionOneLayout
+	}
+	return nil
+}
+
 func (s *Store) SchemaReady(ctx context.Context) error {
+	p, err := s.migrationProvider()
+	if err != nil {
+		return err
+	}
+	sources := p.ListSources()
+	return s.schemaReady(ctx, sources[len(sources)-1].Version)
+}
+
+func (s *Store) schemaReady(ctx context.Context, target int64) error {
 	var v int64
 	err := s.db.GetContext(ctx, &v, "SELECT version_id FROM goose_db_version WHERE is_applied = TRUE ORDER BY id DESC LIMIT 1")
 	var databaseError *driver.MySQLError
@@ -181,8 +220,11 @@ func (s *Store) SchemaReady(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if v != 1 {
-		return errors.New("database migration version does not match this executable")
+	if v != target {
+		if err = s.checkMigrationLayout(ctx, v); err != nil {
+			return err
+		}
+		return fmt.Errorf("database migration version %d does not match target %d", v, target)
 	}
 	if err = s.modelsSchemaReady(ctx); err != nil {
 		return err
