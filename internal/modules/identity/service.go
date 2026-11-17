@@ -21,10 +21,11 @@ var userTagPattern = regexp.MustCompile(`^"u-[1-9][0-9]*-v[1-9][0-9]*"$`)
 var settingsTagPattern = regexp.MustCompile(`^"settings-[0-9a-f]{64}"$`)
 
 type Service struct {
-	provider Provider
-	slots    chan struct{}
-	dummy    string
-	now      func() time.Time
+	connections connections
+	provider    Provider
+	slots       chan struct{}
+	dummy       string
+	now         func() time.Time
 }
 
 func New(provider Provider) *Service {
@@ -133,7 +134,9 @@ func (s *Service) login(ctx context.Context, username, secret, oldToken string, 
 		return nil, invalidCredentials()
 	}
 	result := &LoginResult{Token: cryptox.Token()}
+	var revokedSession uint64
 	err = store.Transact(ctx, func(tx Tx) error {
+		revokedSession = 0
 		ids := []uint64{credential.UserID}
 		var previous *Session
 		if len(oldToken) == 43 {
@@ -174,6 +177,7 @@ func (s *Service) login(ctx context.Context, username, secret, oldToken string, 
 				return e
 			}
 			if previous != nil {
+				revokedSession = previous.ID
 				if e = tx.RevokeSession(previous.ID, s.now()); e != nil {
 					return e
 				}
@@ -188,6 +192,9 @@ func (s *Service) login(ctx context.Context, username, secret, oldToken string, 
 	})
 	if err != nil {
 		return nil, storageError(err)
+	}
+	if revokedSession != 0 {
+		s.revokeConnections(0, revokedSession)
 	}
 	return result, nil
 }
@@ -311,7 +318,9 @@ func (s *Service) executeWithUsers(ctx context.Context, raw string, p policy, ta
 		return nil, err
 	}
 	var result *Auth
+	var revokedUsers []uint64
 	err = store.Transact(ctx, func(tx Tx) error {
+		revokedUsers = nil
 		ss, e := tx.Session(cryptox.Digest(raw), false)
 		if e != nil {
 			return e
@@ -362,9 +371,18 @@ func (s *Service) executeWithUsers(ctx context.Context, raw string, p policy, ta
 		if targetID != 0 && (target == nil || target.DeletedAt != nil) {
 			return httpx.E(404, "NOT_FOUND", "用户不存在")
 		}
+		versions := make(map[uint64]uint64, len(users))
+		for id, user := range users {
+			versions[id] = user.AuthVersion
+		}
 		if fn != nil {
 			if e = fn(tx, a, target); e != nil {
 				return e
+			}
+		}
+		for id, user := range users {
+			if versions[id] != user.AuthVersion {
+				revokedUsers = append(revokedUsers, id)
 			}
 		}
 		if p.renew {
@@ -388,6 +406,9 @@ func (s *Service) executeWithUsers(ctx context.Context, raw string, p policy, ta
 	if err != nil {
 		return nil, storageError(err)
 	}
+	for _, id := range revokedUsers {
+		s.revokeConnections(id, 0)
+	}
 	return result, nil
 }
 func (s *Service) Current(ctx context.Context, raw string) (*Auth, error) {
@@ -402,12 +423,15 @@ func (s *Service) AdminAccess(ctx context.Context, raw string, fn func() error) 
 	})
 }
 func (s *Service) Logout(ctx context.Context, raw string, meta Metadata) error {
-	_, err := s.execute(ctx, raw, policy{allowChange: true}, 0, func(tx Tx, a *Auth, _ *User) error {
+	auth, err := s.execute(ctx, raw, policy{allowChange: true}, 0, func(tx Tx, a *Auth, _ *User) error {
 		if err := tx.RevokeSession(a.Session.ID, s.now()); err != nil {
 			return err
 		}
 		return s.audit(tx, a.User, "auth.logged_out", "user", strconv.FormatUint(a.User.ID, 10), a.User.DisplayName, meta, nil)
 	})
+	if err == nil {
+		s.revokeConnections(0, auth.Session.ID)
+	}
 	var e *httpx.Error
 	if errors.As(err, &e) && e.Code == "UNAUTHENTICATED" {
 		return nil

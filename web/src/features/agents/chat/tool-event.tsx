@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Circle, CircleCheck, LoaderCircle, X } from "lucide-react";
 import { StatusHint, StatusNote } from "./status-hint";
 import { diagnosticLines, diagnosticReason } from "../data/diagnostics";
+import { toolSummary } from "../data/tool-summary";
 import {
   toolNeedsAttention,
   type ToolNode,
@@ -44,6 +45,7 @@ export const builtinToolNames: Record<string, string> = {
 };
 export function ToolEvent({
   id,
+  draft,
   call,
   result,
   reconciliation,
@@ -61,23 +63,11 @@ export function ToolEvent({
   const open = opened ?? pendingQuestion;
   const [visited, setVisited] = useState(false);
   const status = result?.data.status ?? liveStatus;
-  const name =
-    call?.data.tool_key ?? (question ? "ask_user_question" : "工具结果");
+  const { name, hint } = toolSummary({ call, draft, question });
   const args = call?.data.arguments ?? {};
   const builtin = Boolean(
     call && !call.data.mcp_server_id && !call.data.mcp_binding_id,
   );
-  const hint =
-    (name === "glob" || name === "grep") && typeof args.pattern === "string"
-      ? [args.pattern, args.path].filter(Boolean).join(" · ")
-      : [
-          args.path,
-          args.file_path,
-          args.command,
-          args.pattern,
-          args.query,
-          args.url,
-        ].find((value) => typeof value === "string");
   const attention = toolNeedsAttention({ id, call, result, status });
   const execution = result?.data.sandbox_execution;
   const failed = reconciliation
@@ -142,26 +132,29 @@ export function ToolEvent({
           cancelled: "已确认停止",
         }[reconciliation.data.observed_status] ?? "已核实结束")
     : undefined;
-  const label =
-    verifiedStatus ??
-    (result?.data.outcome.certainty === "unknown"
-      ? "结果未知"
-      : execution
-        ? `${status === "failed" ? "工具调用失败 · " : ""}${executionStatus(execution)}`
-        : status
-          ? {
-              succeeded: "已完成",
-              failed: "失败",
-              blocked: "未获准执行",
-              cancelled: "已取消",
-              outcome_unknown: "结果未知",
-              running: "执行中",
-              dispatching: "正在派发",
-              prepared: "已准备",
-              waiting_approval:
-                name === "ask_user_question" ? "等待回答" : "等待批准",
-            }[status]
-          : "等待结果");
+  const label = draft
+    ? draft.committed
+      ? "正在准备调用"
+      : "参数生成中"
+    : (verifiedStatus ??
+      (result?.data.outcome.certainty === "unknown"
+        ? "结果未知"
+        : execution
+          ? `${status === "failed" ? "工具调用失败 · " : ""}${executionStatus(execution)}`
+          : status
+            ? {
+                succeeded: "已完成",
+                failed: "失败",
+                blocked: "未获准执行",
+                cancelled: "已取消",
+                outcome_unknown: "结果未知",
+                running: "执行中",
+                dispatching: "正在派发",
+                prepared: "已准备",
+                waiting_approval:
+                  name === "ask_user_question" ? "等待回答" : "等待批准",
+              }[status]
+            : "等待结果"));
   const specialized = Boolean(execution || file || plan || questions || search);
   return (
     <div
@@ -174,7 +167,10 @@ export function ToolEvent({
           setVisited(true);
           setOpen(!open);
         }}
-        label={builtinToolNames[name] ?? name}
+        label={
+          builtinToolNames[name] ??
+          (name || (draft ? "准备工具调用" : "工具结果"))
+        }
         active={Boolean(running) && !pendingQuestion}
         trailing={
           failed ? (
@@ -244,7 +240,12 @@ export function ToolEvent({
       >
         {(visited || open) && (
           <div className="agent-tool-body min-w-0 space-y-3">
-            {!call && !question && (
+            {draft && (
+              <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-all text-xs">
+                {draft.argumentsText}
+              </pre>
+            )}
+            {!call && !question && !draft && (
               <p className="text-xs text-muted">
                 当前记录包含工具结果；加载更早记录可查看关联的调用名称和参数。
               </p>

@@ -600,14 +600,14 @@ function applyDelta(
       current &&
       (current.type !== "tool_call" ||
         current.draft_call_id !== delta.draft_call_id ||
-        (current.name && delta.name && current.name !== delta.name))
+        (current.name && delta.name && !delta.name.startsWith(current.name)))
     )
       return null;
     const tool = current?.type === "tool_call" ? current : null;
     next = {
       type: "tool_call",
       draft_call_id: delta.draft_call_id,
-      name: tool?.name ?? delta.name ?? null,
+      name: delta.name ?? tool?.name ?? null,
       arguments_text:
         (tool?.arguments_text ?? "") + (delta.arguments_fragment ?? ""),
     };

@@ -149,6 +149,24 @@ func TestTruncatedOrMalformedStreamNeverSucceeds(t *testing.T) {
 	}
 }
 
+func TestChatStreamsToolNameBeforeArgumentsComplete(t *testing.T) {
+	stream := "data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"type\":\"function\",\"function\":{\"name\":\"write_\"}}]}}]}\n\n" +
+		"data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"name\":\"file\",\"arguments\":\"{\\\"path\\\":\\\"report.txt\\\",\\\"content\\\":\\\"\"}}]}}]}\n\n"
+	var names []string
+	response, err := decodeChat(t.Context(), strings.NewReader(stream), func(delta modelcore.Delta) error {
+		if delta.Name != "" {
+			names = append(names, delta.Name)
+		}
+		return nil
+	})
+	if !errors.Is(err, modelcore.ErrIncompleteStream) || len(response.Message.ToolCalls) != 0 {
+		t.Fatal("unfinished draft became executable", err)
+	}
+	if strings.Join(names, ",") != "write_,write_file" {
+		t.Fatalf("tool name was delayed until completion: %v", names)
+	}
+}
+
 func TestChatRejectsNonFunctionToolCalls(t *testing.T) {
 	for _, value := range []string{"", `"type":"custom",`, `"type":null,`, `"type":1,`} {
 		t.Run(value, func(t *testing.T) {

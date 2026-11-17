@@ -3,6 +3,7 @@ package agentcore
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -312,7 +313,8 @@ func (h *Hub) Emit(_ context.Context, permit AttemptPermit, d modelcore.Delta) e
 	if d.Kind == "tool_call" {
 		block.ArgumentsText += d.Text
 		if d.Name != "" {
-			if block.Name != nil && *block.Name != d.Name {
+			// Names may arrive in fragments; drafts only extend the known prefix.
+			if block.Name != nil && !strings.HasPrefix(d.Name, *block.Name) {
 				return reject("STREAM_INVALID")
 			}
 			name := d.Name

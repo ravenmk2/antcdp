@@ -189,24 +189,28 @@ func (s *Service) FreezeAttempt(ctx context.Context, ref agentcore.ExecutionRef,
 
 func validateToolArguments(spec agentcore.ToolSpec, call modelcore.ToolCall) error {
 	if call.ID == "" || len(call.ID) > 255 || len(call.Arguments) > modelcore.MaxToolArgumentsBytes || call.Name != spec.Definition.Name {
-		return modelcore.ErrInvalidResponse
+		return invalidToolResponse("MODEL_TOOL_CALL_INVALID")
 	}
 	var object map[string]any
 	if json.Unmarshal([]byte(call.Arguments), &object) != nil || object == nil {
-		return modelcore.ErrInvalidResponse
+		return invalidToolResponse("MODEL_TOOL_ARGUMENTS_NOT_OBJECT")
 	}
 	var schema jsonschema.Schema
 	if json.Unmarshal(spec.Definition.InputSchema, &schema) != nil {
-		return modelcore.ErrInvalidResponse
+		return invalidToolResponse("MODEL_TOOL_SCHEMA_INVALID")
 	}
 	resolved, e := schema.Resolve(nil)
 	if e != nil {
-		return modelcore.ErrInvalidResponse
+		return invalidToolResponse("MODEL_TOOL_SCHEMA_INVALID")
 	}
 	if resolved.Validate(object) != nil {
-		return modelcore.ErrInvalidResponse
+		return invalidToolResponse("MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH")
 	}
 	return nil
+}
+
+func invalidToolResponse(code string) error {
+	return diagnostic.With(modelcore.ErrInvalidResponse, diagnostic.Detail{Source: "model", Stage: "response_validation", Code: code})
 }
 
 func modelOutcomeReason(out agentcore.AttemptOutcome) string {
@@ -292,7 +296,7 @@ func uiAssistant(message modelcore.Message, ids []agentcore.ID, duration ...*int
 
 func attemptValidation(snapshot attemptSnapshot, response modelcore.Response) ([]agentcore.ToolSpec, error) {
 	if response.Message.Role != "assistant" {
-		return nil, modelcore.ErrInvalidResponse
+		return nil, invalidToolResponse("MODEL_RESPONSE_ROLE_INVALID")
 	}
 	specs := make([]agentcore.ToolSpec, len(response.Message.ToolCalls))
 	known := map[string]agentcore.ToolSpec{}
@@ -303,8 +307,11 @@ func attemptValidation(snapshot attemptSnapshot, response modelcore.Response) ([
 	ids := []agentcore.ID{}
 	for i, call := range response.Message.ToolCalls {
 		spec, ok := known[call.Name]
-		if !ok || seen[call.ID] {
-			return nil, modelcore.ErrInvalidResponse
+		if !ok {
+			return nil, invalidToolResponse("MODEL_TOOL_NAME_UNKNOWN")
+		}
+		if seen[call.ID] {
+			return nil, invalidToolResponse("MODEL_TOOL_CALL_ID_DUPLICATE")
 		}
 		seen[call.ID] = true
 		if e := validateToolArguments(spec, call); e != nil {

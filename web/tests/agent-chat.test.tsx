@@ -564,11 +564,12 @@ it("keeps tool failure details local without turning them into a turn warning", 
       attempt={null}
     />,
   );
-  expect(screen.queryByRole("button", { name: "已使用工具 1 次" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /^已使用工具 1 次/ })).toBeNull();
   expect(
     screen.queryByRole("button", { name: /本轮异常|本轮过程记录/ }),
   ).toBeNull();
   await user.click(screen.getByRole("button", { name: "已完成 · 执行过程" }));
+  await user.click(screen.getByRole("button", { name: /^已使用工具 1 次/ }));
   expect(screen.queryByRole("button", { name: "查看本轮工具异常" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "工具调用失败原因" }));
   expect(await screen.findByRole("tooltip")).toHaveTextContent("HTTP 403");
@@ -892,6 +893,13 @@ it("refreshes sidebar and attention on global lifecycle hints, not token chunks"
       },
       { cancelRefetch: false },
     ),
+  );
+  // The initial snapshot schedules its own usage refresh independently of
+  // the global sidebar hint. Finish both before measuring token-only updates.
+  await waitFor(() =>
+    expect(invalidations).toHaveBeenCalledWith({
+      queryKey: ["agent-session", "10", "workspace", "usage"],
+    }),
   );
   invalidations.mockClear();
   const socket = sockets.at(-1)!;
@@ -1697,6 +1705,9 @@ it("folds reasoning and intermediate replies while retaining the final reply and
   const toggle = screen.getByRole("button", { name: "已完成 · 执行过程" });
   expect(toggle).toHaveAttribute("aria-expanded", "false");
   await user.click(toggle);
+  const process = screen.getByRole("button", { name: /^思考过程/ });
+  expect(process).toHaveAttribute("aria-expanded", "false");
+  await user.click(process);
   expect(screen.getByText("思考")).toBeVisible();
   await user.click(toggle);
   expect(screen.getByText("思考")).not.toBeVisible();
@@ -1830,7 +1841,7 @@ it("preserves nested disclosure combinations across whole-turn toggles without h
   );
   const turn = screen.getByRole("button", { name: "已完成 · 执行过程" });
   await user.click(turn);
-  const group = screen.getByRole("button", { name: "已使用工具 1 次" });
+  const group = screen.getByRole("button", { name: /^已使用工具 1 次/ });
   const reply = screen.getByText("已完成配置核对。");
   expect(
     turn.compareDocumentPosition(screen.getByText("中间进度说明")) &
@@ -1918,7 +1929,9 @@ it("shows the actual loaded skill version without claiming a filesystem copy", a
   const { user } = mount(
     <ConversationTimeline records={loaded} sessionId="10" attempt={null} />,
   );
-  expect(screen.queryByRole("button", { name: "已使用工具 1 次" })).toBeNull();
+  expect(
+    screen.getByRole("button", { name: /^已使用工具 1 次/ }),
+  ).toHaveAttribute("aria-expanded", "true");
   await user.click(screen.getByText("加载技能"));
   expect(screen.getByText(/已加载技能版本 7/)).toBeVisible();
   expect(screen.getByText("技能文本可用，尚无工作目录副本。")).toBeVisible();
@@ -2185,7 +2198,7 @@ it("keeps live reasoning mounted through tools and finalization, and the final t
 });
 
 it.each([1, 2])(
-  "only adds an outer fold for multiple thoughts (%s thoughts)",
+  "keeps the same process fold for single and multiple thoughts (%s thoughts)",
   async (count) => {
     const thoughts: DurableRecord[] = Array.from(
       { length: count },
@@ -2217,14 +2230,10 @@ it.each([1, 2])(
     );
     await user.click(screen.getByRole("button", { name: "已完成 · 执行过程" }));
     const group = screen.queryByRole("button", {
-      name: "思考过程",
+      name: /^思考过程/,
     });
-    if (count === 1) {
-      expect(group).toBeNull();
-    } else {
-      expect(group).toHaveAttribute("aria-expanded", "false");
-      await user.click(group!);
-    }
+    expect(group).toHaveAttribute("aria-expanded", "false");
+    await user.click(group!);
     expect(
       screen.getAllByRole("button", { name: /思考\s*用时 1 秒/ }),
     ).toHaveLength(count);
@@ -2270,6 +2279,7 @@ it("collapses the newest ended process even when paged history starts with an ol
     .find((button) => !button.hasAttribute("disabled"))!;
   expect(turn).toHaveAttribute("aria-expanded", "false");
   await user.click(turn);
+  await user.click(screen.getByRole("button", { name: /^思考过程/ }));
   expect(screen.getByRole("button", { name: /思考.*用时 1 秒/ })).toBeVisible();
   expect(screen.getByText("本轮最终回复")).toBeVisible();
 });

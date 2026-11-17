@@ -18,6 +18,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modules/agents"
+	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
@@ -146,6 +147,7 @@ type agentWSNotice struct {
 }
 type agentWS struct {
 	ctx            context.Context
+	authentication *identity.Connection
 	conn           *websocket.Conn
 	options        Options
 	raw, requestID string
@@ -177,11 +179,13 @@ func registerAgentStream(group *gin.RouterGroup, o Options) {
 		}
 		ctx, cancel := context.WithCancel(c.Request.Context())
 		defer cancel()
-		auth, e := o.Identity.ObserveAccess(ctx, rawSession(c), nil)
+		authentication, e := o.Identity.ObserveConnection(ctx, rawSession(c))
 		if e != nil {
 			httpx.Write(c, e)
 			return
 		}
+		defer authentication.Close()
+		auth := authentication.Auth()
 		if !limits.acquire(auth.User.ID) {
 			httpx.Write(c, httpx.E(429, "RATE_LIMITED", "观察连接数量超过上限"))
 			return
@@ -192,9 +196,30 @@ func registerAgentStream(group *gin.RouterGroup, o Options) {
 		if e != nil {
 			return
 		}
-		defer func() { _ = conn.Close() }()
-		ws := &agentWS{ctx: agents.ObservingContext(ctx), conn: conn, options: o, raw: rawSession(c), requestID: c.GetString("request_id"), subscriptions: map[string]*agentWSSubscription{}, used: map[string]bool{}, notices: make(chan agentWSNotice)}
+		ws := &agentWS{ctx: agents.ObservingConnection(ctx, authentication), authentication: authentication, conn: conn, options: o, raw: rawSession(c), requestID: c.GetString("request_id"), subscriptions: map[string]*agentWSSubscription{}, used: map[string]bool{}, notices: make(chan agentWSNotice)}
 		ws.userID = auth.User.ID
+		var closing sync.Once
+		stop := func() {
+			closing.Do(func() {
+				select {
+				case <-authentication.Done():
+					ws.close(websocket.ClosePolicyViolation)
+				default:
+				}
+				cancel()
+				_ = conn.Close()
+			})
+		}
+		defer stop()
+		// Close outside the writer loop so a slow snapshot/query or blocked write
+		// cannot postpone revocation. Context cancellation releases pending reads.
+		go func() {
+			select {
+			case <-authentication.Done():
+				stop()
+			case <-ctx.Done():
+			}
+		}()
 		defer func() {
 			if ws.changes != nil {
 				ws.changes.Close()
@@ -207,6 +232,13 @@ func registerAgentStream(group *gin.RouterGroup, o Options) {
 	})
 }
 func (w *agentWS) write(value any) error {
+	if w.authentication != nil {
+		select {
+		case <-w.authentication.Done():
+			return errors.New("observation revoked")
+		default:
+		}
+	}
 	encoded, e := json.Marshal(value)
 	if e != nil {
 		return e
@@ -260,6 +292,8 @@ func (w *agentWS) serve() {
 			}
 		}
 	}()
+	expiry := time.NewTimer(time.Until(w.authentication.Auth().Session.ExpiresAt))
+	defer expiry.Stop()
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -292,19 +326,15 @@ func (w *agentWS) serve() {
 			if e := w.notice(item); e != nil {
 				return
 			}
-		case <-ticker.C:
-			if _, e := w.options.Identity.ObserveAccess(w.ctx, w.raw, nil); e != nil {
-				_ = w.problem("", "UNAUTHENTICATED")
-				w.close(websocket.ClosePolicyViolation)
+		case <-expiry.C:
+			deadline, e := w.options.Identity.ConnectionExpiry(w.ctx, w.raw, w.authentication)
+			if e != nil {
+				_ = w.globalAuthenticationError(e)
 				return
 			}
+			expiry.Reset(time.Until(deadline))
+		case <-ticker.C:
 			for _, sub := range w.subscriptions {
-				if e := w.options.Agents.CheckObservation(w.ctx, w.raw, sub.session); e != nil {
-					if e = w.observationError(sub, e); e != nil {
-						return
-					}
-					continue
-				}
 				if !sub.paused {
 					if e := w.catchup(sub); e != nil {
 						if e = w.observationError(sub, e); e != nil {
@@ -325,9 +355,6 @@ func (w *agentWS) handle(f agentClientFrame) error {
 		if w.changes != nil {
 			return w.problem(f.Subscription, "SUBSCRIPTION_LIMIT")
 		}
-		if _, e := w.options.Identity.ObserveAccess(w.ctx, w.raw, nil); e != nil {
-			return w.globalAuthenticationError(e)
-		}
 		w.used[f.Subscription] = true
 		w.globalID = f.Subscription
 		w.changes = w.options.AgentHub.SubscribeSessions()
@@ -335,11 +362,6 @@ func (w *agentWS) handle(f agentClientFrame) error {
 		// remain queued and invalidate that read again.
 		return w.writeSessionChanges(nil, true)
 	case "ping":
-		if _, e := w.options.Identity.ObserveAccess(w.ctx, w.raw, nil); e != nil {
-			_ = w.problem("", "UNAUTHENTICATED")
-			w.close(websocket.ClosePolicyViolation)
-			return e
-		}
 		return w.write(map[string]any{"type": "pong", "nonce": *f.Nonce, "server_time": time.Now().UTC()})
 	case "subscribe":
 		if w.used[f.Subscription] {
@@ -498,9 +520,6 @@ func (w *agentWS) notice(item agentWSNotice) error {
 	}
 	if f.Revision != sub.stream.Revision+1 {
 		return w.resync(sub, "stream_gap")
-	}
-	if e := w.options.Agents.CheckObservation(w.ctx, w.raw, sub.session); e != nil {
-		return w.observationError(sub, e)
 	}
 	if f.Outcome != nil && f.Outcome.EventSeq != nil && uint64(*f.Outcome.EventSeq) > sub.seq {
 		if e := w.catchup(sub); e != nil {

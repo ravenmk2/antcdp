@@ -164,6 +164,7 @@
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
+  overflow-anchor: none;
   padding: 32px 36px;
   scrollbar-gutter: stable;
 }
@@ -1398,7 +1399,18 @@
   line-height: 26px;
 }
 .root :global(.agent-process-steps) {
+  position: relative;
   padding-block: 4px;
+  padding-inline-start: 24px;
+}
+.root :global(.agent-process-steps::before) {
+  content: "";
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-start: 8px;
+  width: 1px;
+  background: var(--chat-divider);
+  pointer-events: none;
 }
 .root :global(.agent-process-step) {
   position: relative;
@@ -1406,20 +1418,6 @@
 }
 .root :global(.agent-process-step > .agent-message-assistant) {
   padding: 0;
-}
-.root :global([data-grouped="false"] .agent-process-steps),
-.root :global([data-grouped="false"] .agent-process-step) {
-  padding-block: 0;
-}
-.root :global(.agent-process-step:not(:last-child)::after) {
-  content: "";
-  position: absolute;
-  left: 8px;
-  top: 32px;
-  bottom: -3px;
-  width: 1px;
-  background: var(--border-strong);
-  opacity: 0.5;
 }
 .root :global(.agent-turn-working) {
   display: flex;

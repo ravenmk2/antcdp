@@ -9,8 +9,35 @@ import (
 	"testing"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 )
+
+func TestAttemptValidationDistinguishesToolContracts(t *testing.T) {
+	tool := agentcore.ToolSpec{Definition: modelcore.Tool{Name: "echo", InputSchema: json.RawMessage(`{"type":"object","properties":{"text":{"type":"string"}},"required":["text"],"additionalProperties":false}`)}}
+	for _, tc := range []struct{ name, arguments, code string }{
+		{"echo", `{"text":"hello"}`, ""},
+		{"unknown-private-name", `{}`, "MODEL_TOOL_NAME_UNKNOWN"},
+		{"echo", `"private-value"`, "MODEL_TOOL_ARGUMENTS_NOT_OBJECT"},
+		{"echo", `{"wrong":"private-value"}`, "MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH"},
+		{"echo", `{"text":1}`, "MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH"},
+	} {
+		_, err := attemptValidation(attemptSnapshot{Tools: []agentcore.ToolSpec{tool}}, modelcore.Response{Message: modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "call-1", Name: tc.name, Arguments: tc.arguments}}}})
+		if tc.code == "" {
+			if err != nil {
+				t.Fatal(err)
+			}
+			continue
+		}
+		detail := diagnostic.From(err)
+		if !errors.Is(err, modelcore.ErrInvalidResponse) || modelOutcomeReason(agentcore.AttemptOutcome{Err: err}) != "MODEL_RESPONSE_INVALID" || detail == nil || detail.Stage != "response_validation" || detail.Code != tc.code {
+			t.Fatalf("err=%v diagnostic=%+v", err, detail)
+		}
+		if strings.Contains(err.Error(), "private") {
+			t.Fatal("tool arguments leaked")
+		}
+	}
+}
 
 func TestModelOutcomeSeparatesTransportAttemptAndRunTimeout(t *testing.T) {
 	for _, test := range []struct {

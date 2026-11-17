@@ -13,6 +13,7 @@ export function ChatDisclosure({
   label,
   icon,
   detail,
+  collapsedDetail,
   trailing,
   children,
   active = false,
@@ -25,6 +26,7 @@ export function ChatDisclosure({
   label: string;
   icon?: ReactNode;
   detail?: ReactNode;
+  collapsedDetail?: ReactNode;
   trailing?: ReactNode;
   children: ReactNode;
   active?: boolean;
@@ -36,6 +38,7 @@ export function ChatDisclosure({
   const intent = useDisclosureState();
   const open = automatic ? intent.expanded(id, defaultOpen) : defaultOpen;
   const motion = useDisclosureMotion();
+  const preview = open ? detail : (collapsedDetail ?? detail);
   return (
     <div className="agent-disclosure" data-active={active}>
       {!headingHidden && (
@@ -57,8 +60,8 @@ export function ChatDisclosure({
             <span className={active ? "agent-activity-label" : undefined}>
               {label}
             </span>
-            {detail && (
-              <span className="agent-disclosure-preview">{detail}</span>
+            {preview && (
+              <span className="agent-disclosure-preview">{preview}</span>
             )}
             <span className="agent-disclosure-spacer" />
             {trailing && <span className="agent-disclosure-trailing-space" />}

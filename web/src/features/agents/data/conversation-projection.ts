@@ -8,6 +8,9 @@ type Event<K extends DurableRecord["event_type"]> = Extract<
 >;
 export interface ToolNode {
   id: string;
+  attemptId?: string;
+  ordinal?: number;
+  draft?: { name?: string; argumentsText: string; committed?: boolean };
   call?: Event<"tool/call">;
   result?: Event<"tool/result">;
   reconciliation?: Event<"tool/reconciled">;
@@ -121,8 +124,43 @@ export class ConversationProjector {
           (block.type === "text" && block.text.trim()) ||
           block.type === "file_reference",
       );
-      if (!content.length) return;
-      record = { ...record, data: { ...record.data, content } };
+      if (content.length) {
+        this.nodes.push({
+          kind: "record",
+          id: `attempt:${record.data.attempt_id}`,
+          record: { ...record, data: { ...record.data, content } },
+        });
+        this.currentGroup = undefined;
+      }
+      // The committed message precedes tool/call frames. Keep those rows in
+      // place while their metadata arrives instead of deleting the draft group.
+      const references = record.data.content.filter(
+        (block) => block.type === "tool_reference",
+      );
+      references.forEach((reference, ordinal) => {
+        const index = this.process(record);
+        const node = this.nodes[index];
+        if (node.kind !== "process" || this.tools.has(reference.tool_call_id))
+          return;
+        this.tools.set(reference.tool_call_id, index);
+        this.nodes[index] = {
+          ...node,
+          tools: [
+            ...node.tools,
+            {
+              id: reference.tool_call_id,
+              attemptId: record.data.attempt_id,
+              ordinal,
+              draft: { argumentsText: "", committed: true },
+            },
+          ],
+          entries: [
+            ...node.entries,
+            { kind: "tool", id: reference.tool_call_id },
+          ],
+        };
+      });
+      return;
     }
     if (
       record.event_type === "tool/call" ||
@@ -142,6 +180,9 @@ export class ConversationProjector {
       const tool: ToolNode = { ...tools[toolIndex], id };
       if (record.event_type === "tool/call") {
         tool.call = record;
+        tool.draft = undefined;
+        tool.attemptId = record.data.model_call_id ?? tool.attemptId;
+        tool.ordinal = record.data.call_ordinal ?? tool.ordinal;
         tool.status = record.data.status ?? "prepared";
       }
       if (record.event_type === "tool/result") {
@@ -258,7 +299,6 @@ export class ConversationProjector {
       ].includes(record.event_type)
     ) {
       const id =
-        record.event_type === "assistant/message" ||
         record.event_type === "assistant/attempt"
           ? `attempt:${record.data.attempt_id}`
           : `event:${record.seq}`;

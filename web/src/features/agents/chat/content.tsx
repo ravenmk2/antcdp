@@ -28,7 +28,7 @@ export function MessageContent({
   return (
     <div className="agent-message-content">
       {blocks.map((block, index) =>
-        block.type === "text" ? (
+        block.type === "text" && block.text.trim() ? (
           <MarkdownView
             navigation={false}
             key={index}

@@ -391,6 +391,21 @@ describe("agent session observation", () => {
       },
     };
     const merged = conversationFrame(state, tool);
+    const extended = conversationFrame(state, {
+      ...tool,
+      delta: {
+        type: "tool_call_delta",
+        block_index: 0,
+        draft_call_id: "draft1",
+        arguments_fragment: '"test"}',
+        name: "search_files",
+      },
+    });
+    expect(extended.activeAttempt?.content[0]).toMatchObject({
+      name: "search_files",
+      arguments_text: '{"q":"test"}',
+    });
+    expect(extended.phase).not.toBe("resyncing");
     expect(merged.activeAttempt?.content).toEqual([
       {
         type: "tool_call",

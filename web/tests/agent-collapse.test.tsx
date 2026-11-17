@@ -87,6 +87,7 @@ function setup(
     live: ActiveAttempt | null,
     key = "page",
     sessionId = "10",
+    pauseAutoCollapse = false,
   ) => (
     <QueryClientProvider client={client}>
       <ConversationTimeline
@@ -94,6 +95,7 @@ function setup(
         records={events}
         sessionId={sessionId}
         attempt={live}
+        pauseAutoCollapse={pauseAutoCollapse}
       />
     </QueryClientProvider>
   );
@@ -105,7 +107,9 @@ function setup(
       live: ActiveAttempt | null = null,
       key = "page",
       sessionId = "10",
-    ) => rendered.rerender(view(events, live, key, sessionId)),
+      pauseAutoCollapse = false,
+    ) =>
+      rendered.rerender(view(events, live, key, sessionId, pauseAutoCollapse)),
   };
 }
 const group = () =>
@@ -113,6 +117,115 @@ const group = () =>
     "button",
   )[0];
 const turn = () => screen.getByRole("button", { name: / · 执行过程$/ });
+
+it("does not render empty stream text as a placeholder or split the process group", () => {
+  const first: ActiveAttempt = {
+    ...draft,
+    content: [
+      { type: "reasoning", text: "准备读取文件" },
+      { type: "text", text: "\n " },
+      {
+        type: "tool_call",
+        draft_call_id: "draft-0",
+        name: "read_file",
+        arguments_text: '{"path":"example.txt"}',
+      },
+    ],
+  };
+  const { update } = setup([records[0]], first);
+  expect(screen.queryByText(/暂无介绍/)).toBeNull();
+  expect(screen.queryByRole("region", { name: "思考过程" })).toBeNull();
+  const group = screen.getByRole("region", { name: "工具过程" });
+  expect(within(group).getByRole("button", { name: "思考中" })).toBeVisible();
+  expect(within(group).getByRole("button", { name: /读取文件/ })).toBeVisible();
+  update([records[0]], {
+    ...first,
+    next_index: 2,
+    content: first.content.map((block) =>
+      block.type === "text" ? { ...block, text: "\n读取前的进度说明" } : block,
+    ),
+  });
+  expect(screen.getByText("读取前的进度说明")).toBeVisible();
+  expect(screen.getByRole("region", { name: "思考过程" })).toBeVisible();
+  expect(screen.queryByText(/暂无介绍/)).toBeNull();
+});
+
+it("previews live file work only while collapsed and removes the preview at completion", async () => {
+  const first: ActiveAttempt = {
+    ...draft,
+    attempt_id: "thought",
+    content: [
+      {
+        type: "tool_call",
+        draft_call_id: "draft-0",
+        name: "write_file",
+        arguments_text: '{"path":"reports/result.txt","content":"unfinished',
+      },
+    ],
+  };
+  const { user, update } = setup([records[0]], first);
+  const header = group();
+  expect(header).toHaveAttribute("aria-expanded", "true");
+  expect(header).not.toHaveTextContent(/写入文件|reports\/result.txt/);
+  const tool = screen.getByRole("button", {
+    name: /写入文件\s*reports\/result.txt/,
+  });
+  expect(tool).toBeVisible();
+  await user.click(header);
+  expect(header).toHaveTextContent("写入文件 · reports/result.txt");
+  expect(header).toHaveAttribute("aria-expanded", "false");
+  const saved: typeof thought = {
+    ...thought,
+    data: {
+      ...thought.data,
+      content: [{ type: "tool_reference", tool_call_id: "80" }],
+    },
+  };
+  const written: typeof call = {
+    ...call,
+    data: {
+      ...call.data,
+      model_call_id: "thought",
+      call_ordinal: 0,
+      tool_key: "write_file",
+      arguments: { path: "reports/result.txt", content: "done" },
+    },
+  };
+  update([records[0], saved, written]);
+  expect(group()).toBe(header);
+  expect(header).toHaveTextContent("写入文件 · reports/result.txt");
+  await user.click(header);
+  expect(header).not.toHaveTextContent("reports/result.txt");
+  expect(
+    screen.getByRole("button", { name: /^写入文件\s*reports\/result.txt/ }),
+  ).toBe(tool);
+  await user.click(header);
+  update([records[0], saved, written, result, reply]);
+  expect(group()).toBe(header);
+  expect(header).toHaveAttribute("aria-expanded", "false");
+  expect(header).not.toHaveTextContent(/写入文件|reports\/result.txt/);
+  update([records[0], saved, written, result, reply, end]);
+  await user.click(turn());
+  expect(group()).not.toHaveTextContent(/写入文件|reports\/result.txt/);
+});
+
+it("previews running reasoning only while collapsed and hides historical previews", async () => {
+  const { user, update } = setup([records[0]], draft);
+  const region = screen.getByRole("region", { name: "思考过程" });
+  const header = within(region).getAllByRole("button")[0];
+  expect(header).not.toHaveTextContent("整理结果");
+  await user.click(header);
+  expect(header).toHaveTextContent("整理结果");
+  await user.click(header);
+  expect(header).not.toHaveTextContent("整理结果");
+  update([records[0], thought, reply, end], null, "refresh");
+  await user.click(turn());
+  const savedHeader = within(
+    screen.getByRole("region", { name: "思考过程" }),
+  ).getAllByRole("button")[0];
+  expect(savedHeader).toHaveAttribute("aria-expanded", "false");
+  expect(savedHeader).not.toHaveTextContent("核对文件内容");
+});
 
 it.each(["succeeded", "failed", "cancelled"] as const)(
   "automatically collapses a %s turn and restores both folds collapsed on refresh",
@@ -271,4 +384,83 @@ it("retains an open tool when pagination reveals the earlier reasoning in the sa
   expect(turn()).toHaveAttribute("aria-expanded", "true");
   expect(group()).toHaveAttribute("aria-expanded", "true");
   expect(body).toBeVisible();
+});
+
+it.each([false, true])(
+  "keeps the tool row mounted across separate commit frames (reasoning=%s)",
+  async (reasoning) => {
+    const first: ActiveAttempt = {
+      ...draft,
+      attempt_id: "thought",
+      content: [
+        ...(reasoning
+          ? [{ type: "reasoning" as const, text: "核对文件内容" }]
+          : []),
+        {
+          type: "tool_call",
+          draft_call_id: "draft-0",
+          name: "read_file",
+          arguments_text: '{"path":"example.txt"}',
+        },
+      ],
+    };
+    const saved: typeof thought = {
+      ...thought,
+      data: {
+        ...thought.data,
+        content: [
+          ...(reasoning
+            ? [{ type: "reasoning" as const, text: "核对文件内容" }]
+            : []),
+          { type: "tool_reference", tool_call_id: "80" },
+        ],
+      },
+    };
+    const { user, update } = setup([records[0]], first);
+    const button = screen.getByRole("button", { name: /^读取文件/ });
+    await user.click(button);
+    const section = screen.getByRole("region", { name: "工具过程" });
+    const anchor = section.getAttribute("data-message-anchor");
+    update([records[0], saved]);
+    expect(screen.getByRole("region", { name: "工具过程" })).toBe(section);
+    expect(section).toHaveAttribute("data-message-anchor", anchor);
+    expect(screen.getByRole("button", { name: /^读取文件/ })).toBe(button);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    update([
+      records[0],
+      saved,
+      {
+        ...call,
+        data: { ...call.data, model_call_id: "thought", call_ordinal: 0 },
+      },
+    ]);
+    expect(screen.getByRole("button", { name: /^读取文件/ })).toBe(button);
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    expect(section).toHaveAttribute("data-message-anchor", anchor);
+  },
+);
+
+it("defers automatic group and turn folding while reading, then folds when following resumes", () => {
+  const { update } = setup(history);
+  update(history, draft, "page", "10", true);
+  const finished = [...history, reply, end];
+  update(finished, null, "page", "10", true);
+  expect(turn()).toHaveAttribute("aria-expanded", "true");
+  expect(group()).toHaveAttribute("aria-expanded", "true");
+  update(finished, null, "page", "10", false);
+  expect(turn()).toHaveAttribute("aria-expanded", "false");
+});
+
+it("allows manual turn folding while automatic folding is paused", async () => {
+  const { user, update } = setup(history);
+  update(history, draft, "page", "10", true);
+  const finished = [...history, reply, end];
+  update(finished, null, "page", "10", true);
+  expect(turn()).toHaveAttribute("aria-expanded", "true");
+  await user.click(turn());
+  expect(turn()).toHaveAttribute("aria-expanded", "false");
+  await user.click(turn());
+  expect(turn()).toHaveAttribute("aria-expanded", "true");
+  update(finished, null, "page", "10", false);
+  expect(turn()).toHaveAttribute("aria-expanded", "true");
 });

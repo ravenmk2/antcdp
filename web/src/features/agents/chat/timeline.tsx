@@ -21,6 +21,7 @@ import { turnIssues } from "../data/turn-issues";
 import { TurnIssues } from "./turn-issues";
 import { MessageContent, FileReference } from "./content";
 import { ToolEvent, builtinToolNames } from "./tool-event";
+import { toolSummary } from "../data/tool-summary";
 import { ChatDisclosure } from "./disclosure";
 import {
   DisclosureScope,
@@ -52,6 +53,7 @@ type ConversationTimelineProps = {
   sessionId: string;
   attempt: ActiveAttempt | null;
   service?: boolean;
+  pauseAutoCollapse?: boolean;
   submissions?: readonly AcceptedSubmission[];
   onVisibleResult?: (
     record: Extract<DurableRecord, { event_type: "run/ended" }>,
@@ -62,6 +64,7 @@ function Timeline({
   sessionId,
   attempt,
   service = false,
+  pauseAutoCollapse = false,
   onVisibleResult,
   submissions = [],
 }: ConversationTimelineProps) {
@@ -186,10 +189,21 @@ function Timeline({
     }
     return result;
   }, [nodes, finalReplies]);
+  const endedTurns = [...turns.values()]
+    .filter((turn) => turn.end)
+    .map((turn) => turn.id);
+  const [collapsedTurns, setCollapsedTurns] = useState(
+    () => new Set(endedTurns),
+  );
+  if (!pauseAutoCollapse && endedTurns.some((id) => !collapsedTurns.has(id)))
+    setCollapsedTurns(new Set([...collapsedTurns, ...endedTurns]));
   const turnExpanded = (turn?: ConversationTurn) =>
     !turn?.foldable ||
     !foldableTurns.has(turn.id) ||
-    disclosure.expanded(turn.id, false);
+    disclosure.expanded(
+      turn.id,
+      pauseAutoCollapse && !collapsedTurns.has(turn.id),
+    );
   const turnHeader = (turn?: ConversationTurn) => {
     if (!turn) return null;
     const foldable = turn.foldable && foldableTurns.has(turn.id);
@@ -207,7 +221,10 @@ function Timeline({
           )
         : null;
     return (
-      <div className="agent-turn-heading">
+      <div
+        className="agent-turn-heading"
+        data-message-anchor={`turn:${turn.id}`}
+      >
         {!turn.end && <WorkingTime startedAt={turn.startedAt} />}
         {turn.end && (
           <button
@@ -303,6 +320,7 @@ function Timeline({
                       node={node}
                       sessionId={sessionId}
                       historical={Boolean(turn?.end)}
+                      pauseAutoCollapse={pauseAutoCollapse}
                       closed={closed}
                       issueToolIds={(
                         issues.get(node.runId ?? "") ?? []
@@ -602,7 +620,7 @@ const AssistantMessage = memo(function AssistantMessage({
       data-latest={latest || Boolean(attempt)}
       aria-label={attempt ? "正在生成的回复" : "智能体回复"}
       data-message-anchor={
-        anchor ?? record?.seq ?? `attempt:${attempt?.attempt_id}`
+        anchor ?? `attempt:${record?.data.attempt_id ?? attempt?.attempt_id}`
       }
     >
       {incomplete && <span className="agent-incomplete-label">未完成</span>}
@@ -611,44 +629,9 @@ const AssistantMessage = memo(function AssistantMessage({
         sessionId={sessionId}
         streaming={Boolean(attempt)}
       />
-      {attempt?.content
-        .filter((block) => block.type === "tool_call")
-        .map((block) => (
-          <DraftTool
-            key={block.draft_call_id}
-            name={block.name ?? "工具调用"}
-            argumentsText={block.arguments_text}
-          />
-        ))}
     </article>
   );
 });
-
-function DraftTool({
-  name,
-  argumentsText,
-}: {
-  name: string;
-  argumentsText: string;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <ChatDisclosure
-      open={open}
-      onToggle={() => setOpen(!open)}
-      label={`正在准备${builtinToolNames[name] ?? name}`}
-      active
-      icon={<ActivityIcon name={name} active />}
-    >
-      <div className="agent-tool-body">
-        <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-all text-xs">
-          {argumentsText}
-        </pre>
-        <p className="mt-2 text-xs text-muted">参数仍在生成，工具尚未执行。</p>
-      </div>
-    </ChatDisclosure>
-  );
-}
 
 function WorkingTime({ startedAt }: { startedAt?: string }) {
   const [now, setNow] = useState(() => Date.now());
@@ -676,6 +659,7 @@ const ProcessGroup = memo(function ProcessGroup({
   node,
   sessionId,
   historical,
+  pauseAutoCollapse,
   closed,
   onIssue,
   issueToolIds,
@@ -683,25 +667,14 @@ const ProcessGroup = memo(function ProcessGroup({
   node: PresentedProcess;
   sessionId: string;
   historical: boolean;
+  pauseAutoCollapse: boolean;
   closed: boolean;
   onIssue: (toolId: string) => void;
   issueToolIds: string[];
 }) {
-  const grouped =
-    node.entries.reduce(
-      (count, entry) =>
-        count +
-        (entry.kind === "tool"
-          ? 1
-          : (entry.attempt?.content ?? entry.record?.data.content ?? []).filter(
-              (block) =>
-                block.type === "tool_call" ||
-                (block.type === "reasoning" && block.text.trim()),
-            ).length),
-      0,
-    ) > 1;
   const pending = node.tools.some(
     (tool) =>
+      Boolean(tool.draft) ||
       (!tool.result &&
         ![
           "succeeded",
@@ -715,24 +688,49 @@ const ProcessGroup = memo(function ProcessGroup({
         !tool.question.answer),
   );
   const completed = historical || (closed && !pending);
+  const [automaticOpen, setAutomaticOpen] = useState(!completed);
+  if (!pauseAutoCollapse && automaticOpen === completed)
+    setAutomaticOpen(!completed);
   const live =
     !completed &&
-    node.entries.some((entry) => entry.kind === "assistant" && entry.attempt);
+    (node.tools.some((tool) => tool.draft) ||
+      node.entries.some(
+        (entry) => entry.kind === "assistant" && entry.attempt,
+      ));
   const activeTool = !historical
     ? [...node.tools]
         .reverse()
         .find(
           (tool) =>
             !tool.result &&
-            ["prepared", "dispatching", "running"].includes(tool.status ?? ""),
+            (tool.draft ||
+              ["prepared", "dispatching", "running"].includes(
+                tool.status ?? "",
+              )),
         )
     : undefined;
-  const activeName = activeTool?.call?.data.tool_key;
-  const activityLabel = activeName
-    ? `正在${builtinToolNames[activeName] ?? activeName}`
-    : !historical
-      ? "思考与工具过程"
-      : null;
+  const activeName = activeTool?.call?.data.tool_key ?? activeTool?.draft?.name;
+  const lastEntry = node.entries.at(-1);
+  const previewTool =
+    activeTool ??
+    (lastEntry?.kind === "tool"
+      ? node.tools.find((tool) => tool.id === lastEntry.id)
+      : undefined);
+  const summary = previewTool ? toolSummary(previewTool) : undefined;
+  const reasoning =
+    lastEntry?.kind === "assistant"
+      ? (lastEntry.attempt?.content ?? lastEntry.record?.data.content ?? [])
+          .flatMap((block) => (block.type === "reasoning" ? [block.text] : []))
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 160)
+      : "";
+  const preview = summary
+    ? [builtinToolNames[summary.name] ?? summary.name, summary.hint]
+        .filter(Boolean)
+        .join(" · ")
+    : reasoning;
   const content = node.entries.map((entry) => {
     if (entry.kind === "assistant")
       return (
@@ -747,8 +745,9 @@ const ProcessGroup = memo(function ProcessGroup({
     const tool = node.tools.find((item) => item.id === entry.id)!;
     return (
       <ToolEvent
-        key={tool.id}
+        key={entry.key ?? tool.id}
         id={tool.id}
+        draft={tool.draft}
         call={tool.call}
         result={tool.result}
         reconciliation={tool.reconciliation}
@@ -765,24 +764,22 @@ const ProcessGroup = memo(function ProcessGroup({
     <section
       className="min-w-0"
       data-has-tools={Boolean(node.tools.length)}
-      data-grouped={grouped}
+      data-grouped="true"
       data-message-anchor={node.anchor}
       aria-label={node.tools.length ? "工具过程" : "思考过程"}
     >
       <ChatDisclosure
-        open={!grouped || !completed}
-        automatic={grouped}
-        headingHidden={!grouped}
+        open={pauseAutoCollapse ? automaticOpen : !completed}
+        automatic
         label={
-          activeName
-            ? activityLabel!
-            : live
-              ? "思考与工具过程"
-              : node.tools.length
-                ? `已使用工具 ${node.tools.length} 次`
-                : "思考过程"
+          live
+            ? "思考与工具过程"
+            : node.tools.length
+              ? `已使用工具 ${node.tools.length} 次`
+              : "思考过程"
         }
         active={Boolean(activeName) || live}
+        collapsedDetail={!completed && preview ? preview : undefined}
         icon={
           activeName ? (
             <ActivityIcon name={activeName} active />
@@ -793,7 +790,15 @@ const ProcessGroup = memo(function ProcessGroup({
       >
         <div className="agent-process-steps">
           {content.map((child, index) => (
-            <div key={node.entries[index].id} className="agent-process-step">
+            <div
+              key={
+                node.entries[index].kind === "tool"
+                  ? (node.entries[index].key ?? node.entries[index].id)
+                  : node.entries[index].id
+              }
+              className="agent-process-step"
+              data-message-anchor={`${node.id}:${node.entries[index].kind === "tool" ? (node.entries[index].key ?? node.entries[index].id) : node.entries[index].id}`}
+            >
               {child}
             </div>
           ))}

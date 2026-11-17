@@ -754,6 +754,7 @@ export function Conversation({
                         sessionId={sessionId}
                         attempt={visibleAttempt(state)}
                         service={service}
+                        pauseAutoCollapse={!following}
                         onVisibleResult={root ? markViewed : undefined}
                       />
                       {operation && (

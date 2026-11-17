@@ -23,9 +23,6 @@ func (w *agentWS) writeSessionChanges(ids []agentcore.ID, resync bool) error {
 }
 
 func (w *agentWS) sessionsChanged() error {
-	if _, e := w.options.Identity.ObserveAccess(w.ctx, w.raw, nil); e != nil {
-		return w.globalAuthenticationError(e)
-	}
 	changes, resync := w.changes.Drain()
 	if resync {
 		return w.writeSessionChanges(nil, true)

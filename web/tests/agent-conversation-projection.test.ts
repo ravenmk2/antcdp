@@ -8,10 +8,52 @@ import {
   conversationFrame,
   initialConversationState,
 } from "@/features/agents/data/stream-reducer";
-import type { DurableRecord } from "@/types/agent-events";
+import type { ActiveAttempt, DurableRecord } from "@/types/agent-events";
 import type { ContentBlock } from "@/types/agents";
 import { records, snapshot, time, question } from "./fixtures/agents";
-import { conversationPresentation } from "@/features/agents/data/conversation-presentation";
+import {
+  ConversationPresenter,
+  conversationPresentation,
+} from "@/features/agents/data/conversation-presentation";
+
+it("gives split process groups distinct stable identities when streamed text arrives between reasoning and tools", () => {
+  const presenter = new ConversationPresenter();
+  const attempt: ActiveAttempt = {
+    attempt_id: "30",
+    run_id: "20",
+    step: 1,
+    next_index: 2,
+    content: [
+      { type: "reasoning", text: "准备执行" },
+      {
+        type: "tool_call",
+        draft_call_id: "draft-0",
+        name: "exec_command",
+        arguments_text: "",
+      },
+    ],
+  };
+  const original = presenter.project([], attempt);
+  const split = {
+    ...attempt,
+    content: [
+      ...attempt.content,
+      { type: "text" as const, text: "开始检查。" },
+    ],
+  };
+  const groups = presenter
+    .project([], split)
+    .filter((node) => node.kind === "process");
+  expect(groups).toHaveLength(2);
+  expect(new Set(groups.map((node) => node.id)).size).toBe(2);
+  expect(groups[0].id).toBe(original[0].id);
+  expect(
+    presenter
+      .project([], split)
+      .filter((node) => node.kind === "process")
+      .map((node) => node.id),
+  ).toEqual(groups.map((node) => node.id));
+});
 
 const call: Extract<DurableRecord, { event_type: "tool/call" }> = {
   seq: "4",

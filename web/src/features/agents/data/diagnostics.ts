@@ -13,6 +13,8 @@ const stages: Record<string, string> = {
   workspace_verify: "验证工作环境",
   request: "请求模型服务",
   response: "处理模型响应",
+  response_decode: "解析模型响应",
+  response_validation: "校验模型响应与工具参数",
   execute: "执行工具",
 };
 const networks: Record<string, string> = {

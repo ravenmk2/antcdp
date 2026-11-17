@@ -169,7 +169,14 @@ export function DisclosureContent({
   return (
     <div
       ref={ref}
-      hidden={!open && !present}
+      hidden={
+        !open &&
+        (!present ||
+          (previous.current.open !== open &&
+            previous.current.revision === revision) ||
+          (previous.current.revision === revision &&
+            animationRef.current === null))
+      }
       data-disclosure-content
       aria-hidden={!open}
       className="flow-root min-w-0"

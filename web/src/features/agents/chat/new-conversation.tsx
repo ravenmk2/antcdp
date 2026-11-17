@@ -106,6 +106,9 @@ export function NewConversation({
         }
       : null;
   const openSession = (sessionId: string) => {
+    // This page and its composer each observe the send flow. Release this
+    // page's guard before the composer's accepted callback navigates.
+    send.release();
     void cache.invalidateQueries({ queryKey: ["agent-sessions"] });
     void cache.invalidateQueries({ queryKey: ["workspace-attention"] });
     navigate(

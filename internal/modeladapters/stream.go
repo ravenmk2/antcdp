@@ -70,7 +70,7 @@ func readSSE(ctx context.Context, reader io.Reader, handle func([]byte) (bool, e
 func rawString(raw json.RawMessage) (string, error) {
 	var s string
 	if json.Unmarshal(raw, &s) != nil {
-		return "", modelcore.ErrInvalidResponse
+		return "", invalidResponse("MODEL_RESPONSE_STRING_INVALID")
 	}
 	return s, nil
 }
@@ -189,12 +189,15 @@ func decodeChat(ctx context.Context, reader io.Reader, emit modelcore.Emit) (mod
 				Finish *string                    `json:"finish_reason"`
 			} `json:"choices"`
 		}
-		if json.Unmarshal(data, &frame) != nil || len(frame.Error) > 0 {
-			return false, modelcore.ErrInvalidResponse
+		if json.Unmarshal(data, &frame) != nil {
+			return false, invalidResponse("MODEL_STREAM_FRAME_INVALID")
+		}
+		if len(frame.Error) > 0 {
+			return false, invalidResponse("MODEL_STREAM_ERROR_FRAME")
 		}
 		if frame.Model != "" {
 			if len(frame.Model) > 255 || strings.ContainsAny(frame.Model, "\r\n\x00") || (result.ReturnedModel != "" && result.ReturnedModel != frame.Model) {
-				return false, modelcore.ErrInvalidResponse
+				return false, invalidResponse("MODEL_RESPONSE_MODEL_INVALID")
 			}
 			result.ReturnedModel = frame.Model
 		}
@@ -207,7 +210,7 @@ func decodeChat(ctx context.Context, reader io.Reader, emit modelcore.Emit) (mod
 		}
 		choice := frame.Choices[0]
 		if finished {
-			return false, modelcore.ErrInvalidResponse
+			return false, invalidResponse("MODEL_STREAM_AFTER_FINISH")
 		}
 		keys := make([]string, 0, len(choice.Delta))
 		for key := range choice.Delta {
@@ -216,7 +219,7 @@ func decodeChat(ctx context.Context, reader io.Reader, emit modelcore.Emit) (mod
 		sort.Strings(keys)
 		for _, key := range keys {
 			if nativeEnvelopeKey(key) {
-				return false, modelcore.ErrInvalidResponse
+				return false, invalidResponse("MODEL_RESPONSE_ENVELOPE_INVALID")
 			}
 			raw := choice.Delta[key]
 			switch key {
@@ -244,12 +247,12 @@ func decodeChat(ctx context.Context, reader io.Reader, emit modelcore.Emit) (mod
 			case "tool_calls":
 				var fragments []map[string]json.RawMessage
 				if json.Unmarshal(raw, &fragments) != nil {
-					return false, modelcore.ErrInvalidResponse
+					return false, invalidResponse("MODEL_TOOL_CALLS_INVALID")
 				}
 				for _, fragment := range fragments {
 					var index int
 					if json.Unmarshal(fragment["index"], &index) != nil || index < 0 || index > len(calls) {
-						return false, modelcore.ErrInvalidResponse
+						return false, invalidResponse("MODEL_TOOL_CALL_INDEX_INVALID")
 					}
 					if index == len(calls) {
 						calls = append(calls, &chatCall{fields: map[string]json.RawMessage{}, function: map[string]json.RawMessage{}, block: nextBlock})
@@ -271,7 +274,7 @@ func decodeChat(ctx context.Context, reader io.Reader, emit modelcore.Emit) (mod
 						}
 						var fn map[string]json.RawMessage
 						if json.Unmarshal(value, &fn) != nil {
-							return false, modelcore.ErrInvalidResponse
+							return false, invalidResponse("MODEL_TOOL_FUNCTION_INVALID")
 						}
 						for k, v := range fn {
 							if k == "name" || k == "arguments" {
@@ -281,6 +284,15 @@ func decodeChat(ctx context.Context, reader io.Reader, emit modelcore.Emit) (mod
 								}
 								if e = appendString(call.function, k, text); e != nil {
 									return false, e
+								}
+								if k == "name" && text != "" {
+									name, _ := rawString(call.function[k])
+									if len(name) > 64 {
+										return false, invalidResponse("MODEL_TOOL_NAME_INVALID")
+									}
+									if e = emit(modelcore.Delta{Kind: "tool_call", BlockIndex: call.block, DraftCallID: "draft-" + strconv.Itoa(index), Name: name}); e != nil {
+										return false, e
+									}
 								}
 								if k == "arguments" {
 									if e = emit(modelcore.Delta{Kind: "tool_call", BlockIndex: call.block, DraftCallID: "draft-" + strconv.Itoa(index), Text: text}); e != nil {
@@ -321,13 +333,13 @@ func decodeChat(ctx context.Context, reader io.Reader, emit modelcore.Emit) (mod
 		return result, err
 	}
 	if result.FinishReason != "stop" && result.FinishReason != "tool_calls" {
-		return result, modelcore.ErrInvalidResponse
+		return result, invalidResponse("MODEL_FINISH_REASON_INVALID")
 	}
 	if len(calls) == 0 && result.Message.Content == "" && result.Message.Reasoning == "" {
 		return result, modelcore.ErrEmptyResponse
 	}
 	if role, e := rawString(fields["role"]); e != nil || role != "assistant" {
-		return result, modelcore.ErrInvalidResponse
+		return result, invalidResponse("MODEL_RESPONSE_ROLE_INVALID")
 	}
 	if len(calls) > 0 {
 		seenIDs := map[string]bool{}
@@ -335,14 +347,14 @@ func decodeChat(ctx context.Context, reader io.Reader, emit modelcore.Emit) (mod
 		for index, call := range calls {
 			kind, err := rawString(call.fields["type"])
 			if err != nil || kind != "function" {
-				return result, modelcore.ErrInvalidResponse
+				return result, invalidResponse("MODEL_TOOL_TYPE_INVALID")
 			}
 			id, _ := rawString(call.fields["id"])
 			name, _ := rawString(call.function["name"])
 			args, _ := rawString(call.function["arguments"])
 			value := modelcore.ToolCall{ID: id, Name: name, Arguments: args}
 			if seenIDs[id] {
-				return result, modelcore.ErrInvalidResponse
+				return result, invalidResponse("MODEL_TOOL_CALL_ID_DUPLICATE")
 			}
 			seenIDs[id] = true
 			if e := validateCall(value); e != nil {

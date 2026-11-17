@@ -361,8 +361,17 @@ func nativeEnvelopeKey(key string) bool {
 
 func validateCall(call modelcore.ToolCall) error {
 	var object map[string]json.RawMessage
-	if call.ID == "" || len(call.ID) > 255 || call.Name == "" || len(call.Name) > 64 || len(call.Arguments) > modelcore.MaxToolArgumentsBytes || json.Unmarshal([]byte(call.Arguments), &object) != nil || object == nil {
-		return fmt.Errorf("%w: tool call", modelcore.ErrInvalidResponse)
+	if call.ID == "" || len(call.ID) > 255 {
+		return invalidResponse("MODEL_TOOL_CALL_ID_INVALID")
+	}
+	if call.Name == "" || len(call.Name) > 64 {
+		return invalidResponse("MODEL_TOOL_NAME_INVALID")
+	}
+	if len(call.Arguments) > modelcore.MaxToolArgumentsBytes {
+		return invalidResponse("MODEL_TOOL_ARGUMENTS_TOO_LARGE")
+	}
+	if json.Unmarshal([]byte(call.Arguments), &object) != nil || object == nil {
+		return invalidResponse("MODEL_TOOL_ARGUMENTS_NOT_OBJECT")
 	}
 	return nil
 }

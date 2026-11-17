@@ -61,8 +61,15 @@ func (s *Service) lockExecution(tx identity.Tx, r Repository, st StateRepository
 			return out, integrity()
 		}
 	}
-	if v.RowVersion != initial.RowVersion {
-		return out, httpx.E(409, "EXECUTION_CHANGED", "执行配置发生变化")
+	// The first read only locates the lock hierarchy. Titles and other session
+	// metadata may change before these locks are acquired; they do not revoke
+	// the frozen turn. Validate identity here and execution authority below.
+	lockedRootID := v.ID
+	if v.RootSessionID != nil {
+		lockedRootID = *v.RootSessionID
+	}
+	if v.AgentID != agent.ID || lockedRootID != rootSessionID {
+		return out, integrity()
 	}
 	root, e := st.Run(uint64(ref.RootRunID), true)
 	if e != nil {
@@ -75,7 +82,7 @@ func (s *Service) lockExecution(tx identity.Tx, r Repository, st StateRepository
 	if e != nil {
 		return out, e
 	}
-	if frozen.Row.AgentID != agent.ID || frozen.Row.ExecutorUserID != initial.ExecutorUserID {
+	if frozen.Row.AgentID != agent.ID || frozen.Row.ExecutorUserID != v.ExecutorUserID {
 		return out, integrity()
 	}
 	agent.SystemPrompt, agent.RowVersion = frozen.Row.SystemPrompt, frozen.Row.AgentConfigVersion

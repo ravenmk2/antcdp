@@ -29,7 +29,7 @@ export function useScrollFollow() {
   const [following, setFollowing] = useState(true);
   const follow = useRef(true);
   const last = useRef<ReturnType<typeof geometry> | null>(null);
-  const anchor = useRef<{ id: string; offset: number } | null>(null);
+  const anchor = useRef<{ id: string; offset: number }[]>([]);
   const historyHeight = useRef<number | null>(null);
   const frame = useRef<number | null>(null);
   const directScroll = useRef(false);
@@ -37,19 +37,35 @@ export function useScrollFollow() {
 
   const captureAnchor = useCallback(() => {
     if (!viewport || follow.current) {
-      anchor.current = null;
+      anchor.current = [];
       return;
     }
     const top = viewport.getBoundingClientRect().top;
-    const element = [
+    const elements = [
       ...viewport.querySelectorAll<HTMLElement>("[data-message-anchor]"),
-    ].find((item) => item.getBoundingClientRect().bottom > top);
-    anchor.current = element
-      ? {
-          id: element.dataset.messageAnchor!,
-          offset: element.getBoundingClientRect().top - top,
-        }
-      : null;
+    ].filter((item) => item.getClientRects().length);
+    const visible = elements.filter(
+      (item) => item.getBoundingClientRect().bottom > top,
+    );
+    // Prefer the innermost visible row, not its potentially very tall group.
+    let primary = visible[0];
+    for (const candidate of visible) {
+      if (primary?.contains(candidate)) primary = candidate;
+      else if (primary) break;
+    }
+    const fallbacks = elements
+      .filter((item) => item !== primary)
+      .sort(
+        (a, b) =>
+          Math.abs(a.getBoundingClientRect().top - top) -
+          Math.abs(b.getBoundingClientRect().top - top),
+      );
+    anchor.current = (primary ? [primary, ...fallbacks] : fallbacks).map(
+      (element) => ({
+        id: element.dataset.messageAnchor!,
+        offset: element.getBoundingClientRect().top - top,
+      }),
+    );
   }, [viewport]);
 
   const synchronize = useCallback(() => {
@@ -59,16 +75,21 @@ export function useScrollFollow() {
       historyHeight.current = null;
     } else if (follow.current) {
       viewport.scrollTop = viewport.scrollHeight;
-    } else if (anchor.current) {
-      const saved = anchor.current;
-      const element = [
+    } else if (anchor.current.length) {
+      const elements = [
         ...viewport.querySelectorAll<HTMLElement>("[data-message-anchor]"),
-      ].find((item) => item.dataset.messageAnchor === saved.id);
-      if (element?.getClientRects().length)
+      ];
+      for (const saved of anchor.current) {
+        const element = elements.find(
+          (item) => item.dataset.messageAnchor === saved.id,
+        );
+        if (!element?.getClientRects().length) continue;
         viewport.scrollTop +=
           element.getBoundingClientRect().top -
           viewport.getBoundingClientRect().top -
           saved.offset;
+        break;
+      }
     }
     last.current = geometry(viewport);
   }, [viewport]);
@@ -92,7 +113,7 @@ export function useScrollFollow() {
     movingAway.current = false;
     follow.current = true;
     setFollowing(true);
-    anchor.current = null;
+    anchor.current = [];
     historyHeight.current = null;
     if (viewport) cancelDisclosureScrollAnchor(viewport);
     synchronize();
@@ -122,7 +143,7 @@ export function useScrollFollow() {
       if (nearBottom(current) && !movingAway.current) {
         follow.current = true;
         setFollowing(true);
-        anchor.current = null;
+        anchor.current = [];
       } else if ((movedUp && !resized) || directScroll.current) {
         pauseFollowing();
       }
@@ -167,7 +188,9 @@ export function useScrollFollow() {
       }
     };
     // Both the transcript and its available viewport can change independently.
-    const observer = new ResizeObserver(schedule);
+    // ResizeObserver runs after layout and before paint. Correct here instead
+    // of allowing one frame at the old scroll position during a fold/dock resize.
+    const observer = new ResizeObserver(synchronize);
     // Includes the trailing space reserved for the floating composer.
     observer.observe(body, { box: "border-box" });
     observer.observe(viewport);

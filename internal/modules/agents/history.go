@@ -11,6 +11,12 @@ import (
 )
 
 type observingKey struct{}
+type connectionKey struct{}
+
+// ObservingConnection binds passive reads to an authenticated live connection.
+func ObservingConnection(ctx context.Context, connection *identity.Connection) context.Context {
+	return context.WithValue(ObservingContext(ctx), connectionKey{}, connection)
+}
 
 // ObservingContext makes passive WS reads authenticate without renewing login.
 func ObservingContext(ctx context.Context) context.Context {
@@ -24,7 +30,13 @@ func (s *Service) observationAccess(ctx context.Context, raw string, fn func(ide
 		return nil, unavailable()
 	}
 	out := &Result{Status: 200}
-	auth, err := s.Identity.ObserveAccess(ctx, raw, func(tx identity.Tx, a *identity.Auth) error {
+	access := func(fn func(identity.Tx, *identity.Auth) error) (*identity.Auth, error) {
+		if connection, ok := ctx.Value(connectionKey{}).(*identity.Connection); ok {
+			return s.Identity.ConnectionAccess(ctx, connection, fn)
+		}
+		return s.Identity.ObserveAccess(ctx, raw, fn)
+	}
+	auth, err := access(func(tx identity.Tx, a *identity.Auth) error {
 		r, e := RepositoryFor(tx)
 		if e != nil {
 			return e

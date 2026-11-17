@@ -206,3 +206,43 @@ it("observes a transcript mounted after asynchronous page data becomes available
   resize(screen.getByTestId("content"));
   expect(size.top).toBe(2300);
 });
+
+it("preserves a visible neighboring anchor when the current row disappears", () => {
+  render(<Harness />);
+  const { node, size } = setupGeometry();
+  resize(node);
+  node.scrollTop = 800;
+  const body = screen.getByTestId("content");
+  const current = document.createElement("article");
+  const next = document.createElement("article");
+  current.dataset.messageAnchor = "current";
+  next.dataset.messageAnchor = "next";
+  body.append(current, next);
+  let nextTop = 840;
+  for (const [element, start] of [
+    [current, () => 760],
+    [next, () => nextTop],
+  ] as const) {
+    vi.spyOn(element, "getClientRects").mockReturnValue([
+      {},
+    ] as unknown as DOMRectList);
+    vi.spyOn(element, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          top: start() - size.top,
+          bottom: start() - size.top + 80,
+          height: 80,
+        }) as DOMRect,
+    );
+  }
+  fireEvent.wheel(node, { deltaY: -200 });
+  fireEvent.scroll(node);
+  expectFollowing(false);
+  current.remove();
+  nextTop -= 80;
+  size.height -= 80;
+  resize(body);
+  expect(size.top).toBe(720);
+  expect(next.getBoundingClientRect().top).toBe(40);
+  expectFollowing(false);
+});

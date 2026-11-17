@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,17 +24,19 @@ import (
 
 type streamTestStore struct {
 	identity.Store
-	mu      sync.Mutex
-	user    identity.User
-	session identity.Session
-	chat    a.SessionRow
-	events  []a.EventRow
-	renewed int
+	mu           sync.Mutex
+	user         identity.User
+	session      identity.Session
+	chat         a.SessionRow
+	events       []a.EventRow
+	renewed      int
+	transactions int
 }
 
 func (s *streamTestStore) Transact(_ context.Context, fn func(identity.Tx) error) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.transactions++
 	return fn(streamTestTx{s: s})
 }
 
@@ -53,10 +56,15 @@ func (t streamTestTx) LockUsers([]uint64) (map[uint64]*identity.User, error) {
 func (streamTestTx) Password(uint64) (*identity.Password, error)       { return &identity.Password{}, nil }
 func (streamTestTx) FounderID() (uint64, error)                        { return 1, nil }
 func (t streamTestTx) RenewSession(uint64, time.Time, time.Time) error { t.s.renewed++; return nil }
-func (t streamTestTx) Agents() a.Repository                            { return streamAgentRepo{} }
-func (t streamTestTx) AgentState() a.StateRepository                   { return streamStateRepo{s: t.s} }
-func (t streamTestTx) AgentObservations() a.ObservationRepository      { return streamObservationRepo{} }
-func (t streamTestTx) Models() m.Repository                            { return streamModelRepo{} }
+func (t streamTestTx) RevokeSession(_ uint64, now time.Time) error {
+	t.s.session.RevokedAt = &now
+	return nil
+}
+func (streamTestTx) Audit(identity.Event) error                   { return nil }
+func (t streamTestTx) Agents() a.Repository                       { return streamAgentRepo{} }
+func (t streamTestTx) AgentState() a.StateRepository              { return streamStateRepo{s: t.s} }
+func (t streamTestTx) AgentObservations() a.ObservationRepository { return streamObservationRepo{} }
+func (t streamTestTx) Models() m.Repository                       { return streamModelRepo{} }
 
 type streamAgentRepo struct{ a.Repository }
 
@@ -201,6 +209,24 @@ func TestAgentWebSocketSnapshotCatchupResyncAndRevocation(t *testing.T) {
 		t.Fatal(start)
 	}
 	store.mu.Lock()
+	beforeChunks := store.transactions
+	store.mu.Unlock()
+	for i := 0; i < 20; i++ {
+		if e := hub.Emit(t.Context(), permit, modelcore.Delta{Kind: "text", BlockIndex: 0, Text: "chunk"}); e != nil {
+			t.Fatal(e)
+		}
+		if read()["kind"] != "chunk" {
+			t.Fatal("missing streamed chunk")
+		}
+	}
+	send(map[string]any{"type": "ping", "nonce": "no-db"})
+	if read()["type"] != "pong" {
+		t.Fatal("missing pong")
+	}
+	store.mu.Lock()
+	if store.transactions != beforeChunks {
+		t.Errorf("chunks/heartbeat performed database reads: %d", store.transactions-beforeChunks)
+	}
 	store.events = append(store.events, streamEvent(t, 2))
 	store.chat.LastSeq = 2
 	store.mu.Unlock()
@@ -269,14 +295,18 @@ func TestAgentWebSocketSnapshotCatchupResyncAndRevocation(t *testing.T) {
 		t.Fatal(e)
 	}
 	store.mu.Lock()
-	store.user.Status = "disabled"
 	renewed := store.renewed
 	store.mu.Unlock()
 	if renewed != 0 {
 		t.Fatal("passive observation renewed login")
 	}
-	send(map[string]any{"type": "ping", "nonce": "revoked"})
-	if read()["code"] != "UNAUTHENTICATED" {
-		t.Fatal("revoked cookie remained connected")
+	if e := ident.Logout(t.Context(), strings.Repeat("x", 43), identity.Metadata{}); e != nil {
+		t.Fatal(e)
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_, _, closeErr := conn.ReadMessage()
+	var closed *websocket.CloseError
+	if !errors.As(closeErr, &closed) || closed.Code != websocket.ClosePolicyViolation {
+		t.Fatalf("logout did not proactively close idle connection: %v", closeErr)
 	}
 }

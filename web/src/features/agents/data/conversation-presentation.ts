@@ -6,7 +6,7 @@ type Reply = Extract<
   { event_type: "assistant/message" | "assistant/attempt" }
 >;
 export type ProcessEntry =
-  | { kind: "tool"; id: string }
+  | { kind: "tool"; id: string; key?: string }
   | { kind: "assistant"; id: string; record?: Reply; attempt?: ActiveAttempt };
 export type PresentedProcess = {
   kind: "process";
@@ -24,19 +24,50 @@ export type PresentedNode =
 /** Preserve mounted process controls when pagination reveals an earlier start. */
 export class ConversationPresenter {
   private identities = new Map<string, string>();
+  private lastAttempt: ActiveAttempt | null = null;
 
   project(
     nodes: ConversationNode[],
     attempt: ActiveAttempt | null,
   ): PresentedNode[] {
+    if (attempt) this.lastAttempt = attempt;
+    const claimed = new Set<string>();
     return conversationPresentation(nodes, attempt).map((node) => {
       if (node.kind !== "process") return node;
-      const members = node.entries.map((entry) => `${node.runId}:${entry.id}`);
-      const id =
-        members.map((member) => this.identities.get(member)).find(Boolean) ??
-        node.id;
+      const members = node.entries.map(
+        (entry) =>
+          `${node.runId}:${entry.kind === "tool" ? (entry.key ?? entry.id) : entry.id}`,
+      );
+      // A new reply body can split a previously shared reasoning/tool group.
+      // Only one resulting group may retain the old mounted identity.
+      let id =
+        members
+          .map((member) => this.identities.get(member))
+          .find((id) => id !== undefined && !claimed.has(id)) ?? node.id;
+      if (claimed.has(id)) id = `${node.id}:${members[0]}`;
+      claimed.add(id);
       for (const member of members) this.identities.set(member, id);
-      return id === node.id ? node : { ...node, id };
+      const drafts =
+        this.lastAttempt?.content.filter(
+          (block) => block.type === "tool_call",
+        ) ?? [];
+      const tools = node.tools.map((tool) => {
+        const draft =
+          tool.attemptId === this.lastAttempt?.attempt_id
+            ? drafts[tool.ordinal ?? -1]
+            : undefined;
+        return tool.draft?.committed && draft
+          ? {
+              ...tool,
+              draft: {
+                ...tool.draft,
+                name: draft.name ?? undefined,
+                argumentsText: draft.arguments_text,
+              },
+            }
+          : tool;
+      });
+      return { ...node, id, anchor: id, tools };
     });
   }
 }
@@ -76,7 +107,12 @@ export function conversationPresentation(
       target.entries.push(
         ...node.entries.map((entry): ProcessEntry =>
           entry.kind === "tool"
-            ? entry
+            ? {
+                ...entry,
+                key: toolPresentationKey(
+                  node.tools.find((tool) => tool.id === entry.id)!,
+                ),
+              }
             : {
                 kind: "assistant",
                 id: `reasoning:${entry.record.data.attempt_id}`,
@@ -132,31 +168,58 @@ export function conversationPresentation(
     }
   }
   if (attempt) {
-    const content = attempt.content.filter(
-      (block) => block.type === "reasoning" || block.type === "tool_call",
+    const reasoning = attempt.content.filter(
+      (block) => block.type === "reasoning" && block.text.trim(),
     );
-    if (content.length) {
-      const target = process(
+    const text = attempt.content.filter(
+      (block) => block.type === "text" && block.text.trim(),
+    );
+    const tools = attempt.content.filter((block) => block.type === "tool_call");
+    if (reasoning.length) {
+      process(
         attempt.run_id,
         `process:attempt:${attempt.attempt_id}`,
         `attempt:${attempt.attempt_id}`,
-      );
-      if (content.length)
-        target.entries.push({
-          kind: "assistant",
-          id: `reasoning:${attempt.attempt_id}`,
-          attempt: { ...attempt, content },
-        });
+      ).entries.push({
+        kind: "assistant",
+        id: `reasoning:${attempt.attempt_id}`,
+        attempt: { ...attempt, content: reasoning },
+      });
     }
-    const text = attempt.content.filter(
-      (block) => block.type !== "reasoning" && block.type !== "tool_call",
-    );
-    if (text.length || !content.length)
+    if (text.length) {
       result.push({
         kind: "draft",
         id: `attempt:${attempt.attempt_id}`,
         attempt: { ...attempt, content: text },
       });
+      group = undefined;
+    }
+    if (tools.length) {
+      const target = process(
+        attempt.run_id,
+        `process:tools:${attempt.attempt_id}`,
+        `attempt:${attempt.attempt_id}`,
+      );
+      tools.forEach((block, ordinal) => {
+        const id = `tool:${attempt.attempt_id}:${ordinal}`;
+        target.tools.push({
+          id,
+          attemptId: attempt.attempt_id,
+          ordinal,
+          draft: {
+            name: block.name ?? undefined,
+            argumentsText: block.arguments_text,
+          },
+        });
+        target.entries.push({ kind: "tool", id, key: id });
+      });
+    }
   }
   return result;
+}
+
+function toolPresentationKey(tool: ToolNode) {
+  return tool.attemptId !== undefined && tool.ordinal !== undefined
+    ? `tool:${tool.attemptId}:${tool.ordinal}`
+    : tool.id;
 }
