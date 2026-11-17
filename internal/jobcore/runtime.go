@@ -4,18 +4,15 @@ package jobcore
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/ravenmk2/antcdp/internal/scriptcore"
 )
 
-const MaxJSONBytes = 1 << 20
+const MaxJSONBytes = scriptcore.MaxJSONBytes
 
-type Error struct {
-	Code    string
-	Message string
-	CallID  string
-}
+type Error = scriptcore.Error
 
-func (e *Error) Error() string           { return e.Message }
-func Failure(code, message string) error { return &Error{Code: code, Message: message} }
+func Failure(code, message string) error { return scriptcore.Failure(code, message) }
 
 type Host interface {
 	State(context.Context, string, string, json.RawMessage, json.RawMessage) (any, error)
@@ -29,18 +26,11 @@ type Input struct {
 	// OnStopping observes failure before outstanding host activities are drained.
 	OnStopping func(error)
 }
-type Result struct {
-	Value    json.RawMessage
-	HasValue bool
-}
+type Result = scriptcore.Result
+
 type Executor interface {
 	Validate(string) error
 	Execute(context.Context, Input, Host) (Result, error)
 }
 
-func Code(err error) string {
-	if e, ok := err.(*Error); ok {
-		return e.Code
-	}
-	return "EXECUTION_ERROR"
-}
+func Code(err error) string { return scriptcore.Code(err) }

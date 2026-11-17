@@ -473,8 +473,8 @@ func checkVersion(value string, u *User) error {
 	return nil
 }
 func protect(a *Auth, target *User, operation string) error {
-	if target.AccountType == "robot" {
-		return httpx.E(403, "ROBOT_MANAGED_BY_AGENT", "请通过绑定的服务型智能体管理机器人账号")
+	if target.AccountType == "robot" && operation != "profile" && operation != "status" {
+		return httpx.E(403, "ROBOT_ACCOUNT_PROTECTED", "机器人仅支持资料和启停管理，不能登录、设置密码或更改账号类型")
 	}
 	self := a.User.ID == target.ID
 	if self && operation == "password" {

@@ -22,6 +22,6 @@ export const passwordSchema = z
 export const resourceCodeSchema = z
   .string()
   .regex(
-    /^[A-Za-z0-9][A-Za-z0-9_-]{0,62}[A-Za-z0-9]$/,
-    "2–64 位字母、数字、_ 或 -，首尾为字母或数字",
+    /^[a-z0-9][a-z0-9_-]{0,63}$/,
+    "1–64 位小写字母、数字、_ 或 -，以字母或数字开头",
   );

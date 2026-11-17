@@ -280,15 +280,27 @@ func (s *Service) submitInputTx(ctx context.Context, tx identity.Tx, r Repositor
 	if e != nil {
 		return e
 	}
+	return s.admitInput(st, out, rec, v, agent, model, selection, a.User.ID, "human", nil, w)
+}
+
+// admitInput applies an already authorized input inside its host transaction.
+// Console and automation commands retain separate identity and receipt handling.
+func (s *Service) admitInput(st StateRepository, out *Result, rec *Receipt, v *SessionRow, agent *Definition, model agentcore.LockedModel, selection EffectiveSelection, actorID uint64, origin string, source *agentcore.SourceRef, w InputCreate) error {
+	id := v.ID
 	session, e := coreSession(v)
 	if e != nil {
 		return e
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	policy := corePolicy(agent)
-	user := agentcore.ID(a.User.ID)
+	user := agentcore.ID(actorID)
 	author := agentcore.ActorRef{Kind: "user", ID: &user}
-	row := &InputRow{SessionID: id, CommandReceiptID: &rec.ID, InputKind: "message", OriginKind: "human", ActorKind: "user", ActorID: strconv.FormatUint(a.User.ID, 10), LastModifiedByKind: "user", LastModifiedByID: strconv.FormatUint(a.User.ID, 10), Status: "pending", QueueOrder: v.NextInputOrder, ContentRevision: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now, QueueDeadlineAt: now.Add(time.Duration(policy.QueueTimeoutSeconds) * time.Second)}
+	row := &InputRow{SessionID: id, CommandReceiptID: &rec.ID, InputKind: "message", OriginKind: origin, ActorKind: "user", ActorID: strconv.FormatUint(actorID, 10), LastModifiedByKind: "user", LastModifiedByID: strconv.FormatUint(actorID, 10), Status: "pending", QueueOrder: v.NextInputOrder, ContentRevision: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now, QueueDeadlineAt: now.Add(time.Duration(policy.QueueTimeoutSeconds) * time.Second)}
+	if source != nil {
+		sourceID := strconv.FormatUint(uint64(source.ID), 10)
+		row.SourceKind = &source.Kind
+		row.SourceID = &sourceID
+	}
 	if e = st.InsertInput(row); e != nil {
 		return e
 	}
@@ -296,7 +308,7 @@ func (s *Service) submitInputTx(ctx context.Context, tx identity.Tx, r Repositor
 	if files == nil {
 		files = []agentcore.FileRef{}
 	}
-	plan, e := agentcore.PlanAdmission(agentcore.AdmissionState{Session: session, Candidate: model, Policy: policy}, agentcore.AdmissionCommand{InputID: agentcore.ID(row.ID), Actor: author, Origin: "human", Kind: "message", Content: w.Content, Files: files, ExpectedModelHash: w.ExpectedHash}, now)
+	plan, e := agentcore.PlanAdmission(agentcore.AdmissionState{Session: session, Candidate: model, Policy: policy}, agentcore.AdmissionCommand{InputID: agentcore.ID(row.ID), Actor: author, Origin: origin, Source: source, Kind: "message", Content: w.Content, Files: files, ExpectedModelHash: w.ExpectedHash}, now)
 	if e != nil {
 		return coreError(e)
 	}
@@ -321,7 +333,7 @@ func (s *Service) submitInputTx(ctx context.Context, tx identity.Tx, r Repositor
 	row.AcceptedSeq = v.LastSeq + 1
 	row.CurrentContentSeq = row.AcceptedSeq
 	v.NextInputOrder = plan.Session.NextInputOrder
-	if e = bindInputFiles(st, v, row.ID, a.User.ID, files, model, now); e != nil {
+	if e = bindInputFiles(st, v, row.ID, actorID, files, model, now); e != nil {
 		return e
 	}
 	view := inputFromPlan(plan.Input, row, strings.Trim(s.tag("input", row.ID, row.RowVersion), `"`))

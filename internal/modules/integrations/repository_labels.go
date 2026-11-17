@@ -9,6 +9,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
+
 	c "github.com/ravenmk2/antcdp/internal/modules/collaboration"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -39,7 +41,7 @@ type RepositoryLabelStore interface {
 	SetRepositoryLabels(uint64, uint64, []uint64) error
 }
 
-var labelCodePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,63}$`)
+var labelCodePattern = resourcecode.Pattern
 var labelColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
 func normalizeRepositoryLabel(w RepositoryLabelWrite, current RepositoryLabel, create bool) (RepositoryLabel, error) {

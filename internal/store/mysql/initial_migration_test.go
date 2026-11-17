@@ -44,7 +44,7 @@ func TestInitialMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	sources := p.ListSources()
-	const baselineMigrations = 15
+	const baselineMigrations = 16
 	if len(sources) < baselineMigrations {
 		t.Fatal("missing baseline migrations", len(sources))
 	}
@@ -85,6 +85,30 @@ func TestInitialMigration(t *testing.T) {
 	}) {
 		return
 	}
+	if !t.Run("pre_event_transition", func(t *testing.T) {
+		if _, err := p.UpTo(ctx, 10); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.db.ExecContext(ctx, "CREATE TABLE `agent` (`id` BIGINT UNSIGNED PRIMARY KEY) ENGINE=InnoDB"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Migrate(ctx); !errors.Is(err, errPreEventsLayout) {
+			t.Fatal("old baseline was not rejected before reordered migrations", err)
+		}
+		var version int64
+		if err := s.db.GetContext(ctx, &version, "SELECT MAX(version_id) FROM goose_db_version WHERE is_applied=1"); err != nil || version != 10 {
+			t.Fatal("rejection changed migration history", version, err)
+		}
+		var count int
+		if err := s.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='event_record'"); err != nil || count != 0 {
+			t.Fatal("rejection executed event DDL", count, err)
+		}
+		if _, err := s.db.ExecContext(ctx, "DROP TABLE `agent`"); err != nil {
+			t.Fatal(err)
+		}
+	}) {
+		return
+	}
 	if err = s.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +122,7 @@ func TestInitialMigration(t *testing.T) {
 		t.Fatal("unexpected baseline migration history", versions, err)
 	}
 	var tables int
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 95 {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 101 {
 		t.Fatal("expected baseline tables and goose history", tables, err)
 	}
 	t.Run("state store", func(t *testing.T) { stateStoreIntegration(t, ctx, s) })

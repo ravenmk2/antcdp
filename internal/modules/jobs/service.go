@@ -13,6 +13,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/integrations"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
 )
 
 func repository(tx identity.Tx) (Repository, error) {
@@ -195,10 +196,16 @@ func (s *Service) Save(ctx context.Context, raw string, project, job uint64, w W
 		created := j == nil
 		wasEnabled := false
 		if created {
-			j = &Job{ProjectID: project, ScopeKind: "project", Creator: a.User.ID, CreatedAt: now(), Version: 1}
+			if !resourcecode.Valid(w.Code) {
+				return httpx.Invalid("code", "invalid_format")
+			}
+			j = &Job{Code: w.Code, ProjectID: project, ScopeKind: "project", Creator: a.User.ID, CreatedAt: now(), Version: 1}
 		} else {
 			if err := version(w.Version, j.Version); err != nil {
 				return err
+			}
+			if w.Code != "" && w.Code != j.Code {
+				return httpx.Invalid("code", "immutable")
 			}
 			wasEnabled = j.Enabled
 			j.Version++

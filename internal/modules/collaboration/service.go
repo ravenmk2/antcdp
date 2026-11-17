@@ -11,13 +11,15 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
+
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
 type Service struct{ Identity *identity.Service }
 
-var codePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,62}[A-Za-z0-9]$`)
+var codePattern = resourcecode.Pattern
 var tagPattern = regexp.MustCompile(`^"(?:project|team)(?:-members|-dissolve)?-[1-9][0-9]*-(?:v[1-9][0-9]*|r[1-9][0-9]*-m[1-9][0-9]*)"$`)
 var IconKeys = []string{"folder", "code", "box", "globe", "bolt", "layers", "team"}
 

@@ -20,7 +20,7 @@ func init() {
 
 func agentRobotIdentity(t *testing.T, f *agentIntegrationFixture) {
 	ctx, raw, svc := f.Context, f.AdminToken, f.Agents
-	created, err := svc.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Name: strings.Repeat("机", 100), Mode: "service", ScopeKind: "platform"})
+	created, err := svc.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: strings.Repeat("机", 100), Mode: "service", RobotUserID: new(fmt.Sprint(createTestRobot(t, f).ID)), ScopeKind: "platform"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func agentRobotIdentity(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if robot.AccountType != "robot" || robot.Status != "disabled" || robot.DisplayName != agent.Name || robot.ManagedAgentID == nil || *robot.ManagedAgentID != agent.ID {
+	if robot.AccountType != "robot" || robot.Status != "active" || robot.DisplayName != "独立机器人" || robot.ManagedAgentID == nil || *robot.ManagedAgentID != agent.ID {
 		t.Fatalf("invalid bound robot: %+v", robot)
 	}
 	var passwords int
@@ -40,9 +40,15 @@ func agentRobotIdentity(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatalf("robot received login credentials: %d %v", passwords, err)
 	}
 	_, _, err = f.Identity.UpdateUser(ctx, raw, robot.ID, identity.UserTag(robot), identity.ProfilePatch{DisplayName: new("independent")}, identity.Metadata{})
-	modelsExpectCode(t, err, "ROBOT_MANAGED_BY_AGENT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	robot, _, err = f.Identity.User(ctx, raw, robot.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
 	_, err = f.Identity.ResetPassword(ctx, raw, robot.ID, identity.UserTag(robot), "robot-login-forbidden", identity.Metadata{})
-	modelsExpectCode(t, err, "ROBOT_MANAGED_BY_AGENT")
+	modelsExpectCode(t, err, "ROBOT_ACCOUNT_PROTECTED")
 	updated, err := svc.PatchDefinition(ctx, raw, agent.ID, created.Tag, a.DefinitionPatch{Name: a.Field[string]{Set: true, Value: "Renamed robot"}})
 	if err != nil {
 		t.Fatal(err)
@@ -51,8 +57,8 @@ func agentRobotIdentity(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if robot.DisplayName != "Renamed robot" {
-		t.Fatal("agent and robot names diverged")
+	if robot.DisplayName != "independent" {
+		t.Fatal("agent unexpectedly changed independent robot name")
 	}
 	users, _, _, err := f.Identity.Users(ctx, raw, identity.Filter{Page: 1, PageSize: 100})
 	if err != nil {
@@ -82,10 +88,10 @@ func agentRobotIdentity(t *testing.T, f *agentIntegrationFixture) {
 		}
 		_, e = collab.Member(ctx, raw, kind, obj.ID, robot.ID, "member", obj.MembershipETag, "add", identity.Metadata{})
 		modelsExpectCode(t, e, "ROBOT_MANAGED_BY_AGENT")
-		if _, e = collab.SetRobotMember(ctx, raw, agent.ID, kind, obj.ID, "member", obj.MembershipETag, identity.Metadata{}); e != nil {
+		if _, e = collab.SetRobotMember(ctx, raw, robot.ID, kind, obj.ID, "member", obj.MembershipETag, identity.Metadata{}); e != nil {
 			t.Fatal(e)
 		}
-		page, _, e := collab.RobotResources(ctx, raw, agent.ID, kind, collaboration.Query{Page: 1, Size: 100})
+		page, _, e := collab.RobotResources(ctx, raw, robot.ID, kind, collaboration.Query{Page: 1, Size: 100})
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -100,7 +106,7 @@ func agentRobotIdentity(t *testing.T, f *agentIntegrationFixture) {
 		}
 		_, e = collab.Member(ctx, raw, kind, obj.ID, robot.ID, "", granted.MembershipETag, "remove", identity.Metadata{})
 		modelsExpectCode(t, e, "ROBOT_MANAGED_BY_AGENT")
-		if _, e = collab.SetRobotMember(ctx, raw, agent.ID, kind, obj.ID, "", granted.MembershipETag, identity.Metadata{}); e != nil {
+		if _, e = collab.SetRobotMember(ctx, raw, robot.ID, kind, obj.ID, "", granted.MembershipETag, identity.Metadata{}); e != nil {
 			t.Fatal(e)
 		}
 	}
@@ -108,7 +114,16 @@ func agentRobotIdentity(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(err)
 	}
 	var retained bool
-	if err = f.Store.db.GetContext(ctx, &retained, "SELECT EXISTS(SELECT 1 FROM agent a JOIN `user` u ON u.id=a.robot_user_id WHERE a.id=? AND a.deleted_at IS NOT NULL AND u.deleted_at IS NOT NULL AND a.robot_user_id=?)", agent.ID, robot.ID); err != nil || !retained {
+	if err = f.Store.db.GetContext(ctx, &retained, "SELECT EXISTS(SELECT 1 FROM agent a JOIN `user` u ON u.id=a.robot_user_id WHERE a.id=? AND a.deleted_at IS NOT NULL AND u.deleted_at IS NULL AND u.status='active' AND a.robot_user_id=?)", agent.ID, robot.ID); err != nil || !retained {
 		t.Fatalf("deleted identity binding was not retained: %v", err)
 	}
+}
+
+func createTestRobot(t *testing.T, f *agentIntegrationFixture) *identity.User {
+	t.Helper()
+	robot, _, err := f.Identity.CreateRobot(f.Context, f.AdminToken, identity.RobotCreate{Username: "robot_" + cryptox.ID()[:20], DisplayName: "独立机器人"}, identity.Metadata{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return robot
 }

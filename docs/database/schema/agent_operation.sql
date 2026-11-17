@@ -1,4 +1,4 @@
--- Reading copy of 00013_agent_runtime.sql; execute embedded migrations instead.
+-- Reading copy of 00014_agent_runtime.sql; execute embedded migrations instead.
 
 CREATE TABLE `agent_operation` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

@@ -189,7 +189,7 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 	admin.call(t, "POST", cp+"/verify", map[string]any{}, 409, tag(admin, cp))
 	admin.call(t, "PATCH", path, map[string]any{"enabled": false}, 200, tag(admin, path))
 	admin.call(t, "POST", path+"/test", map[string]any{}, 409, tag(admin, path))
-	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": label + "_Project", "name": label + " 项目权限", "admin_user_ids": []string{memberID}}, 201, nil))
+	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": strings.ToLower(label) + "_project", "name": label + " 项目权限", "admin_user_ids": []string{memberID}}, 201, nil))
 	projectPath := "/projects/" + project["id"].(string)
 	grantServiceConnection(t, admin, path, "project", project["id"].(string), true)
 	mine := "/me/service-connections/" + kind + "/" + id + "/credentials"

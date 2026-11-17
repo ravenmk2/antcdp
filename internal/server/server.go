@@ -17,6 +17,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modules/agentresources"
 	"github.com/ravenmk2/antcdp/internal/modules/agents"
+	"github.com/ravenmk2/antcdp/internal/modules/events"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/install"
 	"github.com/ravenmk2/antcdp/internal/modules/jobs"
@@ -29,6 +30,7 @@ import (
 )
 
 type Options struct {
+	Events         *events.Service
 	Jobs           *jobs.Service
 	Runtime        config.Runtime
 	Installer      *install.Service
@@ -158,6 +160,7 @@ func New(o Options) http.Handler {
 	registerSMS(api, o)
 	registerDingTalk(api, o)
 	registerJobs(api, o)
+	registerEvents(api, o)
 	registerModels(api, o)
 	registerWebAccess(api, o)
 	registerAgents(api, o)

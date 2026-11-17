@@ -54,6 +54,9 @@ const RemoteHostsPage = lazy(() =>
   })),
 );
 const Root = lazy(() => import("./root"));
+const ProjectEventsPage = lazy(() =>
+  import("./pages/events").then((m) => ({ default: m.ProjectEventsPage })),
+);
 const ProjectJobsPage = lazy(() =>
   import("./pages/jobs").then((m) => ({ default: m.ProjectJobsPage })),
 );
@@ -103,6 +106,7 @@ export const workspaceRoutes: RouteObject[] = [
         ),
       },
       { path: "projects/:projectId", element: <WorkspaceProjectDetail /> },
+      { path: "projects/:projectId/events", element: <ProjectEventsPage /> },
       {
         path: "projects/:projectId/jobs/:jobId?",
         element: <ProjectJobsPage />,

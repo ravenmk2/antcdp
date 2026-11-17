@@ -318,6 +318,17 @@ func (s *Service) Receive(ctx context.Context, connection uint64, h http.Header,
 		if current == nil || current.ConnectionID != connection || !current.Enabled || current.Version != snapshot.WebhookVersion {
 			return changedState()
 		}
+		if s.ReceiveEvent != nil {
+			summary, err := s.ReceiveEvent(ctx, tx, connection, h, body)
+			if err != nil {
+				return err
+			}
+			for key, value := range summary {
+				d.Summary[key] = value
+			}
+			d.Status = "received"
+			snapshot.Diagnostic = d
+		}
 		return saveDiagnostic(r, "webhook", connection, snapshot)
 	})
 	return d, err

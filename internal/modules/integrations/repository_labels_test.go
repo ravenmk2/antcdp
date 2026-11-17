@@ -9,7 +9,7 @@ func TestRepositoryLabelValidation(t *testing.T) {
 	if e != nil || label.Name != "后端" || label.Color != "#ABCDEF" {
 		t.Fatal(label, e)
 	}
-	for _, code := range []string{"", "Backend", "1backend", "../backend", "后端"} {
+	for _, code := range []string{"", "Backend", "../backend", "后端"} {
 		w := valid
 		w.Code = field(code)
 		if _, e := normalizeRepositoryLabel(w, RepositoryLabel{}, true); e == nil {

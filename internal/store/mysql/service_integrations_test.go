@@ -34,7 +34,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	}
 	id := createConnection("GitLab 重构测试")
 	path := base + "/" + id
-	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": "Service_Project", "name": "服务权限测试", "admin_user_ids": []string{memberID}}, 201, nil))
+	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": "service_project", "name": "服务权限测试", "admin_user_ids": []string{memberID}}, 201, nil))
 	pid := project["id"].(string)
 	grantServiceConnection(t, admin, path, "project", pid, true)
 	member.call(t, "GET", path, nil, 403, nil)

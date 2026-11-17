@@ -1,0 +1,33 @@
+-- Reading copy of 00011_events.sql; execute embedded migrations instead.
+
+CREATE TABLE `event_consumption` (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+ subscription_id BIGINT UNSIGNED NOT NULL,
+ revision_id BIGINT UNSIGNED NOT NULL,
+ scope_ref_id BIGINT UNSIGNED NOT NULL,
+ queue_seq BIGINT UNSIGNED NOT NULL,
+ status VARCHAR(24) NOT NULL,
+ attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+ started_at DATETIME(3) NULL,
+ deadline_at DATETIME(3) NULL,
+ next_retry_at DATETIME(3) NULL,
+ finished_at DATETIME(3) NULL,
+ error_code VARCHAR(64) NOT NULL DEFAULT '',
+ error_summary TEXT NOT NULL,
+ result JSON NOT NULL,
+ has_result BOOLEAN NOT NULL DEFAULT FALSE,
+ retry_of_id BIGINT UNSIGNED NULL,
+ operator_user_id BIGINT UNSIGNED NULL,
+ automatic_scope_ref_id BIGINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN retry_of_id IS NULL THEN scope_ref_id ELSE NULL END) STORED,
+ last_log_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ script_log_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ script_log_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,
+ script_logs_truncated BOOLEAN NOT NULL DEFAULT FALSE,
+ created_at DATETIME(3) NOT NULL,
+ PRIMARY KEY(id),
+ UNIQUE KEY uq_event_consumption_queue(subscription_id,queue_seq),
+ UNIQUE KEY uq_event_consumption_automatic(subscription_id,automatic_scope_ref_id),
+ UNIQUE KEY uq_event_consumption_retry(retry_of_id),
+ KEY idx_event_consumption_reference(scope_ref_id,id),
+ KEY idx_event_consumption_status(status,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

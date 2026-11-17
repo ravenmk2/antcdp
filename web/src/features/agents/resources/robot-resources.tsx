@@ -11,15 +11,14 @@ import { useDebouncedSearch } from "@/hooks/use-search";
 import { providerFor } from "@/domain/service-providers";
 import { sshProvider } from "@/domain/ssh-provider";
 import { CredentialPanel } from "@/features/credentials/credential-panel";
-import type { AgentDefinition } from "@/types/agents";
 import type { Resource, Page, ResourceKind } from "@/types/collaboration";
 import type { ServiceConnection } from "@/types/integrations";
 
 export function RobotResources({
-  agent,
+  robotId,
   readOnly = false,
 }: {
-  agent: AgentDefinition;
+  robotId: string;
   readOnly?: boolean;
 }) {
   const [section, setSection] = useState<"projects" | "teams" | "credentials">(
@@ -28,8 +27,8 @@ export function RobotResources({
   return (
     <div className="space-y-5">
       <Notice>
-        专属机器人账号：{agent.robot_user_id}
-        。资料和启停状态随智能体同步，无法换绑或独立编辑。权限修改对下一轮生效，已经开始的轮次继续完成。
+        机器人账号：{robotId}
+        。权限修改对后续执行生效，已经开始的轮次继续完成。
       </Notice>
       <div className="flex gap-2">
         {(
@@ -49,11 +48,11 @@ export function RobotResources({
         ))}
       </div>
       {section === "credentials" ? (
-        <RobotCredentials agentId={agent.id} readOnly={readOnly} />
+        <RobotCredentials robotId={robotId} readOnly={readOnly} />
       ) : (
         <RobotMembership
           key={section}
-          agentId={agent.id}
+          robotId={robotId}
           kind={section}
           readOnly={readOnly}
         />
@@ -62,11 +61,11 @@ export function RobotResources({
   );
 }
 function RobotMembership({
-  agentId,
+  robotId,
   kind,
   readOnly,
 }: {
-  agentId: string;
+  robotId: string;
   kind: ResourceKind;
   readOnly: boolean;
 }) {
@@ -77,9 +76,9 @@ function RobotMembership({
     setQ(value);
     setPage(1);
   });
-  const base = `/admin/agents/${agentId}/grants/${kind}`;
+  const base = `/admin/robots/${robotId}/grants/${kind}`;
   const query = useApiQuery<Page<Resource>>(
-    ["robot-grants", agentId, kind, q, page, size],
+    ["robot-grants", robotId, kind, q, page, size],
     `${base}?${new URLSearchParams({ q, page: String(page), page_size: String(size) })}`,
   );
   return (
@@ -217,20 +216,20 @@ function GrantRow({
   );
 }
 function RobotCredentials({
-  agentId,
+  robotId,
   readOnly,
 }: {
-  agentId: string;
+  robotId: string;
   readOnly: boolean;
 }) {
   const [kind, setKind] = useState<"services" | "hosts">("services"),
     [selected, setSelected] = useState<string>("");
   const path =
     kind === "services"
-      ? `/admin/agents/${agentId}/service-connections`
+      ? `/admin/robots/${robotId}/service-connections`
       : "/remote-hosts";
   const query = useApiQuery<{ items: ServiceConnection[] }>(
-    ["robot-credential-directory", agentId, kind],
+    ["robot-credential-directory", robotId, kind],
     path,
   );
   const item = query.data?.data.items.find((v) => v.id === selected);
@@ -277,7 +276,7 @@ function RobotCredentials({
             readonly={readOnly}
             key={`${kind}:${selected}`}
             provider={provider}
-            base={`/admin/agents/${agentId}/${kind === "hosts" ? "remote-hosts" : `service-connections/${item.service_type}`}/${item.id}/credentials`}
+            base={`/admin/robots/${robotId}/${kind === "hosts" ? "remote-hosts" : `service-connections/${item.service_type}`}/${item.id}/credentials`}
           />
         ) : (
           <Notice>选择连接后管理机器人的账号凭据。秘密保存后不可读取。</Notice>

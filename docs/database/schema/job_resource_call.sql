@@ -1,4 +1,4 @@
--- Reading copy of 00015_jobs.sql; execute embedded migrations instead.
+-- Reading copy of 00016_jobs.sql; execute embedded migrations instead.
 
 CREATE TABLE job_resource_call (
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

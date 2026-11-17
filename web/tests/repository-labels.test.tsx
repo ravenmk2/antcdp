@@ -69,7 +69,7 @@ beforeEach(() => {
   });
 });
 
-it("creates a label with code, name and color and the dictionary version", async () => {
+it("creates a label with a numeric-leading resource code and the dictionary version", async () => {
   const saved = vi.fn(async () => {});
   const user = userEvent.setup();
   mount(
@@ -78,7 +78,7 @@ it("creates a label with code, name and color and the dictionary version", async
   await screen.findByText("后端服务");
   await user.click(screen.getByRole("button", { name: "新建标签" }));
   const dialog = screen.getByRole("dialog", { name: "新建仓库标签" });
-  await user.type(within(dialog).getByLabelText("编码"), "deployment");
+  await user.type(within(dialog).getByLabelText("编码"), "1deployment");
   await user.type(within(dialog).getByLabelText("名称"), "部署配置");
   await user.click(
     within(dialog).getByRole("button", { name: "选择颜色 #10B981" }),
@@ -90,7 +90,7 @@ it("creates a label with code, name and color and the dictionary version", async
     expect.objectContaining({
       method: "POST",
       etag: '"labels-v1"',
-      body: { code: "deployment", name: "部署配置", color: "#10B981" },
+      body: { code: "1deployment", name: "部署配置", color: "#10B981" },
     }),
   );
 });

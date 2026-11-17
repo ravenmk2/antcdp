@@ -12,17 +12,16 @@ import (
 
 // RobotResources returns the same membership projection used for human accounts.
 // The caller remains the administrator; no login or impersonation is created.
-func (s *Service) RobotResources(ctx context.Context, raw string, agentID uint64, k Kind, q Query) (Page, *identity.Auth, error) {
+func (s *Service) RobotResources(ctx context.Context, raw string, robotID uint64, k Kind, q Query) (Page, *identity.Auth, error) {
 	var out Page
 	if !k.Valid() || q.Page < 1 || q.Page > 1000000 || q.Size < 1 || q.Size > 100 {
 		return out, nil, httpx.Invalid("filter", "invalid_value")
 	}
 	q.Scope, q.Status = "all", "active"
 	a, err := s.Identity.BusinessAccess(ctx, raw, func(tx identity.Tx) ([]uint64, error) {
-		id, e := identity.RobotAccountID(tx, agentID, false)
-		return []uint64{id}, e
+		return []uint64{robotID}, nil
 	}, func(tx identity.Tx, a *identity.Auth) error {
-		u, e := identity.AuthorizeRobotManagement(tx, a, agentID)
+		u, e := identity.AuthorizeRobotAccount(tx, a, robotID)
 		if e != nil {
 			return e
 		}
@@ -39,18 +38,15 @@ func (s *Service) RobotResources(ctx context.Context, raw string, agentID uint64
 	return out, a, err
 }
 
-// SetRobotMember edits a direct grant through its owning service Agent. Inherited
+// SetRobotMember edits a direct grant for an independent robot account. Inherited
 // project membership continues to derive from the existing team relations.
-func (s *Service) SetRobotMember(ctx context.Context, raw string, agentID uint64, k Kind, id uint64, role, tag string, meta identity.Metadata) (*identity.Auth, error) {
+func (s *Service) SetRobotMember(ctx context.Context, raw string, robotID uint64, k Kind, id uint64, role, tag string, meta identity.Metadata) (*identity.Auth, error) {
 	if !k.Valid() || !slices.Contains([]string{"", "member", "admin"}, role) {
 		return nil, httpx.Invalid("role", "invalid_value")
 	}
 	var locked []uint64
 	return s.Identity.BusinessAccess(ctx, raw, func(tx identity.Tx) ([]uint64, error) {
-		uid, e := identity.RobotAccountID(tx, agentID, false)
-		if e != nil {
-			return nil, e
-		}
+		uid := robotID
 		r, e := repo(tx)
 		if e != nil {
 			return nil, e
@@ -59,7 +55,7 @@ func (s *Service) SetRobotMember(ctx context.Context, raw string, agentID uint64
 		locked = append(locked, uid)
 		return locked, e
 	}, func(tx identity.Tx, a *identity.Auth) error {
-		u, e := identity.AuthorizeRobotManagement(tx, a, agentID)
+		u, e := identity.AuthorizeRobotAccount(tx, a, robotID)
 		if e != nil {
 			return e
 		}
@@ -100,6 +96,6 @@ func (s *Service) SetRobotMember(ctx context.Context, raw string, agentID uint64
 		if e = r.CleanupShortcuts(locked, time.Now().UTC()); e != nil {
 			return e
 		}
-		return audit(tx, a, meta, k, obj, "robot_grant_changed", map[string]any{"agent_id": fmt.Sprint(agentID), "user_id": fmt.Sprint(u.ID), "before": obj.Role, "after": role})
+		return audit(tx, a, meta, k, obj, "robot_grant_changed", map[string]any{"user_id": fmt.Sprint(u.ID), "before": obj.Role, "after": role})
 	})
 }

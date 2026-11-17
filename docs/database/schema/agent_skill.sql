@@ -1,4 +1,4 @@
--- Reading copy of 00011_agent_definitions.sql; execute embedded migrations instead.
+-- Reading copy of 00012_agent_definitions.sql; execute embedded migrations instead.
 
 CREATE TABLE `agent_skill` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

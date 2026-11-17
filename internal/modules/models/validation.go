@@ -10,12 +10,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
+
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-var codePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+var codePattern = resourcecode.Pattern
 var tagPattern = regexp.MustCompile(`^"[a-f0-9]{64}"$`)
 var thinkingPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 

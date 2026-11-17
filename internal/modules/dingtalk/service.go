@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
+
 	"github.com/ravenmk2/antcdp/internal/modules/collaboration"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
@@ -166,7 +168,7 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 			if w.Enabled != nil {
 				p.Enabled = *w.Enabled
 			}
-			if !regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`).MatchString(p.Code) {
+			if !resourcecode.Valid(p.Code) {
 				return httpx.Invalid("code", "invalid_format")
 			}
 			if p.Name == "" || utf8.RuneCountInString(p.Name) > 100 || utf8.RuneCountInString(p.Description) > 1000 {

@@ -8,13 +8,15 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
+
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/platform/netguard"
 	runtime "github.com/ravenmk2/antcdp/internal/webaccess"
 )
 
-var codePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+var codePattern = resourcecode.Pattern
 var tagPattern = regexp.MustCompile(`^"[a-f0-9]{64}"$`)
 
 func missing() error { return httpx.E(404, "NOT_FOUND", "网络检索资源不存在") }

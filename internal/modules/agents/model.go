@@ -12,6 +12,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/commandstate"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/models"
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
 )
 
 type Field[T any] = models.Field[T]
@@ -100,6 +101,8 @@ type DefinitionSummary struct {
 	UpdatedAt             time.Time `json:"updated_at"`
 }
 type DefinitionCreate struct {
+	Code             string            `json:"code"`
+	RobotUserID      *string           `json:"robot_user_id"`
 	CloudEnvironment *CloudEnvironment `json:"cloud_environment"`
 	Name             string            `json:"name"`
 	Mode             string            `json:"agent_type"`
@@ -241,6 +244,7 @@ type Repository interface {
 	CanReadAgentHistory(uint64, uint64, bool) (bool, error)
 	Definitions(Query) ([]Definition, int, error)
 	Definition(uint64, bool) (*Definition, error)
+	DefinitionByPath(uint64, resourcecode.Locator) (*Definition, error)
 	InsertDefinition(*Definition) error
 	SaveDefinition(*Definition) error
 	DefinitionReferenced(uint64) (bool, error)
@@ -259,6 +263,7 @@ type Repository interface {
 	AgentSessionIDs(uint64) ([]uint64, error)
 	ModelReferenced(string, uint64) (bool, error)
 	Receipt(actor, scopeKind, scopeID, command, key string) (*Receipt, error)
+	AutomationReceipt(caller, scopeID, key string) (*Receipt, error)
 	InsertReceipt(*Receipt) error
 	SaveReceipt(*Receipt) error
 }

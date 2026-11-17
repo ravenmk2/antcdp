@@ -1,4 +1,4 @@
--- Reading copy of 00011_agent_definitions.sql; execute embedded migrations instead.
+-- Reading copy of 00012_agent_definitions.sql; execute embedded migrations instead.
 
 CREATE TABLE `agent` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -8,6 +8,7 @@ CREATE TABLE `agent` (
     agent_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'interactive | service',
     scope_kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     scope_id BIGINT UNSIGNED NULL,
+    scope_key BIGINT UNSIGNED GENERATED ALWAYS AS (COALESCE(scope_id,0)) STORED,
     robot_user_id BIGINT UNSIGNED NULL,
     enabled BOOLEAN NOT NULL DEFAULT FALSE,
     system_prompt MEDIUMTEXT NOT NULL,
@@ -22,7 +23,7 @@ CREATE TABLE `agent` (
     updated_at DATETIME(3) NOT NULL,
     deleted_at DATETIME(3) NULL,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_agent_code (code),
+    UNIQUE KEY uq_agent_scope_code (scope_kind,scope_key,code),
     UNIQUE KEY uq_agent_robot (robot_user_id),
     KEY idx_agent_catalog (agent_type, enabled, deleted_at, id),
     KEY idx_agent_scope (scope_kind, scope_id, deleted_at, id),

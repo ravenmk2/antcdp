@@ -124,6 +124,16 @@ beforeEach(() => {
     if (result) return result;
     if (path.startsWith("/admin/agents/definitions?"))
       return { ...response([]), pagination: { total: 0 } };
+    if (path.startsWith("/admin/robots?"))
+      return response([
+        {
+          id: "9",
+          username: "review_bot",
+          display_name: "审查机器人",
+          status: "active",
+          managed_agent_id: null,
+        },
+      ]);
     if (path.endsWith("/definitions/4")) return response(agent);
     if (path.endsWith("/activation-check"))
       throw new ApiError("VALIDATION_FAILED", "请检查输入内容", 422, [
@@ -254,10 +264,15 @@ it.each(["interactive", "service"] as const)(
       }
     };
     const { user, router } = mount("/admin/agents/new");
+    await user.type(screen.getByRole("textbox", { name: "编码" }), "reviewer");
     if (agentType === "service") {
       const drawer = screen.getByRole("dialog", { name: "新建智能体" });
       await user.click(within(drawer).getByRole("combobox", { name: "类型" }));
       await user.click(await screen.findByRole("option", { name: "服务型" }));
+      await user.click(screen.getByRole("combobox", { name: "执行机器人" }));
+      await user.click(
+        await screen.findByRole("option", { name: "审查机器人 (review_bot)" }),
+      );
     }
     await user.type(
       screen.getByRole("textbox", { name: "智能体名称" }),
@@ -274,6 +289,8 @@ it.each(["interactive", "service"] as const)(
     );
     expect(first?.body).toMatchObject({
       enabled: false,
+      code: "reviewer",
+      robot_user_id: agentType === "service" ? "9" : null,
       name: "核查助手",
       agent_type: agentType,
       scope_kind: "platform",
@@ -492,7 +509,7 @@ it.each(["mcp", "skills"])(
 );
 it("reads service identity permissions without exposing grant controls", async () => {
   override = async (path) => {
-    if (path.startsWith("/admin/agents/4/grants/projects?"))
+    if (path.startsWith("/admin/robots/9/grants/projects?"))
       return response({
         items: [
           {

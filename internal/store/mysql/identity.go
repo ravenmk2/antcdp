@@ -74,19 +74,6 @@ type identityTx struct {
 
 const userColumns = "id,account_type,username,display_name,role,status,avatar_file_id,auth_version,row_version,last_login_at,created_at,updated_at,deleted_at,(SELECT a.id FROM agent a WHERE a.robot_user_id=`user`.id) AS managed_agent_id"
 
-func (t *identityTx) ManagedRobotUserID(agentID uint64, lock bool) (uint64, error) {
-	q := "SELECT robot_user_id FROM agent WHERE id=? AND agent_type='service' AND deleted_at IS NULL AND robot_user_id IS NOT NULL"
-	if lock {
-		q += " FOR UPDATE"
-	}
-	var id uint64
-	err := t.tx.GetContext(t.ctx, &id, q, agentID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
-	}
-	return id, err
-}
-
 func (t *identityTx) FounderID() (uint64, error) {
 	var id uint64
 	err := t.tx.GetContext(t.ctx, &id, "SELECT founder_user_id FROM system_instance WHERE id=1")
@@ -255,6 +242,9 @@ func (t *identityTx) ListUsers(f identity.Filter) ([]identity.User, int, error) 
 	}
 	where := "deleted_at IS NULL AND account_type=?"
 	args := []any{f.AccountType}
+	if f.Unbound {
+		where += " AND NOT EXISTS (SELECT 1 FROM agent a WHERE a.robot_user_id=`user`.id)"
+	}
 	if f.Query != "" {
 		q := strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(f.Query)
 		where += " AND (CONVERT(username USING utf8mb4) LIKE ? ESCAPE '!' OR display_name LIKE ? ESCAPE '!')"

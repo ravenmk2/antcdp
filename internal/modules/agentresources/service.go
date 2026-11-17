@@ -14,6 +14,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
+
 	mcpruntime "github.com/ravenmk2/antcdp/internal/agentadapters/mcp"
 	"github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
@@ -195,7 +197,7 @@ func audit(ctx context.Context, tx identity.Tx, a *identity.Auth, action, kind s
 }
 
 var keyPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{16,128}$`)
-var codePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+var codePattern = resourcecode.Pattern
 var tagPattern = regexp.MustCompile(`^"[a-f0-9]{64}"$`)
 
 func missing() error     { return httpx.E(404, "NOT_FOUND", "智能体资源不存在") }

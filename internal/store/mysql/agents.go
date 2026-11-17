@@ -11,6 +11,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	a "github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
 )
 
 type agentsTx struct {
@@ -22,6 +23,38 @@ func (t *identityTx) Agents() a.Repository { return &agentsTx{t.ctx, t.tx} }
 
 const agentDefinitionColumns = "id,code,name,description,agent_type,scope_kind,scope_id,robot_user_id,enabled,system_prompt,config_schema_version,default_model_binding_id,runtime_policy,pool_capacity,config_version,row_version,created_by_user_id,created_at,updated_at,deleted_at"
 const agentModelBindingColumns = "id,agent_id,model_definition_id,thinking_options,default_thinking,generation_overrides,sort_order,created_at,updated_at,removed_at"
+
+func (t *agentsTx) DefinitionByPath(project uint64, path resourcecode.Locator) (*a.Definition, error) {
+	condition := "scope_kind='project' AND scope_id=?"
+	args := []any{project, path.Code}
+	switch path.ScopeKind {
+	case "platform":
+		condition = "scope_kind='platform' AND scope_id IS NULL"
+		args = []any{path.Code}
+	case "team":
+		condition = "scope_kind='team' AND scope_id=(SELECT id FROM team WHERE code=?)"
+		args = []any{path.ScopeCode, path.Code}
+	case "project":
+		condition = "scope_kind='project' AND scope_id=(SELECT id FROM project WHERE code=?)"
+		args = []any{path.ScopeCode, path.Code}
+	}
+	var v a.Definition
+	err := t.tx.GetContext(t.ctx, &v, "SELECT "+agentDefinitionColumns+" FROM agent WHERE "+condition+" AND code=? AND deleted_at IS NULL", args...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return &v, err
+}
+
+func (t *agentsTx) AutomationReceipt(caller, project, key string) (*a.Receipt, error) {
+	v := &a.Receipt{}
+	err := t.tx.GetContext(t.ctx, v, "SELECT "+agentReceiptColumns+" FROM agent_command_receipt WHERE actor_kind='event_subscription' AND actor_id=? AND scope_kind='project' AND scope_id=? AND command_kind='automation.chat' AND idempotency_key=? FOR UPDATE", caller, project, key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return v, err
+}
+
 const agentToolBindingColumns = "id,agent_id,tool_kind,tool_key,policy,parameter_constraints,config,config_schema_version,sort_order,created_at,updated_at,removed_at"
 
 func agentsError(err error) error {
@@ -36,7 +69,7 @@ func agentsError(err error) error {
 			constraint = constraint[dot+1:]
 		}
 	}
-	if constraint == "uq_agent_code" || constraint == "uq_agent_sandbox_provider_code" {
+	if constraint == "uq_agent_scope_code" || constraint == "uq_agent_sandbox_provider_code" {
 		v := httpx.E(409, "CODE_CONFLICT", "编码已被使用")
 		v.Details = []httpx.Detail{{Code: "conflict", Field: "code"}}
 		return v

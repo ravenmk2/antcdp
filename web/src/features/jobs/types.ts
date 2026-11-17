@@ -28,6 +28,7 @@ export interface ResourceGrant {
   status: string;
 }
 export interface Job {
+  code: string;
   id: string;
   revision_id: string | null;
   name: string;

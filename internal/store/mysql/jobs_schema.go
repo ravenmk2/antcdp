@@ -26,5 +26,20 @@ func (s *Store) jobsSchemaReady(ctx context.Context) error {
 	if count != 1 {
 		return install.ErrIncompleteSchema
 	}
+	if err := s.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='job' AND COLUMN_NAME='code' AND IS_NULLABLE='NO') OR (TABLE_NAME='job_trigger_request' AND COLUMN_NAME IN ('caller_kind','caller_id') AND IS_NULLABLE='NO'))`); err != nil {
+		return err
+	}
+	if count != 3 {
+		return install.ErrIncompleteSchema
+	}
+	for _, expected := range []struct{ table, index, columns string }{{"job", "uq_job_scope_code", "scope_kind,scope_id,code"}, {"job_trigger_request", "uq_job_trigger_request", "job_id,caller_kind,caller_id,request_key"}} {
+		var found string
+		if err := s.db.GetContext(ctx, &found, `SELECT COALESCE(GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ','),'') FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=? AND NON_UNIQUE=0`, expected.table, expected.index); err != nil {
+			return err
+		}
+		if found != expected.columns {
+			return install.ErrIncompleteSchema
+		}
+	}
 	return nil
 }

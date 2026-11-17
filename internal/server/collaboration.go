@@ -67,9 +67,9 @@ func registerCollaboration(b *gin.RouterGroup, o Options) {
 	})
 	for _, k := range []collab.Kind{collab.Project, collab.Team} {
 		base := "/" + string(k) + "s"
-		robotBase := "/admin/agents/:agent_id/grants" + base
+		robotBase := "/admin/robots/:robot_id/grants" + base
 		b.GET(robotBase, func(c *gin.Context) {
-			agentID, ok := collaborationID(c, "agent_id")
+			agentID, ok := collaborationID(c, "robot_id")
 			if !ok {
 				return
 			}
@@ -83,7 +83,7 @@ func registerCollaboration(b *gin.RouterGroup, o Options) {
 			}
 		})
 		b.PUT(robotBase+"/:id", func(c *gin.Context) {
-			agentID, ok := collaborationID(c, "agent_id")
+			agentID, ok := collaborationID(c, "robot_id")
 			if !ok {
 				return
 			}

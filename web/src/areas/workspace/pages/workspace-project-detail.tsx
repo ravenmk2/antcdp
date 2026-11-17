@@ -113,6 +113,8 @@ function ProjectContent({
 
   if (isRemovedProjectView(params))
     return <Navigate replace to={`/projects/${project.id}`} />;
+  if (view.page === "events")
+    return <Navigate replace to={`/projects/${project.id}/events`} />;
   if (view.page === "jobs")
     return <Navigate replace to={`/projects/${project.id}/jobs`} />;
 

@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   Settings,
   Play,
+  Radio,
 } from "lucide-react";
 import { StatusBadge } from "@/components/feedback";
 import { ResourceDetailShell, ResourceHeader, Tabs } from "@/components/layout";
@@ -34,6 +35,7 @@ export function WorkspaceProjectFrame({
 
     { value: "repositories", label: "Git 仓库", icon: FolderGit2 },
     { value: "jobs", label: "任务", icon: Play },
+    { value: "events", label: "事件", icon: Radio },
     { value: "description", label: "项目介绍", icon: FileText },
     { value: "settings", label: "项目设置", icon: Settings },
   ].map(({ value, label, icon: Icon }) => ({
@@ -48,8 +50,8 @@ export function WorkspaceProjectFrame({
 
   function select(value: string) {
     const base = `/projects/${project.id}`;
-    if (value === "jobs") {
-      navigate(`${base}/jobs`);
+    if (value === "jobs" || value === "events") {
+      navigate(`${base}/${value}`);
       return;
     }
     if (value === "overview") {

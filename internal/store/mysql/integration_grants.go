@@ -44,8 +44,8 @@ func (t *identityTx) ConnectionGranted(id uint64, scope i.CredentialOwnership, a
 	return allowed, err
 }
 
-// Human membership yields personal credential visibility. Robots use only their
-// Agent's scope; configuring them as an administrator never widens that scope.
+// Membership yields personal credential visibility for humans and robots.
+// Existing active Agent scope grants remain compatible; admin editors convey no authority.
 func (t *identityTx) ConnectionUserScopes(uid uint64) ([]i.CredentialOwnership, error) {
 	rows := []i.CredentialOwnership{}
 	err := t.tx.SelectContext(t.ctx, &rows, `
@@ -53,13 +53,13 @@ func (t *identityTx) ConnectionUserScopes(uid uint64) ([]i.CredentialOwnership, 
             WHERE u.id=? AND u.deleted_at IS NULL AND u.account_type='human' AND u.role='admin'
         UNION
         SELECT 'project', p.id FROM project p JOIN user u ON u.id=?
-            WHERE u.deleted_at IS NULL AND u.account_type='human' AND p.archived_at IS NULL AND (
+            WHERE u.deleted_at IS NULL AND u.account_type IN ('human','robot') AND p.archived_at IS NULL AND (
                 EXISTS(SELECT 1 FROM project_member m WHERE m.project_id=p.id AND m.user_id=u.id) OR
                 EXISTS(SELECT 1 FROM project_team pt JOIN team tm ON tm.id=pt.team_id AND tm.dissolved_at IS NULL
                     JOIN team_member m ON m.team_id=tm.id AND m.user_id=u.id WHERE pt.project_id=p.id))
         UNION
         SELECT 'team', tm.id FROM team tm JOIN team_member m ON m.team_id=tm.id JOIN user u ON u.id=m.user_id
-            WHERE u.id=? AND u.deleted_at IS NULL AND u.account_type='human' AND tm.dissolved_at IS NULL
+            WHERE u.id=? AND u.deleted_at IS NULL AND u.account_type IN ('human','robot') AND tm.dissolved_at IS NULL
         UNION
         SELECT a.scope_kind, COALESCE(a.scope_id,0) FROM agent a JOIN user u ON u.id=a.robot_user_id
             WHERE u.id=? AND u.deleted_at IS NULL AND u.account_type='robot' AND a.deleted_at IS NULL`, uid, uid, uid, uid)

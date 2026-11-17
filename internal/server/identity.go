@@ -258,6 +258,19 @@ func registerIdentity(api *gin.RouterGroup, o Options) {
 		}
 		respondUser(c, o, u, a, 200)
 	})
+	business.POST("/admin/robots", func(c *gin.Context) {
+		var body identity.RobotCreate
+		if !httpx.Decode(c, &body) {
+			return
+		}
+		u, a, err := service.CreateRobot(c.Request.Context(), rawSession(c), body, metadata(c))
+		if err != nil {
+			httpx.Write(c, err)
+			return
+		}
+		c.Header("Location", "/api/v1/admin/robots/"+strconv.FormatUint(u.ID, 10))
+		respondUser(c, o, u, a, 201)
+	})
 	business.GET("/admin/robots", func(c *gin.Context) {
 		page, ok := queryInt(c, "page", 1)
 		if !ok {
@@ -267,7 +280,7 @@ func registerIdentity(api *gin.RouterGroup, o Options) {
 		if !ok {
 			return
 		}
-		users, total, a, err := service.Users(c.Request.Context(), rawSession(c), identity.Filter{Page: page, PageSize: size, Query: c.Query("q"), Status: c.Query("status"), AccountType: "robot"})
+		users, total, a, err := service.Users(c.Request.Context(), rawSession(c), identity.Filter{Page: page, PageSize: size, Query: c.Query("q"), Status: c.Query("status"), AccountType: "robot", Unbound: c.Query("unbound") == "true"})
 		if err != nil {
 			httpx.Write(c, err)
 			return
@@ -279,8 +292,8 @@ func registerIdentity(api *gin.RouterGroup, o Options) {
 		setSession(c, o, rawSession(c), a)
 		c.JSON(200, gin.H{"data": data, "pagination": gin.H{"page": page, "page_size": size, "total": total}})
 	})
-	business.GET("/admin/robots/:id", func(c *gin.Context) {
-		id, ok := parseID(c)
+	business.GET("/admin/robots/:robot_id", func(c *gin.Context) {
+		id, ok := collaborationID(c, "robot_id")
 		if !ok {
 			return
 		}

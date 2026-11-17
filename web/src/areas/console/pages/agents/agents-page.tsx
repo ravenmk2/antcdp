@@ -1,3 +1,5 @@
+import { resourceCodeSchema } from "@/domain/validation";
+import type { User } from "@/types/auth";
 import { useState, type FormEvent } from "react";
 import {
   Link,
@@ -294,7 +296,13 @@ export function AgentsPage() {
 export function AgentCreatePage() {
   const navigate = useNavigate(),
     errors = useFormErrors();
+  const robots = useApiQuery<(User & { managed_agent_id: string | null })[]>(
+    ["unbound-robots"],
+    "/admin/robots?page_size=100&unbound=true",
+  );
   const [draft, setDraft] = useState({
+    code: "",
+    robot_user_id: null as string | null,
     name: "",
     description: "",
     agent_type: "interactive" as AgentType,
@@ -306,6 +314,7 @@ export function AgentCreatePage() {
   const { command, state, pending, uncertain, recovery } =
     useAgentCommand<AgentDefinition>("agent:create");
   const dirty = Boolean(
+    draft.code ||
     draft.name ||
     draft.description ||
     draft.agent_type !== "interactive" ||
@@ -322,6 +331,13 @@ export function AgentCreatePage() {
     errors.clear();
     if (
       !errors.validate({
+        code: resourceCodeSchema.safeParse(draft.code).success
+          ? ""
+          : "请输入 1–64 位小写字母、数字、_ 或 - 的编码",
+        robot_user_id:
+          draft.agent_type === "service" && !draft.robot_user_id
+            ? "请选择未绑定智能体的机器人"
+            : "",
         name: draft.name.trim() ? "" : "请输入智能体名称",
         scope_id:
           draft.scope_kind !== "platform" && !draft.scope_id
@@ -335,10 +351,20 @@ export function AgentCreatePage() {
       path: "/definitions",
       command: "agent_definition.create",
       scope: "agent_definitions",
-      options: { method: "POST", body: { ...draft, enabled: false } },
+      options: {
+        method: "POST",
+        body: {
+          ...draft,
+          robot_user_id:
+            draft.agent_type === "service" ? draft.robot_user_id : null,
+          enabled: false,
+        },
+      },
     });
     if (command.getSnapshot().phase === "failed")
       errors.show(command.getSnapshot().error, [
+        "code",
+        "robot_user_id",
         "name",
         "description",
         "scope_id",
@@ -382,6 +408,13 @@ export function AgentCreatePage() {
           <ErrorNotice error={errors.error} />
           {recovery}
           <fieldset disabled={pending || uncertain} className="space-y-5">
+            <Field label="编码" required error={errors.fields.code}>
+              <Input
+                value={draft.code}
+                maxLength={64}
+                onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+              />
+            </Field>
             <Field label="智能体名称" required error={errors.fields.name}>
               <Input
                 name="name"
@@ -406,8 +439,38 @@ export function AgentCreatePage() {
             <Notice>
               {draft.agent_type === "interactive"
                 ? "使用对话用户的身份和个人云电脑，历史内容仅本人可见。"
-                : "自动创建专属机器人账号，使用独立云电脑池。机器人资料、权限和凭据均在此智能体内管理。"}
+                : "选择独立机器人作为执行账号，绑定后不可更换。机器人资料、权限和凭据在机器人账号页管理。"}
             </Notice>
+            {draft.agent_type === "service" && (
+              <>
+                <ErrorNotice error={robots.error} />
+                <Field
+                  label="执行机器人"
+                  required
+                  error={errors.fields.robot_user_id}
+                >
+                  <Select
+                    value={draft.robot_user_id ?? ""}
+                    onValueChange={(value) =>
+                      setDraft({ ...draft, robot_user_id: value || null })
+                    }
+                  >
+                    <option value="">选择未绑定机器人</option>
+                    {robots.data?.data
+                      .filter((u) => !u.managed_agent_id)
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.display_name} ({u.username})
+                          {u.status === "disabled" ? " · 已停用" : ""}
+                        </option>
+                      ))}
+                  </Select>
+                </Field>
+                <Link className="text-primary" to="/admin/robots">
+                  管理机器人账号
+                </Link>
+              </>
+            )}
             <Field label="归属" required>
               <Select
                 name="scope_kind"
@@ -738,7 +801,7 @@ export function AgentDetailPage() {
                   agent.data.data.agent_type === "service" && (
                     <RobotResources
                       key={String(editing)}
-                      agent={agent.data.data}
+                      robotId={agent.data.data.robot_user_id!}
                       readOnly={!editing}
                     />
                   )}
@@ -817,7 +880,7 @@ export function AgentDetailPage() {
             <ConfirmDialog
               open={deleting}
               title="删除智能体？"
-              description="删除后不再接受新轮次，历史记录保留。服务型的专属机器人同时停用；已有云电脑需单独维护。"
+              description="删除后不再接受新轮次，历史记录保留。绑定的机器人独立保留，已有云电脑需单独维护。"
               danger
               pending={deletion.pending}
               onClose={() => setDeleting(false)}

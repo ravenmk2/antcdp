@@ -27,6 +27,7 @@ vi.mock("@/features/jobs/script-editor", () => ({
 }));
 
 const job: Job = {
+  code: "test_job",
   id: "2",
   name: "示例任务",
   description: "",

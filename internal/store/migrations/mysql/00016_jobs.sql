@@ -5,6 +5,7 @@ CREATE TABLE job (
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
  scope_kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'project',
  scope_id BIGINT UNSIGNED NOT NULL,
+ code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
  name VARCHAR(100) NOT NULL,
  description VARCHAR(1000) NOT NULL DEFAULT '',
  enabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -16,7 +17,7 @@ CREATE TABLE job (
  created_by_user_id BIGINT UNSIGNED NOT NULL,
  created_at DATETIME(3) NOT NULL,
  updated_at DATETIME(3) NOT NULL,
- PRIMARY KEY(id), KEY idx_job_scope(scope_kind,scope_id,id)
+ PRIMARY KEY(id), UNIQUE KEY uq_job_scope_code(scope_kind,scope_id,code), KEY idx_job_scope(scope_kind,scope_id,id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE job_revision (
@@ -121,6 +122,8 @@ CREATE TABLE job_resource_call (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE job_trigger_request (
+ caller_kind VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ caller_id BIGINT UNSIGNED NOT NULL,
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
  job_id BIGINT UNSIGNED NOT NULL,
  actor_user_id BIGINT UNSIGNED NOT NULL,
@@ -131,7 +134,7 @@ CREATE TABLE job_trigger_request (
  reason_code VARCHAR(64) NOT NULL DEFAULT '',
  job_run_id BIGINT UNSIGNED NULL,
  created_at DATETIME(3) NOT NULL,
- PRIMARY KEY(id), UNIQUE KEY uq_job_trigger_request(job_id,actor_user_id,request_key), KEY idx_job_request_history(job_id,id)
+ PRIMARY KEY(id), UNIQUE KEY uq_job_trigger_request(job_id,caller_kind,caller_id,request_key), KEY idx_job_request_history(job_id,id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE job_schedule (

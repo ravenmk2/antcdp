@@ -1,4 +1,4 @@
--- Reading copy of 00012_cloud_computers.sql; execute embedded migrations instead.
+-- Reading copy of 00013_cloud_computers.sql; execute embedded migrations instead.
 
 CREATE TABLE `cloud_computer_template` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

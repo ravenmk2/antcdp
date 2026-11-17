@@ -180,8 +180,18 @@ func (discardGooseLogger) Printf(string, ...any) {}
 func (discardGooseLogger) Fatalf(string, ...any) {}
 
 var errVersionOneLayout = errors.New("migration version 1 contains tables from later migrations; reconcile the schema and migration history before migrating")
+var errPreEventsLayout = errors.New("pre-event baseline detected; back up and reconcile schema, resource codes and migration history before migrating")
 
 func (s *Store) checkMigrationLayout(ctx context.Context, version int64) error {
+	if version >= 10 {
+		var legacy bool
+		if err := s.db.GetContext(ctx, &legacy, `SELECT EXISTS(SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='agent') AND NOT EXISTS(SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='event_record')`); err != nil {
+			return err
+		}
+		if legacy {
+			return errPreEventsLayout
+		}
+	}
 	if version != 1 {
 		return nil
 	}
@@ -239,6 +249,9 @@ func (s *Store) schemaReady(ctx context.Context, target int64) error {
 		return err
 	}
 	if err = s.jobsSchemaReady(ctx); err != nil {
+		return err
+	}
+	if err = s.eventsSchemaReady(ctx); err != nil {
 		return err
 	}
 	if err = s.integrationsSchemaReady(ctx); err != nil {

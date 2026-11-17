@@ -68,6 +68,7 @@ type Event struct {
 	Detail        json.RawMessage `db:"detail"`
 }
 type Filter struct {
+	Unbound                 bool
 	Page, PageSize          int
 	Query, Status, Identity string
 	AccountType             string

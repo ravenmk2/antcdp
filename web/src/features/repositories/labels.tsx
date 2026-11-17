@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ApiError, request } from "@/api/client";
+import { resourceCodeSchema } from "@/domain/validation";
 import { Button } from "@/components/button";
 import { AsyncBoundary, ErrorNotice } from "@/components/feedback";
 import {
@@ -275,9 +276,9 @@ function RepositoryLabelEditor({
     if (submission.pending || needsReload(submission.error)) return;
     if (
       !form.validate({
-        code: /^[a-z][a-z0-9_-]{0,63}$/.test(code)
+        code: resourceCodeSchema.safeParse(code).success
           ? ""
-          : "以小写字母开头，最多 64 位，允许数字、下划线和连字符",
+          : "1–64 位小写字母、数字、_ 或 -，以字母或数字开头",
         name:
           name.trim() && [...name.trim()].length <= 100
             ? ""

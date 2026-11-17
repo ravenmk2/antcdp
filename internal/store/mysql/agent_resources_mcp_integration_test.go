@@ -109,7 +109,7 @@ func mcpResourceLifecycle(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal("test changed ETag", err)
 	}
 	agentService := &agents.Service{Identity: f.Identity, Store: func() (identity.Store, error) { return f.Store, nil }, ETag: svc.ETag, Catalog: agents.ResourceCatalog{MCPServer: svc.ValidateMCPServer}}
-	definition, err := agentService.CreateDefinition(ctx, token, cryptox.ID(), agents.DefinitionCreate{Name: "MCP bound agent", Mode: "interactive", ScopeKind: "platform"})
+	definition, err := agentService.CreateDefinition(ctx, token, cryptox.ID(), agents.DefinitionCreate{Code: cryptox.ID(), Name: "MCP bound agent", Mode: "interactive", ScopeKind: "platform"})
 	if err != nil {
 		t.Fatal(err)
 	}

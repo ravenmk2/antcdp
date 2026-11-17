@@ -1,4 +1,4 @@
--- Reading copy of 00014_agent_cloud_and_sandbox.sql; execute embedded migrations instead.
+-- Reading copy of 00015_agent_cloud_and_sandbox.sql; execute embedded migrations instead.
 
 CREATE TABLE `agent_cloud_computer_lease` (
     sandbox_lease_id BIGINT UNSIGNED NULL,

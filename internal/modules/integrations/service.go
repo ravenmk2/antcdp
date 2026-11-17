@@ -8,16 +8,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
+
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-var credentialCodePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+var credentialCodePattern = resourcecode.Pattern
 var strongTagPattern = regexp.MustCompile(`^"[a-f0-9]{64}"$`)
 
 type Service struct {
@@ -28,7 +31,8 @@ type Service struct {
 	ETag      func(string) string
 	PublicURL string
 	// Probe is a controlled test seam. Production uses the restricted GitLab transport.
-	Probe func(context.Context, *HTTPConfig, string, time.Time) Diagnostic
+	Probe        func(context.Context, *HTTPConfig, string, time.Time) Diagnostic
+	ReceiveEvent func(context.Context, identity.Tx, uint64, http.Header, []byte) (map[string]any, error)
 }
 
 // Field distinguishes omission from explicit null. Nested object decoding is strict too.
@@ -208,11 +212,7 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 		if owner.Type != "robot" {
 			return nil, nil
 		}
-		id, err := identity.RobotAccountID(tx, owner.Owner, false)
-		if err != nil {
-			return nil, err
-		}
-		return []uint64{id}, nil
+		return []uint64{owner.Owner}, nil
 	}, func(tx identity.Tx, a *identity.Auth) error {
 		if _, ok := adapters[s.serviceType()]; !ok {
 			return fail()
@@ -233,7 +233,7 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 		case "personal":
 			owner.Owner = a.User.ID
 		case "robot":
-			robot, err := identity.AuthorizeRobotManagement(tx, a, owner.Owner)
+			robot, err := identity.AuthorizeRobotAccount(tx, a, owner.Owner)
 			if err != nil {
 				return err
 			}

@@ -390,7 +390,7 @@ function ActivationConfirmation({
           </>
         ) : (
           <Notice tone="warning">
-            停用后不再接受新轮次，保留历史记录；已开始的轮次继续完成。服务型智能体的专属机器人也会停用。
+            停用后不再接受新轮次，保留历史记录；已开始的轮次继续完成。机器人账号的启停独立管理。
           </Notice>
         )}
         {save.recovery}

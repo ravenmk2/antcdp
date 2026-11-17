@@ -12,8 +12,8 @@ import (
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
-	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
 )
 
 type metadataKey struct{}
@@ -36,7 +36,13 @@ func (s *Service) accessWithAgent(ctx context.Context, raw string, admin bool, a
 		return nil, unavailable()
 	}
 	out := &Result{Status: 200}
-	a, e := s.Identity.BusinessAccess(ctx, raw, func(tx identity.Tx) ([]uint64, error) { return robotAccountLocks(tx, agentID) }, func(tx identity.Tx, a *identity.Auth) error {
+	a, e := s.Identity.BusinessAccess(ctx, raw, func(tx identity.Tx) ([]uint64, error) {
+		ids, err := robotAccountLocks(tx, agentID)
+		if uid, ok := ctx.Value(robotBindingKey{}).(uint64); ok {
+			ids = append(ids, uid)
+		}
+		return ids, err
+	}, func(tx identity.Tx, a *identity.Auth) error {
 		if admin && a.User.Role != "admin" {
 			return httpx.E(403, "FORBIDDEN", "需要管理员权限")
 		}
@@ -237,12 +243,32 @@ func (s *Service) CheckActivation(ctx context.Context, raw string, id uint64) (*
 	})
 }
 
+type robotBindingKey struct{}
+
 func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w DefinitionCreate) (*Result, error) {
+	if !resourcecode.Valid(w.Code) {
+		return nil, httpx.Invalid("code", "invalid_format")
+	}
+	var robotID uint64
+	if w.Mode == "service" {
+		if w.RobotUserID == nil {
+			return nil, httpx.Invalid("robot_user_id", "required")
+		}
+		var err error
+		robotID, err = idValue(*w.RobotUserID, "robot_user_id")
+		if err != nil {
+			return nil, err
+		}
+		ctx = context.WithValue(ctx, robotBindingKey{}, robotID)
+	} else if w.RobotUserID != nil {
+		return nil, httpx.Invalid("robot_user_id", "service_agent_required")
+	}
+
 	return s.command(ctx, raw, key, "agent.create", "agents", w, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
 		if w.Enabled.Null {
 			return httpx.Invalid("enabled", "null_not_allowed")
 		}
-		code := cryptox.ID()
+		code := w.Code
 		var e error
 		v := &Definition{Code: code, Name: w.Name, Description: w.Description, Mode: w.Mode, SystemPrompt: w.SystemPrompt, RuntimePolicy: defaultRuntimePolicy(), SchemaVersion: 1, RowVersion: 1, Creator: a.User.ID, ScopeKind: w.ScopeKind, PoolCapacity: w.PoolCapacity}
 		if w.RuntimePolicy != nil {
@@ -272,16 +298,15 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 			return httpx.Invalid("scope_id", "unavailable")
 		}
 		if v.Mode == "service" {
-			now := time.Now().UTC().Truncate(time.Millisecond)
-			robot := &identity.User{AccountType: "robot", Username: "bot_" + code[:26], DisplayName: v.Name, Role: "user", CreatedAt: now, UpdatedAt: now}
-			if e = tx.InsertUser(robot); e != nil {
-				return e
+			users, err := tx.LockUsers([]uint64{robotID})
+			if err != nil {
+				return err
 			}
-			robot.Status = "disabled"
-			if e = tx.SaveUser(robot); e != nil {
-				return e
+			robot := users[robotID]
+			if robot == nil || robot.AccountType != "robot" || robot.DeletedAt != nil || robot.ManagedAgentID != nil {
+				return httpx.Invalid("robot_user_id", "unavailable_or_already_bound")
 			}
-			v.RobotUserID = &robot.ID
+			v.RobotUserID = &robotID
 		}
 		if e = encodeDefinition(v); e != nil {
 			return e
@@ -357,9 +382,6 @@ func (s *Service) PatchDefinition(ctx context.Context, raw string, id uint64, ta
 			if e = r.SaveDefinition(v); e != nil {
 				return e
 			}
-			if e = syncRobot(tx, v); e != nil {
-				return e
-			}
 			if old.Enabled && !v.Enabled {
 				if e = s.cancelAgentQueue(tx, r, out, id, "AGENT_DISABLED"); e != nil {
 					return e
@@ -404,9 +426,6 @@ func (s *Service) DeleteDefinition(ctx context.Context, raw string, id uint64, t
 			return e
 		}
 		if e = r.SaveDefinition(v); e != nil {
-			return e
-		}
-		if e = syncRobot(tx, v); e != nil {
 			return e
 		}
 		out.Status = 204

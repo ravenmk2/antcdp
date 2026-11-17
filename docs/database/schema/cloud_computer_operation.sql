@@ -1,4 +1,4 @@
--- Reading copy of 00014_agent_cloud_and_sandbox.sql; execute embedded migrations instead.
+-- Reading copy of 00015_agent_cloud_and_sandbox.sql; execute embedded migrations instead.
 
 CREATE TABLE `cloud_computer_operation` (
     request_scope_kind VARCHAR(40) CHARACTER SET ascii COLLATE ascii_bin NULL,

@@ -135,18 +135,18 @@ func agentManagementLifecycle(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(e)
 	}
 	key := cryptox.ID()
-	created, e := svc.CreateDefinition(ctx, raw, key, a.DefinitionCreate{Name: "文档助手", Mode: "interactive", ScopeKind: "platform"})
+	created, e := svc.CreateDefinition(ctx, raw, key, a.DefinitionCreate{Code: "documentation", Name: "文档助手", Mode: "interactive", ScopeKind: "platform"})
 	if e != nil {
 		t.Fatal(e)
 	}
 	agent := created.Data.(*a.Definition)
 	_, e = svc.CheckActivation(ctx, raw, agent.ID)
 	modelsExpectCode(t, e, "VALIDATION_FAILED")
-	replayed, e := svc.CreateDefinition(ctx, raw, key, a.DefinitionCreate{Name: "文档助手", Mode: "interactive", ScopeKind: "platform"})
+	replayed, e := svc.CreateDefinition(ctx, raw, key, a.DefinitionCreate{Code: "documentation", Name: "文档助手", Mode: "interactive", ScopeKind: "platform"})
 	if e != nil || !replayed.Replayed {
 		t.Fatal("create replay", e)
 	}
-	_, e = svc.CreateDefinition(ctx, raw, key, a.DefinitionCreate{Name: "changed", Mode: "interactive", ScopeKind: "platform"})
+	_, e = svc.CreateDefinition(ctx, raw, key, a.DefinitionCreate{Code: "documentation", Name: "changed", Mode: "interactive", ScopeKind: "platform"})
 	modelsExpectCode(t, e, "IDEMPOTENCY_CONFLICT")
 	bindings, e := svc.GetModelBindings(ctx, raw, agent.ID)
 	if e != nil {
@@ -296,7 +296,7 @@ func agentScopeLifecycle(t *testing.T, f *agentIntegrationFixture, sourceAgent u
 	if err != nil {
 		t.Fatal(err)
 	}
-	created, err := svc.CreateDefinition(ctx, admin, cryptox.ID(), a.DefinitionCreate{Name: "Scoped agent", Mode: "interactive", ScopeKind: "project", ScopeID: new(strconv.FormatUint(scope.ID, 10))})
+	created, err := svc.CreateDefinition(ctx, admin, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: "Scoped agent", Mode: "interactive", ScopeKind: "project", ScopeID: new(strconv.FormatUint(scope.ID, 10))})
 	if err != nil {
 		t.Fatal(err)
 	}

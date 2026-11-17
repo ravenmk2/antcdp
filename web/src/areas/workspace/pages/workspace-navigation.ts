@@ -2,6 +2,7 @@ export const workspaceProjectPages = [
   "overview",
   "repositories",
   "jobs",
+  "events",
   "description",
   "settings",
 ] as const;
@@ -42,6 +43,8 @@ export function resolveWorkspaceProjectView(
   if (!match) return null;
   const projectId = match[1]!;
   const remainder = match[2]?.replace(/\/$/, "") ?? "";
+  if (remainder === "events")
+    return { projectId, page: "events", section: "profile" };
   if (remainder === "description/edit")
     return { projectId, page: "description", section: "profile" };
   if (/^jobs(?:\/(?:new|[1-9]\d*)(?:\/runs\/[1-9]\d*)?)?$/.test(remainder))

@@ -634,6 +634,7 @@ function JobEditor({
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [form, setForm] = useState(() => ({
+    code: job?.code ?? "",
     name: job?.name ?? "",
     description: job?.description ?? "",
     enabled: job?.enabled ?? false,
@@ -747,6 +748,15 @@ function JobEditor({
         <div className="max-h-[calc(100vh-240px)] space-y-6 overflow-auto pr-1">
           <Panel title="基本配置">
             <div className="space-y-4">
+              <Field label="编码" required>
+                <Input
+                  value={form.code}
+                  maxLength={64}
+                  disabled={Boolean(job)}
+                  placeholder="build_deploy"
+                  onChange={(e) => setForm({ ...form, code: e.target.value })}
+                />
+              </Field>
               <Field label="任务名称" required>
                 <Input
                   value={form.name}

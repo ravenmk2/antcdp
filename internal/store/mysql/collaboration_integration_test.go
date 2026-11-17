@@ -15,8 +15,8 @@ func verifyCollaborationHTTP(t *testing.T, backend *Store, dataDir string, admin
 	create := func(kind, code, name string, ids []string) map[string]any {
 		return testData(admin.call(t, "POST", "/"+kind, map[string]any{"code": code, "name": name, "admin_user_ids": ids}, 201, nil))
 	}
-	project := create("projects", "QA_Project", "协作测试项目", []string{adminID})
-	team := create("teams", "QA_Team", "协作测试团队", []string{memberID})
+	project := create("projects", "qa_project", "协作测试项目", []string{adminID})
+	team := create("teams", "qa_team", "协作测试团队", []string{memberID})
 	p, g := "/projects/"+project["id"].(string), "/teams/"+team["id"].(string)
 	get := func(path string) map[string]any { return testData(admin.call(t, "GET", path, nil, 200, nil)) }
 	head := func(path, field string) map[string]string {
@@ -119,11 +119,11 @@ func verifyCollaborationHTTP(t *testing.T, backend *Store, dataDir string, admin
 	if e := backend.db.Get(&remaining, "SELECT COUNT(*) FROM icon_file WHERE id=?", iconID); e != nil || remaining != 0 {
 		t.Fatal("orphan icon was not pruned", e)
 	}
-	member.call(t, "POST", "/projects", map[string]any{"code": "Denied", "name": "拒绝创建", "admin_user_ids": []string{memberID}}, 403, nil)
+	member.call(t, "POST", "/projects", map[string]any{"code": "denied", "name": "拒绝创建", "admin_user_ids": []string{memberID}}, 403, nil)
 	member.call(t, "GET", "/projects?scope=all", nil, 403, nil)
 	outsider.call(t, "GET", p, nil, 404, nil)
 	expectCode(t, admin.call(t, "POST", "/projects", map[string]any{"code": "qa_project", "name": "另一个名称", "admin_user_ids": []string{adminID}}, 409, nil), "CODE_CONFLICT")
-	expectCode(t, admin.call(t, "POST", "/projects", map[string]any{"code": "Unique_Name", "name": "协作测试项目", "admin_user_ids": []string{adminID}}, 409, nil), "NAME_CONFLICT")
+	expectCode(t, admin.call(t, "POST", "/projects", map[string]any{"code": "unique_name", "name": "协作测试项目", "admin_user_ids": []string{adminID}}, 409, nil), "NAME_CONFLICT")
 	admin.call(t, "PATCH", p, map[string]any{"summary": "首次更新"}, 200, head(p, "etag"))
 	admin.call(t, "PATCH", p, map[string]any{"summary": "过期更新"}, 412, map[string]string{"If-Match": project["etag"].(string)})
 	admin.call(t, "POST", p+"/teams", map[string]any{"team_id": team["id"]}, 204, head(p, "membership_etag"))
@@ -146,7 +146,7 @@ func verifyCollaborationHTTP(t *testing.T, backend *Store, dataDir string, admin
 		member.call(t, "POST", roles, roleWrite, 403, nil)
 		member.call(t, "PUT", rolePath+"/members", assignment, 403, head(rolePath, "etag"))
 		expectCode(t, admin.call(t, "POST", roles, map[string]any{"name": "release operator"}, 409, nil), "NAME_CONFLICT")
-		other := create("projects", "QA_Other_Role", "另一个角色范围", []string{adminID})
+		other := create("projects", "qa_other_role", "另一个角色范围", []string{adminID})
 		otherRoles := "/projects/" + other["id"].(string) + "/roles"
 		admin.call(t, "POST", otherRoles, roleWrite, 201, nil)
 		admin.call(t, "GET", otherRoles+"/"+role["id"].(string), nil, 404, nil)

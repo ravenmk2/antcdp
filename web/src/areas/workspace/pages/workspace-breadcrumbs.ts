@@ -48,6 +48,7 @@ export function workspaceBreadcrumbs(
     const labels: Record<string, string> = {
       repositories: "Git 仓库",
       jobs: "任务",
+      events: "事件",
       settings: "项目设置",
       description: "项目介绍",
     };

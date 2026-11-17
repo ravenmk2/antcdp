@@ -103,7 +103,8 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 	if err != nil {
 		return err
 	}
-	handler := server.New(server.Options{Runtime: r, Installer: installer, Static: web.DistFS(), Version: version, Identity: accounts, Media: files, Icons: icons, Models: modelService, WebAccess: webAccessService, Agents: agentApp.Service, AgentResources: agentApp.Resources, AgentHub: agentApp.Hub, Sandboxes: agentApp.Sandboxes, Jobs: jobService})
+	eventService := newEventService(installer, accounts, jobService, agentApp.Service)
+	handler := server.New(server.Options{Runtime: r, Installer: installer, Static: web.DistFS(), Version: version, Identity: accounts, Media: files, Icons: icons, Models: modelService, WebAccess: webAccessService, Agents: agentApp.Service, AgentResources: agentApp.Resources, AgentHub: agentApp.Hub, Sandboxes: agentApp.Sandboxes, Jobs: jobService, Events: eventService})
 	listener, err := net.Listen("tcp", r.Server.Listen)
 	if err != nil {
 		return err
@@ -119,6 +120,7 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 		workers.Go(func() { maintainAvatars(maintenanceCtx, installer, accounts, files, icons, logger) })
 		workers.Go(func() { runAgents(maintenanceCtx, installer, agentApp, logger) })
 		workers.Go(func() { jobService.Work(maintenanceCtx, logger) })
+		workers.Go(func() { eventService.Work(maintenanceCtx, logger) })
 		workers.Go(func() { maintainAgentResources(maintenanceCtx, installer, agentApp, logger) })
 		workers.Wait()
 	}()

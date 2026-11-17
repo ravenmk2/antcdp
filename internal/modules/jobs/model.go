@@ -13,6 +13,7 @@ import (
 )
 
 type Job struct {
+	Code           string     `db:"code" json:"code"`
 	ID             uint64     `db:"id" json:"id,string"`
 	ScopeKind      string     `db:"scope_kind" json:"scope_kind"`
 	ProjectID      uint64     `db:"scope_id" json:"project_id,string"`
@@ -79,6 +80,7 @@ type ResourceGrant struct {
 	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 }
 type Write struct {
+	Code           string  `json:"code"`
 	Name           string  `json:"name"`
 	Description    string  `json:"description"`
 	Enabled        bool    `json:"enabled"`
@@ -140,16 +142,18 @@ type Log struct {
 	CallID  *uint64         `db:"resource_call_id" json:"resource_call_id,string"`
 }
 type Receipt struct {
-	ID      uint64    `db:"id" json:"id,string"`
-	JobID   uint64    `db:"job_id" json:"job_id,string"`
-	Actor   uint64    `db:"actor_user_id" json:"actor_user_id,string"`
-	Key     string    `db:"request_key" json:"request_key"`
-	Hash    string    `db:"payload_hash" json:"-"`
-	Trigger string    `db:"trigger_kind" json:"trigger_kind"`
-	Outcome string    `db:"outcome" json:"outcome"`
-	Reason  string    `db:"reason_code" json:"reason_code"`
-	RunID   *uint64   `db:"job_run_id" json:"run_id,string"`
-	At      time.Time `db:"created_at" json:"created_at"`
+	CallerKind string    `db:"caller_kind" json:"caller_kind"`
+	CallerID   uint64    `db:"caller_id" json:"caller_id,string"`
+	ID         uint64    `db:"id" json:"id,string"`
+	JobID      uint64    `db:"job_id" json:"job_id,string"`
+	Actor      uint64    `db:"actor_user_id" json:"actor_user_id,string"`
+	Key        string    `db:"request_key" json:"request_key"`
+	Hash       string    `db:"payload_hash" json:"-"`
+	Trigger    string    `db:"trigger_kind" json:"trigger_kind"`
+	Outcome    string    `db:"outcome" json:"outcome"`
+	Reason     string    `db:"reason_code" json:"reason_code"`
+	RunID      *uint64   `db:"job_run_id" json:"run_id,string"`
+	At         time.Time `db:"created_at" json:"created_at"`
 }
 type Start struct {
 	RequestKey string                     `json:"request_key"`
@@ -208,6 +212,7 @@ type Call struct {
 type Repository interface {
 	Jobs(uint64, Filter) ([]Job, error)
 	Job(uint64) (*Job, error)
+	JobByCode(uint64, string) (*Job, error)
 	SaveJob(*Job) error
 	Revision(uint64) (*Revision, error)
 	SaveRevision(*Revision) error
@@ -225,6 +230,7 @@ type Repository interface {
 	AppendLog(*Run, *Log) error
 	Logs(uint64, uint64) ([]Log, error)
 	Receipt(uint64, uint64, string) (*Receipt, error)
+	AutomationReceipt(uint64, uint64, string) (*Receipt, error)
 	SaveReceipt(*Receipt) error
 	Receipts(uint64, uint64) ([]Receipt, error)
 	Schedule(uint64) (*Schedule, error)

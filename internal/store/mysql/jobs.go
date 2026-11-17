@@ -7,6 +7,9 @@ import (
 	"reflect"
 	"time"
 
+	driver "github.com/go-sql-driver/mysql"
+	"github.com/ravenmk2/antcdp/internal/platform/httpx"
+
 	"github.com/ravenmk2/antcdp/internal/modules/jobs"
 )
 
@@ -40,10 +43,30 @@ func (t *jobTx) Job(id uint64) (*jobs.Job, error) {
 	}
 	return &v, nil
 }
+func (t *jobTx) JobByCode(project uint64, code string) (*jobs.Job, error) {
+	var v jobs.Job
+	err := t.tx.GetContext(t.ctx, &v, "SELECT * FROM job WHERE scope_kind='project' AND scope_id=? AND code=? FOR UPDATE", project, code)
+	if err != nil {
+		return nil, jobMissing(err)
+	}
+	return &v, nil
+}
+func (t *jobTx) AutomationReceipt(job, caller uint64, key string) (*jobs.Receipt, error) {
+	var v jobs.Receipt
+	err := t.tx.GetContext(t.ctx, &v, "SELECT * FROM job_trigger_request WHERE job_id=? AND caller_kind='event_subscription' AND caller_id=? AND request_key=? FOR UPDATE", job, caller, key)
+	if err != nil {
+		return nil, jobMissing(err)
+	}
+	return &v, nil
+}
 func (t *jobTx) SaveJob(v *jobs.Job) error {
 	if v.ID == 0 {
-		result, err := t.tx.NamedExecContext(t.ctx, "INSERT INTO job(scope_kind,scope_id,name,description,enabled,current_revision_id,max_concurrency,busy_policy,timeout_ms,row_version,created_by_user_id,created_at,updated_at) VALUES(:scope_kind,:scope_id,:name,:description,:enabled,:current_revision_id,:max_concurrency,:busy_policy,:timeout_ms,:row_version,:created_by_user_id,:created_at,:updated_at)", v)
+		result, err := t.tx.NamedExecContext(t.ctx, "INSERT INTO job(code,scope_kind,scope_id,name,description,enabled,current_revision_id,max_concurrency,busy_policy,timeout_ms,row_version,created_by_user_id,created_at,updated_at) VALUES(:code,:scope_kind,:scope_id,:name,:description,:enabled,:current_revision_id,:max_concurrency,:busy_policy,:timeout_ms,:row_version,:created_by_user_id,:created_at,:updated_at)", v)
 		if err != nil {
+			var duplicate *driver.MySQLError
+			if errors.As(err, &duplicate) && duplicate.Number == 1062 {
+				return httpx.E(409, "CODE_CONFLICT", "项目中已存在此任务编码")
+			}
 			return err
 		}
 		id, err := result.LastInsertId()
@@ -234,14 +257,17 @@ func (t *jobTx) Logs(id, after uint64) ([]jobs.Log, error) {
 }
 func (t *jobTx) Receipt(job, actor uint64, key string) (*jobs.Receipt, error) {
 	var v jobs.Receipt
-	err := t.tx.GetContext(t.ctx, &v, "SELECT * FROM job_trigger_request WHERE job_id=? AND actor_user_id=? AND request_key=?", job, actor, key)
+	err := t.tx.GetContext(t.ctx, &v, "SELECT * FROM job_trigger_request WHERE job_id=? AND caller_kind='user' AND caller_id=? AND request_key=?", job, actor, key)
 	if err != nil {
 		return nil, jobMissing(err)
 	}
 	return &v, nil
 }
 func (t *jobTx) SaveReceipt(v *jobs.Receipt) error {
-	result, err := t.tx.NamedExecContext(t.ctx, `INSERT INTO job_trigger_request(job_id,actor_user_id,request_key,payload_hash,trigger_kind,outcome,reason_code,job_run_id,created_at) VALUES(:job_id,:actor_user_id,:request_key,:payload_hash,:trigger_kind,:outcome,:reason_code,:job_run_id,:created_at)`, v)
+	if v.CallerKind == "" {
+		v.CallerKind, v.CallerID = "user", v.Actor
+	}
+	result, err := t.tx.NamedExecContext(t.ctx, `INSERT INTO job_trigger_request(caller_kind,caller_id,job_id,actor_user_id,request_key,payload_hash,trigger_kind,outcome,reason_code,job_run_id,created_at) VALUES(:caller_kind,:caller_id,:job_id,:actor_user_id,:request_key,:payload_hash,:trigger_kind,:outcome,:reason_code,:job_run_id,:created_at)`, v)
 	if err != nil {
 		return err
 	}

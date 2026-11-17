@@ -46,7 +46,7 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	config := func(source string) map[string]any {
 		return map[string]any{"script": source, "parameters": []any{}, "bindings": []any{}}
 	}
-	body := map[string]any{"name": "并行任务", "description": "测试", "enabled": true, "max_concurrency": 1, "busy_policy": "queue", "timeout_ms": 5000, "config": config(script), "grants": []any{}}
+	body := map[string]any{"code": "parallel", "name": "并行任务", "description": "测试", "enabled": true, "max_concurrency": 1, "busy_policy": "queue", "timeout_ms": 5000, "config": config(script), "grants": []any{}}
 	job := testData(admin.call(t, "POST", base, body, 200, nil))
 	path := base + "/" + job["id"].(string)
 	member.call(t, "GET", path, nil, 200, nil)

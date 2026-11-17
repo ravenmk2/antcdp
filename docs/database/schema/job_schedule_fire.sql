@@ -1,4 +1,4 @@
--- Reading copy of 00015_jobs.sql; execute embedded migrations instead.
+-- Reading copy of 00016_jobs.sql; execute embedded migrations instead.
 
 CREATE TABLE job_schedule_fire (
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

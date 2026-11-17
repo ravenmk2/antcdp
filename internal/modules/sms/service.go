@@ -10,12 +10,14 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
+
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-var codePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+var codePattern = resourcecode.Pattern
 var tagPattern = regexp.MustCompile(`^"[a-f0-9]{64}"$`)
 
 func repository(tx identity.Tx) (Repository, error) {

@@ -52,6 +52,9 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 		}
 		return st, nil
 	}}
+	if o.Events != nil {
+		s.ReceiveEvent = o.Events.ReceiveGitLab
+	}
 	registerProjectRepositories(api, o, s)
 	finish := func(c *gin.Context, r i.Result, a *identity.Auth, err error, status int) {
 		var apiErr *httpx.Error
@@ -101,11 +104,11 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 		r, a, err := s.List(c.Request.Context(), rawSession(c), false)
 		finish(c, r, a, err, 200)
 	})
-	api.GET("/admin/agents/:agent_id/service-connections", func(c *gin.Context) {
+	api.GET("/admin/robots/:robot_id/service-connections", func(c *gin.Context) {
 		if !noQuery(c) {
 			return
 		}
-		id, ok := collaborationID(c, "agent_id")
+		id, ok := collaborationID(c, "robot_id")
 		if !ok {
 			return
 		}
@@ -273,7 +276,7 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 			r, a, err := s.Grants(c.Request.Context(), rawSession(c), id, i.CredentialOwnership{Type: c.Param("subject_kind"), Owner: subject}, c.GetHeader("If-Match"), w.Enabled, metadata(c))
 			finish(c, r, a, err, 200)
 		})
-		for _, group := range []struct{ path, ownership string }{{base, "platform"}, {"/me/service-connections/" + kind, "personal"}, {"/projects/:id/service-connections/" + kind, "project"}, {"/admin/agents/:agent_id/service-connections/" + kind, "robot"}} {
+		for _, group := range []struct{ path, ownership string }{{base, "platform"}, {"/me/service-connections/" + kind, "personal"}, {"/projects/:id/service-connections/" + kind, "project"}, {"/admin/robots/:robot_id/service-connections/" + kind, "robot"}} {
 			prefix := group.path + "/:connection_id/credentials"
 			for _, route := range []struct{ method, path, op string }{
 				{"GET", "", "list"}, {"POST", "", "create"}, {"GET", "/preferred", "get_preferred"}, {"PUT", "/preferred", "preferred"}, {"DELETE", "/preferred", "clear_preferred"},
@@ -289,7 +292,7 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 					}
 					owner := i.CredentialOwnership{Type: group.ownership}
 					if owner.Type == "robot" {
-						owner.Owner, ok = collaborationID(c, "agent_id")
+						owner.Owner, ok = collaborationID(c, "robot_id")
 						if !ok {
 							return
 						}
