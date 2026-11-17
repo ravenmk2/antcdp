@@ -34,7 +34,10 @@ const agent: CatalogAgent = {
       display_name: "测试模型",
       provider_label: "测试",
       protocol: "chat_completions",
-      thinking_options: [{ key: "default", label: "标准" }],
+      thinking_options: [
+        { key: "default", label: "标准" },
+        { key: "high", label: "高" },
+      ],
     },
   ],
 };
@@ -144,6 +147,29 @@ it.each([true, false])(
   },
 );
 
+it("selects thinking directly in the new conversation composer", async () => {
+  const { user, send, input } = setup(true);
+  const thinking = await screen.findByRole("combobox", {
+    name: "选择思考强度",
+  });
+  await user.click(thinking);
+  await user.click(await screen.findByRole("option", { name: "高" }));
+  expect(thinking).toHaveTextContent("高");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await send();
+  expect(mock).toHaveBeenCalledWith(
+    "/agents/sessions",
+    expect.objectContaining({
+      body: expect.objectContaining({
+        model_selection: { model_binding_id: "8", thinking_option_key: "high" },
+      }),
+    }),
+  );
+  expect(thinking).toBeDisabled();
+  await act(async () => input.resolve(response({ input_id: "11" })));
+  expect(await screen.findByText("已打开会话")).toBeVisible();
+});
+
 it("still protects navigation while a new conversation submission has failed", async () => {
   const { input, send, user, router } = setup(true);
   await send();
@@ -156,7 +182,5 @@ it("still protects navigation while a new conversation submission has failed", a
     await screen.findByRole("dialog", { name: "离开当前页面？" }),
   ).toBeVisible();
   expect(router.state.location.pathname).toBe("/new");
-  expect(screen.getByRole("textbox", { hidden: true })).toHaveValue(
-    "检查发送跳转",
-  );
+  expect(screen.getByLabelText("消息内容")).toHaveValue("检查发送跳转");
 });

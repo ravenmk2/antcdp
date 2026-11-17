@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/diagnostic"
+	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
@@ -135,6 +137,11 @@ func (s *Service) selection(tx identity.Tx, r Repository, v *SessionRow) (agentc
 		if json.Unmarshal(v.LockedModelConfig, &frozen) != nil || frozen.SelectionHash == "" {
 			return agentcore.LockedModel{}, EffectiveSelection{}, integrity()
 		}
+		if v.SelectedThinkingOptionKey != frozen.ThinkingKey {
+			if e := changeFrozenThinking(&frozen, v.SelectedThinkingOptionKey, binding.ThinkingOptions, view.Thinking); e != nil {
+				return agentcore.LockedModel{}, EffectiveSelection{}, e
+			}
+		}
 		current := view.Available && binding.RemovedAt == nil
 		found := false
 		for _, key := range binding.ThinkingOptions {
@@ -166,6 +173,47 @@ func (s *Service) selection(tx identity.Tx, r Repository, v *SessionRow) (agentc
 		selection.Availability.Reason = &reason
 	}
 	return m, selection, nil
+}
+
+// Change only reasoning parameters; provider routes and model identity must
+// remain stable because the conversation may contain provider-owned file IDs.
+func changeFrozenThinking(frozen *frozenModel, key string, allowed []string, options []modelcore.ThinkingOption) error {
+	if !slices.Contains(allowed, key) {
+		return httpx.Invalid("thinking_option_key", "not_allowed")
+	}
+	for _, option := range options {
+		if option.Key != key {
+			continue
+		}
+		values, err := objectJSON(option.Parameters, "thinking.parameters")
+		if err != nil {
+			return err
+		}
+		parameters := map[string]json.RawMessage{}
+		for name, value := range frozen.Parameters {
+			if !modelcore.IsThinkingParameter(name) {
+				parameters[name] = value
+			}
+		}
+		for name, value := range values {
+			if !modelcore.IsThinkingParameter(name) {
+				return httpx.Invalid("thinking.parameters", "thinking_parameters_only")
+			}
+			parameters[name] = value
+		}
+		frozen.Parameters, frozen.ThinkingKey = parameters, key
+		frozen.SelectionHash = ""
+		hash, err := agentcore.ContentHash(frozen.LockedModel)
+		if err != nil {
+			return err
+		}
+		frozen.SelectionHash = hash
+		frozen.Display.Thinking, frozen.Display.ThinkingLabel = key, option.Label
+		frozen.Display.Hash = hash
+		frozen.Display.Parameters, err = json.Marshal(parameters)
+		return err
+	}
+	return httpx.Invalid("thinking_option_key", "not_allowed")
 }
 func (s *Service) viewState(st StateRepository, v *SessionRow, user uint64) (ViewState, error) {
 	out := ViewState{SessionID: v.ID}

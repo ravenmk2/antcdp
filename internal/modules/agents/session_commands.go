@@ -2,6 +2,8 @@ package agents
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +31,7 @@ func (s *Service) PatchSessionConfiguration(ctx context.Context, raw string, id 
 			return e
 		}
 		var selection ModelSelection
+		var selected frozenModel
 		if w.Selection.Set {
 			selection = w.Selection.Value
 			candidate := *current
@@ -37,16 +40,17 @@ func (s *Service) PatchSessionConfiguration(ctx context.Context, raw string, id 
 				return e
 			}
 			candidate.SelectedThinkingOptionKey = selection.Thinking
-			if current.ModelLockedAt != nil {
+			if current.ModelLockedAt != nil && candidate.SelectedModelBindingID != current.SelectedModelBindingID {
 				return httpx.E(409, "MODEL_SELECTION_LOCKED", "会话模型已经锁定")
 			}
-			_, resolved, e := s.selection(tx, r, &candidate)
+			model, resolved, e := s.selection(tx, r, &candidate)
 			if e != nil {
 				return e
 			}
 			if !resolved.Availability.Available {
 				return httpx.E(409, "MODEL_UNAVAILABLE", "模型当前不可用")
 			}
+			selected = frozenModel{model, resolved}
 		}
 		v, e := s.sessionAccess(st, id, a, true, true)
 		if e != nil {
@@ -58,7 +62,7 @@ func (s *Service) PatchSessionConfiguration(ctx context.Context, raw string, id 
 		if v.ArchivedAt != nil && w.Selection.Set {
 			return httpx.E(409, "SESSION_ARCHIVED", "会话已归档")
 		}
-		if w.Selection.Set && v.ModelLockedAt != nil {
+		if w.Selection.Set && v.ModelLockedAt != nil && selected.BindingID != agentcore.ID(v.SelectedModelBindingID) {
 			return httpx.E(409, "MODEL_SELECTION_LOCKED", "会话模型已经锁定")
 		}
 		fields := []string{}
@@ -83,6 +87,16 @@ func (s *Service) PatchSessionConfiguration(ctx context.Context, raw string, id 
 			if binding != v.SelectedModelBindingID || selection.Thinking != v.SelectedThinkingOptionKey {
 				v.SelectedModelBindingID = binding
 				v.SelectedThinkingOptionKey = selection.Thinking
+				if v.ModelLockedAt != nil {
+					v.LockedModelConfig, e = json.Marshal(selected)
+					if e != nil {
+						return e
+					}
+					v.ModelSelectionHash, e = hex.DecodeString(selected.SelectionHash)
+					if e != nil {
+						return integrity()
+					}
+				}
 				fields = append(fields, "model_selection")
 			}
 		}

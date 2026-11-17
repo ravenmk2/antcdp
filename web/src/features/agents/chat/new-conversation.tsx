@@ -3,8 +3,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router";
 import { Bot, ChevronDown, LockKeyhole, Sparkles } from "lucide-react";
 import { Button } from "@/components/button";
-import { Drawer, OverlayCancelButton } from "@/components/overlays";
-import { Field, Select } from "@/components/fields";
 import {
   AsyncBoundary,
   EmptyState,
@@ -25,7 +23,7 @@ import {
 } from "../data/agent-runtime";
 import { ResourcePicker } from "@/features/agents/resources/resource-picker";
 import { ChatComposer } from "./composer";
-import { useComposerInset } from "./use-composer-inset";
+import { ModelSelectionControls } from "./model-selection";
 
 export function NewConversation({
   service = false,
@@ -35,7 +33,6 @@ export function NewConversation({
   agentId?: string;
 }) {
   const cache = useQueryClient();
-  const composerInset = useComposerInset();
   const [params] = useSearchParams(),
     navigate = useNavigate();
   const routeAgent = agentId || params.get("agent") || "";
@@ -45,7 +42,6 @@ export function NewConversation({
   const { state: draft, draft: editor } = useConversationDraft(id),
     send = useConversationSend(id);
   const [picking, setPicking] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const fixedAgent = !service && Boolean(agentId);
   const catalog = useApiQuery<(CatalogAgent | AgentSummary)[]>(
     ["agent-start-catalog", service],
@@ -117,99 +113,52 @@ export function NewConversation({
         : `/agents/sessions/${sessionId}`,
     );
   };
-  const selectionFields = (
-    <>
-      <Field label="模型" className="agent-start-field">
-        <Select
-          disabled={locked || !selected}
-          value={selected?.binding_id ?? ""}
-          onValueChange={(modelId) => editor.patch({ modelId, thinking: "" })}
-        >
-          {modelOptions?.map((model) => (
-            <option key={model.binding_id} value={model.binding_id}>
-              {model.display_name} · {model.provider_label}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      {(selected?.thinking_options.length ?? 0) > 1 && (
-        <Field label="思考模式" className="agent-start-field">
-          <Select
-            disabled={locked || !thinking}
-            value={thinking ?? ""}
-            onValueChange={(value) => editor.patch({ thinking: value })}
-          >
-            {selected?.thinking_options.map((option) => (
-              <option key={option.key} value={option.key}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      )}
-    </>
+  const selectionControls = (
+    <ModelSelectionControls
+      models={modelOptions ?? []}
+      value={{
+        model_binding_id: selected?.binding_id ?? "",
+        thinking_option_key: thinking ?? "",
+      }}
+      disabled={locked}
+      onChange={(value) =>
+        editor.patch({
+          modelId: value.model_binding_id,
+          thinking: value.thinking_option_key,
+        })
+      }
+    />
   );
   if (fixedAgent)
     return (
-      <div className="agent-chat-page">
-        <h1 className="sr-only">新对话</h1>
-        <div className="agent-conversation-frame" data-side-actions="true">
-          <aside className="agent-chat-actions-sidebar" aria-hidden />
-          <div className="agent-chat-body">
-            <section className="agent-chat-primary" aria-label="新对话">
-              <div className="agent-chat-scroll" aria-label="对话内容" />
-              <footer className="agent-chat-footer" ref={composerInset}>
-                <div className="agent-chat-content">
-                  <AsyncBoundary
-                    loading={agent.isPending}
-                    error={agent.error}
-                    onRetry={() => agent.refetch()}
-                  >
-                    {value && !available && (
-                      <Notice tone="warning">当前智能体暂不可开始会话。</Notice>
-                    )}
-                    <ChatComposer
-                      id={id}
-                      target={target}
-                      disabled={!available || !selected || !thinking}
-                      onAccepted={openSession}
-                      onOpenSession={openSession}
-                      settings={
-                        <button
-                          type="button"
-                          className="agent-composer-model"
-                          aria-label="模型与思考模式"
-                          title="模型与思考模式"
-                          disabled={locked || !selected}
-                          onClick={() => setSettingsOpen(true)}
-                        >
-                          <span className="truncate">
-                            {selected?.display_name}
-                            {thinking &&
-                              ` · ${selected?.thinking_options.find((option) => option.key === thinking)?.label ?? thinking}`}
-                          </span>
-                          <ChevronDown className="size-3" />
-                        </button>
-                      }
-                    />
-                  </AsyncBoundary>
-                </div>
-              </footer>
-            </section>
-          </div>
+      <section
+        className="agent-chat-page agent-new-conversation"
+        aria-label="新对话"
+      >
+        <div className="agent-new-conversation-content">
+          <header className="agent-new-conversation-heading">
+            <h1>{value?.name ?? "新对话"}</h1>
+            <p>{value?.description || "今天想一起完成什么？"}</p>
+          </header>
+          <AsyncBoundary
+            loading={agent.isPending}
+            error={agent.error}
+            onRetry={() => agent.refetch()}
+          >
+            {value && !available && (
+              <Notice tone="warning">当前智能体暂不可开始会话。</Notice>
+            )}
+            <ChatComposer
+              id={id}
+              target={target}
+              disabled={!available || !selected || !thinking}
+              onAccepted={openSession}
+              onOpenSession={openSession}
+              settings={selectionControls}
+            />
+          </AsyncBoundary>
         </div>
-        <Drawer
-          open={settingsOpen}
-          title="会话设置"
-          onClose={() => setSettingsOpen(false)}
-          footer={<OverlayCancelButton>完成</OverlayCancelButton>}
-        >
-          <div className="space-y-5">
-            {selectionFields}
-            <p className="text-xs text-muted">开始后模型与思考模式不可更改。</p>
-          </div>
-        </Drawer>
-      </div>
+      </section>
     );
   return (
     <section className="agent-start-panel" aria-label="开始新对话">
@@ -239,11 +188,12 @@ export function NewConversation({
           <>
             <ChatComposer
               variant="start"
+              settings={selectionControls}
               sendLabel="开始对话"
               footerLeading={
                 <span className="agent-start-lock">
                   <LockKeyhole className="size-3.5" />
-                  开始后模型与思考模式不可更改
+                  开始后模型锁定，思考强度可随时调整
                 </span>
               }
               id={id}
@@ -275,7 +225,6 @@ export function NewConversation({
                     </Button>
                   </div>
                 )}
-                {selectionFields}
               </div>
             </ChatComposer>
             <ErrorNotice error={agent.error || options.error} />

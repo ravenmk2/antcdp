@@ -174,6 +174,15 @@ export function ConversationSidebar({
             <Button
               variant="ghost"
               size="iconSm"
+              aria-label="搜索会话"
+              title="搜索会话"
+              onClick={() => setSearch(true)}
+            >
+              <Search />
+            </Button>
+            <Button
+              variant="ghost"
+              size="iconSm"
               aria-label="新建对话"
               title="新建对话"
               render={
@@ -185,15 +194,6 @@ export function ConversationSidebar({
               }
               nativeButton={false}
             />
-            <Button
-              variant="ghost"
-              size="iconSm"
-              aria-label="搜索会话"
-              title="搜索会话"
-              onClick={() => setSearch(true)}
-            >
-              <Search />
-            </Button>
           </div>
         </div>
         {ready ? (

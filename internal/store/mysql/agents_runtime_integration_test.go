@@ -48,6 +48,7 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 		return json.RawMessage(`{"authorized":true}`), nil
 	}}
 	agent := runtimeTestAgent(t, f)
+	t.Run("thinking_selection", func(t *testing.T) { runtimeThinkingSelection(t, f) })
 	t.Run("execution_lookup_race", func(t *testing.T) { runtimeExecutionRace(t, f, agent.ID) })
 	t.Run("session_titles", func(t *testing.T) { runtimeSessionTitles(t, f, agent.ID) })
 	t.Run("turn_lifecycle", func(t *testing.T) { runtimeTurnLifecycle(t, f, agent.ID) })

@@ -279,21 +279,28 @@ it("keeps an unvisited conversation entry blank and restores the last agent and 
   expect(router.state.location.search).toBe("?agent=1");
 });
 
-it("uses an empty conversation body and the regular footer composer for new conversations", async () => {
+it("offers a dedicated new conversation view with inline model selection", async () => {
   const user = userEvent.setup();
   mount("/agents?agent=1");
   const input = await screen.findByRole("textbox", { name: "消息内容" });
-  expect(input.closest(".agent-chat-footer")).not.toBeNull();
-  expect(screen.getByLabelText("对话内容")).toBeEmptyDOMElement();
-  expect(screen.queryByText("公开测试助手")).not.toBeInTheDocument();
+  expect(
+    within(screen.getByRole("region", { name: "新对话" })).getByRole(
+      "textbox",
+      { name: "消息内容" },
+    ),
+  ).toBe(input);
+  expect(screen.getByRole("heading", { name: "项目协作助手" })).toBeVisible();
+  expect(screen.getByText("公开测试助手")).toBeVisible();
   expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
   expect(
     mock.mock.calls.some(([url]) => url.startsWith("/agents/catalog?")),
   ).toBe(false);
-  await user.click(screen.getByRole("button", { name: "模型与思考模式" }));
-  const dialog = await screen.findByRole("dialog", { name: "会话设置" });
-  expect(within(dialog).getByRole("combobox", { name: "模型" })).toBeEnabled();
-  await user.click(within(dialog).getByRole("button", { name: "完成" }));
+  await user.click(screen.getByRole("combobox", { name: "选择模型" }));
+  expect(await screen.findByRole("option", { name: /对话模型/ })).toBeVisible();
+  expect(
+    screen.queryByRole("dialog", { name: "会话设置" }),
+  ).not.toBeInTheDocument();
+  await user.keyboard("{Escape}");
   await user.type(input, "未提交的首条消息");
   expect(screen.getByRole("button", { name: "发送" })).toBeEnabled();
   expect(mock.mock.calls.some(([url]) => url === "/agents/sessions")).toBe(

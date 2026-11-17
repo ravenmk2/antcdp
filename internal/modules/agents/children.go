@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
@@ -71,6 +72,33 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		rootSessionID, parentRunID := x.Session.ID, x.Run.ID
 		v := &SessionRow{AgentID: x.Session.AgentID, ExecutionMode: x.Session.ExecutionMode, SessionKind: "child", RootSessionID: &rootSessionID, ParentRunID: &parentRunID, ExecutorUserID: x.Session.ExecutorUserID, Title: "子任务", CloudComputerID: x.RootSession.CloudComputerID, SelectedModelBindingID: x.Session.SelectedModelBindingID, SelectedThinkingOptionKey: x.Session.SelectedThinkingOptionKey, LockedModelConfig: x.Session.LockedModelConfig, ModelSelectionHash: x.Session.ModelSelectionHash, ModelLockedAt: x.Session.ModelLockedAt, NextInputOrder: 1, SurfaceRevision: 1, RowVersion: 1, CreatedByActorKind: "system", CreatedByActorID: "system", CreatedAt: now, UpdatedAt: now, LastActivityAt: now}
+		// A session's next-turn thinking may have changed since this root run
+		// started. Children inherit the executing root snapshot, including metadata.
+		if v.SelectedThinkingOptionKey != x.Execution.Model.ThinkingKey {
+			var frozen frozenModel
+			if json.Unmarshal(v.LockedModelConfig, &frozen) != nil {
+				return integrity()
+			}
+			frozen.LockedModel = x.Execution.Model
+			frozen.Display.Thinking = frozen.ThinkingKey
+			frozen.Display.ThinkingLabel = frozen.ThinkingKey
+			for _, level := range modelcore.ThinkingLevels() {
+				if level.Key == frozen.ThinkingKey {
+					frozen.Display.ThinkingLabel = level.Label
+				}
+			}
+			frozen.Display.Hash = frozen.SelectionHash
+			frozen.Display.Parameters, e = json.Marshal(frozen.Parameters)
+			if e != nil {
+				return e
+			}
+			v.LockedModelConfig, e = json.Marshal(frozen)
+			if e != nil {
+				return e
+			}
+			v.SelectedThinkingOptionKey = frozen.ThinkingKey
+			v.ModelSelectionHash = x.Run.ModelSelectionHash
+		}
 		if e = st.InsertSession(v); e != nil {
 			return e
 		}
@@ -85,6 +113,7 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 		if e != nil {
 			return e
 		}
+		coreS.Model = &x.Execution.Model
 		coreR, e := coreRun(x.Run)
 		if e != nil {
 			return e

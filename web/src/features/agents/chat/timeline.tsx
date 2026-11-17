@@ -1,5 +1,5 @@
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
-import { Waypoints, Bot } from "lucide-react";
+import { Atom, Bot } from "lucide-react";
 import { useSession } from "@/app/auth";
 import { ChatCopyButton as CopyButton } from "./controls";
 import type { ActiveAttempt, DurableRecord } from "@/types/agent-events";
@@ -779,7 +779,7 @@ const ProcessGroup = memo(function ProcessGroup({
           activeName ? (
             <ActivityIcon name={activeName} active />
           ) : (
-            <Waypoints aria-hidden className="agent-activity-icon" />
+            <Atom aria-hidden className="agent-activity-icon" />
           )
         }
       >

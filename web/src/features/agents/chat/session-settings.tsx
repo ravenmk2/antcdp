@@ -128,68 +128,68 @@ function SessionSettingsForm({
             }
           />
         </Field>
-        {config.model_locked_at ? (
+        {config.model_locked_at && (
           <Notice>
-            模型与思考已在首次有效输入时锁定：{session.selection.model_name} ·{" "}
-            {session.selection.thinking_label}。
+            模型已锁定：{session.selection.model_name}
+            。思考强度可调整，从下一轮执行生效。
           </Notice>
-        ) : (
-          !archived && (
-            <AsyncBoundary
-              loading={options.isPending}
-              error={options.error}
-              onRetry={() => options.refetch()}
-            >
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="模型">
+        )}
+        {!archived && (
+          <AsyncBoundary
+            loading={options.isPending}
+            error={options.error}
+            onRetry={() => options.refetch()}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="模型">
+                <Select
+                  disabled={Boolean(config.model_locked_at)}
+                  value={draft.model_selection.model_binding_id}
+                  onValueChange={(id) => {
+                    const model = options.data?.data.model_options.find(
+                      (item) => item.binding_id === id,
+                    );
+                    if (model?.thinking_options[0])
+                      setDraft({
+                        ...draft,
+                        model_selection: {
+                          model_binding_id: id,
+                          thinking_option_key: model.thinking_options[0].key,
+                        },
+                      });
+                  }}
+                >
+                  {options.data?.data.model_options.map((model) => (
+                    <option key={model.binding_id} value={model.binding_id}>
+                      {model.display_name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              {(currentModel?.thinking_options.length ?? 0) > 1 && (
+                <Field label="思考强度">
                   <Select
-                    value={draft.model_selection.model_binding_id}
-                    onValueChange={(id) => {
-                      const model = options.data?.data.model_options.find(
-                        (item) => item.binding_id === id,
-                      );
-                      if (model?.thinking_options[0])
-                        setDraft({
-                          ...draft,
-                          model_selection: {
-                            model_binding_id: id,
-                            thinking_option_key: model.thinking_options[0].key,
-                          },
-                        });
-                    }}
+                    value={draft.model_selection.thinking_option_key}
+                    onValueChange={(key) =>
+                      setDraft({
+                        ...draft,
+                        model_selection: {
+                          ...draft.model_selection,
+                          thinking_option_key: key,
+                        },
+                      })
+                    }
                   >
-                    {options.data?.data.model_options.map((model) => (
-                      <option key={model.binding_id} value={model.binding_id}>
-                        {model.display_name}
+                    {currentModel?.thinking_options.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}
                       </option>
                     ))}
                   </Select>
                 </Field>
-                {(currentModel?.thinking_options.length ?? 0) > 1 && (
-                  <Field label="思考">
-                    <Select
-                      value={draft.model_selection.thinking_option_key}
-                      onValueChange={(key) =>
-                        setDraft({
-                          ...draft,
-                          model_selection: {
-                            ...draft.model_selection,
-                            thinking_option_key: key,
-                          },
-                        })
-                      }
-                    >
-                      {currentModel?.thinking_options.map((option) => (
-                        <option key={option.key} value={option.key}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                )}
-              </div>
-            </AsyncBoundary>
-          )
+              )}
+            </div>
+          </AsyncBoundary>
         )}
         {!archived && !session.state.agent_access_available && (
           <Notice tone="warning">

@@ -243,6 +243,107 @@ function mount(element: React.ReactNode, route = "/agents/sessions/10") {
   };
 }
 
+it.each([false, true])(
+  "changes thinking in a locked conversation (active run: %s)",
+  async (running) => {
+    if (running) {
+      current.state.active_run_id = "20";
+      current.state.active_run_status = "running";
+    }
+    override = (url, options) => {
+      if (url === "/agents/catalog/4")
+        return response({
+          model_options: [
+            {
+              binding_id: "8",
+              display_name: "研发模型",
+              provider_label: "DeepSeek",
+              thinking_options: [
+                { key: "default", label: "标准思考" },
+                { key: "high", label: "高" },
+              ],
+            },
+          ],
+        });
+      if (url.endsWith("/configuration") && options.method === "PATCH") {
+        current = {
+          ...current,
+          selection: {
+            ...current.selection,
+            thinking_option_key: "high",
+            thinking_label: "高",
+            model_selection_hash: "high-hash",
+          },
+          configuration: {
+            ...current.configuration,
+            model_selection: {
+              model_binding_id: "8",
+              thinking_option_key: "high",
+            },
+          },
+        };
+        return response(current.configuration, '"c2"');
+      }
+    };
+    const { user } = mount(<AgentSessionPage />);
+    const thinking = await screen.findByRole("combobox", {
+      name: "选择思考强度",
+    });
+    expect(
+      screen.queryByRole("combobox", { name: "选择模型" }),
+    ).not.toBeInTheDocument();
+    await user.click(thinking);
+    await user.click(await screen.findByRole("option", { name: "高" }));
+    await waitFor(() => expect(thinking).toHaveTextContent("高"));
+    expect(mock).toHaveBeenCalledWith(
+      "/agents/sessions/10/configuration",
+      expect.objectContaining({
+        method: "PATCH",
+        etag: '"c1"',
+        body: {
+          model_selection: {
+            model_binding_id: "8",
+            thinking_option_key: "high",
+          },
+        },
+      }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "会话设置" }),
+    ).not.toBeInTheDocument();
+    expect(thinking).toBeEnabled();
+  },
+);
+
+it("keeps the previous thinking selection after a failed save", async () => {
+  override = (url, options) => {
+    if (url === "/agents/catalog/4")
+      return response({
+        model_options: [
+          {
+            binding_id: "8",
+            display_name: "研发模型",
+            thinking_options: [
+              { key: "default", label: "标准思考" },
+              { key: "high", label: "高" },
+            ],
+          },
+        ],
+      });
+    if (url.endsWith("/configuration") && options.method === "PATCH")
+      throw new ApiError("VERSION_CONFLICT", "配置已变化，请重新选择", 412);
+  };
+  const { user } = mount(<AgentSessionPage />);
+  const thinking = await screen.findByRole("combobox", {
+    name: "选择思考强度",
+  });
+  await user.click(thinking);
+  await user.click(await screen.findByRole("option", { name: "高" }));
+  expect(await screen.findByText("配置已变化，请重新选择")).toBeVisible();
+  await waitFor(() => expect(thinking).toBeEnabled());
+  expect(thinking).toHaveTextContent("标准思考");
+});
+
 function failedHistory(partial = ""): DurableRecord[] {
   const ended = records.find((record) => record.event_type === "run/ended")!;
   return [
@@ -645,9 +746,10 @@ it("shows measured reasoning time on collapsed rows without inventing old timing
       ]}
     />,
   );
-  expect(
-    screen.getByRole("button", { name: /思考\s*· 2 秒/ }),
-  ).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByRole("button", { name: /思考\s*· 2 秒/ })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
   expect(screen.getByRole("button", { name: /^思考$/ })).toHaveAttribute(
     "aria-expanded",
     "false",
@@ -2238,9 +2340,7 @@ it.each([1, 2])(
       screen.getAllByRole("button", { name: /思考\s*· 1 秒/ }),
     ).toHaveLength(count);
     await user.click(screen.getByRole("button", { name: "已完成 · 执行过程" }));
-    expect(
-      screen.queryByRole("button", { name: /思考\s*· 1 秒/ }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: /思考\s*· 1 秒/ })).toBeNull();
     expect(screen.getByText("已完成配置核对。")).toBeVisible();
   },
 );

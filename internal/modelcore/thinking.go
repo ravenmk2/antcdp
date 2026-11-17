@@ -3,7 +3,7 @@ package modelcore
 import "encoding/json"
 
 // ThinkingOption is a resolved request parameter set. Stored agent snapshots
-// retain the exact parameters selected when the conversation was locked.
+// retain the exact parameters selected when each run started.
 type ThinkingOption struct {
 	Key        string          `json:"key"`
 	Label      string          `json:"label"`

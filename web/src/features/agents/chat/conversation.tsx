@@ -40,7 +40,6 @@ import {
   FolderOpen,
   History,
   ListOrdered,
-  LockKeyhole,
   MessageCircleQuestion,
   Minimize2,
   PanelRight,
@@ -69,6 +68,7 @@ import { QueuePanel } from "./queue-panel";
 import { RunInspector } from "./run-inspector";
 import { SessionFiles } from "./session-files";
 import { SessionSettings } from "./session-settings";
+import { SessionModelSelection } from "./session-model-selection";
 import { SessionWorkspace } from "./session-workspace";
 import { ConversationTimeline } from "./timeline";
 import { useScrollFollow } from "./use-scroll-follow";
@@ -110,6 +110,7 @@ export function Conversation({
     [historyPending, setHistoryPending] = useState(false),
     [historyError, setHistoryError] = useState<unknown>(),
     [viewError, setViewError] = useState<unknown>();
+  const [selectionPending, setSelectionPending] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [queueExpanded, setQueueExpanded] = useState<boolean | null>(null);
   const {
@@ -928,6 +929,7 @@ export function Conversation({
                               detail.selection.model_selection_hash,
                           }}
                           disabled={
+                            selectionPending ||
                             !permissions.submit ||
                             !detail.selection.availability.available
                           }
@@ -940,21 +942,14 @@ export function Conversation({
                           settings={
                             <>
                               <ContextUsage sessionId={sessionId} />
-                              <button
-                                type="button"
-                                className="agent-composer-model"
-                                disabled={!permissions.manage}
-                                onClick={() => setPanel("settings")}
-                                title={`${detail.selection.model_name} · ${detail.selection.thinking_label}${detail.selection.locked ? " · 模型已锁定" : ""}`}
-                              >
-                                <span className="truncate">
-                                  {detail.selection.model_name} ·{" "}
-                                  {detail.selection.thinking_label}
-                                </span>
-                                {detail.selection.locked && (
-                                  <LockKeyhole className="size-3" />
-                                )}
-                              </button>
+                              <SessionModelSelection
+                                session={{
+                                  ...detail,
+                                  configuration: config,
+                                  permissions,
+                                }}
+                                onPending={setSelectionPending}
+                              />
                             </>
                           }
                           footerLeading={
