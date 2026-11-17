@@ -12,7 +12,7 @@ export function workspaceBreadcrumbs(
   workspaceTeamName?: string,
 ): Crumb[] {
   if (path === "/home") return [{ label: "工作区" }, { label: "工作台" }];
-  if (path === "/cloud-computer")
+  if (path === "/computer")
     return [{ label: "工作区", to: "/home" }, { label: "我的云电脑" }];
   if (/^\/agents\/sessions\/[1-9]\d*\/?$/.test(path))
     return [{ label: "工作台", to: "/home" }, { label: "对话" }];

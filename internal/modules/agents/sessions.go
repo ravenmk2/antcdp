@@ -253,7 +253,7 @@ func (s *Service) detail(ctx context.Context, tx identity.Tx, r Repository, st S
 	if e != nil {
 		return SessionDetail{}, e
 	}
-	cwd, e := agentCWD(agent)
+	cwd, e := sessionCWD(v)
 	if e != nil {
 		return SessionDetail{}, e
 	}

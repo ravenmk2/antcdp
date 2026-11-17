@@ -21,7 +21,7 @@ describe("History routes", () => {
       "/agents/sessions/31",
       "/agents",
       "/agent-catalog",
-      "/cloud-computer",
+      "/computer",
       "/admin/cloud-computers",
       "/admin/cloud-computers/settings",
       "/admin/cloud-computers/15",

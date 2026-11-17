@@ -175,6 +175,19 @@ type FileTransport interface {
 	PutFile(context.Context, ResourceRef, FileRequest, io.Reader) error
 }
 
+// FileStream preserves the download metadata needed to forward a single range
+// without reading the complete file. ContentLength is -1 when unknown.
+type FileStream struct {
+	Reader        io.ReadCloser
+	ContentLength int64
+	ContentRange  string
+	StatusCode    int
+}
+
+type FileStreamer interface {
+	StreamFile(context.Context, ResourceRef, FileRequest, string) (*FileStream, error)
+}
+
 // Optional backend capabilities. Unsupported volume deletion must be reported;
 // terminating an instance is never evidence that its retained volume is gone.
 type LifecycleControl interface {

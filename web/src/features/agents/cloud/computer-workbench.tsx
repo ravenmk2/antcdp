@@ -13,14 +13,15 @@ import {
   FolderPlus,
   HardDrive,
   ListTree,
+  LoaderCircle,
   MemoryStick,
   Monitor,
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { request } from "@/api/client";
+import { ApiError, request } from "@/api/client";
 import { Button, IconButton } from "@/components/button";
-import { AsyncBoundary, ErrorNotice, Notice } from "@/components/feedback";
+import { ErrorNotice, Notice } from "@/components/feedback";
 import type { CloudComputer, CloudFileEntry } from "@/types/cloud-computer";
 import { agentRoot } from "../data/agent-api";
 import { sandboxKeys, sandboxReason } from "../sandbox/shared";
@@ -38,7 +39,7 @@ export function ComputerWorkbench({
 }) {
   const cache = useQueryClient();
   const [selected, setSelected] = useState<CloudFileEntry | null>(null);
-  const [directory, setDirectory] = useState("");
+  const [directory, setDirectory] = useState("home");
   const [create, setCreate] = useState(false);
   const [remove, setRemove] = useState<CloudFileEntry | null>(null);
   const id = computer?.id || "";
@@ -59,9 +60,32 @@ export function ComputerWorkbench({
   });
   const current = workspace.data?.data || computer;
   const ready = current?.state === "ready";
+  const [visitKey] = useState(() => crypto.randomUUID());
+  const home = useQuery({
+    queryKey: ["cloud-home", id, visitKey],
+    queryFn: async () => {
+      const result = await request<{ status: string; error_code?: string }>(
+        `${agentRoot}/cloud-computers/${id}/home`,
+        { method: "POST", body: {}, idempotencyKey: visitKey },
+      );
+      if (result.data.status !== "succeeded")
+        throw new ApiError(
+          result.data.error_code || "WORKSPACE_RECONCILING",
+          "主目录准备尚未完成，请重试核实结果。",
+        );
+      return result;
+    },
+    enabled: Boolean(ready),
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchInterval: (q) => (homeBusy(q.state.error) ? 3000 : false),
+  });
+  const homeReady = home.isSuccess;
   const targetDirectory = useQuery({
     ...directoryQuery(id, directory, 1),
-    enabled: Boolean(ready),
+    enabled: Boolean(ready && homeReady),
   });
   const reading =
     useIsFetching({ queryKey: [...sandboxKeys, "tree", id] }) +
@@ -72,7 +96,12 @@ export function ComputerWorkbench({
     current?.unknown_executions,
   );
   const unavailable =
-    !ready || busy || Boolean(reading) || workspace.isError || !workspace.data;
+    !ready ||
+    !homeReady ||
+    busy ||
+    Boolean(reading) ||
+    workspace.isError ||
+    !workspace.data;
   const refresh = () => {
     void cache.invalidateQueries({ queryKey: sandboxKeys });
   };
@@ -123,7 +152,6 @@ export function ComputerWorkbench({
         </header>
         <div className="cloud-explorer-location">
           <HardDrive className="size-4" />
-          <span className="shrink-0">当前目录</span>
           <span
             className="ml-auto truncate font-mono"
             title={`/data${directory && `/${directory}`}`}
@@ -133,19 +161,41 @@ export function ComputerWorkbench({
         </div>
         <div className="cloud-tree-scroll">
           {ready ? (
-            <Directory
-              key={id}
-              computerId={id}
-              path=""
-              name="data"
-              depth={0}
-              selected={selected}
-              directory={directory}
-              onDirectory={setDirectory}
-              onSelect={setSelected}
-              onRemove={setRemove}
-              disabled={unavailable}
-            />
+            <>
+              {home.isError && (
+                <div className="p-3 text-xs">
+                  {homeBusy(home.error) ? (
+                    <Notice>电脑忙碌，空闲后自动准备主目录。</Notice>
+                  ) : (
+                    <>
+                      <ErrorNotice error={home.error} />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => void home.refetch()}
+                      >
+                        重试准备主目录
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+              <Directory
+                key={id}
+                computerId={id}
+                path=""
+                name="data"
+                depth={0}
+                selected={selected}
+                directory={directory}
+                onDirectory={setDirectory}
+                onSelect={setSelected}
+                onRemove={setRemove}
+                disabled={unavailable}
+                prepared={homeReady}
+                preparing={home.isFetching || homeBusy(home.error)}
+              />
+            </>
           ) : (
             <div className="p-5 text-sm leading-7 text-muted">
               电脑就绪后，可在这里浏览工作文件。
@@ -221,7 +271,16 @@ export function ComputerWorkbench({
   );
 }
 
+function homeBusy(error: unknown) {
+  return (
+    error instanceof ApiError &&
+    ["CLOUD_COMPUTER_BUSY", "WORKSPACE_BUSY"].includes(error.code)
+  );
+}
+
 type DirectoryProps = {
+  prepared: boolean;
+  preparing?: boolean;
   computerId: string;
   path: string;
   name: string;
@@ -257,13 +316,15 @@ function Directory(props: DirectoryProps) {
     onDirectory,
     onSelect,
     onRemove,
+    prepared,
+    preparing,
   } = props;
-  const [expanded, setExpanded] = useState(depth === 0);
+  const [expanded, setExpanded] = useState(depth === 0 || path === "home");
   const [page, setPage] = useState(1);
   const cache = useQueryClient();
   const query = useQuery({
     ...directoryQuery(computerId, path, page),
-    enabled: expanded,
+    enabled: expanded && prepared,
     retry: false,
     refetchOnWindowFocus: false,
   });
@@ -300,6 +361,7 @@ function Directory(props: DirectoryProps) {
         data-active={directory === path}
         style={{ paddingLeft: 12 + depth * 16 }}
         aria-expanded={expanded}
+        aria-busy={query.isFetching || (depth === 0 && preparing)}
         title={`/data${path && `/${path}`}`}
         onClick={() => {
           setExpanded(!expanded);
@@ -313,15 +375,33 @@ function Directory(props: DirectoryProps) {
           <Folder className="cloud-folder-icon" />
         )}
         <span>{name}</span>
+        {(query.isFetching || (depth === 0 && preparing)) && (
+          <LoaderCircle
+            className="animate-spin"
+            aria-label={`正在加载 ${name}`}
+          />
+        )}
       </button>
       {expanded && (
         <div role="group" aria-label={`${name} 目录内容`}>
-          <AsyncBoundary
-            loading={query.isPending}
-            error={query.error}
-            onRetry={() => query.refetch()}
-          >
-            {entries.map((entry) =>
+          {query.isError && (
+            <div className="px-3 py-1 text-xs">
+              <ErrorNotice error={query.error} />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => void query.refetch()}
+              >
+                重试读取 {name}
+              </Button>
+            </div>
+          )}
+          {depth === 0 && prepared && (
+            <Directory {...props} path="home" name="home" depth={1} />
+          )}
+          {entries
+            .filter((entry) => depth !== 0 || entry.path !== "home")
+            .map((entry) =>
               entry.kind === "directory" ? (
                 <div className="cloud-tree-directory-row" key={entry.path}>
                   <Directory
@@ -372,36 +452,35 @@ function Directory(props: DirectoryProps) {
                 </div>
               ),
             )}
-            {!entries.length && (
-              <p
-                className="cloud-tree-empty"
-                style={{ paddingLeft: 30 + depth * 16 }}
+          {query.isSuccess && !entries.length && depth !== 0 && (
+            <p
+              className="cloud-tree-empty"
+              style={{ paddingLeft: 30 + depth * 16 }}
+            >
+              空目录
+            </p>
+          )}
+          {(page > 1 || more) && (
+            <div className="cloud-tree-pages">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={page === 1 || query.isFetching}
+                onClick={() => setPage(page - 1)}
               >
-                空目录
-              </p>
-            )}
-            {(page > 1 || more) && (
-              <div className="cloud-tree-pages">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={page === 1 || query.isFetching}
-                  onClick={() => setPage(page - 1)}
-                >
-                  上一页
-                </Button>
-                <span>{page}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!more || query.isFetching}
-                  onClick={() => setPage(page + 1)}
-                >
-                  下一页
-                </Button>
-              </div>
-            )}
-          </AsyncBoundary>
+                上一页
+              </Button>
+              <span>{page}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={!more || query.isFetching}
+                onClick={() => setPage(page + 1)}
+              >
+                下一页
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -433,7 +512,7 @@ function ComputerInfo({ computer }: { computer: CloudComputer }) {
         </div>
         <h3>我的专属云电脑</h3>
         <CloudStatus state={computer.state} />
-        <p>交互会话共享 · 项目目录独立</p>
+        <p>交互会话共享 · 会话目录独立</p>
       </div>
       <section className="cloud-info-section">
         <h3>资源配置</h3>

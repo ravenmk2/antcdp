@@ -78,7 +78,7 @@ export const workspaceRoutes: RouteObject[] = [
     children: [
       { index: true, element: <Navigate to="/home" replace /> },
       { path: "home", element: <HomePage /> },
-      { path: "cloud-computer", element: <PersonalCloudComputerPage /> },
+      { path: "computer", element: <PersonalCloudComputerPage /> },
       { path: "agents", element: <ConversationsPage /> },
       { path: "agent-catalog", element: <AgentDirectory /> },
       { path: "agents/sessions/:sessionId", element: <AgentSessionPage /> },

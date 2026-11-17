@@ -19,18 +19,17 @@ const MaxWriteBytes = 32 << 10
 const MaxFileBytes int64 = 100 << 20
 const MaxWalkEntries = 10000
 
-// ValidCWD accepts only canonical default directories derived from Agent scope.
+// ValidCWD accepts the computer home and canonical root-session directories.
 func ValidCWD(cwd string) bool {
-	if cwd == "/data/platform" {
+	if cwd == "/data/home" {
 		return true
 	}
-	for _, prefix := range []string{"/data/teams/", "/data/projects/"} {
-		if value, ok := strings.CutPrefix(cwd, prefix); ok {
-			id, err := strconv.ParseUint(value, 10, 64)
-			return err == nil && id != 0 && strconv.FormatUint(id, 10) == value
-		}
+	value, ok := strings.CutPrefix(cwd, "/data/sessions/")
+	if !ok {
+		return false
 	}
-	return false
+	id, err := strconv.ParseUint(value, 10, 64)
+	return err == nil && id != 0 && strconv.FormatUint(id, 10) == value
 }
 
 // Paths are relative to the Agent workspace mount. Provider APIs govern IO semantics.

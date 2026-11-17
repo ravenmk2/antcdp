@@ -37,7 +37,7 @@ func (s *CloudService) workspaceRequest(ctx context.Context, access *SandboxAcce
 
 func nativeReadOnly(q workspace.Request) bool {
 	switch q.Operation {
-	case "list", "read", "glob", "grep", "verify_native", "download":
+	case "list", "read", "glob", "grep", "verify_native", "download", "directory_exists":
 		return true
 	}
 	return false
@@ -183,6 +183,23 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspace.Request
 			err = f.MakeDirectory(ctx, a.Resource, "/data/agents/"+q.AgentID+"/skills", 755)
 		}
 		value = map[string]any{"cwd": cwd}
+	case "directory_exists", "ensure_home":
+		if name != "/data/home" {
+			return workspace.Response{}, integrity()
+		}
+		info, statErr := f.StatFile(ctx, a.Resource, name)
+		exists := statErr == nil
+		if exists && info.Kind != "directory" {
+			return workspace.Response{}, httpx.E(409, "WORKSPACE_NOT_DIRECTORY", "/data/home 已被非目录文件占用")
+		}
+		if statErr != nil && !nativeMissing(statErr) {
+			return workspace.Response{}, statErr
+		}
+		if !exists && q.Operation == "ensure_home" {
+			err = f.MakeDirectory(ctx, a.Resource, name, 755)
+			changed = err == nil
+		}
+		value = map[string]any{"exists": exists || changed}
 	case "verify_native":
 		err = a.Provider.Health(ctx, &a.Resource)
 		if err == nil {

@@ -9,7 +9,7 @@ import { AgentRuntimeProvider } from "@/features/agents/data/agent-runtime";
 import { sandboxKeys } from "@/features/agents/sandbox/shared";
 import { WorkspaceFiles } from "@/features/agents/sandbox/workspace-files";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -55,6 +55,8 @@ beforeEach(() => {
     )
       return response(computer);
     if (path === "/agents/cloud-computer") return response(null);
+    if (path === "/agents/cloud-computers/9/home")
+      return response({ status: "succeeded" });
     if (path.includes("/entries?"))
       return {
         ...response([
@@ -96,7 +98,7 @@ function mount(entry: string) {
             path: "/admin/cloud-computers/:computerId",
             element: <CloudComputerDetailPage />,
           },
-          { path: "/cloud-computer", element: <PersonalCloudComputerPage /> },
+          { path: "/computer", element: <PersonalCloudComputerPage /> },
           { path: "/files", element: <WorkspaceFiles computerId="9" /> },
         ],
       },
@@ -445,7 +447,7 @@ it("shows confirmed changed paths when file maintenance partially fails", async 
   ).toBeInTheDocument();
 });
 it("does not allocate a sandbox when visiting an empty personal environment", async () => {
-  mount("/cloud-computer");
+  mount("/computer");
   await screen.findByText("电脑将在首次使用时创建");
   expect(
     mocked.mock.calls.every(
@@ -460,33 +462,35 @@ it("browses nested personal directories and keeps environment details collapsed 
       const parent = new URLSearchParams(path.split("?")[1]).get("path");
       return {
         ...response(
-          parent
-            ? [
-                {
-                  name: "report.md",
-                  path: "reports/report.md",
-                  kind: "file",
-                  size_bytes: "100",
-                  modified_at: null,
-                  entry_token: "v1",
-                },
-              ]
-            : [
-                {
-                  name: "reports",
-                  path: "reports",
-                  kind: "directory",
-                  size_bytes: null,
-                  modified_at: null,
-                  entry_token: "v1",
-                },
-              ],
+          parent === "home"
+            ? []
+            : parent
+              ? [
+                  {
+                    name: "report.md",
+                    path: "reports/report.md",
+                    kind: "file",
+                    size_bytes: "100",
+                    modified_at: null,
+                    entry_token: "v1",
+                  },
+                ]
+              : [
+                  {
+                    name: "reports",
+                    path: "reports",
+                    kind: "directory",
+                    size_bytes: null,
+                    modified_at: null,
+                    entry_token: "v1",
+                  },
+                ],
         ),
         pagination: { total: 1 },
       };
     }
   };
-  const { user } = mount("/cloud-computer");
+  const { user } = mount("/computer");
   const details = (await screen.findByText("环境与存储")).closest("details");
   expect(details).not.toHaveAttribute("open");
   await user.click(screen.getByText("环境与存储"));
@@ -507,7 +511,71 @@ it("prevents directory creation after a personal directory read fails", async ()
     if (path.includes("/entries?"))
       throw new ApiError("READ_FAILED", "目录不可读取", 503);
   };
-  mount("/cloud-computer");
-  await screen.findByText("目录不可读取");
+  mount("/computer");
+  await screen.findAllByText("目录不可读取");
   expect(screen.getByRole("button", { name: "新建目录" })).toBeDisabled();
+});
+
+it("prepares home on each visit and displays directory loading in its own row", async () => {
+  let finish: (() => void) | undefined;
+  let waiting = true;
+  override = async (path) => {
+    if (path === "/agents/cloud-computer") return response(computer);
+    if (path.includes("/entries?")) {
+      const parent = new URLSearchParams(path.split("?")[1]).get("path");
+      if (parent === "home" && waiting)
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      return {
+        ...response([]),
+        pagination: { total: parent === "" ? 101 : 0 },
+      };
+    }
+  };
+  const first = mount("/computer");
+  await waitFor(() => expect(finish).toBeTypeOf("function"));
+  const folder = screen.getByRole("button", { name: /home/ });
+  expect(folder).toHaveAttribute("aria-expanded", "true");
+  expect(folder).toHaveAttribute("aria-busy", "true");
+  expect(screen.getByLabelText("正在加载 home").closest("button")).toBe(folder);
+  expect(screen.getByText("/data/home")).toBeVisible();
+  expect(screen.queryByText("正在加载…")).not.toBeInTheDocument();
+  expect(screen.queryByText("空目录")).not.toBeInTheDocument();
+  waiting = false;
+  await act(async () => finish!());
+  await screen.findByText("空目录");
+  expect(folder).toHaveAttribute("aria-busy", "false");
+  await first.user.click(screen.getByRole("button", { name: "下一页" }));
+  expect(screen.getByRole("button", { name: "home" })).toBeVisible();
+  cleanup();
+  mount("/computer");
+  await screen.findByRole("button", { name: "home" });
+  const preparations = mocked.mock.calls.filter(([path]) =>
+    path.endsWith("/9/home"),
+  );
+  expect(preparations).toHaveLength(2);
+  expect(preparations[0][1]?.idempotencyKey).not.toBe(
+    preparations[1][1]?.idempotencyKey,
+  );
+});
+
+it("waits for a busy computer before retrying home preparation", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  let busy = true;
+  override = async (path) => {
+    if (path === "/agents/cloud-computer") return response(computer);
+    if (path.endsWith("/9/home") && busy)
+      throw new ApiError("CLOUD_COMPUTER_BUSY", "busy", 409);
+    if (path.includes("/entries?"))
+      return { ...response([]), pagination: { total: 0 } };
+  };
+  mount("/computer");
+  await screen.findByText("电脑忙碌，空闲后自动准备主目录。");
+  expect(mocked.mock.calls.some(([path]) => path.includes("/entries?"))).toBe(
+    false,
+  );
+  busy = false;
+  await act(async () => vi.advanceTimersByTimeAsync(3001));
+  await screen.findByRole("button", { name: "home" });
 });

@@ -3,41 +3,79 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
-func (s *CloudService) OpenWorkspaceFile(ctx context.Context, raw string, id uint64, name string) (*Result, *WorkspaceFileContent, error) {
+func (s *CloudService) OpenWorkspaceFile(ctx context.Context, raw string, id uint64, name, byteRange string) (*Result, *WorkspaceFileContent, error) {
 	name, err := workspacePath(name, false)
 	if err != nil {
 		return nil, nil, err
 	}
-	if s.Host.Files == nil {
-		return nil, nil, unavailable()
+	if !sandboxcore.ValidFileRange(byteRange) {
+		return nil, nil, httpx.E(416, "FILE_RANGE_INVALID", "文件范围无效")
 	}
-	result, op, access, err := s.beginWorkspaceRead(ctx, raw, id, "workspace_download", workspaceFileIntent{Path: name})
+	var access *SandboxAccess
+	var connection CloudConnection
+	result, err := s.cloudAccess(ctx, raw, false, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository, auth *identity.Auth, out *Result) error {
+		computer, e := repo.Computer(id, false)
+		if e != nil {
+			return e
+		}
+		if e = workspaceContentAccess(computer, auth); e != nil {
+			return e
+		}
+		provider, e := repo.Connection(false)
+		if e != nil {
+			return e
+		}
+		access, connection, e = s.accessFromRows(provider, computer)
+		if e == nil {
+			out.Tag = s.tag("computer", id, computer.RowVersion)
+		}
+		return e
+	})
 	if err != nil {
 		return result, nil, err
 	}
-	ctx, cancel := context.WithDeadline(ctx, op.DeadlineAt)
-	defer cancel()
-	key, facts, err := s.copyWorkspaceSnapshot(ctx, access, op.ID, name)
-	if finishErr := s.finishWorkspaceOperation(ctx, op.ID, access, nil, err); err == nil {
-		err = finishErr
-	}
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	access.Provider, err = s.openProvider(ctx, connection)
 	if err != nil {
+		cancel()
 		return result, nil, err
 	}
-	reader, err := s.Host.Files.Open(key)
+	provider, ok := access.Provider.(sandboxcore.FileStreamer)
+	if !ok {
+		cancel()
+		return result, nil, unavailable()
+	}
+	remote, err := nativePath(name)
 	if err != nil {
-		_ = s.deleteWorkspaceDownload(ctx, op.ID, key)
+		cancel()
 		return result, nil, err
 	}
-	lease := &leasedReader{ReadSeekCloser: reader, closed: func() { _ = s.deleteWorkspaceDownload(context.WithoutCancel(ctx), op.ID, key) }}
-	return result, &WorkspaceFileContent{Reader: lease, Filename: downloadFilename(name), Size: facts.Size}, nil
+	stream, err := provider.StreamFile(ctx, access.Resource, sandboxcore.FileRequest{Path: remote, MaxBytes: workspace.MaxFileBytes}, byteRange)
+	if err != nil {
+		cancel()
+		return result, nil, err
+	}
+	stream.Reader = &workspaceDownloadReader{ReadCloser: stream.Reader, cancel: cancel}
+	return result, &WorkspaceFileContent{FileStream: stream, Filename: downloadFilename(name)}, nil
+}
+
+type workspaceDownloadReader struct {
+	io.ReadCloser
+	cancel context.CancelFunc
+}
+
+func (r *workspaceDownloadReader) Close() error {
+	r.cancel()
+	return r.ReadCloser.Close()
 }
 
 func (s *CloudService) deleteWorkspaceDownload(ctx context.Context, id uint64, key string) error {

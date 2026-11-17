@@ -68,7 +68,7 @@ func (s *CloudService) getReceipt(ctx context.Context, raw, key, command, scope 
 }
 
 func isWorkspaceMutationReceipt(receipt *Receipt) bool {
-	return receipt.OperationID != nil && (receipt.Command == "workspace.mkdir" || receipt.Command == "workspace.remove")
+	return receipt.OperationID != nil && (receipt.Command == "workspace.mkdir" || receipt.Command == "workspace.remove" || receipt.Command == "workspace.ensure_home")
 }
 
 func workspaceReceiptOperation(repo CloudRepository, receipt *Receipt) (*CloudOperationRow, error) {

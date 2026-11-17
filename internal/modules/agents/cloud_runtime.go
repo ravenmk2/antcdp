@@ -170,6 +170,20 @@ func (s *CloudService) accessRows(repo CloudRepository, computerID uint64, lease
 	if e != nil {
 		return nil, CloudConnection{}, e
 	}
+	access, c, e := s.accessFromRows(p, w)
+	if e != nil {
+		return nil, c, e
+	}
+	if lease != nil {
+		if lease.ComputerID != w.ID || lease.State != "active" || lease.ReleasedAt != nil || lease.BackendGeneration != w.BackendGeneration || lease.InstanceID == nil || *lease.InstanceID != w.InstanceID || lease.StorageGeneration != w.StorageGeneration {
+			return nil, c, httpx.E(409, "CLOUD_LEASE_FENCED", "云电脑执行占用已失效")
+		}
+		access.BindingID, access.BindingFence = lease.RootRunID, lease.FenceVersion
+	}
+	return access, c, nil
+}
+
+func (s *CloudService) accessFromRows(p *SandboxConnectionRow, w *CloudComputerRow) (*SandboxAccess, CloudConnection, error) {
 	if p == nil || p.MaintenanceState != "normal" || w == nil || w.State != "ready" || w.DeletedAt != nil || w.BackendGeneration != p.BackendGeneration {
 		return nil, CloudConnection{}, httpx.E(409, "CLOUD_NOT_READY", "云电脑暂不可用")
 	}
@@ -181,13 +195,7 @@ func (s *CloudService) accessRows(repo CloudRepository, computerID uint64, lease
 	if e != nil {
 		return nil, c, e
 	}
-	access := &SandboxAccess{Resource: ref, ComputerID: w.ID, BackendGeneration: w.BackendGeneration, InstanceID: w.InstanceID, StorageGeneration: w.StorageGeneration, CWD: "/data/platform"}
-	if lease != nil {
-		if lease.ComputerID != w.ID || lease.State != "active" || lease.ReleasedAt != nil || lease.BackendGeneration != w.BackendGeneration || lease.InstanceID == nil || *lease.InstanceID != w.InstanceID || lease.StorageGeneration != w.StorageGeneration {
-			return nil, c, httpx.E(409, "CLOUD_LEASE_FENCED", "云电脑执行占用已失效")
-		}
-		access.BindingID, access.BindingFence = lease.RootRunID, lease.FenceVersion
-	}
+	access := &SandboxAccess{Resource: ref, ComputerID: w.ID, BackendGeneration: w.BackendGeneration, InstanceID: w.InstanceID, StorageGeneration: w.StorageGeneration, CWD: "/data/home"}
 	return access, c, nil
 }
 

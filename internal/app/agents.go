@@ -63,7 +63,7 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 		}
 		return client.Open(ctx)
 	}
-	sandboxes := &agents.CloudService{Host: service, Cipher: installer.SandboxSecret, ControlKey: installer.SandboxControlKey, InstallationID: installer.SandboxInstallationID, Epoch: epoch, Factory: opensandbox.Factory{}, ProtectedTargets: func() ([]string, error) { return agentSandboxProtectedTargets(installer) }}
+	sandboxes := &agents.CloudService{Host: service, Cipher: installer.SandboxSecret, ControlKey: installer.SandboxControlKey, InstallationID: installer.SandboxInstallationID, Epoch: epoch, Factory: opensandbox.NewFactory(), ProtectedTargets: func() ([]string, error) { return agentSandboxProtectedTargets(installer) }}
 	sandboxes.PrepareWorkspace = sandboxes.InitializeComputer
 	sandboxes.VerifyEnvironment = sandboxes.VerifyWorkspaceEnvironment
 	sandboxes.ExecutionReconciler = sandboxes.ReconcileExecutions

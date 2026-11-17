@@ -353,8 +353,8 @@ func agentScopeLifecycle(t *testing.T, f *agentIntegrationFixture, sourceAgent u
 		t.Fatal(err)
 	}
 	session := conversation.Data.(a.SessionDetail)
-	if session.State.Workspace.CWD != "/data/projects/"+strconv.FormatUint(scope.ID, 10) {
-		t.Fatal("project agent did not use its scope directory", session.State.Workspace.CWD)
+	if session.State.Workspace.CWD != "/data/sessions/"+strconv.FormatUint(session.Configuration.ID, 10) {
+		t.Fatal("project agent did not use its session directory", session.State.Workspace.CWD)
 	}
 	_, err = svc.GetSession(ctx, admin, session.Configuration.ID)
 	modelsExpectCode(t, err, "NOT_FOUND")

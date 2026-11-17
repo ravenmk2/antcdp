@@ -134,7 +134,7 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 	if err != nil {
 		return nil, err
 	}
-	cwd, err := agentCWD(agent)
+	cwd, err := sessionCWD(session)
 	if err != nil {
 		return nil, err
 	}

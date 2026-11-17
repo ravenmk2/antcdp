@@ -251,7 +251,7 @@ it("shows five favorites and ten filtered sessions, with independent expansion",
   );
 });
 
-it("keeps an unvisited conversation entry blank and restores the last agent and session per user", async () => {
+it("opens a new conversation for the last selected agent per user without restoring its session", async () => {
   const router = mount("/agents");
   expect(screen.queryByRole("heading")).not.toBeInTheDocument();
   expect(mock).not.toHaveBeenCalled();
@@ -266,8 +266,12 @@ it("keeps an unvisited conversation entry blank and restores the last agent and 
     JSON.stringify({ agentId: "1", sessionId: "31" }),
   );
   await act(() => router.navigate("/agents"));
+  expect(await screen.findByRole("region", { name: "新对话" })).toBeVisible();
+  expect(router.state.location.pathname).toBe("/agents");
+  expect(router.state.location.search).toBe("?agent=1");
+  expect(screen.queryByText("恢复的会话")).not.toBeInTheDocument();
+  await act(() => router.navigate("/agents/sessions/31"));
   await screen.findByText("恢复的会话");
-  expect(router.state.location.pathname).toBe("/agents/sessions/31");
   localStorage.setItem(
     "antcdp.workspace.last-conversation:1",
     JSON.stringify({ agentId: "1" }),

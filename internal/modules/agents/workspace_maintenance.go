@@ -246,6 +246,9 @@ func (s *CloudService) executeWorkspaceMutation(ctx context.Context, c *workspac
 
 func mutationRequests(kind string, intent workspaceFileIntent) []workspace.Request {
 	if kind == "workspace_mkdir" {
+		if intent.EnsureHome {
+			return []workspace.Request{{Operation: "ensure_home", Path: intent.Path}}
+		}
 		return []workspace.Request{{Operation: "mkdir", Path: intent.Path}}
 	}
 	requests := make([]workspace.Request, 0, len(intent.Items))
@@ -309,7 +312,7 @@ func recoveredWorkspaceResult(op *CloudOperationRow, observation workspaceOperat
 			cause = httpx.E(409, "WORKSPACE_RESULT_UNAVAILABLE", "操作已停止，但部分结果无法恢复，请重新检查文件")
 			continue
 		}
-		if execution.Response.Changed && (execution.Request.Operation == "mkdir" || execution.Request.Operation == "remove") {
+		if execution.Response.Changed && (execution.Request.Operation == "mkdir" || execution.Request.Operation == "ensure_home" || execution.Request.Operation == "remove") {
 			affected = append(affected, execution.Request.Path)
 		}
 		if !execution.Response.OK {

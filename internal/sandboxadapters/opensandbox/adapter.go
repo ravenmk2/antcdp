@@ -30,19 +30,24 @@ const (
 	execdPort       = 44772
 )
 
-type Factory struct{}
+type Factory struct{ endpoints *endpointCache }
+
+// NewFactory shares validated download addresses across short-lived providers.
+func NewFactory() Factory { return Factory{endpoints: newEndpointCache()} }
 
 var _ sandboxcore.Factory = Factory{}
 var _ sandboxcore.Provider = (*Provider)(nil)
 
 type Provider struct {
-	connection sandboxcore.Connection
-	base       *url.URL
-	lifecycle  *sdk.LifecycleClient
-	http       *http.Client
+	connection    sandboxcore.Connection
+	base          *url.URL
+	lifecycle     *sdk.LifecycleClient
+	http          *http.Client
+	endpoints     *endpointCache
+	connectionKey [32]byte
 }
 
-func (Factory) Open(ctx context.Context, c sandboxcore.Connection) (sandboxcore.Provider, error) {
+func (f Factory) Open(ctx context.Context, c sandboxcore.Connection) (sandboxcore.Provider, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, remoteError(err, false)
 	}
@@ -69,7 +74,7 @@ func (Factory) Open(ctx context.Context, c sandboxcore.Connection) (sandboxcore.
 	client := &http.Client{Transport: boundedTransport{base: transport}, Timeout: c.OperationTimeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	c.ControlKey = append([]byte(nil), c.ControlKey...)
-	return &Provider{connection: c, base: base, http: client, lifecycle: sdk.NewLifecycleClientWithCache(strings.TrimRight(base.String(), "/")+"/v1", c.APIKey, nil, sdk.WithHTTPClient(client))}, nil
+	return &Provider{connection: c, base: base, http: client, endpoints: f.endpoints, connectionKey: endpointConnectionKey(c), lifecycle: sdk.NewLifecycleClientWithCache(strings.TrimRight(base.String(), "/")+"/v1", c.APIKey, nil, sdk.WithHTTPClient(client))}, nil
 }
 
 func connectionURL(raw string) (*url.URL, error) {
@@ -138,12 +143,17 @@ func (p *Provider) Inspect(ctx context.Context, ref sandboxcore.ResourceRef) (sa
 	}
 	result, err := p.lifecycle.GetSandbox(ctx, ref.RemoteID)
 	if statusCode(err) == http.StatusNotFound {
+		p.endpoints.remove(p.endpointKey(ref), nil)
 		return sandboxcore.Observation{Ref: ref, State: "absent"}, nil
 	}
 	if err != nil {
 		return sandboxcore.Observation{Ref: ref, State: "unknown"}, remoteError(err, false)
 	}
-	return observe(ref, result)
+	observed, err := observe(ref, result)
+	if err != nil || observed.State != "ready" {
+		p.endpoints.remove(p.endpointKey(ref), nil)
+	}
+	return observed, err
 }
 
 func (p *Provider) Find(ctx context.Context, owner sandboxcore.Ownership, page, size int) (sandboxcore.ResourcePage, error) {
@@ -180,6 +190,7 @@ func (p *Provider) Terminate(ctx context.Context, ref sandboxcore.ResourceRef) e
 	if observed.State == "absent" || observed.State == "terminated" {
 		return nil
 	}
+	p.endpoints.remove(p.endpointKey(ref), nil)
 	return remoteError(p.lifecycle.DeleteSandbox(ctx, ref.RemoteID), true)
 }
 
@@ -194,6 +205,7 @@ func (p *Provider) Pause(ctx context.Context, ref sandboxcore.ResourceRef) error
 	if actual.State != "ready" {
 		return failure("SANDBOX_NOT_READY", false)
 	}
+	p.endpoints.remove(p.endpointKey(ref), nil)
 	return remoteError(p.lifecycle.PauseSandbox(ctx, ref.RemoteID), true)
 }
 func (p *Provider) Resume(ctx context.Context, ref sandboxcore.ResourceRef) error {
@@ -207,6 +219,7 @@ func (p *Provider) Resume(ctx context.Context, ref sandboxcore.ResourceRef) erro
 	if actual.State != "paused" {
 		return failure("SANDBOX_NOT_PAUSED", false)
 	}
+	p.endpoints.remove(p.endpointKey(ref), nil)
 	return remoteError(p.lifecycle.ResumeSandbox(ctx, ref.RemoteID), true)
 }
 
@@ -281,7 +294,9 @@ func (p *Provider) dataEndpoint(ctx context.Context, ref sandboxcore.ResourceRef
 	if proxy {
 		headers["OPEN-SANDBOX-API-KEY"] = p.connection.APIKey
 	}
-	return &sdk.Endpoint{Endpoint: u.String(), Headers: headers}, nil
+	validated := &sdk.Endpoint{Endpoint: u.String(), Headers: headers}
+	p.endpoints.put(p.endpointKey(ref), validated)
+	return validated, nil
 }
 
 // This versioned domain and ownership tuple must remain stable across process

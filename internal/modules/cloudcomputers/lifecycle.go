@@ -236,7 +236,7 @@ func (s *Service) provisionCloud(ctx context.Context, c *cloudClaim, p sandboxco
 	if actual.ExpiresAt != nil {
 		return &sandboxcore.Error{Code: "CLOUD_PERSISTENT_LIFETIME_UNSUPPORTED"}
 	}
-	access := &Access{Provider: p, Resource: actual.Ref, ComputerID: c.Computer.ID, BackendGeneration: c.Computer.BackendGeneration, InstanceID: c.Computer.InstanceID, StorageGeneration: c.Computer.StorageGeneration, OperationID: c.Operation.ID, OperationFence: c.Operation.FenceVersion, CWD: "/data/platform"}
+	access := &Access{Provider: p, Resource: actual.Ref, ComputerID: c.Computer.ID, BackendGeneration: c.Computer.BackendGeneration, InstanceID: c.Computer.InstanceID, StorageGeneration: c.Computer.StorageGeneration, OperationID: c.Operation.ID, OperationFence: c.Operation.FenceVersion, CWD: "/data/home"}
 	if s.VerifyEnvironment == nil || s.PrepareWorkspace == nil {
 		return unavailable()
 	}

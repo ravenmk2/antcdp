@@ -3,7 +3,7 @@ const validId = (value: unknown): value is string =>
   typeof value === "string" && /^[1-9]\d*$/.test(value);
 const key = (userId: string) => `antcdp.workspace.last-conversation:${userId}`;
 
-export function lastConversationPath(userId: string): string | null {
+export function lastAgentConversationPath(userId: string): string | null {
   try {
     const value: unknown = JSON.parse(
       localStorage.getItem(key(userId)) || "null",
@@ -15,8 +15,6 @@ export function lastConversationPath(userId: string): string | null {
       !validId(value.agentId)
     )
       return null;
-    if ("sessionId" in value && validId(value.sessionId))
-      return `/agents/sessions/${value.sessionId}`;
     return `/agents?agent=${value.agentId}`;
   } catch {
     return null;

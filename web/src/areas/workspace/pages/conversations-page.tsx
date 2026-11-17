@@ -1,5 +1,5 @@
 import { useSession } from "@/app/auth";
-import { lastConversationPath } from "./conversation-memory";
+import { lastAgentConversationPath } from "./conversation-memory";
 import { useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router";
 import { ArrowUpRight, Bot, Search, Star } from "lucide-react";
@@ -26,7 +26,7 @@ export function ConversationsPage() {
 }
 
 function RestoreConversation({ userId }: { userId: string }) {
-  const path = lastConversationPath(userId);
+  const path = lastAgentConversationPath(userId);
   return path ? <Navigate to={path} replace /> : null;
 }
 

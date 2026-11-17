@@ -2,8 +2,10 @@ package opensandbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"path"
 	"strings"
 
@@ -37,12 +39,10 @@ func (p *Provider) OpenFile(ctx context.Context, ref sandboxcore.ResourceRef, f 
 	if err := validateFile(f); err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(ctx, p.connection.OperationTimeout)
-	client, err := p.fileClient(ctx, ref, f)
-	if err != nil {
-		cancel()
+	if err := validateRef(ref); err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, p.connection.OperationTimeout)
 	byteRange := ""
 	if f.Offset > 0 || f.Length > 0 {
 		byteRange = fmt.Sprintf("bytes=%d-", f.Offset)
@@ -50,12 +50,70 @@ func (p *Provider) OpenFile(ctx context.Context, ref sandboxcore.ResourceRef, f 
 			byteRange += fmt.Sprint(f.Offset + f.Length - 1)
 		}
 	}
-	reader, err := client.DownloadFile(ctx, f.Path, byteRange)
+	stream, err := p.openDownload(ctx, ref, func(endpoint *sdk.Endpoint) (*sandboxcore.FileStream, error) {
+		reader, e := p.downloadFile(ctx, endpoint, f, byteRange)
+		if e != nil {
+			return nil, e
+		}
+		return &sandboxcore.FileStream{Reader: reader, ContentLength: -1, StatusCode: 200}, nil
+	})
 	if err != nil {
 		cancel()
+		return nil, err
+	}
+	return &limitedReadCloser{Reader: &boundedReader{source: stream.Reader, remaining: f.MaxBytes}, closer: stream.Reader, cancel: cancel}, nil
+}
+
+func (p *Provider) openDownload(ctx context.Context, ref sandboxcore.ResourceRef, download func(*sdk.Endpoint) (*sandboxcore.FileStream, error)) (*sandboxcore.FileStream, error) {
+	endpoint := p.endpoints.get(p.endpointKey(ref))
+	cached := endpoint != nil
+	var err error
+	if endpoint == nil {
+		endpoint, err = p.dataEndpoint(ctx, ref)
+	}
+	if err != nil {
+		return nil, err
+	}
+	stream, err := download(endpoint)
+	// Only a failed cached route is refreshed. File errors, authentication errors
+	// and failures after reading starts must not cause another download.
+	if cached && ctx.Err() == nil && p.staleDownloadEndpoint(err) {
+		p.endpoints.remove(p.endpointKey(ref), endpoint)
+		endpoint, err = p.dataEndpoint(ctx, ref)
+		if err == nil {
+			stream, err = download(endpoint)
+			if p.staleDownloadEndpoint(err) {
+				p.endpoints.remove(p.endpointKey(ref), endpoint)
+			}
+		}
+	}
+	if err != nil {
 		return nil, remoteError(err, false)
 	}
-	return &limitedReadCloser{Reader: &boundedReader{source: reader, remaining: f.MaxBytes}, closer: reader, cancel: cancel}, nil
+	return stream, nil
+}
+
+func (p *Provider) downloadFile(ctx context.Context, endpoint *sdk.Endpoint, f sandboxcore.FileRequest, byteRange string) (io.ReadCloser, error) {
+	client := sdk.NewExecdClient(endpoint.Endpoint, "", sdk.WithHTTPClient(p.http), sdk.WithHeaders(endpoint.Headers), sdk.WithRetry(sdk.RetryConfig{WakeRetryEnabled: sdk.WakeRetryDisabled()}))
+	var files sdk.IdentityFilesystem = client
+	if f.UID != nil {
+		identity, err := client.FilesWithIdentity(*f.UID, *f.GID)
+		if err != nil {
+			return nil, failure("SANDBOX_FILE_IDENTITY_UNSUPPORTED", false)
+		}
+		files = identity
+	}
+	return files.DownloadFile(ctx, f.Path, byteRange)
+}
+
+func (p *Provider) staleDownloadEndpoint(err error) bool {
+	var network *net.OpError
+	if errors.As(err, &network) && network.Op == "dial" {
+		return true
+	}
+	// A proxy can report an unreachable upstream without a local dial error.
+	status := statusCode(err)
+	return p.connection.AccessMode == "server_proxy" && (status == 502 || status == 503 || status == 504)
 }
 
 func (p *Provider) PutFile(ctx context.Context, ref sandboxcore.ResourceRef, f sandboxcore.FileRequest, source io.Reader) error {

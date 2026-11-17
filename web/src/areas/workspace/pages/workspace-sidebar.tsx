@@ -20,7 +20,7 @@ const workspaceItems = [
   { to: "/agent-catalog", label: "智能体", icon: Bot },
   { to: "/projects", label: "项目", icon: Folder },
   { to: "/teams", label: "团队", icon: Users },
-  { to: "/cloud-computer", label: "云电脑", icon: Monitor },
+  { to: "/computer", label: "云电脑", icon: Monitor },
 ];
 
 export function WorkspaceSidebar({

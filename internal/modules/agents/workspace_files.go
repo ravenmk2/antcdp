@@ -14,6 +14,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
+	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
 type WorkspaceEntryQuery struct {
@@ -40,9 +41,8 @@ type WorkspaceRemovalWrite struct {
 	Recursive bool                   `json:"recursive"`
 }
 type WorkspaceFileContent struct {
-	Reader   ReadSeekCloser
+	*sandboxcore.FileStream
 	Filename string
-	Size     uint64
 }
 type workspaceEntryCondition struct {
 	ComputerID uint64 `json:"cloud_computer_id,string"`
@@ -51,6 +51,7 @@ type workspaceEntryCondition struct {
 	Identity   string `json:"identity"`
 }
 type workspaceFileIntent struct {
+	EnsureHome     bool                      `json:"ensure_home,omitempty"`
 	Path           string                    `json:"path,omitempty"`
 	Items          []workspaceEntryCondition `json:"items,omitempty"`
 	Recursive      bool                      `json:"recursive,omitempty"`
@@ -220,6 +221,40 @@ func (s *CloudService) ListWorkspaceEntries(ctx context.Context, raw string, id 
 	result.Data = items
 	result.Pagination = &Pagination{Page: q.Page, PageSize: q.PageSize, Total: listing.Total}
 	return result, nil
+}
+
+// EnsureWorkspaceHome checks on every visit; a previous successful preparation
+// does not imply that the directory still exists. Reads are allowed during runs.
+func (s *CloudService) EnsureWorkspaceHome(ctx context.Context, raw string, id uint64, key string) (*Result, error) {
+	if !keyPattern.MatchString(key) {
+		return nil, httpx.Invalid("idempotency_key", "invalid_format")
+	}
+	out, op, access, err := s.beginWorkspaceRead(ctx, raw, id, "workspace_read", workspaceFileIntent{Path: "home"})
+	if err != nil {
+		return out, err
+	}
+	bounded, cancel := context.WithDeadline(ctx, op.DeadlineAt)
+	defer cancel()
+	response, err := s.workspaceRequest(bounded, access, op.ID, workspace.Request{Operation: "directory_exists", Path: "home"})
+	var result struct {
+		Exists bool `json:"exists"`
+	}
+	if err == nil && json.Unmarshal(response.Result, &result) != nil {
+		err = integrity()
+	}
+	if finishErr := s.finishWorkspaceOperation(ctx, op.ID, access, nil, err); err == nil {
+		err = finishErr
+	}
+	if err != nil {
+		return out, err
+	}
+	if result.Exists {
+		out.Data = map[string]any{"status": "succeeded"}
+		return out, nil
+	}
+	return s.workspaceMutation(ctx, raw, id, "", key, "workspace.ensure_home", "workspace_mkdir", struct{}{}, func(computer *CloudComputerRow) (workspaceFileIntent, error) {
+		return workspaceFileIntent{Path: "home", EnsureHome: true, WorkspaceFence: computer.FenceVersion}, nil
+	})
 }
 
 func (s *CloudService) CreateWorkspaceDirectory(ctx context.Context, raw string, id uint64, key string, w WorkspaceDirectoryWrite) (*Result, error) {
