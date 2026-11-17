@@ -30,6 +30,7 @@ type StoredEvent struct {
 	// interrupted or generation-limited text is explicitly admitted instead.
 	ExcludeFromContext bool        `json:"exclude_from_context,omitempty"`
 	Retry              *modelRetry `json:"retry,omitempty"`
+	ContextRecovery    bool        `json:"context_recovery,omitempty"`
 }
 
 func appendEvent(st StateRepository, session *SessionRow, runID *uint64, kind, key string, public any, facts *StoredEvent, now time.Time) (uint64, error) {

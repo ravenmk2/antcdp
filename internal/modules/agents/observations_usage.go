@@ -138,6 +138,9 @@ func (s *Service) SessionUsage(ctx context.Context, raw string, id uint64) (*Res
 		if e != nil {
 			return e
 		}
+		if e = s.projectContextUsage(tx, st, session, &context); e != nil {
+			return e
+		}
 		activity, e := repo.SessionActivity(id)
 		if e != nil {
 			return e

@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/modelcore"
+	"github.com/ravenmk2/antcdp/internal/modules/identity"
 )
 
 // Cache counters are paired per request. Missing counters and impossible pairs
@@ -18,13 +20,19 @@ type CacheUsage struct {
 }
 
 type ContextUsage struct {
-	Window         uint64     `json:"window_tokens,string"`
-	ReservedOutput uint64     `json:"reserved_output_tokens,string"`
-	Input          *uint64    `json:"input_tokens,string"`
-	CacheRead      *uint64    `json:"cache_read_tokens,string"`
-	CallID         *uint64    `json:"model_call_id,string"`
-	ObservedAt     *time.Time `json:"observed_at"`
-	Stale          bool       `json:"stale"`
+	Projected         *uint64    `json:"projected_tokens,string"`
+	Estimated         *uint64    `json:"estimated_tokens,string"`
+	Threshold         *uint64    `json:"compaction_threshold_tokens,string"`
+	InputLimit        *uint64    `json:"input_limit_tokens,string"`
+	Headroom          *uint64    `json:"headroom_tokens,string"`
+	MeasurementSource string     `json:"measurement_source"`
+	Window            uint64     `json:"window_tokens,string"`
+	ReservedOutput    uint64     `json:"reserved_output_tokens,string"`
+	Input             *uint64    `json:"input_tokens,string"`
+	CacheRead         *uint64    `json:"cache_read_tokens,string"`
+	CallID            *uint64    `json:"model_call_id,string"`
+	ObservedAt        *time.Time `json:"observed_at"`
+	Stale             bool       `json:"stale"`
 }
 
 type SessionUsageReport struct {
@@ -46,7 +54,12 @@ func sessionContextUsage(session *SessionRow, latest *ModelCallRow, summarySeq u
 		if json.Unmarshal(session.LockedModelConfig, &model) != nil || model.SelectionHash == "" {
 			return result, integrity()
 		}
-		result.Window, result.ReservedOutput = model.ContextWindow, model.MaxOutputTokens
+		result.Window = model.ContextWindow
+		var err error
+		result.ReservedOutput, err = modelcore.EffectiveOutputTokens(model.Parameters, model.MaxOutputTokens)
+		if err != nil {
+			return result, err
+		}
 	}
 	if latest == nil {
 		return result, nil
@@ -71,4 +84,45 @@ func sessionContextUsage(session *SessionRow, latest *ModelCallRow, summarySeq u
 		}
 	}
 	return result, nil
+}
+
+func (s *Service) projectContextUsage(tx identity.Tx, st StateRepository, session *SessionRow, result *ContextUsage) error {
+	if session.ModelLockedAt == nil {
+		return nil
+	}
+	var model frozenModel
+	if json.Unmarshal(session.LockedModelConfig, &model) != nil {
+		return integrity()
+	}
+	budget, err := agentcore.ResolveContextBudget(model.LockedModel)
+	if err != nil {
+		return err
+	}
+	result.Threshold, result.InputLimit, result.Headroom = &budget.Threshold, &budget.Limit, &budget.Headroom
+	manifest, facts, err := loadSurface(st, session)
+	if err != nil {
+		return err
+	}
+	request, err := s.sessionContextRequest(tx, st, session, manifest, facts)
+	if err != nil || request.Model == "" {
+		return err
+	}
+	model.Parameters = request.Parameters
+	budget, err = agentcore.ResolveContextBudget(model.LockedModel)
+	if err != nil {
+		return err
+	}
+	result.ReservedOutput = budget.Output
+	result.Threshold, result.InputLimit, result.Headroom = &budget.Threshold, &budget.Limit, &budget.Headroom
+	anchor, err := s.contextAnchor(st, session)
+	if err != nil {
+		return err
+	}
+	measurement, err := agentcore.MeasureContext(s.contextCounter(), request, anchor)
+	if err != nil {
+		return err
+	}
+	result.Projected, result.Estimated = &measurement.Tokens, &measurement.Estimated
+	result.MeasurementSource = measurement.Source
+	return nil
 }

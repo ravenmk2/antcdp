@@ -146,6 +146,7 @@ func (m *executionModel) Generate(ctx context.Context, _ []*schema.Message, _ ..
 	// and dynamic middleware must never replace native history or reorder tools.
 	step := m.prepared
 	imageRepaired := false
+	contextRecovered := false
 	for attempt := 1; attempt <= m.maxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -191,6 +192,21 @@ func (m *executionModel) Generate(ctx context.Context, _ []*schema.Message, _ ..
 			return nil, commit.Failure
 		}
 		if callErr != nil {
+			if errors.Is(callErr, modelcore.ErrContextWindowExceeded) && !streamStarted && !contextRecovered && attempt < m.maxAttempts && ctx.Err() == nil {
+				if recovery, ok := m.hooks.(interface {
+					RecoverContext(context.Context, agentcore.PreparedStep) (agentcore.PreparedStep, bool, error)
+				}); ok {
+					rebuilt, changed, err := recovery.RecoverContext(ctx, step)
+					if err != nil {
+						return nil, err
+					}
+					if changed {
+						step, m.prepared = rebuilt, rebuilt
+						contextRecovered = true
+						continue
+					}
+				}
+			}
 			if errors.Is(callErr, modelcore.ErrImageFileRejected) && !streamStarted && !imageRepaired && int(step.Step) < m.maxSteps {
 				if repair, ok := m.hooks.(interface {
 					RepairImageFiles(context.Context, agentcore.PreparedStep) (bool, error)

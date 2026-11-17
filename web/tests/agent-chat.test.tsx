@@ -765,7 +765,7 @@ it("calculates token ratios without converting large counts to imprecise numbers
   expect(tokenPercent("101", "100", true)).toBe(101);
 });
 it.each([false, true])(
-  "shows cache coverage and marks compressed context stale: %s",
+  "shows session cache ratio and projected context progress after compaction: %s",
   async (stale) => {
     override = (url) =>
       url.endsWith("/usage")
@@ -777,6 +777,10 @@ it.each([false, true])(
             context: {
               window_tokens: "128000",
               reserved_output_tokens: "8192",
+              projected_tokens: stale ? "6400" : "38400",
+              estimated_tokens: "36000",
+              compaction_threshold_tokens: "102400",
+              measurement_source: "usage_adjusted",
               input_tokens: "32000",
               cache_read_tokens: "0",
               model_call_id: "9",
@@ -795,10 +799,17 @@ it.each([false, true])(
     const { user } = mount(<ContextUsage sessionId="10" />);
     await user.hover(
       await screen.findByRole("button", {
-        name: `上下文 ${stale ? "—" : "25%"}，缓存命中 0%，查看用量`,
+        name: `上下文已用 ${stale ? "5%" : "30%"}，缓存命中 80%，查看会话统计`,
       }),
     );
     expect(await screen.findByText("80%")).toBeVisible();
+    expect(screen.getByText("缓存命中 80%")).toBeVisible();
+    expect(
+      screen.getByText("最近请求缓存命中").nextElementSibling,
+    ).toHaveTextContent("0%");
+    expect(
+      screen.getByRole("progressbar", { name: "上下文已用" }),
+    ).toHaveAttribute("aria-valuenow", stale ? "5" : "30");
     expect(screen.getByText("2 / 3 次")).toBeVisible();
     expect(screen.getByText("会话轮数").nextElementSibling).toHaveTextContent(
       "4",
@@ -828,11 +839,14 @@ it("loads turn statistics on hover, separates retries from ended steps, and reus
   };
   const { user } = mount(<TurnUsage sessionId="10" runId="20" />);
   expect(mock).not.toHaveBeenCalled();
-  const trigger = screen.getByRole("button", { name: "本轮统计" });
+  const trigger = screen.getByRole("button", { name: "本轮用量" });
   expect(trigger).toHaveClass("agent-chat-icon-button");
   expect(trigger).toHaveTextContent("");
   await user.hover(trigger);
   expect(await screen.findByText("2,000")).toBeVisible();
+  expect(
+    screen.getByText("输入（含缓存）").nextElementSibling,
+  ).toHaveTextContent("2,000");
   expect(screen.getByText("已结束步骤").nextElementSibling).toHaveTextContent(
     "1",
   );
@@ -864,7 +878,7 @@ it("offers statistics for a failed turn without inventing a reply to copy", () =
       ]}
     />,
   );
-  expect(screen.getByRole("button", { name: "本轮统计" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "本轮用量" })).toBeVisible();
   expect(screen.queryByRole("button", { name: "复制回复" })).toBeNull();
 });
 

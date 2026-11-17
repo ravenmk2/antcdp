@@ -39,11 +39,12 @@ var (
 	ErrTransportTimeout = errors.New("model transport timed out")
 	// Remote failure classes contain no connection or provider response data.
 	// Adapters wrap these without retaining the original HTTP/network error.
-	ErrRateLimited          = errors.New("model rate limited")
-	ErrAuthenticationFailed = errors.New("model authentication failed")
-	ErrRequestRejected      = errors.New("model request rejected")
-	ErrRemoteService        = errors.New("model remote service failed")
-	ErrTransport            = errors.New("model transport failed")
+	ErrRateLimited           = errors.New("model rate limited")
+	ErrAuthenticationFailed  = errors.New("model authentication failed")
+	ErrRequestRejected       = errors.New("model request rejected")
+	ErrContextWindowExceeded = errors.New("model context window exceeded")
+	ErrRemoteService         = errors.New("model remote service failed")
+	ErrTransport             = errors.New("model transport failed")
 )
 
 type Capabilities struct {

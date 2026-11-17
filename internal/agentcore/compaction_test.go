@@ -42,7 +42,7 @@ func TestCompactionKeepsSurfaceOnInvalidSummaryAndRechecksRevision(t *testing.T)
 	recent := modelcore.Message{Role: "user", Content: "current task"}
 	manifest := SurfaceManifest{SchemaVersion: 1, Revision: 3, Entries: []SurfaceEntry{{Kind: "message", Sequences: []Seq{1}}, {Kind: "message", Sequences: []Seq{2}}}}
 	facts := map[Seq]HistoryFact{1: {Seq: 1, SchemaVersion: 1, Kind: "input/message", Message: &old}, 2: {Seq: 2, SchemaVersion: 1, Kind: "input/message", Message: &recent}}
-	first, last, err := CompactionRange(manifest, facts, 1)
+	first, last, err := CompactionTokenRange(manifest, facts, 1, modelcore.RequestTokenCounter{})
 	if err != nil || first != 0 || last != 0 {
 		t.Fatalf("range %d %d %v", first, last, err)
 	}

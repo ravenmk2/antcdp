@@ -690,6 +690,12 @@ export interface SessionUsageReport extends UsageTotals {
   context: {
     window_tokens: string;
     reserved_output_tokens: string;
+    projected_tokens: string | null;
+    estimated_tokens: string | null;
+    compaction_threshold_tokens: string | null;
+    input_limit_tokens: string | null;
+    headroom_tokens: string | null;
+    measurement_source: "estimated" | "usage_adjusted" | "";
     input_tokens: string | null;
     cache_read_tokens: string | null;
     model_call_id: string | null;

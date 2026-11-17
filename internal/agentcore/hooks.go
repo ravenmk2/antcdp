@@ -17,15 +17,26 @@ type StepPreparer func(context.Context, ExecutionContext, uint32) (PreparedStep,
 // Prepare performs live discovery/context commits once; retries use its frozen
 // value. Opening a client resolves the current secret without changing route.
 type PersistentHooks struct {
-	Execution      ExecutionContext
-	Prepare        StepPreparer
-	Models         ModelClientFactory
-	Store          StepStore
-	Tools          *ToolRunner
-	Hub            *Hub
-	AttemptTimeout time.Duration
-	Estimate       func(modelcore.Request) (Budget, error)
-	RepairImages   func(context.Context, PreparedStep) error
+	Execution       ExecutionContext
+	Prepare         StepPreparer
+	Models          ModelClientFactory
+	Store           StepStore
+	Tools           *ToolRunner
+	Hub             *Hub
+	AttemptTimeout  time.Duration
+	Estimate        func(modelcore.Request) (Budget, error)
+	RepairImages    func(context.Context, PreparedStep) error
+	CompactOverflow func(context.Context, ExecutionContext, PreparedStep) (PreparedStep, bool, error)
+}
+
+func (h *PersistentHooks) RecoverContext(ctx context.Context, step PreparedStep) (PreparedStep, bool, error) {
+	if step.Ref != h.Execution.Ref {
+		return step, false, invalid("context_recovery")
+	}
+	if h.CompactOverflow == nil {
+		return step, false, nil
+	}
+	return h.CompactOverflow(ctx, h.Execution, step)
 }
 
 func (h *PersistentHooks) RepairImageFiles(ctx context.Context, step PreparedStep) (bool, error) {

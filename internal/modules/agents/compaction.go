@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"time"
 
@@ -178,7 +179,25 @@ func (s *Service) CompactSession(ctx context.Context, raw string, id uint64, key
 			if _, e = agentcore.BuildSurface(manifest, facts); e != nil {
 				return coreError(e)
 			}
-			first, last, e := agentcore.CompactionRange(manifest, facts, 2)
+			var model frozenModel
+			if json.Unmarshal(v.LockedModelConfig, &model) != nil {
+				return integrity()
+			}
+			budget, e := agentcore.ResolveContextBudget(model.LockedModel)
+			if e != nil {
+				return coreError(e)
+			}
+			first, last, e := agentcore.CompactionTokenRange(manifest, facts, budget.Retain, s.contextCounter())
+			// Manual compaction is useful below pressure too: retain the newest
+			// complete entry and protected user instruction when the normal tail
+			// budget would otherwise consume the whole conversation.
+			if e != nil {
+				var cause *agentcore.Error
+				if !errors.As(e, &cause) || cause.Code != "COMPACTION_NOT_NEEDED" {
+					return coreError(e)
+				}
+				first, last, e = agentcore.CompactionTokenRange(manifest, facts, 0, s.contextCounter())
+			}
 			if e != nil {
 				return coreError(e)
 			}
@@ -327,7 +346,9 @@ func (s *Service) Begin(ctx context.Context, request agentcore.CompactionRequest
 }
 
 func summaryRequest(original modelcore.Request, m agentcore.SurfaceManifest, facts map[agentcore.Seq]agentcore.HistoryFact, first, last int) (modelcore.Request, error) {
-	m.Entries = m.Entries[first : last+1]
+	// Keep the original prefix when compacting an interval after the latest
+	// user instruction; the auxiliary request also needs that task context.
+	m.Entries = m.Entries[:last+1]
 	messages, e := agentcore.BuildSurface(m, facts)
 	if e != nil {
 		return modelcore.Request{}, e

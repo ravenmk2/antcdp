@@ -146,7 +146,7 @@ func (s *Service) summarizeImageAttempt(ctx context.Context, record agentcore.Co
 		if record.Request.First < 0 || record.Request.Last < record.Request.First || record.Request.Last >= len(selected.Entries) {
 			return integrity()
 		}
-		selected.Entries = selected.Entries[record.Request.First : record.Request.Last+1]
+		selected.Entries = selected.Entries[:record.Request.Last+1]
 		manifest, e := json.Marshal(selected)
 		if e != nil {
 			return e
@@ -162,7 +162,11 @@ func (s *Service) summarizeImageAttempt(ctx context.Context, record agentcore.Co
 			if e != nil {
 				return e
 			}
-			l, res, e := l.Reserve(agentcore.Budget{ModelCalls: 1, InputTokens: input, OutputTokens: frozen.MaxOutputTokens})
+			output, e := modelcore.EffectiveOutputTokens(request.Parameters, frozen.MaxOutputTokens)
+			if e != nil {
+				return e
+			}
+			l, res, e := l.Reserve(agentcore.Budget{ModelCalls: 1, InputTokens: input, OutputTokens: output})
 			if e != nil {
 				return coreError(e)
 			}

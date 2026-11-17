@@ -124,7 +124,12 @@ func TestAgentBudgetIncludesImagesWithoutPersistingThem(t *testing.T) {
 		t.Fatal(err)
 	}
 	budget, err := estimateAgentRequest(request)
-	if err != nil || budget.ModelCalls != 1 || budget.OutputTokens != 512 || budget.InputTokens != uint64(len(encoded))+8192 {
+	if err != nil || budget.ModelCalls != 1 || budget.OutputTokens != 512 || budget.InputTokens < 8192 || strings.Contains(string(encoded), "private-image-bytes") {
 		t.Fatal("image input reservation missing", err)
+	}
+	request.Messages[0].Images = nil
+	textOnly, err := estimateAgentRequest(request)
+	if err != nil || budget.InputTokens-textOnly.InputTokens != 8192 {
+		t.Fatal("image counted more than once", budget, textOnly, err)
 	}
 }

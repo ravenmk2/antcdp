@@ -39,11 +39,12 @@ type Client struct {
 
 // RemoteError deliberately excludes URL, headers, body and provider exception text.
 type RemoteError struct {
-	Status    int
-	Kind      string
-	Network   string
-	Delay     time.Duration
-	ImageFile bool
+	Status          int
+	Kind            string
+	Network         string
+	Delay           time.Duration
+	ImageFile       bool
+	ContextOverflow bool
 }
 
 func (e *RemoteError) Diagnostic() *diagnostic.Detail {
@@ -74,6 +75,9 @@ func (e *RemoteError) Error() string {
 }
 
 func (e *RemoteError) Unwrap() error {
+	if e.ContextOverflow {
+		return modelcore.ErrContextWindowExceeded
+	}
 	if e.ImageFile {
 		return modelcore.ErrImageFileRejected
 	}
@@ -220,7 +224,19 @@ func (c *Client) Generate(ctx context.Context, input modelcore.Request, emit mod
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return modelcore.Response{}, &RemoteError{Status: resp.StatusCode, Delay: retryAfter(resp.Header.Get("Retry-After"), time.Now()), ImageFile: usesFiles && rejectedImageFile(resp, input)}
+		remote := &RemoteError{Status: resp.StatusCode, Delay: retryAfter(resp.Header.Get("Retry-After"), time.Now())}
+		if resp.StatusCode == 400 || resp.StatusCode == 413 || resp.StatusCode == 422 || resp.StatusCode == 404 {
+			body, readErr := io.ReadAll(io.LimitReader(resp.Body, (16<<10)+1))
+			if readErr == nil && len(body) <= 16<<10 {
+				remote.ContextOverflow = resp.StatusCode != 404 && contextOverflow(body)
+				if usesFiles && !remote.ContextOverflow {
+					copyResponse := *resp
+					copyResponse.Body = io.NopCloser(bytes.NewReader(body))
+					remote.ImageFile = rejectedImageFile(&copyResponse, input)
+				}
+			}
+		}
+		return modelcore.Response{}, remote
 	}
 	if !strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "text/event-stream") {
 		return modelcore.Response{}, modelcore.ErrUnsupported

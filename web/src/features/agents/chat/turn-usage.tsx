@@ -97,7 +97,7 @@ export function TurnUsage({
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
           className="agent-chat-icon-button"
-          aria-label="本轮统计"
+          aria-label="本轮用量"
           openOnHover
           delay={200}
           closeDelay={150}
@@ -105,7 +105,7 @@ export function TurnUsage({
           <ChartNoAxesColumn aria-hidden />
         </PopoverTrigger>
         <PopoverContent side="top" className="w-72 space-y-3">
-          <h3 className="text-sm font-medium">本轮统计</h3>
+          <h3 className="text-sm font-medium">本轮用量</h3>
           {query.isError ? (
             <button type="button" onClick={() => void query.refetch()}>
               读取失败，点击重试
@@ -119,8 +119,8 @@ export function TurnUsage({
                   {[
                     ["已结束步骤", String(usage.steps)],
                     ["模型调用", `${usage.count} 次`],
-                    ["输入 Token", format(usage.input_tokens)],
-                    ["输出 Token", format(usage.output_tokens)],
+                    ["输入（含缓存）", format(usage.input_tokens)],
+                    ["输出", format(usage.output_tokens)],
                     ["缓存读取", format(usage.cache_read_tokens)],
                     ["缓存写入", format(usage.cache_write_tokens)],
                     [

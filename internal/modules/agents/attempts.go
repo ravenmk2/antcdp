@@ -26,6 +26,7 @@ type attemptImage struct {
 }
 
 type attemptSnapshot struct {
+	InputEstimate *uint64                    `json:"input_estimate_tokens,omitempty"`
 	Images        []attemptImage             `json:"images,omitempty"`
 	SchemaVersion int                        `json:"schema_version"`
 	Model         string                     `json:"model"`
@@ -61,6 +62,11 @@ func snapshotRequest(request modelcore.Request, model agentcore.LockedModel, too
 		}
 	}
 	var e error
+	estimate, e := modelcore.EstimateRequestTokens(request)
+	if e != nil {
+		return config, e
+	}
+	config.InputEstimate = &estimate
 	config.SystemHash, e = agentcore.ContentHash(config.System)
 	return config, e
 }
@@ -122,7 +128,14 @@ func (s *Service) FreezeAttempt(ctx context.Context, ref agentcore.ExecutionRef,
 			if err != nil {
 				return err
 			}
-			if stored.Retry == nil || now.Before(stored.Retry.RetryAt) || hex.EncodeToString(prior.RequestHash) != d.RequestHash {
+			admitted := stored.Retry != nil && !now.Before(stored.Retry.RetryAt) && hex.EncodeToString(prior.RequestHash) == d.RequestHash
+			if stored.ContextRecovery {
+				admitted, err = contextRecoveryReduced(prior, d.Step)
+				if err != nil {
+					return err
+				}
+			}
+			if !admitted {
 				return httpx.E(409, "RETRY_NOT_ADMITTED", "模型重试尚未获准")
 			}
 		}
@@ -252,6 +265,9 @@ func modelOutcomeReason(out agentcore.AttemptOutcome) string {
 	}
 	if errors.Is(out.Err, modelcore.ErrImageFileRejected) {
 		return "MODEL_IMAGE_FILE_REJECTED"
+	}
+	if errors.Is(out.Err, modelcore.ErrContextWindowExceeded) {
+		return "CONTEXT_BUDGET_EXCEEDED"
 	}
 	if errors.Is(out.Err, modelcore.ErrRequestRejected) {
 		return "MODEL_REQUEST_REJECTED"
@@ -475,7 +491,11 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 			// already shown to the user must remain available to "continue".
 			// Never replay its native thinking signatures or unfinished tool calls.
 			keepPartial := status == "interrupted" || reason == "MODEL_GENERATION_LIMIT" && message.Content != ""
-			seq, e := appendEvent(st, x.Session, &x.Run.ID, "assistant/attempt", "model-result:"+strconv.FormatUint(call.ID, 10), map[string]any{"attempt_id": agentcore.ID(call.ID), "model_call_id": agentcore.ID(call.ID), "step_no": call.StepNo, "attempt_no": call.AttemptNo, "status": status, "rejected_tools": rejectedTools(observed), "content": uiAssistant(message, nil, result.ReasoningDurationMS), "partial": partial, "reason_code": reason, "diagnostic": diagnostic.From(diagnostic.With(outcome.Err, diagnostic.Detail{Source: "model", Stage: "response", Code: reason})), "retry": retry}, &StoredEvent{Message: &message, ModelCallID: agentcore.ID(call.ID), Interrupted: partial, PartialReason: reason, ExcludeFromContext: !keepPartial, Retry: retry}, now)
+			recovery, e := contextRecoveryEligible(st, call, outcome, len(observed) > 0)
+			if e != nil {
+				return e
+			}
+			seq, e := appendEvent(st, x.Session, &x.Run.ID, "assistant/attempt", "model-result:"+strconv.FormatUint(call.ID, 10), map[string]any{"attempt_id": agentcore.ID(call.ID), "model_call_id": agentcore.ID(call.ID), "step_no": call.StepNo, "attempt_no": call.AttemptNo, "status": status, "rejected_tools": rejectedTools(observed), "content": uiAssistant(message, nil, result.ReasoningDurationMS), "partial": partial, "reason_code": reason, "diagnostic": diagnostic.From(diagnostic.With(outcome.Err, diagnostic.Detail{Source: "model", Stage: "response", Code: reason})), "retry": retry}, &StoredEvent{Message: &message, ModelCallID: agentcore.ID(call.ID), Interrupted: partial, PartialReason: reason, ExcludeFromContext: !keepPartial, Retry: retry, ContextRecovery: recovery}, now)
 			if e != nil {
 				return e
 			}

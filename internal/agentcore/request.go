@@ -26,6 +26,11 @@ func BuildPreparedStep(ref ExecutionRef, step uint32, locked LockedModel, prompt
 	for k, v := range locked.Parameters {
 		request.Parameters[k] = append(json.RawMessage(nil), v...)
 	}
+	output, err := modelcore.EffectiveOutputTokens(locked.Parameters, locked.MaxOutputTokens)
+	if err != nil {
+		return PreparedStep{}, err
+	}
+	request.Parameters = withOutputCap(request.Parameters, output)
 	system := prompt.Platform
 	if prompt.Administrator != "" {
 		if system != "" {

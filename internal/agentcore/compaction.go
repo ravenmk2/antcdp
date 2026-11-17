@@ -73,8 +73,11 @@ func (c *Compactor) Compact(ctx context.Context, request CompactionRequest, orig
 	if strings.TrimSpace(response.Message.Content) == "" || len(response.Message.ToolCalls) > 0 {
 		return failed("COMPACTION_INVALID_SUMMARY", reject("COMPACTION_INVALID_SUMMARY"))
 	}
-	// The caller supplies a request containing only the selected complete
-	// interval plus stable system/tools and a final summary instruction.
+	if response.FinishReason == "length" || response.FinishReason == "max_tokens" {
+		return failed("COMPACTION_INVALID_SUMMARY", reject("COMPACTION_INVALID_SUMMARY"))
+	}
+	// Price only the replaced interval; the caller can include an earlier
+	// protected instruction as additional context for the summary model.
 	summaryRequest := original
 	summaryRequest.Messages = []modelcore.Message{{Role: "user", Content: response.Message.Content}}
 	after, err := c.Tokens.Count(summaryRequest)
@@ -95,32 +98,4 @@ func (c *Compactor) Compact(ctx context.Context, request CompactionRequest, orig
 		c.Hub.Committed(finish, receipt)
 	}
 	return receipt, nil
-}
-
-// CompactionRange preserves the most recent task and at least retain entries.
-// Tool groups are indivisible entries; incomplete groups never enter Surface.
-func CompactionRange(manifest SurfaceManifest, facts map[Seq]HistoryFact, retain int) (int, int, error) {
-	if retain < 1 {
-		return 0, 0, invalid("retain")
-	}
-	last := len(manifest.Entries) - retain - 1
-	for n := len(manifest.Entries) - 1; n >= 0; n-- {
-		found := false
-		for _, seq := range manifest.Entries[n].Sequences {
-			if f, ok := facts[seq]; ok && f.Kind == "input/message" {
-				if n-1 < last {
-					last = n - 1
-				}
-				found = true
-				break
-			}
-		}
-		if found {
-			break
-		}
-	}
-	if last < 0 {
-		return 0, 0, reject("COMPACTION_NOT_NEEDED")
-	}
-	return 0, last, nil
 }

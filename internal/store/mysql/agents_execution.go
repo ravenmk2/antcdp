@@ -22,6 +22,19 @@ func (t *agentsTx) CompactionModelCall(id uint64) (*a.ModelCallRow, error) {
 	return v, e
 }
 
+func (t *agentsTx) LatestGenerationCall(id uint64, completed bool) (*a.ModelCallRow, error) {
+	query := "SELECT " + agentModelCallColumns + " FROM agent_model_call WHERE session_id=? AND purpose='generation'"
+	if completed {
+		query += " AND status='completed'"
+	}
+	v := &a.ModelCallRow{}
+	err := t.tx.GetContext(t.ctx, v, query+" ORDER BY id DESC LIMIT 1", id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return v, err
+}
+
 func (t *agentsTx) RecoverableRoots(epoch string, limit int) ([]a.RunRow, error) {
 	rows := []a.RunRow{}
 	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentRunColumns+" FROM agent_run WHERE root_run_id IS NULL AND finished_at IS NULL AND executor_epoch<>? ORDER BY id LIMIT ?", epoch, limit)

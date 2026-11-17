@@ -90,7 +90,11 @@ func runtimeToolOutput(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 		}
 	}
 	originalTokens := f.Agents.Tokens
-	f.Agents.Tokens = outputPressureCounter{high: (x.Model.ContextWindow - x.Model.MaxOutputTokens) * 9 / 10}
+	budget, err := core.ResolveContextBudget(x.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Agents.Tokens = outputPressureCounter{high: budget.Threshold}
 	t.Cleanup(func() { f.Agents.Tokens = originalTokens })
 	pruned, err := f.Agents.PrepareStep(f.Context, x, 2)
 	if err != nil || len(pruned.Manifest.ToolOutputPrunes) != 1 {

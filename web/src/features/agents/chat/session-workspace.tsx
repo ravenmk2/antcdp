@@ -489,8 +489,8 @@ function SessionContext({
               </StatusBadge>
               <dl className="agent-workspace-facts mt-4">
                 {[
-                  ["输入 Token", usage.data.data.input_tokens],
-                  ["输出 Token", usage.data.data.output_tokens],
+                  ["输入（含缓存）", usage.data.data.input_tokens],
+                  ["输出", usage.data.data.output_tokens],
                   ["缓存读取", usage.data.data.cache_read_tokens],
                   ["缓存写入", usage.data.data.cache_write_tokens],
                 ].map(([label, value]) => (

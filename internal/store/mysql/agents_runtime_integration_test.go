@@ -68,6 +68,7 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 	t.Run("stop_publishes_queue_transition", func(t *testing.T) { runtimeStopQueue(t, f, agent.ID) })
 	t.Run("attachment_read_lease_and_archive_race", func(t *testing.T) { runtimeFiles(t, f, agent.ID) })
 	t.Run("compaction_success_failure_restart", func(t *testing.T) { runtimeCompaction(t, f, agent.ID) })
+	t.Run("context_meter", func(t *testing.T) { runtimeContextMeter(t, f, agent.ID) })
 	t.Run("debug_admission_atomicity", func(t *testing.T) { runtimeDebug(t, f, agent.ID) })
 	t.Run("skill_without_source_does_not_block_chat", func(t *testing.T) {
 		bindings, err := svc.GetToolBindings(f.Context, f.AdminToken, agent.ID)

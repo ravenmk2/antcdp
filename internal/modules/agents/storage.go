@@ -390,6 +390,7 @@ type StateRepository interface {
 	DeleteImageCache(string, []byte, string) error
 	PendingCompactions(string, time.Time, int) ([]CompactionRow, error)
 	CompactionModelCall(uint64) (*ModelCallRow, error)
+	LatestGenerationCall(uint64, bool) (*ModelCallRow, error)
 	FileCleanupCandidates(time.Time, int) ([]FileRow, error)
 	FileHasBindings(uint64) (bool, error)
 	OldDownloadReferences(string, int) ([]ResourceReferenceRow, error)

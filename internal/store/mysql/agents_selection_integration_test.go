@@ -75,7 +75,26 @@ func runtimeThinkingSelection(t *testing.T, f *agentIntegrationFixture) {
 	}
 	_, err = f.Agents.SubmitInput(f.Context, f.AdminToken, id, cryptox.ID(), a.InputCreate{Content: []core.TextBlock{{Type: "text", Text: "stale selection"}}, ExpectedHash: x.Model.SelectionHash})
 	modelsExpectCode(t, err, "MODEL_SELECTION_CHANGED")
-	commit := runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "thinking-child", Name: "delegate", Arguments: `{"task":"verify inherited thinking","file_refs":[]}`}}})
+	prepared, err := f.Agents.PrepareStep(f.Context, x, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit := runtimePreparedAttempt(t, f, x, prepared, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "thinking-child", Name: "delegate", Arguments: `{"task":"verify inherited thinking","file_refs":[]}`}}})
+	estimate, err := modelcore.EstimateRequestTokens(prepared.Request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.Store.db.ExecContext(f.Context, "UPDATE agent_model_call SET input_tokens=? WHERE session_id=? AND purpose='generation'", estimate+100, id); err != nil {
+		t.Fatal(err)
+	}
+	usage, err := f.Agents.SessionUsage(f.Context, f.AdminToken, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pressure := usage.Data.(a.SessionUsageReport).Context
+	if pressure.Projected == nil || pressure.Estimated == nil || *pressure.Projected != *pressure.Estimated+100 || pressure.MeasurementSource != "usage_adjusted" {
+		t.Fatal("UI used next-turn thinking instead of active frozen request", pressure)
+	}
 	permit, err := f.Agents.PrepareDispatch(f.Context, x.Ref, commit.Calls[0].ID)
 	if err != nil || permit.Kind != "execute" {
 		t.Fatal("prepare child", err)

@@ -261,6 +261,9 @@ export function Conversation({
       if (
         type.startsWith("tool/") ||
         type.startsWith("assistant/") ||
+        type.startsWith("context/") ||
+        type === "input/message" ||
+        type === "image/offload" ||
         type.startsWith("compaction/") ||
         type.startsWith("artifact/") ||
         type.startsWith("run/") ||

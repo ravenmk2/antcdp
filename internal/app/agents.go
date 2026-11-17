@@ -77,7 +77,7 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 		return &agents.Result{Data: result.Data, Tag: result.Tag, Location: result.Location, Status: result.Status, Replayed: result.Replayed, Pagination: result.Pagination, Auth: result.Auth}, err
 	}
 	service.RuntimeModels = agentModelFactory{modelsService}
-	service.Tokens = agentTokenCounter{}
+	service.Tokens = modelcore.RequestTokenCounter{}
 	service.Compactor = &agentcore.Compactor{Store: service, Models: service, Tokens: service.Tokens, Hub: hub}
 	catalog := &agentToolCatalog{resources: resources, web: webService}
 	service.Catalog = agents.ResourceCatalog{Skill: resources.ReadSkillSnapshot, Tools: catalog.list, Tool: catalog.get, ValidateToolConstraints: catalog.validateConstraints, MCPArguments: mcp.ValidateArguments, MCPServer: resources.ValidateMCPServer, MCPIdentity: resources.ReadMCPIdentity, DiscoverMCP: resources.DiscoverMCP, AuthorizeTool: catalog.authorize}
@@ -97,7 +97,7 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 	}
 	runner.Hub = hub
 	runtime.Hooks = func(_ context.Context, execution agentcore.ExecutionContext) (agentcore.EngineHooks, error) {
-		return &agentcore.PersistentHooks{Execution: execution, Prepare: service.PrepareStep, RepairImages: service.RepairImageFiles, Models: agentModelFactory{modelsService}, Store: service, Tools: runner, Hub: hub, Estimate: estimateAgentRequest}, nil
+		return &agentcore.PersistentHooks{Execution: execution, Prepare: service.PrepareStep, RepairImages: service.RepairImageFiles, CompactOverflow: service.CompactOverflow, Models: agentModelFactory{modelsService}, Store: service, Tools: runner, Hub: hub, Estimate: estimateAgentRequest}, nil
 	}
 	service.Committed = func(ctx context.Context, receipt agentcore.CommitReceipt) {
 		hub.Committed(ctx, receipt)
@@ -124,18 +124,12 @@ func (f agentModelFactory) Open(ctx context.Context, frozen agentcore.LockedMode
 	})
 }
 
-// Byte count is a conservative reservation, not a provider usage claim. Native
-// image bytes stay memory-only but participate in this upper bound explicitly.
+// Reservations use the same content estimator as context pressure. Actual
+// provider usage settles the reservation and is never replaced by estimates.
 func estimateAgentRequest(request modelcore.Request) (agentcore.Budget, error) {
-	b, err := json.Marshal(request)
+	input, err := modelcore.EstimateRequestTokens(request)
 	if err != nil {
 		return agentcore.Budget{}, err
-	}
-	input := uint64(len(b))
-	for _, message := range request.Messages {
-		for _, image := range message.Images {
-			input += modelcore.EstimateImageTokens(image)
-		}
 	}
 	var output uint64
 	if raw := request.Parameters["max_output_tokens"]; len(raw) > 0 {
@@ -144,13 +138,6 @@ func estimateAgentRequest(request modelcore.Request) (agentcore.Budget, error) {
 		}
 	}
 	return agentcore.Budget{ModelCalls: 1, InputTokens: input, OutputTokens: output}, nil
-}
-
-type agentTokenCounter struct{}
-
-func (agentTokenCounter) Count(request modelcore.Request) (uint64, error) {
-	budget, err := estimateAgentRequest(request)
-	return budget.InputTokens, err
 }
 
 func runAgents(ctx context.Context, installer *install.Service, app *agentApplication, logger *slog.Logger) {
