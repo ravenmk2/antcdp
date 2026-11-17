@@ -245,7 +245,7 @@ it("tolerates a successful plan state arriving before its result", async () => {
   node.result = undefined;
   render(<ToolEvent {...node} sessionId="1" />);
   await userEvent.setup().click(screen.getByText("更新任务计划"));
-  expect(screen.getByText("尚未收到工具结果。")).toBeVisible();
+  expect(screen.queryByText("尚未收到工具结果。")).toBeNull();
 });
 
 it("shows question and answer pairs for waiting, multiple selections, late answers and skipped questions", async () => {

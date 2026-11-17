@@ -118,6 +118,61 @@ const group = () =>
   )[0];
 const turn = () => screen.getByRole("button", { name: / · 执行过程$/ });
 
+it("keeps a rejected streamed tool mounted, updates its status and restores it from history", async () => {
+  const live: ActiveAttempt = {
+    ...draft,
+    content: [
+      {
+        type: "tool_call",
+        draft_call_id: "draft-0",
+        name: "exec_command",
+        arguments_text: '{"command":"pwd","timeout_seconds":601}',
+      },
+    ],
+  };
+  const { update, user } = setup([records[0]], live);
+  const button = screen.getByRole("button", { name: /执行命令.*pwd/ });
+  await user.click(button);
+  const rejected: Extract<DurableRecord, { event_type: "assistant/attempt" }> =
+    {
+      ...records[0],
+      seq: "3",
+      event_type: "assistant/attempt",
+      data: {
+        attempt_id: live.attempt_id,
+        model_call_id: "30",
+        status: "failed",
+        content: [],
+        partial: false,
+        reason_code: "MODEL_RESPONSE_INVALID",
+        diagnostic: {
+          code: "MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH",
+          tool_name: "exec_command",
+          field_path: "/timeout_seconds",
+          constraint: "maximum",
+          expected: "600",
+        },
+        rejected_tools: [
+          {
+            name: "exec_command",
+            arguments_text: '{"command":"pwd","timeout_seconds":601}',
+            truncated: false,
+          },
+        ],
+      },
+    };
+  update([records[0], rejected]);
+  expect(screen.getByRole("button", { name: /执行命令.*pwd/ })).toBe(button);
+  expect(button).toHaveTextContent("参数校验失败 · 未执行");
+  expect(button).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByText(/参数字段：\/timeout_seconds/)).toBeVisible();
+  expect(screen.queryByText("尚未收到工具结果。")).toBeNull();
+  update([records[0], rejected], null, "reload");
+  expect(
+    screen.getByRole("button", { name: /执行命令.*pwd/ }),
+  ).toHaveTextContent("未执行");
+});
+
 it("does not render empty stream text as a placeholder or split the process group", () => {
   const first: ActiveAttempt = {
     ...draft,
@@ -146,7 +201,7 @@ it("does not render empty stream text as a placeholder or split the process grou
     ),
   });
   expect(screen.getByText("读取前的进度说明")).toBeVisible();
-  expect(screen.getByRole("region", { name: "思考过程" })).toBeVisible();
+  expect(screen.getByRole("region", { name: "工具过程" })).toBe(group);
   expect(screen.queryByText(/暂无介绍/)).toBeNull();
 });
 
@@ -252,7 +307,7 @@ it.each(["succeeded", "failed", "cancelled"] as const)(
   },
 );
 
-it("keeps a group open between tools and reasoning, then closes it at the reply boundary before the turn ends", () => {
+it("keeps a group open between tools and reasoning, then closes it only once the reply is committed", () => {
   const { update } = setup(history.slice(0, 3));
   expect(group()).toHaveAttribute("aria-expanded", "true");
   update(history); // A tool result alone is not a group boundary.
@@ -266,8 +321,10 @@ it("keeps a group open between tools and reasoning, then closes it at the reply 
       { type: "text", text: "后续正文" },
     ],
   });
-  expect(group()).toHaveAttribute("aria-expanded", "false");
+  expect(group()).toHaveAttribute("aria-expanded", "true");
   expect(screen.getByText("后续正文")).toBeVisible();
+  update([...history, reply]);
+  expect(group()).toHaveAttribute("aria-expanded", "false");
   expect(screen.queryByRole("button", { name: / · 执行过程$/ })).toBeNull();
 });
 
@@ -288,7 +345,7 @@ it.each(["group", "thought", "tool"])(
     } else
       await user.click(
         screen.getByRole("button", {
-          name: target === "thought" ? /思考.*用时/ : /读取文件/,
+          name: target === "thought" ? /思考.*·/ : /读取文件/,
         }),
       );
     const finished = [...history, reply, end];
@@ -318,7 +375,7 @@ it.each(["group", "thought", "tool"])(
 
 it("releases ancestor protection when a manually opened detail is closed again", async () => {
   const { user, update } = setup();
-  const thoughtToggle = screen.getByRole("button", { name: /思考.*用时/ });
+  const thoughtToggle = screen.getByRole("button", { name: /思考.*·/ });
   await user.click(thoughtToggle);
   await user.click(thoughtToggle);
   update([...history, reply, end]);
@@ -327,7 +384,7 @@ it("releases ancestor protection when a manually opened detail is closed again",
 
 it("honors manual group closure despite an open child and subsequent streaming", async () => {
   const { user, update } = setup(history, draft);
-  await user.click(screen.getByRole("button", { name: /思考.*用时/ }));
+  await user.click(screen.getByRole("button", { name: /思考.*·/ }));
   await user.click(group());
   update(history, { ...draft, next_index: 2 });
   expect(group()).toHaveAttribute("aria-expanded", "false");

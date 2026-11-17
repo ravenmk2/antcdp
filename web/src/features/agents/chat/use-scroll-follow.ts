@@ -136,6 +136,14 @@ export function useScrollFollow() {
         previous &&
         (previous.height !== current.height ||
           previous.viewport !== current.viewport);
+      // Layout/clamping and our own scroll correction are not user intent.
+      // Keep the saved reading anchor instead of replacing it with a displaced
+      // position, or re-enabling following when a collapse exposes the bottom.
+      if (resized) {
+        synchronize();
+        return;
+      }
+      if (previous && Math.abs(previous.top - current.top) < 1) return;
       const movedUp = previous && current.top < previous.top - 1;
       if (movedUp && !resized) movingAway.current = true;
       else if (previous && current.top > previous.top + 1 && !resized)

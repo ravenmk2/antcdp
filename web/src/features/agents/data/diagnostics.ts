@@ -41,6 +41,11 @@ export function diagnosticLines(
     detail.http_status && `服务返回 HTTP ${detail.http_status}`,
     detail.network && (networks[detail.network] ?? "网络连接异常"),
     detail.code && `错误码：${detail.code}`,
+    detail.tool_name &&
+      `工具：${detail.tool_name}${detail.tool_index ? `（第 ${detail.tool_index} 个）` : ""}`,
+    detail.field_path && `参数字段：${detail.field_path}`,
+    detail.constraint && `校验约束：${detail.constraint}`,
+    detail.expected && `期望：${detail.expected}`,
     detail.operation_id && `环境操作：${detail.operation_id}`,
     detail.instance_id && `沙箱实例：${detail.instance_id}`,
   ].filter((line): line is string => typeof line === "string" && Boolean(line));

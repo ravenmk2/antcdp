@@ -46,6 +46,7 @@ export const builtinToolNames: Record<string, string> = {
 export function ToolEvent({
   id,
   draft,
+  rejected,
   call,
   result,
   reconciliation,
@@ -132,29 +133,31 @@ export function ToolEvent({
           cancelled: "已确认停止",
         }[reconciliation.data.observed_status] ?? "已核实结束")
     : undefined;
-  const label = draft
-    ? draft.committed
-      ? "正在准备调用"
-      : "参数生成中"
-    : (verifiedStatus ??
-      (result?.data.outcome.certainty === "unknown"
-        ? "结果未知"
-        : execution
-          ? `${status === "failed" ? "工具调用失败 · " : ""}${executionStatus(execution)}`
-          : status
-            ? {
-                succeeded: "已完成",
-                failed: "失败",
-                blocked: "未获准执行",
-                cancelled: "已取消",
-                outcome_unknown: "结果未知",
-                running: "执行中",
-                dispatching: "正在派发",
-                prepared: "已准备",
-                waiting_approval:
-                  name === "ask_user_question" ? "等待回答" : "等待批准",
-              }[status]
-            : "等待结果"));
+  const label = rejected
+    ? `${rejected.interrupted ? "生成已中断" : rejected.diagnostic?.code === "MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH" ? "参数校验失败" : "调用未完成"} · 未执行`
+    : draft
+      ? draft.committed
+        ? "正在准备调用"
+        : "参数生成中"
+      : (verifiedStatus ??
+        (result?.data.outcome.certainty === "unknown"
+          ? "结果未知"
+          : execution
+            ? `${status === "failed" ? "工具调用失败 · " : ""}${executionStatus(execution)}`
+            : status
+              ? {
+                  succeeded: "已完成",
+                  failed: "失败",
+                  blocked: "未获准执行",
+                  cancelled: "已取消",
+                  outcome_unknown: "结果未知",
+                  running: "执行中",
+                  dispatching: "正在派发",
+                  prepared: "已准备",
+                  waiting_approval:
+                    name === "ask_user_question" ? "等待回答" : "等待批准",
+                }[status]
+              : "等待结果"));
   const specialized = Boolean(execution || file || plan || questions || search);
   return (
     <div
@@ -192,10 +195,12 @@ export function ToolEvent({
                 {[
                   label,
                   diagnosticReason(
-                    result?.data.diagnostic,
-                    result?.data.outcome.reason,
+                    rejected?.diagnostic ?? result?.data.diagnostic,
+                    rejected?.reason ?? result?.data.outcome.reason,
                   ),
-                  ...diagnosticLines(result?.data.diagnostic),
+                  ...diagnosticLines(
+                    rejected?.diagnostic ?? result?.data.diagnostic,
+                  ),
                 ]
                   .filter(Boolean)
                   .join("\n")}
@@ -231,7 +236,8 @@ export function ToolEvent({
           ) : (
             <span title={typeof hint === "string" ? hint : undefined}>
               {typeof hint === "string" ? hint : label}
-              {typeof hint === "string" && (running || (attention && !onIssue))
+              {typeof hint === "string" &&
+              (rejected || running || (attention && !onIssue))
                 ? ` · ${label}`
                 : ""}
             </span>
@@ -240,6 +246,17 @@ export function ToolEvent({
       >
         {(visited || open) && (
           <div className="agent-tool-body min-w-0 space-y-3">
+            {rejected && (
+              <p className="text-xs text-muted">
+                {[
+                  label,
+                  ...diagnosticLines(rejected.diagnostic),
+                  rejected.truncated ? "参数仅保留开头预览。" : "",
+                ]
+                  .filter(Boolean)
+                  .join("\n")}
+              </p>
+            )}
             {draft && (
               <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-all text-xs">
                 {draft.argumentsText}
@@ -420,13 +437,6 @@ export function ToolEvent({
                   language="bash"
                 />
               )}
-            {!result && !questions && (
-              <p className="text-xs text-muted">
-                {status === "waiting_approval"
-                  ? "等待交互完成后继续。"
-                  : "尚未收到工具结果。"}
-              </p>
-            )}
           </div>
         )}
       </ChatDisclosure>

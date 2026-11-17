@@ -20,6 +20,29 @@ type StreamBlock struct {
 	ArgumentsText string  `json:"arguments_text,omitempty"`
 }
 
+// ObservedTools preserves failed/unfinished tool rows without promoting partial
+// arguments into the executable model response.
+func (h *Hub) ObservedTools(permit AttemptPermit) []modelcore.ToolCall {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	s := h.sessions[permit.Ref.SessionID]
+	if s == nil || permit.Ref.Epoch != h.epoch || s.snapshot.Active == nil || s.snapshot.Active.AttemptID != permit.CallID {
+		return nil
+	}
+	var calls []modelcore.ToolCall
+	for _, block := range s.snapshot.Active.Content {
+		if block.Type != "tool_call" {
+			continue
+		}
+		name := ""
+		if block.Name != nil {
+			name = *block.Name
+		}
+		calls = append(calls, modelcore.ToolCall{Name: name, Arguments: block.ArgumentsText})
+	}
+	return calls
+}
+
 func (b StreamBlock) MarshalJSON() ([]byte, error) {
 	if b.Type == "tool_call" {
 		return json.Marshal(struct {

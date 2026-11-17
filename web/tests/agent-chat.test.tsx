@@ -458,7 +458,7 @@ it("consolidates an empty failed attempt into an accessible result hint without 
   );
 });
 
-it("keeps partial generated text with an unfinished marker inside the completed turn fold", async () => {
+it("keeps partial generated text inside the completed turn fold without a duplicate marker", async () => {
   const { user } = mount(
     <ConversationTimeline
       records={failedHistory("已经生成的内容")}
@@ -469,7 +469,7 @@ it("keeps partial generated text with an unfinished marker inside the completed 
   expect(screen.getByText("已经生成的内容")).not.toBeVisible();
   await user.click(screen.getByRole("button", { name: "失败 · 执行过程" }));
   expect(screen.getByText("已经生成的内容")).toBeVisible();
-  expect(screen.getByText("未完成")).toBeVisible();
+  expect(screen.queryByText("未完成")).toBeNull();
   expect(
     screen.queryByText(runtimeReason("MODEL_CONNECTION_FAILED")),
   ).not.toBeInTheDocument();
@@ -646,7 +646,7 @@ it("shows measured reasoning time on collapsed rows without inventing old timing
     />,
   );
   expect(
-    screen.getByRole("button", { name: /思考\s*用时 2 秒/ }),
+    screen.getByRole("button", { name: /思考\s*· 2 秒/ }),
   ).toHaveAttribute("aria-expanded", "false");
   expect(screen.getByRole("button", { name: /^思考$/ })).toHaveAttribute(
     "aria-expanded",
@@ -2186,7 +2186,7 @@ it("keeps live reasoning mounted through tools and finalization, and the final t
   expect(screen.getByText("根据工具结果整理结论")).toBe(lastBody);
   expect(lastBody).toBeVisible();
   expect(lastToggle).toHaveAttribute("aria-expanded", "true");
-  expect(lastToggle).toHaveTextContent("用时 2 秒");
+  expect(lastToggle).toHaveTextContent("· 2 秒");
   expect(screen.getByText("最终完整结论")).toBe(final);
   expect(screen.getByRole("region", { name: "工具过程" })).toBe(group);
   await user.click(screen.getByRole("button", { name: "已完成 · 执行过程" }));
@@ -2235,11 +2235,11 @@ it.each([1, 2])(
     expect(group).toHaveAttribute("aria-expanded", "false");
     await user.click(group!);
     expect(
-      screen.getAllByRole("button", { name: /思考\s*用时 1 秒/ }),
+      screen.getAllByRole("button", { name: /思考\s*· 1 秒/ }),
     ).toHaveLength(count);
     await user.click(screen.getByRole("button", { name: "已完成 · 执行过程" }));
     expect(
-      screen.queryByRole("button", { name: /思考\s*用时 1 秒/ }),
+      screen.queryByRole("button", { name: /思考\s*· 1 秒/ }),
     ).toBeNull();
     expect(screen.getByText("已完成配置核对。")).toBeVisible();
   },
@@ -2273,14 +2273,14 @@ it("collapses the newest ended process even when paged history starts with an ol
       attempt={null}
     />,
   );
-  expect(screen.queryByRole("button", { name: /思考.*用时 1 秒/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /思考.*· 1 秒/ })).toBeNull();
   const turn = screen
     .getAllByRole("button", { name: "已完成 · 执行过程" })
     .find((button) => !button.hasAttribute("disabled"))!;
   expect(turn).toHaveAttribute("aria-expanded", "false");
   await user.click(turn);
   await user.click(screen.getByRole("button", { name: /^思考过程/ }));
-  expect(screen.getByRole("button", { name: /思考.*用时 1 秒/ })).toBeVisible();
+  expect(screen.getByRole("button", { name: /思考.*· 1 秒/ })).toBeVisible();
   expect(screen.getByText("本轮最终回复")).toBeVisible();
 });
 

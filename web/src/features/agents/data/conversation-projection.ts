@@ -7,6 +7,12 @@ type Event<K extends DurableRecord["event_type"]> = Extract<
   { event_type: K }
 >;
 export interface ToolNode {
+  rejected?: {
+    diagnostic?: import("@/types/agent-events").DiagnosticDetail | null;
+    reason: string;
+    interrupted: boolean;
+    truncated: boolean;
+  };
   id: string;
   attemptId?: string;
   ordinal?: number;

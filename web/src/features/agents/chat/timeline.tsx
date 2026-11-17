@@ -69,8 +69,8 @@ function Timeline({
   submissions = [],
 }: ConversationTimelineProps) {
   const { user } = useSession();
-  const [projector] = useState(() => new ConversationProjector());
-  const [presenter] = useState(() => new ConversationPresenter());
+  const projector = useMemo(() => new ConversationProjector(), []);
+  const presenter = useMemo(() => new ConversationPresenter(), []);
   const nodes = useMemo(
     () => presenter.project(projector.project(records), attempt),
     [presenter, projector, records, attempt],
@@ -303,13 +303,7 @@ function Timeline({
           const revision = turn ? (turnRevisions.get(turn.id) ?? 0) : 0;
           const next = nodes[index + 1];
           // An empty next-attempt placeholder is only a model/tool handoff.
-          const closed = Boolean(
-            next &&
-            (next.kind !== "draft" ||
-              next.attempt.content.some(
-                (block) => block.type === "text" && block.text.trim(),
-              )),
-          );
+          const closed = Boolean(next && next.kind !== "draft");
           return (
             <Fragment key={node.id}>
               {turn?.firstNode === node.id && turnHeader(turn)}
@@ -623,7 +617,6 @@ const AssistantMessage = memo(function AssistantMessage({
         anchor ?? `attempt:${record?.data.attempt_id ?? attempt?.attempt_id}`
       }
     >
-      {incomplete && <span className="agent-incomplete-label">未完成</span>}
       <MessageContent
         blocks={blocks.filter((block) => block.type !== "tool_reference")}
         sessionId={sessionId}
@@ -674,7 +667,7 @@ const ProcessGroup = memo(function ProcessGroup({
 }) {
   const pending = node.tools.some(
     (tool) =>
-      Boolean(tool.draft) ||
+      Boolean(tool.draft && !tool.rejected) ||
       (!tool.result &&
         ![
           "succeeded",
@@ -693,7 +686,7 @@ const ProcessGroup = memo(function ProcessGroup({
     setAutomaticOpen(!completed);
   const live =
     !completed &&
-    (node.tools.some((tool) => tool.draft) ||
+    (node.tools.some((tool) => tool.draft && !tool.rejected) ||
       node.entries.some(
         (entry) => entry.kind === "assistant" && entry.attempt,
       ));
@@ -702,6 +695,7 @@ const ProcessGroup = memo(function ProcessGroup({
         .reverse()
         .find(
           (tool) =>
+            !tool.rejected &&
             !tool.result &&
             (tool.draft ||
               ["prepared", "dispatching", "running"].includes(
@@ -748,6 +742,7 @@ const ProcessGroup = memo(function ProcessGroup({
         key={entry.key ?? tool.id}
         id={tool.id}
         draft={tool.draft}
+        rejected={tool.rejected}
         call={tool.call}
         result={tool.result}
         reconciliation={tool.reconciliation}

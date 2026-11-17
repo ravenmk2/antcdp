@@ -203,8 +203,10 @@ func validateToolArguments(spec agentcore.ToolSpec, call modelcore.ToolCall) err
 	if e != nil {
 		return invalidToolResponse("MODEL_TOOL_SCHEMA_INVALID")
 	}
-	if resolved.Validate(object) != nil {
-		return invalidToolResponse("MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH")
+	if validationErr := resolved.Validate(object); validationErr != nil {
+		detail := toolValidationDetail(&schema, object, validationErr, "", 0)
+		detail.ToolName = spec.Definition.Name
+		return diagnostic.Attach(modelcore.ErrInvalidResponse, &detail)
 	}
 	return nil
 }
@@ -315,7 +317,10 @@ func attemptValidation(snapshot attemptSnapshot, response modelcore.Response) ([
 		}
 		seen[call.ID] = true
 		if e := validateToolArguments(spec, call); e != nil {
-			return nil, e
+			detail := diagnostic.From(e)
+			detail.ToolName = spec.Definition.Name
+			detail.ToolIndex = i + 1
+			return nil, diagnostic.Attach(e, detail)
 		}
 		specs[i] = spec
 		ids = append(ids, agentcore.ID(^uint64(0)))
@@ -438,6 +443,10 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 			return e
 		}
 		if reason != "" {
+			observed := outcome.Response.Message.ToolCalls
+			if len(result.ObservedTools) > len(observed) {
+				observed = result.ObservedTools
+			}
 			message = modelcore.Message{Role: "assistant", Content: boundedPartial(message.Content), Reasoning: boundedPartial(message.Reasoning)}
 			partial := message.Content != "" || message.Reasoning != ""
 			status := "failed"
@@ -466,7 +475,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 			// already shown to the user must remain available to "continue".
 			// Never replay its native thinking signatures or unfinished tool calls.
 			keepPartial := status == "interrupted" || reason == "MODEL_GENERATION_LIMIT" && message.Content != ""
-			seq, e := appendEvent(st, x.Session, &x.Run.ID, "assistant/attempt", "model-result:"+strconv.FormatUint(call.ID, 10), map[string]any{"attempt_id": agentcore.ID(call.ID), "model_call_id": agentcore.ID(call.ID), "step_no": call.StepNo, "attempt_no": call.AttemptNo, "status": status, "content": uiAssistant(message, nil, result.ReasoningDurationMS), "partial": partial, "reason_code": reason, "diagnostic": diagnostic.From(diagnostic.With(outcome.Err, diagnostic.Detail{Source: "model", Stage: "response", Code: reason})), "retry": retry}, &StoredEvent{Message: &message, ModelCallID: agentcore.ID(call.ID), Interrupted: partial, PartialReason: reason, ExcludeFromContext: !keepPartial, Retry: retry}, now)
+			seq, e := appendEvent(st, x.Session, &x.Run.ID, "assistant/attempt", "model-result:"+strconv.FormatUint(call.ID, 10), map[string]any{"attempt_id": agentcore.ID(call.ID), "model_call_id": agentcore.ID(call.ID), "step_no": call.StepNo, "attempt_no": call.AttemptNo, "status": status, "rejected_tools": rejectedTools(observed), "content": uiAssistant(message, nil, result.ReasoningDurationMS), "partial": partial, "reason_code": reason, "diagnostic": diagnostic.From(diagnostic.With(outcome.Err, diagnostic.Detail{Source: "model", Stage: "response", Code: reason})), "retry": retry}, &StoredEvent{Message: &message, ModelCallID: agentcore.ID(call.ID), Interrupted: partial, PartialReason: reason, ExcludeFromContext: !keepPartial, Retry: retry}, now)
 			if e != nil {
 				return e
 			}

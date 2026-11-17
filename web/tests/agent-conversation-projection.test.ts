@@ -16,7 +16,7 @@ import {
   conversationPresentation,
 } from "@/features/agents/data/conversation-presentation";
 
-it("gives split process groups distinct stable identities when streamed text arrives between reasoning and tools", () => {
+it("keeps existing tool rows in their original group when late text arrives", () => {
   const presenter = new ConversationPresenter();
   const attempt: ActiveAttempt = {
     attempt_id: "30",
@@ -44,8 +44,8 @@ it("gives split process groups distinct stable identities when streamed text arr
   const groups = presenter
     .project([], split)
     .filter((node) => node.kind === "process");
-  expect(groups).toHaveLength(2);
-  expect(new Set(groups.map((node) => node.id)).size).toBe(2);
+  expect(groups).toHaveLength(1);
+  expect(groups[0].tools).toHaveLength(1);
   expect(groups[0].id).toBe(original[0].id);
   expect(
     presenter

@@ -25,6 +25,7 @@ export type PresentedNode =
 export class ConversationPresenter {
   private identities = new Map<string, string>();
   private lastAttempt: ActiveAttempt | null = null;
+  private toolGroups = new Map<string, string>();
 
   project(
     nodes: ConversationNode[],
@@ -32,7 +33,7 @@ export class ConversationPresenter {
   ): PresentedNode[] {
     if (attempt) this.lastAttempt = attempt;
     const claimed = new Set<string>();
-    return conversationPresentation(nodes, attempt).map((node) => {
+    const presented = conversationPresentation(nodes, attempt).map((node) => {
       if (node.kind !== "process") return node;
       const members = node.entries.map(
         (entry) =>
@@ -69,6 +70,30 @@ export class ConversationPresenter {
       });
       return { ...node, id, anchor: id, tools };
     });
+    // Once visible, a tool belongs to its mounted group. Late text fragments
+    // may add a reply boundary, but must not move an existing tool across it.
+    const groups = presented.filter(
+      (node): node is PresentedProcess => node.kind === "process",
+    );
+    for (const group of groups) {
+      for (const entry of [...group.entries]) {
+        if (entry.kind !== "tool") continue;
+        const key = entry.key ?? entry.id;
+        const owner = groups.find(
+          (item) => item.id === this.toolGroups.get(key),
+        );
+        if (owner && owner !== group && owner.runId === group.runId) {
+          const tool = group.tools.find((item) => item.id === entry.id)!;
+          group.entries = group.entries.filter((item) => item !== entry);
+          group.tools = group.tools.filter((item) => item !== tool);
+          owner.entries.push(entry);
+          owner.tools.push(tool);
+        } else this.toolGroups.set(key, group.id);
+      }
+    }
+    return presented.filter(
+      (node) => node.kind !== "process" || node.entries.length > 0,
+    );
   }
 }
 
@@ -126,6 +151,7 @@ export function conversationPresentation(
     if (record.event_type === "artifact/retained") continue;
     if (record.event_type === "assistant/attempt") {
       if (
+        !record.data.rejected_tools?.length &&
         !record.data.content.some(
           (block) =>
             block.type === "file_reference" ||
@@ -158,6 +184,31 @@ export function conversationPresentation(
           record: { ...record, data: { ...record.data, content } },
         });
         group = undefined;
+      }
+      if (record.data.rejected_tools?.length) {
+        const target = process(
+          runId,
+          `process:tools:${record.data.attempt_id}`,
+          record.seq,
+        );
+        record.data.rejected_tools.forEach((tool, ordinal) => {
+          const id = `tool:${record.data.attempt_id}:${ordinal}`;
+          target.tools.push({
+            id,
+            attemptId: record.data.attempt_id,
+            ordinal,
+            status:
+              record.data.status === "interrupted" ? "cancelled" : "failed",
+            draft: { name: tool.name, argumentsText: tool.arguments_text },
+            rejected: {
+              diagnostic: record.data.diagnostic,
+              reason: record.data.reason_code,
+              interrupted: record.data.status === "interrupted",
+              truncated: tool.truncated,
+            },
+          });
+          target.entries.push({ kind: "tool", id, key: id });
+        });
       }
     } else if (record.event_type === "assistant/message") {
       result.push(node);

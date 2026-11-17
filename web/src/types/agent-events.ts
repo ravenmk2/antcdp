@@ -25,6 +25,11 @@ export interface DiagnosticDetail {
   network?: string;
   operation_id?: string;
   instance_id?: string;
+  tool_name?: string;
+  tool_index?: number;
+  field_path?: string;
+  constraint?: string;
+  expected?: string;
 }
 
 import type { JsonObject } from "./models";
@@ -134,6 +139,11 @@ export interface EventPayloads {
     finish_reason: string;
   };
   "assistant/attempt": {
+    rejected_tools?: {
+      name: string;
+      arguments_text: string;
+      truncated: boolean;
+    }[];
     diagnostic?: DiagnosticDetail | null;
     step_no?: number;
     attempt_no?: number;

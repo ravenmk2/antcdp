@@ -211,6 +211,7 @@ type AttemptRecord struct {
 	Receipt CommitReceipt
 }
 type AttemptResult struct {
+	ObservedTools       []modelcore.ToolCall // UI evidence only; never executable or model context.
 	ReasoningDurationMS *int64
 	Permit              AttemptPermit
 	Outcome             AttemptOutcome

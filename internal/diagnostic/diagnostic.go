@@ -20,6 +20,11 @@ type Detail struct {
 	Network     string `json:"network,omitempty"`
 	OperationID string `json:"operation_id,omitempty"`
 	InstanceID  string `json:"instance_id,omitempty"`
+	ToolName    string `json:"tool_name,omitempty"`
+	ToolIndex   int    `json:"tool_index,omitempty"`
+	FieldPath   string `json:"field_path,omitempty"`
+	Constraint  string `json:"constraint,omitempty"`
+	Expected    string `json:"expected,omitempty"`
 }
 
 type carrier interface{ Diagnostic() *Detail }
@@ -42,6 +47,13 @@ func Copy(d *Detail) *Detail {
 	v.Code = token(v.Code)
 	v.OperationID = token(v.OperationID)
 	v.InstanceID = token(v.InstanceID)
+	v.ToolName = token(v.ToolName)
+	v.Constraint = token(v.Constraint)
+	v.FieldPath = safePath(v.FieldPath)
+	v.Expected = safePath(v.Expected)
+	if v.ToolIndex < 0 || v.ToolIndex > 256 {
+		v.ToolIndex = 0
+	}
 	switch v.Network {
 	case "dns", "timeout", "connection_refused", "connection_reset", "tls":
 	default:
@@ -54,6 +66,20 @@ func Copy(d *Detail) *Detail {
 		return nil
 	}
 	return &v
+}
+
+func safePath(s string) string {
+	if len(s) > 256 {
+		return ""
+	}
+	for _, c := range s {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '-', c == '/', c == '.', c == '~', c == ',':
+		default:
+			return ""
+		}
+	}
+	return s
 }
 
 func token(s string) string {

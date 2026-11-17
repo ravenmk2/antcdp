@@ -25,6 +25,26 @@ func TestReasoningClockExcludesTextAndAccumulatesWindows(t *testing.T) {
 	}
 }
 
+func TestObservedToolDraftsRemainObservationOnly(t *testing.T) {
+	hub := NewHub("epoch")
+	permit := AttemptPermit{Ref: ExecutionRef{SessionID: 1, RunID: 2, Epoch: "epoch"}, CallID: 3, Step: 1}
+	if err := hub.Start(permit); err != nil {
+		t.Fatal(err)
+	}
+	name := "write_file"
+	if err := hub.Emit(t.Context(), permit, modelcore.Delta{Kind: "tool_call", BlockIndex: 0, Name: name, DraftCallID: "draft", Text: `{"path":"file.txt","content":"unfinished`}); err != nil {
+		t.Fatal(err)
+	}
+	calls := hub.ObservedTools(permit)
+	if len(calls) != 1 || calls[0].Name != name || calls[0].ID != "" || calls[0].Arguments == "" {
+		t.Fatal(calls)
+	}
+	permit.CallID++
+	if len(hub.ObservedTools(permit)) != 0 {
+		t.Fatal("read another attempt's drafts")
+	}
+}
+
 func TestReasoningTimingSurvivesStreamSnapshotAndFinalCommit(t *testing.T) {
 	hub := NewHub("epoch")
 	permit := AttemptPermit{Ref: ExecutionRef{SessionID: 1, RunID: 2, Epoch: "epoch"}, CallID: 3, Step: 1}

@@ -115,6 +115,7 @@ func (h *PersistentHooks) CompleteAttempt(ctx context.Context, permit AttemptPer
 	result := AttemptResult{Permit: permit, Outcome: outcome}
 	if h.Hub != nil {
 		result.ReasoningDurationMS = h.Hub.FinishReasoning(permit)
+		result.ObservedTools = h.Hub.ObservedTools(permit)
 	}
 	commit, err := h.Store.CompleteAttempt(ctx, permit.Ref, result)
 	if h.Hub != nil {

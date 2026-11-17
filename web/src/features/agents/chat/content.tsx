@@ -4,6 +4,7 @@ import { Button } from "@/components/button";
 import { AsyncBoundary, Notice } from "@/components/feedback";
 import { Drawer, OverlayCancelButton } from "@/components/overlays";
 import { MarkdownView } from "@/components/markdown";
+import { ChatMarkdown } from "./markdown";
 import { useApiQuery } from "@/hooks/use-api";
 import type {
   Artifact,
@@ -29,14 +30,7 @@ export function MessageContent({
     <div className="agent-message-content">
       {blocks.map((block, index) =>
         block.type === "text" && block.text.trim() ? (
-          <MarkdownView
-            navigation={false}
-            key={index}
-            source={block.text}
-            compact
-            preview
-            streaming={streaming}
-          />
+          <ChatMarkdown key={index} source={block.text} streaming={streaming} />
         ) : block.type === "reasoning" && block.text.trim() ? (
           <ReasoningBlock
             key={index}
@@ -86,7 +80,7 @@ function ReasoningBlock({
         streaming ? (
           <ThinkingDots />
         ) : durationMs !== undefined ? (
-          `用时 ${durationMs < 1000 ? "不足 1 秒" : `${Math.floor(durationMs / 1000)} 秒`}`
+          `· ${durationMs < 1000 ? "< 1 秒" : `${Math.floor(durationMs / 1000)} 秒`}`
         ) : undefined
       }
     >

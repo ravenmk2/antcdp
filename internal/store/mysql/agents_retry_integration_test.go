@@ -58,11 +58,19 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 				outcome.Err = modelcore.ErrOutputLimit
 			}
 			result := core.AttemptResult{Permit: first.Permit, Outcome: outcome}
+			if mode == "output_limit" {
+				result.ObservedTools = result.Outcome.Response.Message.ToolCalls
+				result.Outcome.Response.Message.ToolCalls = nil
+			}
 			commit, err := f.Agents.CompleteAttempt(f.Context, x.Ref, result)
 			if err != nil || commit.Failure != nil || len(commit.Calls) != 0 {
 				t.Fatal("failed attempt settlement", err, commit)
 			}
 			var tools int
+			var rejectedCount int
+			if err = f.Store.db.GetContext(f.Context, &rejectedCount, "SELECT JSON_LENGTH(JSON_EXTRACT(payload, '$.public.rejected_tools')) FROM agent_event WHERE session_id=? AND seq=?", x.Ref.SessionID, commit.AssistantSeq); err != nil || rejectedCount != 1 {
+				t.Fatal("failed tool observation not retained", rejectedCount, err)
+			}
 			if err = f.Store.db.GetContext(f.Context, &tools, "SELECT COUNT(*) FROM agent_tool_call WHERE run_id=?", x.Ref.RunID); err != nil || tools != 0 {
 				t.Fatal("partial tool dispatched", tools, err)
 			}
