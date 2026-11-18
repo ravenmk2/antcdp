@@ -91,7 +91,13 @@ export function resolveWorkspaceProjectView(
   return { projectId, page, section: "profile" };
 }
 
-export type WorkspaceTeamTab = "overview" | "members" | "projects";
+export const workspaceTeamTabLabels = {
+  overview: "团队介绍",
+  members: "团队成员",
+  projects: "参与项目",
+} as const;
+
+export type WorkspaceTeamTab = keyof typeof workspaceTeamTabLabels;
 
 export function normalizeWorkspaceTeamTab(
   value: string | null,

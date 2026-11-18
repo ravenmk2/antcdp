@@ -1,4 +1,14 @@
+.buttonAccent {
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+}
+:global(.dark) .buttonAccent {
+  --accent: #1783ff;
+  --accent-hover: #2e90ff;
+}
+
 .scope {
+  composes: buttonAccent;
   --font-code:
     ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, Menlo, Monaco,
     "Liberation Mono", "DejaVu Sans Mono", "MiSans", monospace;
@@ -6,8 +16,6 @@
     "MiSans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   color-scheme: light;
-  --accent: #2563eb;
-  --accent-hover: #1d4ed8;
   --accent-soft: #eff6ff;
   --accent-soft-strong: #d5e7ff;
   --on-accent: #fff;
@@ -52,8 +60,6 @@
 }
 :global(.dark) .scope {
   color-scheme: dark;
-  --accent: #1783ff;
-  --accent-hover: #2e90ff;
   --accent-soft: #18324e;
   --accent-soft-strong: #244363;
   --on-accent: #fff;

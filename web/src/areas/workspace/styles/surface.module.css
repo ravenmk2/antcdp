@@ -136,8 +136,7 @@
   border-color: var(--border);
   background: var(--surface);
 }
-.scope :global(.workspace-sidebar-switcher),
-.scope :global(.workspace-sidebar-identity) {
+.scope :global(.workspace-sidebar-switcher) {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -149,8 +148,6 @@
   background: var(--surface);
   color: var(--text);
   text-align: left;
-}
-.scope :global(.workspace-sidebar-switcher) {
   cursor: pointer;
 }
 .scope :global(.workspace-sidebar-switcher:is(:hover, [aria-expanded="true"])) {
@@ -695,10 +692,10 @@
   .scope :global(.workspace-shortcut-feedback .notice) {
     flex: 1;
   }
-  :global(:root:not(.dark)) .scope :global(.data-table) {
+  .scope:not(:global(.dark *)) :global(.data-table) {
     --table-row-hover: #f4f4f4;
   }
-  :global(:root:not(.dark)) .scope :global(.data-table thead th) {
+  .scope:not(:global(.dark *)) :global(.data-table thead th) {
     background-color: var(--workspace-table-header);
   }
   :global(.dark) .scope

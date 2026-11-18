@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { Button } from "@/components/button";
+import { StandaloneInput } from "@/components/fields";
 import { SimpleTable } from "@/components/table";
+import { TableToolbar } from "@/components/table-toolbar";
 import { request } from "@/api/client";
 import { useSession } from "@/app/auth";
 import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
-import { Panel, ResourceDetailShell } from "@/components/layout";
+import { PanelRoot, ResourceDetailShell } from "@/components/layout";
 import { ConfirmDialog } from "@/components/overlays";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { ResourceIcon } from "@/components/resource-icon";
@@ -20,7 +23,10 @@ import { useWorkspaceShortcut } from "@/areas/workspace/pages/use-workspace-shor
 import { WorkspaceResourceHeader } from "./workspace-resource-header";
 import { WorkspaceResourceActions } from "@/areas/workspace/pages/workspace-resource-actions";
 import { WorkspaceShortcutFeedback } from "@/areas/workspace/pages/workspace-shortcut-feedback";
-import { normalizeWorkspaceTeamTab } from "@/areas/workspace/pages/workspace-navigation";
+import {
+  normalizeWorkspaceTeamTab,
+  workspaceTeamTabLabels,
+} from "@/areas/workspace/pages/workspace-navigation";
 
 export function WorkspaceTeamDetail() {
   const { teamId } = useParams();
@@ -82,33 +88,37 @@ function TeamContent({
   return (
     <ResourceDetailShell
       header={
-        <WorkspaceResourceHeader
-          resource={team}
-          kind="teams"
-          actions={
-            <WorkspaceResourceActions
-              kind="teams"
-              resource={team}
-              shortcut={shortcut}
-              onEdit={() => setEdit(true)}
-              editDescriptionTo={`/teams/${team.id}/description/edit`}
-              onRefresh={onRefresh}
-              onLeave={() => setLeave(true)}
-            />
-          }
-        />
+        tab === "overview" && (
+          <WorkspaceResourceHeader
+            resource={team}
+            kind="teams"
+            actions={
+              <WorkspaceResourceActions
+                kind="teams"
+                resource={team}
+                shortcut={shortcut}
+                onEdit={() => setEdit(true)}
+                editDescriptionTo={`/teams/${team.id}/description/edit`}
+                onRefresh={onRefresh}
+                onLeave={() => setLeave(true)}
+              />
+            }
+          />
+        )
       }
     >
-      {Boolean(shortcut.error) && (
-        <WorkspaceShortcutFeedback
-          error={shortcut.error}
-          pending={shortcut.shortcuts.isFetching}
-          onReload={() => void shortcut.reload()}
-        />
-      )}
       <div className="min-w-0">
         {tab === "overview" && (
-          <ResourceDocument source={team.description} kind="teams" />
+          <>
+            {Boolean(shortcut.error) && (
+              <WorkspaceShortcutFeedback
+                error={shortcut.error}
+                pending={shortcut.shortcuts.isFetching}
+                onReload={() => void shortcut.reload()}
+              />
+            )}
+            <ResourceDocument source={team.description} kind="teams" />
+          </>
         )}
         {tab === "members" && <MembersPanel kind="teams" resource={team} />}
         {tab === "projects" && <TeamProjects team={team} />}
@@ -149,35 +159,73 @@ function TeamContent({
 }
 
 function TeamProjects({ team }: { team: Resource }) {
+  const [input, setInput] = useState("");
+  const [q, setQ] = useState("");
   const query = useApiQuery<Resource[]>(
     ["team-projects", team.id],
     `/teams/${team.id}/projects`,
   );
+  const keyword = q.toLowerCase();
+  const projects = query.data?.data.filter((project) =>
+    [project.name, project.code, project.summary].some((value) =>
+      value.toLowerCase().includes(keyword),
+    ),
+  );
   return (
-    <Panel title="关联项目" bodyClassName="p-0">
+    <PanelRoot>
+      <TableToolbar
+        onReset={() => {
+          setInput("");
+          setQ("");
+        }}
+        onRefresh={() => void query.refetch()}
+        refreshing={query.isFetching}
+      >
+        <form
+          className="flex shrink-0 items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setQ(input.trim());
+          }}
+        >
+          <StandaloneInput
+            aria-label="搜索参与项目"
+            placeholder="搜索名称、编码或摘要"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+          />
+          <Button type="submit" variant="outline">
+            搜索
+          </Button>
+        </form>
+      </TableToolbar>
       <AsyncBoundary
         loading={query.isPending}
         error={query.error}
         onRetry={() => void query.refetch()}
-        empty={!query.data?.data.length}
-        emptyTitle="尚未加入项目"
-        emptyDescription="团队被授权加入项目后，会在这里显示你可见的项目。"
+        empty={!projects?.length}
+        emptyTitle={q ? "没有匹配的项目" : "团队尚未参与项目"}
+        emptyDescription={
+          q
+            ? "请调整搜索关键词。"
+            : "团队获得项目授权后，这里会显示你有权查看的项目。"
+        }
       >
         <SimpleTable
-          label="关联项目"
+          label={workspaceTeamTabLabels.projects}
           headers={["项目名称", "摘要", "成员", "状态"]}
         >
-          {query.data?.data.map((project) => (
+          {projects?.map((project) => (
             <tr key={project.id}>
               <td>
                 <Link
                   to={"/projects/" + project.id}
-                  className="inline-flex max-w-full items-center gap-3 rounded-md text-foreground hover:text-primary"
+                  className="flex w-fit max-w-full items-center gap-3 rounded-md text-foreground hover:text-primary"
                 >
                   <ResourceIcon resource={project} projectId={project.id} />
                   <span className="min-w-0">
                     <strong className="block truncate">{project.name}</strong>
-                    <small className="mono block truncate text-muted">
+                    <small className="mt-1 block truncate font-mono text-muted">
                       {project.code}
                     </small>
                   </span>
@@ -196,6 +244,6 @@ function TeamProjects({ team }: { team: Resource }) {
           ))}
         </SimpleTable>
       </AsyncBoundary>
-    </Panel>
+    </PanelRoot>
   );
 }

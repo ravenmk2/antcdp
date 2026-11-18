@@ -13,16 +13,30 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useApiQuery } from "@/hooks/use-api";
 import { useDebouncedSearch } from "@/hooks/use-search";
-import type { Page, Resource } from "@/types/collaboration";
+import type { Page, Resource, ResourceKind } from "@/types/collaboration";
 
-export function ProjectSwitcher({ project }: { project: Resource }) {
+export function ResourceSwitcher({
+  kind,
+  resource,
+}: {
+  kind: ResourceKind;
+  resource: Resource;
+}) {
   const session = useSession();
   const [open, setOpen] = useState(false);
   const [submitted, setSubmitted] = useState("");
   const search = useDebouncedSearch("", setSubmitted, 300);
+  const project = kind === "projects";
+  const label = project ? "项目" : "团队";
+  const ended = project ? "archived" : "dissolved";
+  const endedLabel = project ? "已归档" : "已解散";
   const directory = useApiQuery<Page<Resource>>(
-    ["project-switcher", session.user.id, submitted],
-    `/projects?${new URLSearchParams({
+    [
+      project ? "project-switcher" : "team-switcher",
+      session.user.id,
+      submitted,
+    ],
+    `/${kind}?${new URLSearchParams({
       scope: "mine",
       status: "all",
       page: "1",
@@ -46,20 +60,20 @@ export function ProjectSwitcher({ project }: { project: Resource }) {
         render={
           <button
             className="workspace-sidebar-switcher"
-            aria-label={`切换项目，当前 ${project.name}`}
+            aria-label={`切换${label}，当前 ${resource.name}`}
           >
             <ResourceIcon
-              resource={project}
-              projectId={project.id}
+              resource={resource}
+              projectId={project ? resource.id : undefined}
               className="size-8"
             />
             <span className="min-w-0 flex-1">
-              <strong className="block truncate text-sm" title={project.name}>
-                {project.name}
+              <strong className="block truncate text-sm" title={resource.name}>
+                {resource.name}
               </strong>
               <small className="mt-0.5 block truncate text-[11px] text-muted">
-                {project.code}
-                {project.status === "archived" ? " · 已归档" : ""}
+                {resource.code}
+                {resource.status === ended ? ` · ${endedLabel}` : ""}
               </small>
             </span>
             <ChevronDown className="sidebar-label size-4 text-muted" />
@@ -73,7 +87,7 @@ export function ProjectSwitcher({ project }: { project: Resource }) {
       >
         <div className="border-b border-b-border-subtle p-2">
           <StandaloneInput
-            aria-label="搜索我的项目"
+            aria-label={`搜索我的${label}`}
             placeholder="搜索名称、编码或摘要"
             value={search.value}
             onChange={(event) => search.setValue(event.target.value)}
@@ -94,11 +108,11 @@ export function ProjectSwitcher({ project }: { project: Resource }) {
         <div className="max-h-72 overflow-y-auto p-1">
           {directory.isPending ? (
             <p className="p-4 text-center text-xs text-muted" role="status">
-              正在加载项目…
+              正在加载{label}…
             </p>
           ) : directory.isError ? (
             <div className="grid justify-items-center gap-2 p-4 text-xs text-muted">
-              <p>项目列表加载失败。</p>
+              <p>{label}列表加载失败。</p>
               <Button
                 size="sm"
                 variant="outline"
@@ -114,12 +128,13 @@ export function ProjectSwitcher({ project }: { project: Resource }) {
                 key={item.id}
                 render={
                   <Link
-                    to={`/projects/${item.id}`}
+                    to={`/${kind}/${item.id}`}
+                    aria-current={item.id === resource.id ? "true" : undefined}
                     className="flex items-center gap-2"
                   >
                     <ResourceIcon
                       resource={item}
-                      projectId={item.id}
+                      projectId={project ? item.id : undefined}
                       className="size-7"
                     />
                     <span className="min-w-0 flex-1">
@@ -130,11 +145,13 @@ export function ProjectSwitcher({ project }: { project: Resource }) {
                         {item.code}
                       </small>
                     </span>
-                    {item.status === "archived" && (
-                      <span className="text-[11px] text-muted">已归档</span>
+                    {item.status === ended && (
+                      <span className="text-[11px] text-muted">
+                        {endedLabel}
+                      </span>
                     )}
-                    {item.id === project.id && (
-                      <Check className="size-4 text-primary" />
+                    {item.id === resource.id && (
+                      <Check aria-hidden className="size-4 text-primary" />
                     )}
                   </Link>
                 }
@@ -142,13 +159,13 @@ export function ProjectSwitcher({ project }: { project: Resource }) {
             ))
           ) : (
             <p className="p-4 text-center text-xs text-muted">
-              {submitted ? "没有匹配的项目" : "暂无可切换项目"}
+              {submitted ? `没有匹配的${label}` : `暂无可切换${label}`}
             </p>
           )}
         </div>
         {directory.data && directory.data.data.total > 100 && (
           <p className="border-t border-t-border-subtle px-3 py-2 text-[11px] text-muted">
-            共 {directory.data.data.total} 个项目，请通过搜索缩小范围。
+            共 {directory.data.data.total} 个{label}，请通过搜索缩小范围。
           </p>
         )}
       </DropdownMenuContent>

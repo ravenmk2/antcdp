@@ -79,6 +79,14 @@ const team: Resource = {
   description: "团队协作约定",
   etag: '"team-11-v1"',
 };
+const deliveryTeam: Resource = {
+  ...team,
+  id: "12",
+  code: "delivery-team",
+  name: "交付团队",
+  description: "团队交付流程",
+  etag: '"team-12-v1"',
+};
 const shortcuts: Shortcuts = {
   projects: { items: [], version: "1", etag: '"projects-v1"' },
   teams: { items: [], version: "1", etag: '"teams-v1"' },
@@ -91,16 +99,27 @@ vi.mock("@/hooks/use-api", () => ({
         data: { data: { items: [project], total: 1 } },
         isPending: false,
       };
-    const data =
-      path === "/projects/7"
-        ? project
-        : path === "/teams/11"
-          ? team
-          : path === "/teams/11/projects"
-            ? [project]
-            : path === "/me/sidebar-shortcuts"
-              ? shortcuts
-              : [];
+    if (path.startsWith("/teams?")) {
+      const params = new URLSearchParams(path.slice("/teams?".length));
+      const items =
+        params.get("scope") === "mine"
+          ? [team, deliveryTeam].filter((item) =>
+              item.name.includes(params.get("q") ?? ""),
+            )
+          : [];
+      return {
+        data: { data: { items, total: items.length } },
+        isPending: false,
+      };
+    }
+    const responses: Record<string, Resource | Resource[] | Shortcuts> = {
+      "/projects/7": project,
+      "/teams/11": team,
+      "/teams/12": deliveryTeam,
+      "/teams/11/projects": [project],
+      "/me/sidebar-shortcuts": shortcuts,
+    };
+    const data = responses[path] ?? [];
     return {
       data: { data },
       isPending: false,
@@ -203,12 +222,14 @@ it("keeps project credential links in the workspace", async () => {
   );
 });
 
-it("renders team information and preserves member and project navigation", async () => {
+it("shows team information on the introduction and opens the participating projects list", async () => {
   const { user } = mount(
     [{ path: "/teams/:teamId", element: <WorkspaceTeamDetail /> }],
     "/teams/11?tab=unknown",
   );
-  expect(screen.getByRole("heading", { name: /平台团队/ })).toBeVisible();
+  const main = within(screen.getByRole("main"));
+  expect(main.getByRole("heading", { name: /平台团队/ })).toBeVisible();
+  expect(main.getByText("对象操作")).toBeVisible();
   expect(screen.getByText("团队协作约定")).toBeVisible();
   const rail = within(screen.getByRole("complementary", { name: "团队导航" }));
   expect(rail.getByRole("link", { name: "团队介绍" })).toHaveAttribute(
@@ -219,9 +240,60 @@ it("renders team information and preserves member and project navigation", async
 
   await user.click(rail.getByRole("link", { name: /团队成员/ }));
   expect(screen.getByText("团队成员内容")).toBeVisible();
-  await user.click(rail.getByRole("link", { name: "关联项目" }));
-  expect(screen.getByRole("link", { name: /交付平台/ })).toHaveAttribute(
+  expect(
+    main.queryByRole("heading", { name: /平台团队/ }),
+  ).not.toBeInTheDocument();
+  expect(main.queryByText("对象操作")).not.toBeInTheDocument();
+  await user.click(rail.getByRole("link", { name: "参与项目" }));
+  expect(
+    main.queryByRole("heading", { name: /平台团队/ }),
+  ).not.toBeInTheDocument();
+  expect(
+    within(screen.getByRole("navigation", { name: "当前位置" })).getByText(
+      "参与项目",
+    ),
+  ).toHaveAttribute("aria-current", "page");
+  const table = within(main.getByRole("table", { name: "参与项目" }));
+  expect(table.getByRole("link", { name: /交付平台/ })).toHaveAttribute(
     "href",
     "/projects/7",
   );
+
+  await user.type(
+    main.getByRole("textbox", { name: "搜索参与项目" }),
+    "不存在{Enter}",
+  );
+  expect(main.getByText("没有匹配的项目")).toBeVisible();
+  await user.click(main.getByRole("button", { name: "重置筛选" }));
+  expect(main.getByRole("table", { name: "参与项目" })).toBeVisible();
+});
+
+it("searches the user's teams and switches to the selected team introduction", async () => {
+  const { router, user } = mount(
+    [{ path: "/teams/:teamId", element: <WorkspaceTeamDetail /> }],
+    "/teams/11?tab=members",
+  );
+  await user.click(
+    screen.getByRole("button", { name: "切换团队，当前 平台团队" }),
+  );
+  const menu = within(await screen.findByRole("menu"));
+  expect(menu.getByRole("menuitem", { name: /平台团队/ })).toHaveAttribute(
+    "aria-current",
+    "true",
+  );
+
+  await user.type(
+    menu.getByRole("textbox", { name: "搜索我的团队" }),
+    "交付{Enter}",
+  );
+  expect(
+    menu.queryByRole("menuitem", { name: /平台团队/ }),
+  ).not.toBeInTheDocument();
+  await user.click(menu.getByRole("menuitem", { name: /交付团队/ }));
+  expect(router.state.location.pathname).toBe("/teams/12");
+  expect(router.state.location.search).toBe("");
+  expect(screen.getByText("团队交付流程")).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "切换团队，当前 交付团队" }),
+  ).toBeVisible();
 });

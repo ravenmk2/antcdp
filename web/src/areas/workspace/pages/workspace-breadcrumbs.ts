@@ -4,6 +4,7 @@ import {
   normalizeWorkspaceTeamTab,
   projectSectionLabels,
   resolveWorkspaceProjectView,
+  workspaceTeamTabLabels,
 } from "@/areas/workspace/pages/workspace-navigation";
 
 export function workspaceBreadcrumbs(
@@ -40,8 +41,7 @@ export function workspaceBreadcrumbs(
         ...(tab !== "overview" ? { to: path } : {}),
       },
     ];
-    if (tab === "members") items.push({ label: "团队成员" });
-    if (tab === "projects") items.push({ label: "关联项目" });
+    if (tab !== "overview") items.push({ label: workspaceTeamTabLabels[tab] });
     return items;
   }
   if (project) {

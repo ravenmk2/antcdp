@@ -11,6 +11,8 @@ import { Field, Input } from "@/components/fields";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
 import { authHref, returnTarget } from "@/lib/routes";
 import { resolveSiteName } from "@/lib/site-name";
+import { cn } from "@/lib/utils";
+import memberTheme from "@/styles/member-theme.module.css";
 import type { Session } from "@/types/auth";
 import {
   displayNameSchema,
@@ -309,7 +311,7 @@ function AuthForm({
               )}
               <Button
                 size="lg"
-                className="w-full"
+                className={cn("w-full", !change && memberTheme.buttonAccent)}
                 type="submit"
                 pending={submission.pending}
               >

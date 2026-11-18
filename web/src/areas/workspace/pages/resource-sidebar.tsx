@@ -15,13 +15,13 @@ import {
 } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import type { ReactNode } from "react";
-import { ResourceIcon } from "@/components/resource-icon";
 import type { Resource } from "@/types/collaboration";
-import { ProjectSwitcher } from "./project-switcher";
+import { ResourceSwitcher } from "./resource-switcher";
 import {
   normalizeWorkspaceTeamTab,
   projectSectionRoutes,
   projectSectionLabels,
+  workspaceTeamTabLabels,
   type WorkspaceProjectView,
 } from "./workspace-navigation";
 
@@ -119,7 +119,7 @@ export function ProjectSidebar({
 }) {
   return (
     <ResourceNavigation
-      header={<ProjectSwitcher project={project} />}
+      header={<ResourceSwitcher kind="projects" resource={project} />}
       name={project.name}
       base={`/projects/${project.id}`}
       active={view.page === "settings" ? view.section : view.page}
@@ -141,32 +141,27 @@ export function TeamSidebar({ team }: { team: Resource }) {
   const [params] = useSearchParams();
   const active = normalizeWorkspaceTeamTab(params.get("tab"));
   const links = [
-    { key: "overview", label: "团队介绍", icon: FileText },
-    { key: "members", label: "团队成员", icon: Users },
-    { key: "projects", label: "关联项目", icon: FolderGit2 },
-  ].map((link) => {
+    { key: "overview", icon: FileText },
+    { key: "members", icon: Users },
+    { key: "projects", icon: FolderGit2 },
+  ] as const;
+  const destinations = links.map((link) => {
     const next = new URLSearchParams(params);
     if (link.key === "overview") next.delete("tab");
     else next.set("tab", link.key);
-    return { ...link, suffix: next.size ? `?${next}` : "" };
+    return {
+      ...link,
+      label: workspaceTeamTabLabels[link.key],
+      suffix: next.size ? `?${next}` : "",
+    };
   });
   return (
     <ResourceNavigation
-      header={
-        <div className="workspace-sidebar-identity">
-          <ResourceIcon resource={team} className="size-8" />
-          <span className="min-w-0">
-            <strong className="block truncate text-sm">{team.name}</strong>
-            <small className="block truncate text-[11px] text-muted">
-              {team.code}
-            </small>
-          </span>
-        </div>
-      }
+      header={<ResourceSwitcher kind="teams" resource={team} />}
       name={team.name}
       base={`/teams/${team.id}`}
       active={active}
-      groups={[{ label: "团队", links }]}
+      groups={[{ label: "团队", links: destinations }]}
     />
   );
 }

@@ -252,17 +252,19 @@ export function ResourceDetailShell({
 }: ComponentProps<"div"> & {
   contextClassName?: string;
   contentClassName?: string;
-  header: ReactNode;
+  header?: ReactNode;
   navigation?: ReactNode;
   children: ReactNode;
   wide?: boolean;
 }) {
   return (
     <div className={cn("resource-detail-page", className)} {...props}>
-      <div className={cn("resource-context", contextClassName)}>
-        {header}
-        {navigation}
-      </div>
+      {(header || navigation) && (
+        <div className={cn("resource-context", contextClassName)}>
+          {header}
+          {navigation}
+        </div>
+      )}
       <div
         className={cn(
           "resource-detail-content",
