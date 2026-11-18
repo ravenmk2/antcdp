@@ -1918,16 +1918,59 @@
   padding: 1px 4px;
   font-size: 0.9em;
 }
+.root :global(.agent-markdown-table-frame) {
+  margin-block: 16px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.root
+  :global(.agent-markdown > :first-child > .agent-markdown-table-frame:first-child) {
+  margin-block-start: 0;
+}
+.root
+  :global(.agent-markdown > :last-child > .agent-markdown-table-frame:last-child) {
+  margin-block-end: 0;
+}
 .root :global(.agent-markdown-table) {
   overflow-x: auto;
 }
-.root :global(.agent-markdown table) {
-  border-collapse: collapse;
+.root :global(.agent-markdown-table > table) {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
 }
-.root :global(.agent-markdown :is(th, td)) {
-  padding: 6px 12px;
-  border: 1px solid var(--chat-divider);
-  min-width: 7rem;
+.root :global(.agent-markdown-table :is(th, td)) {
+  padding: 8px 12px;
+  border-right: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.root :global(.agent-markdown-table th) {
+  background: var(--surface-subtle);
+}
+.root :global(.agent-markdown-table :is(th, td):last-child) {
+  border-right: 0;
+}
+.root :global(.agent-markdown-table tbody tr:last-child td) {
+  border-bottom: 0;
+}
+.root :global(.agent-markdown-table-heading) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.root :global(.agent-markdown-table-heading > :last-child) {
+  flex-shrink: 0;
+}
+.root :global(.agent-markdown-table-heading .agent-chat-icon-button) {
+  width: 32px;
+  height: 32px;
+}
+.root :global(.agent-markdown-table-heading .agent-chat-icon-button svg) {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
 }
 .root :global(.agent-markdown-code) {
   border-radius: 8px;

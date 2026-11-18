@@ -21,22 +21,35 @@ afterEach(() => {
   window.history.replaceState({}, "", "/");
 });
 
-it("copies each complete table from its original Markdown source", async () => {
-  const first =
-    "| 名称 | 链接 |\r\n| --- | --- |\r\n| `a` | [站点](/home) |\r\n";
-  const second = "| 数量 |\n| ---: |\n| 12 |";
-  const source = `正文\r\n\r\n${first}\r\n间隔\n\n${second}`;
-  expect(parseMarkdown(source).tables).toEqual([first, second]);
-  const user = userEvent.setup();
-  const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
-  render(<MarkdownView source={source} />);
-  const buttons = screen.getAllByRole("button", { name: "复制表格 Markdown" });
-  expect(screen.getAllByRole("table")).toHaveLength(2);
-  await user.click(buttons[0]);
-  expect(write).toHaveBeenLastCalledWith(first);
-  await user.click(buttons[1]);
-  expect(write).toHaveBeenLastCalledWith(second);
-});
+it.each([
+  ["document", MarkdownView],
+  ["chat", ChatMarkdown],
+] as const)(
+  "uses a scroll region and copies the exact Markdown of each %s table",
+  async (_kind, Preview) => {
+    const first =
+      "| 名称 | 链接 |\r\n| --- | --- |\r\n| `a` | [站点](/home) |\r\n";
+    const second = "| 数量 |\n| ---: |\n| 12 |";
+    const source = `正文\r\n\r\n${first}\r\n间隔\n\n${second}`;
+    expect(parseMarkdown(source).tables).toEqual([first, second]);
+    const user = userEvent.setup();
+    const write = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue();
+    render(<Preview source={source} />);
+    const regions = screen.getAllByRole("region", { name: "Markdown 表格" });
+    expect(regions).toHaveLength(2);
+    for (const [index, expected] of [first, second].entries()) {
+      const region = regions[index];
+      expect(region).toHaveAttribute("tabindex", "0");
+      const table = within(region).getByRole("table");
+      await user.click(
+        within(table).getByRole("button", { name: "复制表格 Markdown" }),
+      );
+      expect(write).toHaveBeenLastCalledWith(expected);
+    }
+  },
+);
 
 it.each([
   ["document", MarkdownView],

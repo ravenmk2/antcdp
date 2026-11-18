@@ -1,4 +1,4 @@
-import MarkdownIt from "markdown-it";
+import MarkdownIt, { type Token } from "markdown-it";
 
 const tableTextAlignment: Record<string, string> = {
   "text-align:left": "text-left",
@@ -26,6 +26,24 @@ export function createMarkdownParser() {
   return parser;
 }
 
+export function markdownSourceLines(source: string) {
+  return source.match(/[^\r\n]*(?:\r\n|\r|\n|$)/g) ?? [];
+}
+
+export function collectMarkdownTables(
+  tokens: readonly Token[],
+  sourceLines: readonly string[],
+) {
+  const tables: string[] = [];
+  for (const token of tokens) {
+    if (token.type === "table_open" && token.map) {
+      token.attrSet("data-markdown-table", String(tables.length));
+      tables.push(sourceLines.slice(token.map[0], token.map[1]).join(""));
+    }
+  }
+  return tables;
+}
+
 export interface DocumentHeading {
   id: string;
   title: string;
@@ -43,16 +61,11 @@ export function parseMarkdown(source: string) {
   const renderer = createMarkdownParser();
   const headings: DocumentHeading[] = [];
   const blocks: DocumentCode[] = [];
-  const tables: string[] = [];
-  const sourceLines = source.match(/[^\r\n]*(?:\r\n|\r|\n|$)/g) ?? [];
   const used = new Set<string>();
   const tokens = renderer.parse(source, {});
+  const tables = collectMarkdownTables(tokens, markdownSourceLines(source));
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
-    if (token.type === "table_open" && token.map) {
-      token.attrSet("data-markdown-table", String(tables.length));
-      tables.push(sourceLines.slice(token.map[0], token.map[1]).join(""));
-    }
     if (token.map && token.nesting !== -1)
       token.attrSet("data-source-line", String(token.map[0] + 1));
     if (token.type !== "heading_open") continue;

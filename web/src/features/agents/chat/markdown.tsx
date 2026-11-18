@@ -9,7 +9,11 @@ import {
 import DOMPurify from "dompurify";
 import { Download, WrapText } from "lucide-react";
 import { useTheme } from "@/app/theme";
-import { createMarkdownParser } from "@/lib/markdown-document";
+import {
+  collectMarkdownTables,
+  createMarkdownParser,
+  markdownSourceLines,
+} from "@/lib/markdown-document";
 import { ChatCopyButton, ChatIconButton } from "./controls";
 
 // Conversation rendering owns its DOM, spacing and streaming lifecycle. Parsing
@@ -36,20 +40,20 @@ export function ChatMarkdown({
   const blocks = useMemo(() => {
     const env = {};
     const tokens = parser.parse(source, env);
-    const result: { key: number; html: string }[] = [];
+    const sourceLines = markdownSourceLines(source);
+    const result: { key: number; html: string; tables: string[] }[] = [];
     for (let start = 0; start < tokens.length;) {
       let end = start + 1;
       if (tokens[start].nesting === 1) {
         let depth = 1;
         while (end < tokens.length && depth) depth += tokens[end++].nesting;
       }
+      const blockTokens = tokens.slice(start, end);
+      const tables = collectMarkdownTables(blockTokens, sourceLines);
       result.push({
         key: tokens[start].map?.[0] ?? start,
-        html: parser.renderer.render(
-          tokens.slice(start, end),
-          parser.options,
-          env,
-        ),
+        html: parser.renderer.render(blockTokens, parser.options, env),
+        tables,
       });
       start = end;
     }
@@ -58,31 +62,34 @@ export function ChatMarkdown({
   if (!source.trim()) return null;
   return (
     <div className="agent-markdown" aria-label="Markdown 正文">
-      {blocks.map((block) => (
-        <MarkdownBlock
-          key={block.key}
-          html={block.html}
-          streaming={streaming}
-        />
+      {blocks.map(({ key, ...block }) => (
+        <MarkdownBlock key={key} {...block} streaming={streaming} />
       ))}
     </div>
   );
 }
 
-const MarkdownBlock = memo(function MarkdownBlock({
-  html,
-  streaming,
-}: {
+type MarkdownBlockProps = {
   html: string;
+  tables: readonly string[];
   streaming: boolean;
-}) {
-  const content = useMemo(() => {
+};
+
+const attributeNames: Record<string, string> = {
+  class: "className",
+  colspan: "colSpan",
+  rowspan: "rowSpan",
+};
+
+const MarkdownBlock = memo(
+  function MarkdownBlock({ html, tables, streaming }: MarkdownBlockProps) {
     const clean = DOMPurify.sanitize(html, {
       USE_PROFILES: { html: true },
       FORBID_TAGS: ["img", "iframe", "object", "embed"],
       FORBID_ATTR: ["style"],
     });
     const dom = new DOMParser().parseFromString(clean, "text/html");
+
     function render(node: Node, key: number): ReactNode {
       if (node.nodeType === 3) return node.textContent;
       if (!(node instanceof Element)) return null;
@@ -96,49 +103,71 @@ const MarkdownBlock = memo(function MarkdownBlock({
             streaming={streaming}
           />
         );
+
       const tag = node.tagName.toLowerCase();
-      const attributes: Record<string, unknown> = { key };
+      const attributes: Record<string, unknown> = {};
       for (const attr of node.attributes) {
-        if (!attr.name.startsWith("on"))
-          attributes[
-            (
-              {
-                class: "className",
-                colspan: "colSpan",
-                rowspan: "rowSpan",
-              } as Record<string, string>
-            )[attr.name] ?? attr.name
-          ] = attr.value;
+        if (!attr.name.startsWith("on")) {
+          attributes[attributeNames[attr.name] ?? attr.name] = attr.value;
+        }
       }
+      const tableStructure = ["table", "thead", "tbody", "tr"].includes(tag);
       const children = [...node.childNodes]
         .filter(
           (child) =>
             !(
-              ["table", "thead", "tbody", "tr"].includes(tag) &&
+              tableStructure &&
               child.nodeType === 3 &&
               !child.textContent?.trim()
             ),
         )
         .map(render);
-      const element = createElement(tag, attributes, ...children);
-      return tag === "table" ? (
-        <div
-          key={key}
-          className="agent-markdown-table"
-          role="region"
-          aria-label="Markdown 表格"
-          tabIndex={0}
-        >
-          {element}
-        </div>
-      ) : (
-        element
-      );
+
+      if (tag === "th" && !node.nextElementSibling) {
+        const index = node
+          .closest("table")
+          ?.getAttribute("data-markdown-table");
+        const source = index != null ? tables[Number(index)] : undefined;
+        if (source !== undefined) {
+          return (
+            <th {...attributes} key={key}>
+              <div className="agent-markdown-table-heading">
+                <span>{children}</span>
+                <ChatCopyButton value={source} label="复制表格 Markdown" />
+              </div>
+            </th>
+          );
+        }
+      }
+      if (tag === "table") {
+        return (
+          <div key={key} className="agent-markdown-table-frame">
+            <div
+              className="agent-markdown-table"
+              role="region"
+              aria-label="Markdown 表格"
+              tabIndex={0}
+            >
+              <table {...attributes}>{children}</table>
+            </div>
+          </div>
+        );
+      }
+      return createElement(tag, { ...attributes, key }, ...children);
     }
-    return [...dom.body.childNodes].map(render);
-  }, [html, streaming]);
-  return <div className="agent-markdown-block">{content}</div>;
-});
+
+    return (
+      <div className="agent-markdown-block">
+        {[...dom.body.childNodes].map(render)}
+      </div>
+    );
+  },
+  (previous, next) =>
+    previous.html === next.html &&
+    previous.streaming === next.streaming &&
+    previous.tables.length === next.tables.length &&
+    previous.tables.every((source, index) => source === next.tables[index]),
+);
 
 function ChatCode({
   source,

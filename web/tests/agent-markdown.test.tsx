@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import { ChatMarkdown } from "@/features/agents/chat/markdown";
 
@@ -30,6 +31,33 @@ it("keeps completed blocks and code controls mounted while the tail grows", () =
   ).toHaveTextContent("A");
   rerender(<ChatMarkdown source={source} />);
   expect(container.querySelector(".agent-markdown-code")).toBe(code);
+});
+
+it("retains table scroll and focus as rows stream and copies the current source", async () => {
+  const user = userEvent.setup();
+  const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const source = "| 项目 | 数量 |\r\n| --- | ---: |\r\n| 甲 | 1 |\r\n";
+  const next = `${source}| 乙 | 2 |`;
+  const { rerender } = render(<ChatMarkdown source={source} streaming />);
+  const region = screen.getByRole("region", { name: "Markdown 表格" });
+  const copy = within(region).getByRole("button", {
+    name: "复制表格 Markdown",
+  });
+  region.scrollLeft = 64;
+  copy.focus();
+
+  rerender(<ChatMarkdown source={next} streaming />);
+  expect(screen.getByRole("region", { name: "Markdown 表格" })).toBe(region);
+  expect(region.scrollLeft).toBe(64);
+  expect(copy).toHaveFocus();
+  expect(within(region).getByRole("cell", { name: "乙" })).toBeVisible();
+  await user.click(copy);
+  expect(write).toHaveBeenLastCalledWith(next);
+
+  const revised = next.replace("| 乙 |", "|  乙  |");
+  rerender(<ChatMarkdown source={revised} streaming />);
+  await user.click(copy);
+  expect(write).toHaveBeenLastCalledWith(revised);
 });
 
 it("renders empty fragments silently and keeps untrusted markup inert", () => {
