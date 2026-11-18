@@ -1,7 +1,6 @@
 import { ApiError, request, type RequestOptions } from "@/api/client";
-import { IntegrationsPage as AccountIntegrationsPage } from "@/areas/account/pages/integrations";
 import { IntegrationsPage as SystemIntegrationsPage } from "@/areas/console/pages/integrations";
-import { IntegrationsPage as ProjectIntegrationsPage } from "@/areas/workspace/pages/integrations";
+import { IntegrationsPage as WorkspaceIntegrationsPage } from "@/areas/workspace/pages/integrations";
 import { NavigationGuardProvider } from "@/components/navigation-guard";
 import { defaultConfig, serviceProviders } from "@/domain/service-providers";
 import type { Diagnostic, ServiceConnection } from "@/types/integrations";
@@ -196,11 +195,11 @@ function setup(
           },
           {
             path: "/account/integrations/:connectionId?",
-            element: <AccountIntegrationsPage />,
+            element: <WorkspaceIntegrationsPage scope="account" />,
           },
           {
             path: "/projects/:projectId/integrations/:connectionId?",
-            element: <ProjectIntegrationsPage />,
+            element: <WorkspaceIntegrationsPage />,
           },
           { path: "/elsewhere", element: <p>其他页面</p> },
         ],

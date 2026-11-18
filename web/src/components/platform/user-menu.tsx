@@ -21,17 +21,18 @@ import {
   LogOut,
   Monitor,
   Moon,
+  Settings,
   ShieldCheck,
   Sun,
-  UserRound,
 } from "lucide-react";
 import { Menu as DropdownMenu } from "@base-ui/react/menu";
 import { useState } from "react";
+import { createPath, useLocation, useMatch } from "react-router";
 
-const areaEntries = [
-  { area: "workspace", to: "/home", label: "工作区", icon: Home },
-  { area: "account", to: "/account", label: "个人中心", icon: UserRound },
-  { area: "console", to: "/admin", label: "控制台", icon: LayoutDashboard },
+const destinations = [
+  { id: "workspace", to: "/home", label: "工作区", icon: Home },
+  { id: "console", to: "/admin", label: "控制台", icon: LayoutDashboard },
+  { id: "settings", to: "/account", label: "个人设置", icon: Settings },
 ] as const;
 
 function FounderCrown() {
@@ -92,13 +93,18 @@ function IdentityIcon({
 export function UserMenu({
   compact,
   onLogout,
+  onNavigate,
   area,
 }: {
   compact: boolean;
   onLogout: () => void;
+  onNavigate?: () => void;
   area: Exclude<SurfaceArea, "public">;
 }) {
   const session = useSession();
+  const location = useLocation();
+  const settings = useMatch("/account/*");
+  const current = settings ? "settings" : area;
   const { appearance, setAppearance } = useTheme();
   const [keyboardNavigation, setKeyboardNavigation] = useState(false);
   const rail = area === "workspace" && compact;
@@ -190,18 +196,24 @@ export function UserMenu({
               </DropdownMenu.RadioItem>
             ))}
           </DropdownMenu.RadioGroup>
-          {areaEntries
+          {destinations
             .filter(
               (entry) =>
-                entry.area !== "console" || session.user.role === "admin",
+                entry.id !== "console" || session.user.role === "admin",
             )
             .map((entry) => (
               <MenuLink
-                key={entry.area}
+                key={entry.id}
                 to={entry.to}
                 icon={entry.icon}
                 label={entry.label}
-                current={entry.area === area}
+                current={entry.id === current}
+                state={
+                  entry.id === "settings"
+                    ? { personalSettingsReturnTo: createPath(location) }
+                    : undefined
+                }
+                onClick={onNavigate}
                 iconClassName="text-current"
                 className="text-navigation focus:text-navigation"
               />

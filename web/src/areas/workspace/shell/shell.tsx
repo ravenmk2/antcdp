@@ -2,14 +2,16 @@ import { useAuth, useSession } from "@/app/auth";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import type { ApiResponse } from "@/api/client";
 import { LogoutDialog, ShellActions, useLogout } from "@/app/session-actions";
+import { IconButton } from "@/components/button";
 import { LoadingState } from "@/components/feedback";
 import { Drawer } from "@/components/overlays";
 import { UserMenu } from "@/components/platform/user-menu";
 import { useApiQuery } from "@/hooks/use-api";
 import { resolveSiteName } from "@/lib/site-name";
 import type { Resource } from "@/types/collaboration";
+import { ArrowLeft } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
-import { Link, Outlet, useLocation } from "react-router";
+import { Link, Outlet, useLocation, useMatch } from "react-router";
 import type { AgentNavigationSummary, SessionSummary } from "@/types/agents";
 import {
   SessionHeadingContext,
@@ -19,12 +21,31 @@ import { ConversationSidebar } from "@/features/agents/chat/conversation-sidebar
 import { workspaceBreadcrumbs } from "../pages/workspace-breadcrumbs";
 import { WorkspaceSidebar } from "../pages/workspace-sidebar";
 import { ProjectSidebar, TeamSidebar } from "../pages/resource-sidebar";
+import {
+  PersonalSettingsSidebar,
+  personalSettingsBreadcrumbs,
+  personalSettingsLabel,
+  personalSettingsSection,
+} from "../pages/personal-settings-navigation";
 import { resolveWorkspaceProjectView } from "../pages/workspace-navigation";
 import { rememberConversation } from "../pages/conversation-memory";
 import { Frame } from "./frame";
 export function Shell() {
   const cache = useQueryClient();
   const location = useLocation();
+  const settingsMatch = useMatch("/account/*");
+  const settingsSection = settingsMatch
+    ? personalSettingsSection(location.pathname, location.search)
+    : undefined;
+  const [settingsReturnTo, setSettingsReturnTo] = useState<string>();
+  const entryReturnTo = (
+    location.state as { personalSettingsReturnTo?: string } | null
+  )?.personalSettingsReturnTo;
+  // Credential links create their own history entries during the settings visit.
+  const returnTo = settingsMatch
+    ? (entryReturnTo ?? settingsReturnTo)
+    : undefined;
+  if (returnTo !== settingsReturnTo) setSettingsReturnTo(returnTo);
   const { user } = useSession();
   const [heading, setHeading] = useState<SessionHeading>();
   const [mobile, setMobile] = useState(false);
@@ -135,17 +156,32 @@ export function Shell() {
       <div className="sidebar-scroll">
         <WorkspaceSidebar close={close} />
       </div>
-      <UserMenu compact={compact} onLogout={logout.open} area="workspace" />
+      <UserMenu
+        compact={compact}
+        onLogout={logout.open}
+        onNavigate={close}
+        area="workspace"
+      />
     </div>
   );
   return (
     <SessionHeadingContext value={setHeading}>
       <Frame
         navigation={navigation(true)}
-        resourceDetail={Boolean(projectView || teamId)}
-        secondaryName={conversationArea ? "对话" : teamId ? "团队" : "项目"}
+        resourceDetail={Boolean(settingsSection || projectView || teamId)}
+        secondaryName={
+          settingsSection
+            ? personalSettingsLabel
+            : conversationArea
+              ? "对话"
+              : teamId
+                ? "团队"
+                : "项目"
+        }
         secondary={
-          conversationArea ? (
+          settingsSection ? (
+            <PersonalSettingsSidebar active={settingsSection.key} />
+          ) : conversationArea ? (
             <ConversationSidebar
               agentId={agentId}
               agentName={summary.data?.data.name}
@@ -160,18 +196,32 @@ export function Shell() {
           ) : undefined
         }
         crumbs={
-          conversationArea
-            ? conversationCrumbs
-            : workspaceBreadcrumbs(
-                location.pathname,
-                location.search,
-                project.data?.data,
-                team.data?.data.name,
-              )
+          settingsSection
+            ? personalSettingsBreadcrumbs(location.pathname, location.search)
+            : conversationArea
+              ? conversationCrumbs
+              : workspaceBreadcrumbs(
+                  location.pathname,
+                  location.search,
+                  project.data?.data,
+                  team.data?.data.name,
+                )
         }
         onOpenNavigation={() => setMobile(true)}
         actions={
           <>
+            {settingsSection && (
+              <IconButton
+                label={
+                  returnTo && returnTo !== "/home" ? "返回原页面" : "返回工作区"
+                }
+                render={<Link to={returnTo ?? "/home"} />}
+                nativeButton={false}
+                role="link"
+              >
+                <ArrowLeft />
+              </IconButton>
+            )}
             <ShellActions />
           </>
         }

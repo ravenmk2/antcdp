@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-export type SurfaceArea = "public" | "console" | "workspace" | "account";
+export type SurfaceArea = "public" | "console" | "workspace";
 export interface SurfaceContextValue {
   area: SurfaceArea;
   portal: HTMLElement;

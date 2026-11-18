@@ -6,9 +6,13 @@ import {
   HostDirectory,
   useHostDirectory,
 } from "@/features/remote-hosts/directory";
-export function RemoteHostsPage() {
+export function RemoteHostsPage({
+  scope = "project",
+}: {
+  scope?: "account" | "project";
+}) {
   const { hostId, projectId, admin, directory, project, selected, creating } =
-    useHostDirectory({ kind: "project" });
+    useHostDirectory({ kind: scope });
   if (hostId && selected)
     return (
       <div className="page">

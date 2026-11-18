@@ -18,7 +18,7 @@ const sources = files(root);
 const areaOf = (file) =>
   relative(root, file)
     .replaceAll("\\", "/")
-    .match(/^areas\/(console|workspace|account)\//)?.[1];
+    .match(/^areas\/([^/]+)\//)?.[1];
 const graph = new Map();
 for (const file of sources.filter((file) => /\.tsx?$/.test(file))) {
   const source = ts.createSourceFile(

@@ -1,4 +1,3 @@
-import { accountRoutes } from "@/areas/account/routes";
 import { consoleRoutes } from "@/areas/console/routes";
 import { workspaceRoutes } from "@/areas/workspace/routes";
 import { Button } from "@/components/button";
@@ -79,7 +78,6 @@ export const appRoutes = [
                 element: <RequireAdmin />,
                 children: consoleRoutes,
               },
-              { path: "account", children: accountRoutes },
               ...workspaceRoutes,
             ],
           },

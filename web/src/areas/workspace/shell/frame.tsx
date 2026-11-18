@@ -25,7 +25,10 @@ export function Frame({
   secondaryName: string;
   resourceDetail: boolean;
 }) {
-  const [secondaryOpen, setSecondaryOpen] = useState(true);
+  const [collapsedSidebars, setCollapsedSidebars] = useState<
+    Record<string, boolean>
+  >({});
+  const secondaryOpen = !collapsedSidebars[secondaryName];
   const [mobileSecondary, setMobileSecondary] = useState(false);
   return (
     <div className="app-layout" data-collapsed="true">
@@ -52,7 +55,12 @@ export function Frame({
                   className="max-[820px]:hidden"
                   aria-expanded={secondaryOpen}
                   label={`${secondaryOpen ? "收起" : "展开"}${secondaryName}侧栏`}
-                  onClick={() => setSecondaryOpen(!secondaryOpen)}
+                  onClick={() =>
+                    setCollapsedSidebars({
+                      ...collapsedSidebars,
+                      [secondaryName]: secondaryOpen,
+                    })
+                  }
                 >
                   {secondaryOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
                 </IconButton>

@@ -18,8 +18,6 @@ export function workspaceBreadcrumbs(
     return [{ label: "工作区", to: "/home" }, { label: "我的云电脑" }];
   if (/^\/chats\/[1-9]\d*\/?$/.test(path))
     return [{ label: "工作台", to: "/home" }, { label: "对话" }];
-  if (path.startsWith("/account"))
-    return [{ label: "工作区", to: "/home" }, { label: "个人设置" }];
   if (path.startsWith("/teams/")) {
     const editMatch = path.match(/^\/teams\/([1-9]\d*)\/description\/edit$/);
     if (editMatch)
@@ -90,16 +88,6 @@ export function workspaceBreadcrumbs(
     }
     return items;
   }
-  if (path.includes("/integrations/"))
-    return [
-      { label: "服务集成", to: "/account/integrations" },
-      { label: "连接详情" },
-    ];
-  if (path.includes("/remote-hosts/"))
-    return [
-      { label: "远程主机", to: "/account/remote-hosts" },
-      { label: "主机详情" },
-    ];
   const names: Record<string, string> = {
     "/agents/catalog": "智能体",
     "/projects": "我的项目",

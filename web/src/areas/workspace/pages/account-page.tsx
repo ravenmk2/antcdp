@@ -13,8 +13,9 @@ import { useFormErrors, useSubmission } from "@/hooks/use-form";
 import { useUnsaved } from "@/hooks/use-unsaved";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router";
+import { Link, useLocation } from "react-router";
 import { z } from "zod";
+import { personalSettingsSection } from "./personal-settings-navigation";
 
 const profileSchema = z.object({ display_name: displayNameSchema });
 const passwordSchema = z
@@ -29,11 +30,8 @@ const passwordSchema = z
   });
 
 export function AccountPage() {
-  const location = useLocation();
-  const [params] = useSearchParams();
-  const section = location.pathname.endsWith("/security")
-    ? "security"
-    : (params.get("section") ?? "profile");
+  const { pathname, search } = useLocation();
+  const { key: section } = personalSettingsSection(pathname, search);
   return (
     <div className="page">
       <PageHeader
@@ -52,7 +50,9 @@ export function AccountPage() {
               : "管理你访问服务和远程主机时使用的凭证。"
         }
       />
-      <div className="account-settings-content" data-section={section}>
+      <div
+        className={section === "security" ? "max-w-[680px]" : "max-w-[800px]"}
+      >
         {section === "profile" ? (
           <Profile />
         ) : section === "security" ? (

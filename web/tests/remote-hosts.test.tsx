@@ -1,7 +1,6 @@
 import { ApiError, request, type RequestOptions } from "@/api/client";
-import { RemoteHostsPage as AccountRemoteHostsPage } from "@/areas/account/pages/remote-hosts";
 import { RemoteHostsPage as SystemRemoteHostsPage } from "@/areas/console/pages/remote-hosts";
-import { RemoteHostsPage as ProjectRemoteHostsPage } from "@/areas/workspace/pages/remote-hosts";
+import { RemoteHostsPage as WorkspaceRemoteHostsPage } from "@/areas/workspace/pages/remote-hosts";
 import { NavigationGuardProvider } from "@/components/navigation-guard";
 import type { ServiceConnection } from "@/types/integrations";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -101,11 +100,11 @@ function setup(entry = "/admin/remote-hosts") {
           },
           {
             path: "/account/remote-hosts/:hostId?",
-            element: <AccountRemoteHostsPage />,
+            element: <WorkspaceRemoteHostsPage scope="account" />,
           },
           {
             path: "/projects/:projectId/remote-hosts/:hostId?",
-            element: <ProjectRemoteHostsPage />,
+            element: <WorkspaceRemoteHostsPage />,
           },
           { path: "/elsewhere", element: <p>其他页面</p> },
         ],

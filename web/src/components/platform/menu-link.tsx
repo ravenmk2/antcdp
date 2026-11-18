@@ -11,6 +11,8 @@ export function MenuLink({
   className,
   iconClassName,
   current = false,
+  state,
+  onClick,
 }: {
   to: string;
   icon: typeof Home;
@@ -19,6 +21,8 @@ export function MenuLink({
   className?: string;
   iconClassName?: string;
   current?: boolean;
+  state?: unknown;
+  onClick?: () => void;
 }) {
   const content = (
     <>
@@ -47,7 +51,11 @@ export function MenuLink({
   }
   return (
     <DropdownMenuItem
-      render={<Link to={to}>{content}</Link>}
+      render={
+        <Link to={to} state={state} onClick={onClick}>
+          {content}
+        </Link>
+      }
       className={className}
     />
   );

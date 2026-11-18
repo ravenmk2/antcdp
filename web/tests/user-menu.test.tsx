@@ -58,10 +58,10 @@ function renderMenu(path: string) {
 
 it.each([
   ["/home?view=recent#activity", "工作区"],
-  ["/account/remote-hosts/123", "个人中心"],
+  ["/account/remote-hosts/123", "个人设置"],
   ["/admin/users?create=1", "控制台"],
 ])(
-  "marks the owning area without navigating away from %s",
+  "marks the current destination without navigating away from %s",
   async (path, currentArea) => {
     renderMenu(path);
     const user = userEvent.setup();
@@ -72,11 +72,11 @@ it.each([
     expect(
       items
         .filter((item) =>
-          /^(工作区|个人中心|控制台)/.test(item.textContent ?? ""),
+          /^(工作区|控制台|个人设置|退出登录)/.test(item.textContent ?? ""),
         )
         .map((item) => item.textContent),
     ).toEqual(
-      ["工作区", "个人中心", "控制台"].map(
+      ["工作区", "控制台", "个人设置", "退出登录"].map(
         (label) => label + (label === currentArea ? "当前" : ""),
       ),
     );
@@ -90,7 +90,7 @@ it.each([
     await user.click(current);
     expect(screen.getByLabelText("当前位置测试")).toHaveTextContent(path);
     expect(await screen.findByRole("menu")).toBeVisible();
-    const target = currentArea === "工作区" ? "个人中心" : "工作区";
+    const target = currentArea === "工作区" ? "个人设置" : "工作区";
     await user.click(await screen.findByRole("menuitem", { name: target }));
     expect(screen.getByLabelText("当前位置测试")).toHaveTextContent(
       target === "工作区" ? "/home" : "/account",
