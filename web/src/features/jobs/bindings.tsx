@@ -1,16 +1,26 @@
-import { Button } from "@/components/button";
+import { Plus, X } from "lucide-react";
+import { Button, IconButton } from "@/components/button";
 import { Field, Input, Select } from "@/components/fields";
+import { useJobResourceDirectory } from "./resource-directory";
 import type { Binding, ResourceGrant } from "./types";
 
 export function Bindings({
+  projectId,
   value,
   grants,
   onChange,
 }: {
+  projectId: string;
   value: Binding[];
   grants: ResourceGrant[];
   onChange: (value: Binding[]) => void;
 }) {
+  const directory = useJobResourceDirectory(
+    projectId,
+    grants,
+    "",
+    grants.length > 0,
+  );
   function update(index: number, patch: Partial<Binding>) {
     onChange(value.map((b, i) => (i === index ? { ...b, ...patch } : b)));
   }
@@ -18,6 +28,19 @@ export function Bindings({
     <div className="space-y-4">
       {value.map((b, i) => (
         <div key={i} className="space-y-3 rounded-lg border border-border p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate text-sm font-medium">
+              {b.name || `绑定 ${i + 1}`}
+            </span>
+            <IconButton
+              size="iconSm"
+              label="移除绑定"
+              variant="ghost"
+              onClick={() => onChange(value.filter((_, n) => n !== i))}
+            >
+              <X />
+            </IconButton>
+          </div>
           <Field label="绑定名称">
             <Input
               value={b.name}
@@ -41,8 +64,8 @@ export function Bindings({
                 .filter((g) => g.status === "active" || g.id === b.grant_id)
                 .map((g) => (
                   <option key={g.id} value={g.id}>
-                    授权 #{g.id} · 连接 #{g.connection_id} / 凭证 #
-                    {g.credential_id}
+                    授权 #{g.id} · {directory.connectionName(g.connection_id)} /{" "}
+                    {directory.credentialName(g.connection_id, g.credential_id)}
                     {g.status === "revoked" ? "（已撤销）" : ""}
                   </option>
                 ))}
@@ -53,13 +76,6 @@ export function Bindings({
               {b.connection_code} / {b.name}
             </p>
           )}
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => onChange(value.filter((_, n) => n !== i))}
-          >
-            移除绑定
-          </Button>
         </div>
       ))}
       <Button
@@ -77,10 +93,10 @@ export function Bindings({
           ])
         }
       >
-        添加绑定
+        <Plus /> 添加绑定
       </Button>
       <p className="text-xs text-muted">
-        先在任务的资源授权页授权服务连接与项目凭证。本次服务调用只检查授权并记录审计，尚未接入真实服务。
+        先授权服务连接与项目凭证，再为脚本添加绑定。
       </p>
     </div>
   );

@@ -169,6 +169,9 @@ it("saves a new binding with numeric ID strings alongside the script", async () 
     ],
   };
   const { user, writes } = mount("/projects/1/jobs/2?edit=1", definition);
+  await user.click(
+    await screen.findByText("资源绑定", { selector: "summary" }),
+  );
   await user.click(await screen.findByRole("button", { name: "添加绑定" }));
   await user.type(screen.getByRole("textbox", { name: "绑定名称" }), "build");
   await user.click(screen.getByRole("combobox", { name: "服务连接授权" }));
@@ -184,6 +187,37 @@ it("saves a new binding with numeric ID strings alongside the script", async () 
       { name: "build", grant_id: "4", connection_id: "5", connection_code: "" },
     ],
   });
+});
+
+it("keeps the run history visible behind the confirmation and starts only when confirmed", async () => {
+  const { user, writes } = mount("/projects/1/jobs/2", {
+    ...job,
+    can_run: true,
+  });
+  await user.click(await screen.findByRole("button", { name: "运行任务" }));
+  const dialog = await screen.findByRole("dialog", { name: "运行任务" });
+  expect(within(dialog).getByText(/此任务无需输入参数/)).toBeVisible();
+  expect(writes).toHaveLength(0);
+  await user.click(within(dialog).getByRole("button", { name: "取消" }));
+  expect(await screen.findByText("暂无运行记录")).toBeVisible();
+  expect(writes).toHaveLength(0);
+});
+
+it("explains draft creation before making a write from the new-task editor", async () => {
+  const { user, writes } = mount("/projects/1/jobs/new", {
+    ...job,
+    can_manage: true,
+  });
+  await user.type(
+    await screen.findByRole("textbox", { name: "任务编码" }),
+    "verify_job",
+  );
+  await user.click(screen.getByRole("button", { name: "草稿调试" }));
+  const dialog = await screen.findByRole("dialog", {
+    name: "创建草稿并调试？",
+  });
+  expect(within(dialog).getByText(/固定任务编码/)).toBeVisible();
+  expect(writes).toHaveLength(0);
 });
 
 it("drains terminal logs and merges call updates without duplicate calls", async () => {

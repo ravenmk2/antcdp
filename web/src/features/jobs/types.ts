@@ -127,6 +127,8 @@ export const statusLabel: Record<string, string> = {
   running: "运行中",
   cancelling: "取消中",
   stopping: "停止中",
+  timeout_stopping: "超时收尾中",
+  failure_stopping: "失败收尾中",
   succeeded: "成功",
   failed: "失败",
   cancelled: "已取消",

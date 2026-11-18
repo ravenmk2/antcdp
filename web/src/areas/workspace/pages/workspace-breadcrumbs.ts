@@ -57,6 +57,9 @@ export function workspaceBreadcrumbs(
     const credentialMatch = path.match(
       /^\/projects\/[1-9]\d*\/(integrations|remote-hosts)(?:\/([1-9]\d*))?$/,
     );
+    const jobMatch = path.match(
+      /^\/projects\/[1-9]\d*\/jobs(?:\/(new|[1-9]\d*)(?:\/runs\/([1-9]\d*))?)?\/?$/,
+    );
     if (credentialMatch) {
       const [, section, objectId] = credentialMatch;
       const sectionPath = `/projects/${project.id}/${section}`;
@@ -68,6 +71,20 @@ export function workspaceBreadcrumbs(
         items.push({
           label: section === "integrations" ? "连接详情" : "主机详情",
         });
+    } else if (jobMatch) {
+      const [, jobId, runId] = jobMatch;
+      const jobsPath = `/projects/${project.id}/jobs`;
+      items.push({ label: "任务", ...(jobId ? { to: jobsPath } : {}) });
+      if (jobId === "new") {
+        items.push({ label: "创建任务" });
+      } else if (jobId) {
+        const editing = new URLSearchParams(search).get("edit") === "1";
+        if (runId || editing)
+          items.push({ label: "任务详情", to: `${jobsPath}/${jobId}` });
+        items.push({
+          label: runId ? `运行 #${runId}` : editing ? "编辑任务" : "任务详情",
+        });
+      }
     } else if (path.includes("/dingtalk")) {
       items.push({
         label: "钉钉机器人",

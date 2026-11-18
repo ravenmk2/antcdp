@@ -161,6 +161,10 @@ function mountProject(entry: string) {
         element: <ProjectJobsPage />,
       },
       {
+        path: "/projects/:projectId/jobs/:jobId/runs/:runId",
+        element: <ProjectJobsPage />,
+      },
+      {
         path: "/projects/:projectId/dingtalk/:robotId?",
         element: <ProjectJobsPage robots />,
       },
@@ -180,6 +184,16 @@ function mountProject(entry: string) {
     entry,
   );
 }
+
+it("uses workspace breadcrumbs to return from a run to its task and then to the task list", async () => {
+  const { router, user } = mountProject("/projects/7/jobs/9/runs/4");
+  const crumbs = within(screen.getByRole("navigation", { name: "当前位置" }));
+  expect(crumbs.getByText("运行 #4")).toHaveAttribute("aria-current", "page");
+  await user.click(crumbs.getByRole("link", { name: "任务详情" }));
+  expect(router.state.location.pathname).toBe("/projects/7/jobs/9");
+  await user.click(crumbs.getByRole("link", { name: "任务" }));
+  expect(router.state.location.pathname).toBe("/projects/7/jobs");
+});
 
 it.each([
   ["", "项目资源", true],
