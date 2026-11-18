@@ -1,0 +1,10 @@
+{
+  "api_code": "echo",
+  "title": "回显参数",
+  "summary": "原样返回调用参数，供调试平台 API 工具使用。",
+  "description": "接受 JSON 对象并返回同一个对象，支持空对象、嵌套值和任意字段。请使用测试数据。",
+  "effect": "read",
+  "input_schema": {"type": "object", "additionalProperties": true},
+  "example_args": {"message": "你好", "items": [1, true, null]},
+  "result_description": "结果为输入的 args 对象。"
+}

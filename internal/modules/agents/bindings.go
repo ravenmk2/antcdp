@@ -41,14 +41,18 @@ func (s *Service) bindingDefinition(r Repository, id uint64, kind, tag string) (
 	return v, nil
 }
 func (s *Service) saveBindingChange(ctx context.Context, tx identity.Tx, r Repository, a *identity.Auth, v *Definition, kind string) error {
+	if e := advanceBindingVersion(r, v); e != nil {
+		return e
+	}
+	return audit(ctx, tx, a, "agent."+kind, "agent", v.ID)
+}
+
+func advanceBindingVersion(r Repository, v *Definition) error {
 	v.RowVersion++
 	if e := encodeDefinition(v); e != nil {
 		return e
 	}
-	if e := r.SaveDefinition(v); e != nil {
-		return e
-	}
-	return audit(ctx, tx, a, "agent."+kind, "agent", v.ID)
+	return r.SaveDefinition(v)
 }
 func (s *Service) bindingResult(out *Result, v *Definition, kind string, items any) {
 	tag := s.tag(kind, v.ID, v.RowVersion)

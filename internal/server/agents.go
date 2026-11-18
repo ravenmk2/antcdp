@@ -295,6 +295,7 @@ func registerAgents(api *gin.RouterGroup, o Options) {
 		}
 		return s.ListToolCatalog(c.Request.Context(), rawSession(c), q)
 	}))
+	registerAgentPAPI(a, o, s)
 	for _, group := range []*gin.RouterGroup{u, a} {
 		admin := group == a
 		group.GET("/command-receipts/:key", agentRead(o, func(c *gin.Context) (*agents.Result, error) {

@@ -90,6 +90,7 @@ import {
 import { AgentModelBindings } from "@/features/agents/resources/model-bindings";
 import { AgentMCPBindings } from "@/features/agents/resources/mcp-bindings";
 import { AgentToolBindings } from "@/features/agents/resources/tool-bindings";
+import { AgentPapiGrants } from "@/features/agents/resources/papi-grants";
 import { AgentRuntimePolicy } from "@/features/agents/resources/runtime-policy";
 import { ResourcePicker } from "@/features/agents/resources/resource-picker";
 import type { Resource } from "@/types/collaboration";
@@ -552,6 +553,7 @@ export function AgentDetailPage() {
     "resources",
     "models",
     "tools",
+    "papi",
     "mcp",
     "skills",
     "runtime",
@@ -723,6 +725,7 @@ export function AgentDetailPage() {
                     label: "能力配置",
                     items: [
                       { value: "tools", label: "内置工具", icon: Wrench },
+                      { value: "papi", label: "平台 API 授权", icon: Plug },
                       { value: "mcp", label: "MCP 服务", icon: Plug },
                       { value: "skills", label: "技能", icon: FileText },
                     ],
@@ -837,6 +840,14 @@ export function AgentDetailPage() {
                     mode={agent.data.data.agent_type}
                     onSaved={refresh}
                     readOnly={!editing}
+                  />
+                )}
+                {tab === "papi" && (
+                  <AgentPapiGrants
+                    key={`${agentId}:${editing}`}
+                    agentId={agentId}
+                    readOnly={!editing}
+                    onSaved={refresh}
                   />
                 )}
                 {tab === "mcp" && (

@@ -1,4 +1,10 @@
-import { List, MessageCircleQuestion, Wrench } from "lucide-react";
+import {
+  FileText,
+  List,
+  ListTree,
+  MessageCircleQuestion,
+  Wrench,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import styles from "./activity-icon.module.css";
 
@@ -7,6 +13,12 @@ const bulbOutline =
 
 // Split the SVG into semantic parts so the outline stays stable while its details animate.
 const glyphs = {
+  papi_call: (
+    <>
+      <path d="M7 3v4m6-4v4M5 7h10v2a5 5 0 0 1-5 5v3a3 3 0 0 0 3 3h5m-8-6a5 5 0 0 1-5-5" />
+      <path className="activity-papi-signal" d="m17 8 2-1m-2 4h4m-4 3 2 1" />
+    </>
+  ),
   reasoning: (
     <>
       <path className="activity-bulb-glow" d={bulbOutline} />
@@ -147,10 +159,14 @@ export function ActivityIcon({
     );
   }
   const Icon =
-    name === "update_plan"
-      ? List
-      : name === "question" || name === "ask_user_question"
-        ? MessageCircleQuestion
-        : Wrench;
+    name === "papi_list"
+      ? ListTree
+      : name === "papi_desc"
+        ? FileText
+        : name === "update_plan"
+          ? List
+          : name === "question" || name === "ask_user_question"
+            ? MessageCircleQuestion
+            : Wrench;
   return <Icon aria-hidden="true" className={className} />;
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/commandstate"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/models"
+	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
 )
 
@@ -222,6 +223,7 @@ type Service struct {
 	ETag                func(string) string
 	Models              *models.Service
 	Catalog             ResourceCatalog
+	PAPI                *papi.Registry
 	Committed           func(context.Context, agentcore.CommitReceipt)
 	SessionChanged      func(agentcore.SessionChange)
 	Files               *ByteStore
@@ -254,6 +256,10 @@ type Repository interface {
 	SaveMCPBindings(uint64, []MCPBinding, time.Time) error
 	ToolBindings(uint64, bool) ([]ToolBinding, error)
 	SaveToolBindings(uint64, []ToolBinding, time.Time) error
+	PAPIGrants(uint64) ([]PAPIGrantRow, error)
+	PAPIGrant(uint64, string) (*PAPIGrantRow, error)
+	PutPAPIGrant(PAPIGrantRow) error
+	DeletePAPIGrant(uint64, string) error
 	SkillBindings(uint64) ([]SkillBinding, error)
 	SaveSkillBindings(uint64, []SkillBinding, time.Time) error
 	CanUseAgent(agentID, userID uint64, admin bool) (bool, error)

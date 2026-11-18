@@ -13,6 +13,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	webservice "github.com/ravenmk2/antcdp/internal/modules/webaccess"
+	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/webaccess"
 )
@@ -35,16 +36,25 @@ func builtinAgentTools() []agents.ToolDescriptor {
 		{"delegate", "委派子任务", "Delegate one bounded task to a temporary child with the same identity, model, permissions, sandbox and total budget. The child cannot delegate further. Provide all necessary context; it has independent message history.", "child", `{"type":"object","properties":{"task":{"type":"string","minLength":1,"maxLength":16000}},"required":["task"],"additionalProperties":false}`},
 	}
 	definitions = append(definitions, sandboxAgentTools()...)
+	definitions = append(definitions, platformAPITools()...)
 	out := make([]agents.ToolDescriptor, 0, len(definitions))
 	for _, v := range definitions {
 		policies := []string{"allow", "confirm", "deny"}
-		if v.class == "question" || v.class == "child" || v.key == "update_plan" {
+		if v.class == "question" || v.class == "child" || v.key == "update_plan" || papi.IsTool(v.key) {
 			policies = []string{"allow", "deny"}
 		}
 		hash := sha256.Sum256([]byte(v.schema))
-		out = append(out, agents.ToolDescriptor{Key: v.key, Name: v.name, RequiresSandbox: isSandboxAgentTool(v.key), Description: v.description, Source: agents.ToolSource{Kind: "builtin"}, ExecutionClass: v.class, SupportedPolicies: policies, ConstraintsSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`), SchemaFingerprint: hex.EncodeToString(hash[:]), Availability: agents.Availability{Available: true}, ParallelSafe: v.class == "read_only", Definition: modelcore.Tool{Name: v.key, Description: v.description, InputSchema: json.RawMessage(v.schema)}})
+		out = append(out, agents.ToolDescriptor{Key: v.key, Name: v.name, RequiresSandbox: isSandboxAgentTool(v.key), Description: v.description, Source: agents.ToolSource{Kind: "builtin"}, ExecutionClass: v.class, SupportedPolicies: policies, ConstraintsSchema: json.RawMessage(`{"type":"object","additionalProperties":false}`), SchemaFingerprint: hex.EncodeToString(hash[:]), Availability: agents.Availability{Available: true}, ParallelSafe: v.class == "read_only" && v.key != papi.CallTool, Definition: modelcore.Tool{Name: v.key, Description: v.description, InputSchema: json.RawMessage(v.schema)}})
 	}
 	return out
+}
+
+func platformAPITools() []builtinToolDefinition {
+	return []builtinToolDefinition{
+		{papi.ListTool, "列出平台 API", "List AntCDP Platform API operations authorized for this agent. Search by keyword and use next_offset to fetch the next page.", "read_only", `{"type":"object","properties":{"query":{"type":"string","maxLength":128},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":50}},"additionalProperties":false}`},
+		{papi.DescTool, "查看 API 用法", "Describe an authorized AntCDP Platform API operation by its exact ID. Read its input schema before calling an unfamiliar operation.", "read_only", `{"type":"object","properties":{"api":{"type":"string","maxLength":96}},"required":["api"],"additionalProperties":false}`},
+		{papi.CallTool, "调用平台 API", "Call an authorized AntCDP Platform API operation by exact ID with its JSON object arguments. Use an empty object when there are no arguments. Use test data for echo.", "read_only", `{"type":"object","properties":{"api":{"type":"string","maxLength":96},"args":{"type":"object","additionalProperties":true}},"required":["api","args"],"additionalProperties":false}`},
+	}
 }
 
 func (c *agentToolCatalog) available(tx identity.Tx, descriptor *agents.ToolDescriptor) error {

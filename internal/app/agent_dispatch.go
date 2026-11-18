@@ -12,6 +12,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/agentresources"
 	"github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/webaccess"
 )
 
@@ -47,6 +48,9 @@ func (d *agentToolDispatcher) Dispatch(ctx context.Context, execution agentcore.
 	no := false
 	if permit.Call.Ref != execution.Ref || permit.Token == "" {
 		return toolFailure("DISPATCH_PERMIT_INVALID", &no), nil
+	}
+	if permit.Call.Spec.MCP == nil && papi.IsTool(permit.Call.Spec.Key) {
+		return d.dispatchPlatformAPI(ctx, execution.Ref, permit)
 	}
 	if permit.ProjectID != 0 {
 		if err := d.service.AuthorizeProjectDispatch(ctx, execution.Ref, permit); err != nil {
@@ -167,6 +171,30 @@ func (d *agentToolDispatcher) Dispatch(ctx context.Context, execution agentcore.
 		}
 		return toolFailure("TOOL_UNAVAILABLE", &no), nil
 	}
+}
+
+func (d *agentToolDispatcher) dispatchPlatformAPI(ctx context.Context, ref agentcore.ExecutionRef, permit agentcore.DispatchPermit) (agentcore.DispatchObservation, error) {
+	no := false
+	execution, err := d.service.AuthorizeExecution(ctx, ref)
+	if err != nil {
+		return toolFailure("EXECUTION_NOT_AUTHORIZED", &no), nil
+	}
+	var snapshot struct {
+		Resource *papi.Authorization `json:"resource"`
+	}
+	if json.Unmarshal(permit.Authorization, &snapshot) != nil || snapshot.Resource == nil || d.service.PAPI == nil {
+		return toolFailure("DISPATCH_PERMIT_INVALID", &no), nil
+	}
+	content, err := d.service.PAPI.Dispatch(ctx, execution, permit.Call.Spec.Key, permit.Call.Call.Arguments, *snapshot.Resource)
+	var failure *papi.Failure
+	if errors.As(err, &failure) {
+		return toolObservation("failed", failure.Code, failure.Content(), &no), nil
+	}
+	if err != nil || !json.Valid(content) {
+		return toolFailure("PAPI_EXECUTION_FAILED", &no), nil
+	}
+	yes := true
+	return toolObservation("succeeded", "", string(content), &yes), nil
 }
 
 func webToolFailure(err error, attempts []webaccess.Attempt) agentcore.DispatchObservation {

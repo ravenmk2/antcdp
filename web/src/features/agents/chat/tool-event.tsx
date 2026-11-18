@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Circle, CircleCheck, LoaderCircle, X } from "lucide-react";
 import { StatusHint, StatusNote } from "./status-hint";
 import { diagnosticLines, diagnosticReason } from "../data/diagnostics";
-import { toolSummary } from "../data/tool-summary";
+import { isPapiTool, toolIconActive, toolSummary } from "../data/tool-summary";
 import {
   toolNeedsAttention,
   type ToolNode,
@@ -23,6 +23,9 @@ import {
   readSearchResult,
 } from "./tool-content";
 export const builtinToolNames: Record<string, string> = {
+  papi_list: "列出平台 API",
+  papi_desc: "查看 API 用法",
+  papi_call: "调用平台 API",
   web_search: "网络搜索",
   web_fetch: "网页读取",
   skill: "加载技能",
@@ -66,6 +69,7 @@ export function ToolEvent({
   const status = result?.data.status ?? liveStatus;
   const { name, hint } = toolSummary({ call, draft, question });
   const args = call?.data.arguments ?? {};
+  const papi = isPapiTool(name);
   const builtin = Boolean(
     call && !call.data.mcp_server_id && !call.data.mcp_binding_id,
   );
@@ -84,7 +88,7 @@ export function ToolEvent({
     !result.data.truncated,
   );
   const value =
-    builtin && knownSuccess && result
+    builtin && !papi && knownSuccess && result
       ? readToolObject(result.data.content)
       : null;
   const file =
@@ -211,7 +215,11 @@ export function ToolEvent({
         icon={
           <ActivityIcon
             name={name}
-            active={Boolean(running) && !pendingQuestion}
+            active={toolIconActive(
+              name,
+              { call, result, status, rejected },
+              Boolean(running) && !pendingQuestion,
+            )}
           />
         }
         detail={
@@ -261,6 +269,13 @@ export function ToolEvent({
               <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-all text-xs">
                 {draft.argumentsText}
               </pre>
+            )}
+            {papi && call?.data.arguments_text && (
+              <ToolCode
+                source={call.data.arguments_text}
+                title="调用参数"
+                language="json"
+              />
             )}
             {!call && !question && !draft && (
               <p className="text-xs text-muted">
@@ -390,7 +405,10 @@ export function ToolEvent({
                   </div>
                 )}
                 {(!specialized || status !== "succeeded") && !execution && (
-                  <ToolTextResult blocks={result.data.content} />
+                  <ToolTextResult
+                    blocks={result.data.content}
+                    preserveSource={papi}
+                  />
                 )}
                 <MessageContent
                   blocks={result.data.content.filter(

@@ -180,6 +180,7 @@ export interface EventPayloads {
     | "policy"
   > & {
     tool_call_id: string;
+    arguments_text?: string;
     model_call_id?: string;
     step_no?: number;
     call_ordinal?: number;

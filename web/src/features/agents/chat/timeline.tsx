@@ -21,7 +21,7 @@ import { turnIssues } from "../data/turn-issues";
 import { TurnIssues } from "./turn-issues";
 import { MessageContent, FileReference } from "./content";
 import { ToolEvent, builtinToolNames } from "./tool-event";
-import { toolSummary } from "../data/tool-summary";
+import { toolIconActive, toolSummary } from "../data/tool-summary";
 import { ChatDisclosure } from "./disclosure";
 import {
   DisclosureScope,
@@ -776,8 +776,11 @@ const ProcessGroup = memo(function ProcessGroup({
         active={Boolean(activeName) || live}
         collapsedDetail={!completed && preview ? preview : undefined}
         icon={
-          activeName ? (
-            <ActivityIcon name={activeName} active />
+          activeName && activeTool ? (
+            <ActivityIcon
+              name={activeName}
+              active={toolIconActive(activeName, activeTool, true)}
+            />
           ) : (
             <Atom aria-hidden className="agent-activity-icon" />
           )

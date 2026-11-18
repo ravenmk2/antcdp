@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ToolEvent } from "@/features/agents/chat/tool-event";
+import activityIconStyles from "@/features/agents/chat/activity-icon.module.css";
 import type { ToolNode } from "@/features/agents/data/conversation-projection";
 import { question } from "./fixtures/agents";
 
@@ -61,6 +62,59 @@ function tool(
     },
   };
 }
+
+it("animates a live PAPI call and preserves the exact historical JSON", async () => {
+  const args =
+    '{"api":"echo","args":{ "n":9007199254740993,"d":0.1234567890123456789 }}';
+  const output = '{ "n":9007199254740993,"d":0.1234567890123456789 }';
+  const node = tool("papi_call", { api: "echo", args: {} }, {});
+  node.call!.data.arguments_text = args;
+  node.result!.data.content = [{ type: "text", text: output }];
+  const { container, rerender } = render(
+    <ToolEvent {...node} result={undefined} status="prepared" sessionId="1" />,
+  );
+  const icon = () =>
+    container.querySelector(".activity-papi-signal")?.closest("svg");
+  expect(icon()).not.toHaveClass(activityIconStyles.active);
+  rerender(
+    <ToolEvent {...node} result={undefined} status="running" sessionId="1" />,
+  );
+  expect(icon()).toHaveClass(activityIconStyles.active);
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: /调用平台 API.*echo/ }));
+  expect(screen.getByLabelText("调用参数").textContent).toBe(args);
+  rerender(<ToolEvent {...node} status="running" sessionId="1" />);
+  expect(icon()).not.toHaveClass(activityIconStyles.active);
+  expect(screen.getByLabelText("返回内容").textContent).toBe(output);
+});
+
+it("uses distinct static icons for PAPI listing and description", () => {
+  const { container, rerender } = render(
+    <ToolEvent
+      {...tool("papi_list", {}, {})}
+      status="running"
+      result={undefined}
+      sessionId="1"
+    />,
+  );
+  expect(container.querySelector("svg.lucide-list-tree")).toBeInTheDocument();
+  expect(container.querySelector("svg.lucide-list-tree")).not.toHaveClass(
+    activityIconStyles.active,
+  );
+  rerender(
+    <ToolEvent
+      {...tool("papi_desc", { api: "echo" }, {})}
+      status="running"
+      result={undefined}
+      sessionId="1"
+    />,
+  );
+  expect(container.querySelector("svg.lucide-file-text")).toBeInTheDocument();
+  expect(container.querySelector("svg.lucide-file-text")).not.toHaveClass(
+    activityIconStyles.active,
+  );
+});
 
 it("opens a failure hint independently from the tool disclosure", async () => {
   const node = tool("read_file", { path: "missing.txt" }, "file unavailable");

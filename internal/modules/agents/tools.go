@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
@@ -30,11 +32,9 @@ func preparedCall(st StateRepository, ref agentcore.ExecutionRef, row *ToolCallR
 	if e != nil {
 		return agentcore.PreparedToolCall{}, e
 	}
-	var public struct {
-		Arguments json.RawMessage `json:"arguments"`
-	}
-	if json.Unmarshal(facts.Public, &public) != nil {
-		return agentcore.PreparedToolCall{}, integrity()
+	public, e := facts.toolCallDetails()
+	if e != nil {
+		return agentcore.PreparedToolCall{}, e
 	}
 	hash, e := agentcore.ContentHash(public.Arguments)
 	if e != nil || hash != hexHash(row.ArgumentsHash) {
@@ -71,12 +71,15 @@ func settleToolBudget(st StateRepository, root *RunRow, call *ToolCallRow, execu
 	}
 	return saveLedger(st, root, l)
 }
-func (s *Service) blockTool(st StateRepository, x executionRows, row *ToolCallRow, reason string, now time.Time) (agentcore.DispatchAdmission, error) {
+func (s *Service) blockTool(st StateRepository, x executionRows, row *ToolCallRow, reason, content string, now time.Time) (agentcore.DispatchAdmission, error) {
 	no := false
 	if e := settleToolBudget(st, x.Root, row, &no); e != nil {
 		return agentcore.DispatchAdmission{}, e
 	}
-	commit, e := settleToolEvent(st, x.Session, row, "blocked", &no, "The tool was not executed: "+reason, reason, nil, now)
+	if content == "" {
+		content = "The tool was not executed: " + reason
+	}
+	commit, e := settleToolEvent(st, x.Session, row, "blocked", &no, content, reason, nil, now)
 	if e != nil {
 		return agentcore.DispatchAdmission{}, e
 	}
@@ -146,7 +149,24 @@ func (s *Service) PrepareDispatch(ctx context.Context, ref agentcore.ExecutionRe
 				blocked = "RESOURCE_ACCESS_DENIED"
 			}
 		}
-		if blocked == "" && call.Spec.MCP == nil {
+		var blockedContent string
+		if blocked == "" && papi.IsTool(call.Spec.Key) && call.Spec.MCP == nil {
+			var authorization papi.Authorization
+			authorization, e = s.PAPI.Prepare(ctx, x.Execution, call.Spec.Key, call.Call.Arguments)
+			var failure *papi.Failure
+			switch {
+			case errors.As(e, &failure):
+				blocked = failure.Code
+				blockedContent = failure.Content()
+			case e != nil:
+				return e
+			default:
+				resourceAuthorization, e = json.Marshal(authorization)
+				if e != nil {
+					return e
+				}
+			}
+		} else if blocked == "" && call.Spec.MCP == nil {
 			if s.Catalog.AuthorizeTool == nil {
 				blocked = "TOOL_AUTHORIZATION_UNAVAILABLE"
 			} else {
@@ -160,7 +180,7 @@ func (s *Service) PrepareDispatch(ctx context.Context, ref agentcore.ExecutionRe
 			}
 		}
 		if blocked != "" {
-			out, e = s.blockTool(st, x, row, blocked, now)
+			out, e = s.blockTool(st, x, row, blocked, blockedContent, now)
 			if e == nil {
 				receipt = out.Completion.Receipt
 			}
@@ -172,7 +192,7 @@ func (s *Service) PrepareDispatch(ctx context.Context, ref agentcore.ExecutionRe
 			return coreError(e)
 		}
 		if action == "blocked" || action == "root_intervention_required" {
-			out, e = s.blockTool(st, x, row, action, now)
+			out, e = s.blockTool(st, x, row, action, "", now)
 			if e == nil {
 				receipt = out.Completion.Receipt
 			}
@@ -204,7 +224,7 @@ func (s *Service) PrepareDispatch(ctx context.Context, ref agentcore.ExecutionRe
 		}
 		l, res, e := l.Reserve(agentcore.Budget{ToolCalls: 1})
 		if e != nil {
-			out, e = s.blockTool(st, x, row, "BUDGET_EXCEEDED", now)
+			out, e = s.blockTool(st, x, row, "BUDGET_EXCEEDED", "", now)
 			if e == nil {
 				receipt = out.Completion.Receipt
 			}

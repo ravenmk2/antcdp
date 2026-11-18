@@ -46,6 +46,7 @@ export class ApiError extends Error {
 export interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
+  rawJSON?: string;
   etag?: string;
   collectionEtag?: string;
   idempotencyKey?: string;
@@ -108,7 +109,10 @@ export async function request<T>(
   schema?: ZodType<T>,
 ): Promise<ApiResponse<T>> {
   const method =
-    options.method ?? (options.body === undefined ? "GET" : "POST");
+    options.method ??
+    (options.body === undefined && options.rawJSON === undefined
+      ? "GET"
+      : "POST");
   const write = method !== "GET";
   let csrf = "";
   if (write) {
@@ -152,11 +156,12 @@ export async function request<T>(
         ...options.headers,
       },
       body:
-        options.body === undefined
+        options.rawJSON ??
+        (options.body === undefined
           ? undefined
           : options.body instanceof FormData
             ? options.body
-            : JSON.stringify(options.body),
+            : JSON.stringify(options.body)),
     });
   } catch (error) {
     if (options.signal?.aborted) throw error;

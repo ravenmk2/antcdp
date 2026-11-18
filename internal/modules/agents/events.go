@@ -5,27 +5,31 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
+	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
 // StoredEvent separates public projection from request-compatible native facts.
 // Neither HTTP nor WS serializes this envelope directly.
 type StoredEvent struct {
-	Public           json.RawMessage             `json:"public"`
-	Message          *modelcore.Message          `json:"model,omitempty"`
-	Context          *agentcore.ContextFact      `json:"context,omitempty"`
-	ModelCallID      agentcore.ID                `json:"model_call_id,omitempty"`
-	ToolCallID       string                      `json:"provider_call_id,omitempty"`
-	Ordinal          uint32                      `json:"ordinal,omitempty"`
-	Interrupted      bool                        `json:"interrupted,omitempty"`
-	PartialReason    string                      `json:"partial_reason,omitempty"`
-	Surface          *agentcore.SurfaceManifest  `json:"surface,omitempty"`
-	ImageOffloads    []agentcore.ImageOffload    `json:"image_offloads,omitempty"`
-	ToolOutputPrunes []agentcore.ToolOutputPrune `json:"tool_output_prunes,omitempty"`
+	Public             json.RawMessage             `json:"public"`
+	Message            *modelcore.Message          `json:"model,omitempty"`
+	ExactToolArguments string                      `json:"exact_tool_arguments,omitempty"`
+	ExactNative        string                      `json:"exact_native,omitempty"`
+	Context            *agentcore.ContextFact      `json:"context,omitempty"`
+	ModelCallID        agentcore.ID                `json:"model_call_id,omitempty"`
+	ToolCallID         string                      `json:"provider_call_id,omitempty"`
+	Ordinal            uint32                      `json:"ordinal,omitempty"`
+	Interrupted        bool                        `json:"interrupted,omitempty"`
+	PartialReason      string                      `json:"partial_reason,omitempty"`
+	Surface            *agentcore.SurfaceManifest  `json:"surface,omitempty"`
+	ImageOffloads      []agentcore.ImageOffload    `json:"image_offloads,omitempty"`
+	ToolOutputPrunes   []agentcore.ToolOutputPrune `json:"tool_output_prunes,omitempty"`
 	// Retry failures are observable without changing model history. Retained
 	// interrupted or generation-limited text is explicitly admitted instead.
 	ExcludeFromContext bool        `json:"exclude_from_context,omitempty"`
@@ -43,6 +47,7 @@ func appendEvent(st StateRepository, session *SessionRow, runID *uint64, kind, k
 		stored = *facts
 		stored.Public = data
 	}
+	stored = preservePAPINative(stored)
 	payload, e := agentcore.CanonicalJSON(stored)
 	if e != nil {
 		return 0, e
@@ -74,6 +79,20 @@ func appendEvent(st StateRepository, session *SessionRow, runID *uint64, kind, k
 	}
 	return seq, nil
 }
+
+func preservePAPINative(stored StoredEvent) StoredEvent {
+	if stored.Message == nil || stored.Message.NativeProtocol != modelcore.AnthropicMessages || len(stored.Message.Native) == 0 ||
+		!slices.ContainsFunc(stored.Message.ToolCalls, func(call modelcore.ToolCall) bool { return papi.IsTool(call.Name) }) {
+		return stored
+	}
+	// The native Anthropic input is an object. Storing it as text avoids MySQL
+	// normalizing numeric arguments before it is replayed in the model prefix.
+	message := *stored.Message
+	stored.ExactNative = string(message.Native)
+	message.Native = nil
+	stored.Message = &message
+	return stored
+}
 func eventReceipt(id, from, through uint64) agentcore.CommitReceipt {
 	return agentcore.CommitReceipt{Ranges: []agentcore.EventRange{{SessionID: agentcore.ID(id), From: agentcore.Seq(from), Through: agentcore.Seq(through)}}}
 }
@@ -87,12 +106,59 @@ func decodeEvent(v EventRow) (StoredEvent, error) {
 	if string(hash[:]) != string(v.PayloadSHA256) || json.Unmarshal(v.Payload, &out) != nil || len(out.Public) == 0 {
 		return out, integrity()
 	}
+	if out.ExactNative != "" {
+		if out.Message == nil || len(out.Message.Native) != 0 || !json.Valid([]byte(out.ExactNative)) {
+			return out, integrity()
+		}
+		out.Message.Native = json.RawMessage(out.ExactNative)
+	}
 	return out, nil
 }
+
+type toolCallDetails struct {
+	Arguments json.RawMessage `json:"arguments"`
+	Policy    string          `json:"policy"`
+}
+
+func (facts StoredEvent) toolCallDetails() (toolCallDetails, error) {
+	var call toolCallDetails
+	if err := json.Unmarshal(facts.Public, &call); err != nil {
+		return call, integrity()
+	}
+	if facts.ExactToolArguments != "" {
+		if len(call.Arguments) != 0 || !json.Valid([]byte(facts.ExactToolArguments)) {
+			return call, integrity()
+		}
+		call.Arguments = json.RawMessage(facts.ExactToolArguments)
+	}
+	if len(call.Arguments) == 0 {
+		return call, integrity()
+	}
+	return call, nil
+}
+
 func projectEvent(v EventRow) (DurableRecord, error) {
 	facts, e := decodeEvent(v)
 	if e != nil {
 		return DurableRecord{}, e
+	}
+	if v.EventType == "tool/call" && facts.ExactToolArguments != "" {
+		if !json.Valid([]byte(facts.ExactToolArguments)) {
+			return DurableRecord{}, integrity()
+		}
+		var public map[string]json.RawMessage
+		if json.Unmarshal(facts.Public, &public) != nil || public == nil || public["arguments"] != nil {
+			return DurableRecord{}, integrity()
+		}
+		public["arguments"] = json.RawMessage(facts.ExactToolArguments)
+		public["arguments_text"], e = json.Marshal(facts.ExactToolArguments)
+		if e != nil {
+			return DurableRecord{}, e
+		}
+		facts.Public, e = json.Marshal(public)
+		if e != nil {
+			return DurableRecord{}, e
+		}
 	}
 	if v.EventType == "input/accepted" || v.EventType == "input/updated" || v.EventType == "input/message" {
 		var public map[string]json.RawMessage

@@ -67,9 +67,13 @@ func (s *Service) accessWithAgent(ctx context.Context, raw string, admin bool, a
 	return out, e
 }
 func audit(ctx context.Context, tx identity.Tx, a *identity.Auth, action, kind string, id uint64) error {
+	return auditDetail(ctx, tx, a, action, kind, id, json.RawMessage(`{}`))
+}
+
+func auditDetail(ctx context.Context, tx identity.Tx, a *identity.Auth, action, kind string, id uint64, detail json.RawMessage) error {
 	meta, _ := ctx.Value(metadataKey{}).(identity.Metadata)
 	target := strconv.FormatUint(id, 10)
-	e := identity.Event{ActorID: &a.User.ID, ActorType: "user", ActorName: a.User.DisplayName, ActorUsername: &a.User.Username, Action: action, TargetType: kind, TargetID: &target, OccurredAt: time.Now().UTC(), Detail: json.RawMessage(`{}`)}
+	e := identity.Event{ActorID: &a.User.ID, ActorType: "user", ActorName: a.User.DisplayName, ActorUsername: &a.User.Username, Action: action, TargetType: kind, TargetID: &target, OccurredAt: time.Now().UTC(), Detail: detail}
 	if meta.RequestID != "" {
 		e.RequestID = &meta.RequestID
 	}

@@ -172,3 +172,11 @@
 .icon.active :global(.activity-star-last) {
   animation-delay: -1.2s;
 }
+.papi_call.active :global(.activity-papi-signal) {
+  animation: activity-fade 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .papi_call.active :global(.activity-papi-signal) {
+    animation: none;
+  }
+}

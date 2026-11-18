@@ -8,12 +8,14 @@ import (
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/papi"
 )
 
 type FrozenTool struct {
-	Binding         ToolBinding        `json:"binding"`
-	Spec            agentcore.ToolSpec `json:"spec"`
-	RequiresSandbox bool               `json:"requires_sandbox"`
+	Binding         ToolBinding           `json:"binding"`
+	Spec            agentcore.ToolSpec    `json:"spec"`
+	RequiresSandbox bool                  `json:"requires_sandbox"`
+	PAPIGrants      []agentcore.PAPIGrant `json:"papi_grants,omitempty"`
 }
 
 // RunContextRow is private, immutable root authority. MCP discovery fills its
@@ -44,6 +46,7 @@ type frozenRunContext struct {
 	Policy        policySnapshot
 	Authorization agentcore.Authorization
 	Tools         []FrozenTool
+	PAPIGrants    []agentcore.PAPIGrant
 	MCP           []mcpPreparation
 	MCPTools      []agentcore.ToolSpec
 	MCPFact       agentcore.ContextFact
@@ -60,6 +63,12 @@ func readRunContext(st StateRepository, root uint64) (*frozenRunContext, error) 
 	x := &frozenRunContext{Row: row}
 	if json.Unmarshal(row.ModelSnapshot, &x.Model) != nil || json.Unmarshal(row.RuntimePolicy, &x.Policy) != nil || json.Unmarshal(row.ResourceGrants, &x.Authorization) != nil || json.Unmarshal(row.BuiltinTools, &x.Tools) != nil || json.Unmarshal(row.MCPBindings, &x.MCP) != nil {
 		return nil, integrity()
+	}
+	for _, tool := range x.Tools {
+		if len(tool.PAPIGrants) != 0 {
+			x.PAPIGrants = tool.PAPIGrants
+			break
+		}
 	}
 	if row.MCPPreparedAt != nil {
 		var surface struct {
@@ -107,6 +116,9 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 		if binding.Policy == "deny" || binding.ToolKey == "skill" && s.Skills == nil || binding.ToolKey == "read_image" && model.Capabilities.ImageInput != modelcore.Supported {
 			continue
 		}
+		if papi.IsTool(binding.ToolKey) && (s.PAPI == nil || binding.Policy != "allow") {
+			continue
+		}
 		if s.Catalog.Tool == nil {
 			return nil, unavailable()
 		}
@@ -118,6 +130,15 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 			continue
 		}
 		tools = append(tools, FrozenTool{Binding: binding, RequiresSandbox: d.RequiresSandbox, Spec: agentcore.ToolSpec{Key: binding.ToolKey, Definition: d.Definition, ExecutionClass: d.ExecutionClass, ParallelSafe: d.ParallelSafe, Policy: binding.Policy, ResultLimit: 64 << 10}})
+	}
+	for i := range tools {
+		if papi.IsTool(tools[i].Spec.Key) {
+			tools[i].PAPIGrants, err = s.freezePAPIGrants(r, agent.ID)
+			if err != nil {
+				return nil, err
+			}
+			break
+		}
 	}
 	mcp, err := s.prepareMCPBindings(tx, r, agent.ID)
 	if err != nil {
@@ -157,4 +178,22 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 		}
 	}
 	return readRunContext(st, run.ID)
+}
+
+func (s *Service) freezePAPIGrants(r Repository, agentID uint64) ([]agentcore.PAPIGrant, error) {
+	rows, err := r.PAPIGrants(agentID)
+	if err != nil {
+		return nil, err
+	}
+	grants := make([]agentcore.PAPIGrant, 0, len(rows))
+	for _, row := range rows {
+		constraints, err := row.constraints()
+		if err != nil {
+			return nil, err
+		}
+		if grant, ok := s.PAPI.Freeze(row.Code, constraints); ok {
+			grants = append(grants, grant)
+		}
+	}
+	return grants, nil
 }

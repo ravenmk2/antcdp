@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -124,6 +125,43 @@ func TestProtocolsPreserveNativeReplayAndUsage(t *testing.T) {
 			}
 			if tc.protocol == modelcore.AnthropicMessages && (!strings.Contains(string(captured[1]), "opaque-signature") || !strings.Contains(string(captured[1]), "cache_control")) {
 				t.Fatal("lost native block fields")
+			}
+		})
+	}
+}
+
+func TestProtocolsAcceptOpenPAPIArguments(t *testing.T) {
+	const args = `{"api":"echo","args":{ "large":9007199254740993, "decimal":0.1234567890123456789, "items":[true,null,{}] }}`
+	encoded, err := json.Marshal(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chat := `data: {"choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"index":0,"id":"call-1","type":"function","function":{"name":"papi_call","arguments":` + string(encoded) + `}}]},"finish_reason":"tool_calls"}]}` + "\n\ndata: [DONE]\n\n"
+	messages := strings.Replace(messagesToolStream, `"name":"echo"`, `"name":"papi_call"`, 1)
+	messages = strings.Replace(messages, `"partial_json":"{\"value\":\"OK\"}"`, `"partial_json":`+string(encoded), 1)
+	for _, test := range []struct {
+		protocol modelcore.Protocol
+		stream   string
+	}{{modelcore.ChatCompletions, chat}, {modelcore.AnthropicMessages, messages}} {
+		t.Run(string(test.protocol), func(t *testing.T) {
+			client, err := NewClient(Config{Provider: modelcore.DeepSeek, Protocol: test.protocol, BaseURL: "https://example.test", APIKey: "synthetic-key"}, &http.Client{Transport: imageTransport(func(r *http.Request) (*http.Response, error) {
+				var body map[string]json.RawMessage
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Error(err)
+				}
+				if !strings.Contains(string(body["tools"]), `"args":{"type":"object","additionalProperties":true}`) {
+					t.Errorf("lost open argument schema: %s", body["tools"])
+				}
+				return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"text/event-stream"}}, Body: io.NopCloser(strings.NewReader(test.stream))}, nil
+			})})
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := testRequest(test.protocol)
+			request.Tools = []modelcore.Tool{{Name: "papi_call", InputSchema: json.RawMessage(`{"type":"object","properties":{"api":{"type":"string"},"args":{"type":"object","additionalProperties":true}},"required":["api","args"],"additionalProperties":false}`)}}
+			response, err := client.Generate(t.Context(), request, nil)
+			if err != nil || len(response.Message.ToolCalls) != 1 || response.Message.ToolCalls[0].Arguments != args {
+				t.Fatalf("PAPI arguments changed across protocol stream: %v (%v)", response.Message.ToolCalls, err)
 			}
 		})
 	}

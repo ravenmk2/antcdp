@@ -17,6 +17,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/diagnostic"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
@@ -204,6 +205,17 @@ func validateToolArguments(spec agentcore.ToolSpec, call modelcore.ToolCall) err
 	if call.ID == "" || len(call.ID) > 255 || len(call.Arguments) > modelcore.MaxToolArgumentsBytes || call.Name != spec.Definition.Name {
 		return invalidToolResponse("MODEL_TOOL_CALL_INVALID")
 	}
+	if spec.MCP == nil && papi.IsTool(spec.Key) {
+		err := papi.ValidateEnvelope(spec.Definition.InputSchema, call.Arguments)
+		if err == nil {
+			return nil
+		}
+		var failure *papi.Failure
+		if errors.As(err, &failure) {
+			return diagnostic.With(modelcore.ErrInvalidResponse, diagnostic.Detail{Source: "model", Stage: "response_validation", Code: "MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH", FieldPath: failure.Field, Constraint: failure.Constraint})
+		}
+		return invalidToolResponse("MODEL_TOOL_SCHEMA_INVALID")
+	}
 	var object map[string]any
 	if json.Unmarshal([]byte(call.Arguments), &object) != nil || object == nil {
 		return invalidToolResponse("MODEL_TOOL_ARGUMENTS_NOT_OBJECT")
@@ -342,7 +354,7 @@ func attemptValidation(snapshot attemptSnapshot, response modelcore.Response) ([
 		ids = append(ids, agentcore.ID(^uint64(0)))
 	}
 	public, _ := json.Marshal(map[string]any{"attempt_id": agentcore.ID(^uint64(0)), "model_call_id": agentcore.ID(^uint64(0)), "content": uiAssistant(response.Message, ids), "finish_reason": response.FinishReason})
-	envelope, _ := json.Marshal(StoredEvent{Public: public, Message: &response.Message, ModelCallID: agentcore.ID(^uint64(0))})
+	envelope, _ := json.Marshal(preservePAPINative(StoredEvent{Public: public, Message: &response.Message, ModelCallID: agentcore.ID(^uint64(0))}))
 	if len(envelope) > agentcore.MaxEventBytes {
 		return nil, modelcore.ErrOutputLimit
 	}
@@ -549,7 +561,14 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 			for i, row := range rows {
 				c := message.ToolCalls[i]
 				spec := specs[i]
-				seq, e := appendEvent(st, x.Session, &x.Run.ID, "tool/call", "", map[string]any{"tool_call_id": agentcore.ID(row.ID), "model_call_id": agentcore.ID(call.ID), "step_no": row.StepNo, "call_ordinal": row.CallOrdinal, "provider_call_id": row.ProviderCallID, "status": row.Status, "tool_key": row.ToolKey, "mcp_server_id": coreID(row.MCPServerID), "mcp_binding_id": coreID(row.MCPBindingID), "mcp_tool_name": row.MCPToolName, "arguments": json.RawMessage(c.Arguments), "arguments_hash": hexHash(row.ArgumentsHash), "execution_class": row.ExecutionClass, "policy": spec.Policy}, nil, now)
+				public := map[string]any{"tool_call_id": agentcore.ID(row.ID), "model_call_id": agentcore.ID(call.ID), "step_no": row.StepNo, "call_ordinal": row.CallOrdinal, "provider_call_id": row.ProviderCallID, "status": row.Status, "tool_key": row.ToolKey, "mcp_server_id": coreID(row.MCPServerID), "mcp_binding_id": coreID(row.MCPBindingID), "mcp_tool_name": row.MCPToolName, "arguments_hash": hexHash(row.ArgumentsHash), "execution_class": row.ExecutionClass, "policy": spec.Policy}
+				var facts *StoredEvent
+				if papi.IsTool(spec.Key) {
+					facts = &StoredEvent{ExactToolArguments: c.Arguments}
+				} else {
+					public["arguments"] = json.RawMessage(c.Arguments)
+				}
+				seq, e := appendEvent(st, x.Session, &x.Run.ID, "tool/call", "", public, facts, now)
 				if e != nil {
 					return e
 				}

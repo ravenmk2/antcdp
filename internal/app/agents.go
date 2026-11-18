@@ -20,6 +20,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/install"
 	"github.com/ravenmk2/antcdp/internal/modules/models"
 	webservice "github.com/ravenmk2/antcdp/internal/modules/webaccess"
+	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/platform/netguard"
@@ -36,6 +37,10 @@ type agentApplication struct {
 }
 
 func newAgentApplication(dataDir string, installer *install.Service, accounts *identity.Service, modelsService *models.Service, webService *webservice.Service) (*agentApplication, error) {
+	platformAPIs, err := papi.New()
+	if err != nil {
+		return nil, err
+	}
 	files, err := agents.NewByteStore(filepath.Join(dataDir, "agents", "files"))
 	if err != nil {
 		return nil, err
@@ -43,7 +48,7 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 	store := modelsService.Store
 	epoch := cryptox.ID()
 	hub := agentcore.NewHub(epoch)
-	service := &agents.Service{Identity: accounts, Store: store, ETag: installer.AgentETag, Models: modelsService, Files: files, Epoch: epoch}
+	service := &agents.Service{Identity: accounts, Store: store, ETag: installer.AgentETag, Models: modelsService, Files: files, Epoch: epoch, PAPI: platformAPIs}
 	resources := &agentresources.Service{Identity: accounts, Store: store, Cipher: installer.AgentResourceSecret, ETag: installer.AgentETag, Files: files, Epoch: epoch,
 		MCPFactory: func(_ context.Context, config mcp.Config) (agentresources.MCPClient, error) {
 			hosts, err := installer.OutboundProtectedHosts()

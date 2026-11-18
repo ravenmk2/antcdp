@@ -413,12 +413,9 @@ func (s *Service) ListToolCalls(ctx context.Context, raw string, id uint64, q Ob
 			if e != nil {
 				return e
 			}
-			var call struct {
-				Arguments json.RawMessage `json:"arguments"`
-				Policy    string          `json:"policy"`
-			}
-			if json.Unmarshal(facts.Public, &call) != nil || len(call.Arguments) == 0 {
-				return integrity()
+			call, e := facts.toolCallDetails()
+			if e != nil {
+				return e
 			}
 			certainty := "pending"
 			if v.Status == "outcome_unknown" {

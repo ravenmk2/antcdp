@@ -88,11 +88,18 @@ type ExecutionContext struct {
 	AgentID          ID
 	Principal        PrincipalRef
 	Authorization    Authorization
+	PAPIGrants       []PAPIGrant
 	ContentSessionID ID
 	Policy           Policy
 	Model            LockedModel
 	Binding          *BindingRef
 	Deadline         time.Time
+}
+
+type PAPIGrant struct {
+	Code        string `json:"api_code"`
+	Fingerprint string `json:"fingerprint"`
+	Constraints string `json:"parameter_constraints"`
 }
 type DispatchPermit struct {
 	Call          PreparedToolCall

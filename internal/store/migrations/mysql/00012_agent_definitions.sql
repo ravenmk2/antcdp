@@ -90,6 +90,15 @@ CREATE TABLE `agent_tool_binding` (
     KEY idx_agent_tool_binding_current (agent_id, removed_at, id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE `agent_papi_grant` (
+    agent_id BIGINT UNSIGNED NOT NULL,
+    api_code VARCHAR(96) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    parameter_constraints JSON NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (agent_id, api_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE `agent_skill_binding` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     agent_id BIGINT UNSIGNED NOT NULL,

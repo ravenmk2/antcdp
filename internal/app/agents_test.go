@@ -10,6 +10,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/agentadapters/mcp"
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
+	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/webaccess"
 )
 
@@ -34,6 +35,9 @@ func TestAgentBuiltinSchemasSupportControlAndRejectExtraArguments(t *testing.T) 
 		"ask_user_question": `{"questions":[{"question_id":"scope","prompt":"Choose a scope","type":"single_choice","options":[{"id":"one","label":"First","description":"One item"}],"allow_text":true}]}`,
 		"update_plan":       `{"plan":[{"step":"Check the current state","status":"in_progress"}]}`,
 		"delegate":          `{"task":"Explain the public example"}`,
+		papi.ListTool:       `{"offset":0,"limit":20}`,
+		papi.DescTool:       `{"api":"echo"}`,
+		papi.CallTool:       `{"api":"echo","args":{"nested":{"value":true}}}`,
 	}
 	seen := map[string]bool{}
 	for _, tool := range builtinAgentTools() {
@@ -60,7 +64,7 @@ func TestAgentBuiltinSchemasSupportControlAndRejectExtraArguments(t *testing.T) 
 		if mcp.ValidateArguments(tool.Definition.InputSchema, injected) == nil {
 			t.Fatalf("%s accepted unknown fields", tool.Key)
 		}
-		if tool.ExecutionClass == "question" || tool.ExecutionClass == "child" {
+		if tool.ExecutionClass == "question" || tool.ExecutionClass == "child" || papi.IsTool(tool.Key) {
 			for _, policy := range tool.SupportedPolicies {
 				if policy == "confirm" {
 					t.Fatal("control tools must not produce nested approvals")

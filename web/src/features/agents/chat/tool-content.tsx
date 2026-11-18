@@ -144,9 +144,25 @@ export function fileResultSupported(
   );
 }
 
-export function ToolTextResult({ blocks }: { blocks: ContentBlock[] }) {
+export function ToolTextResult({
+  blocks,
+  preserveSource = false,
+}: {
+  blocks: ContentBlock[];
+  preserveSource?: boolean;
+}) {
   return blocks.map((block, index) => {
     if (block.type !== "text") return null;
+    if (preserveSource) {
+      return (
+        <ToolCode
+          key={index}
+          source={block.text}
+          title="返回内容"
+          language="json"
+        />
+      );
+    }
     let source = block.text;
     let language = "text";
     try {
