@@ -1,8 +1,11 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Link, MemoryRouter } from "react-router";
+import { Link, MemoryRouter, Route, Routes } from "react-router";
 import { expect, it, vi } from "vitest";
 import { Shell } from "@/areas/workspace/shell/shell";
+import { useSessionHeading } from "@/features/agents/chat/navigation-context";
+import type { SessionConfiguration } from "@/types/agents";
+import { session } from "./fixtures/agents";
 
 vi.mock("@/app/theme", () => ({ useTheme: () => ({ resolved: "light" }) }));
 vi.mock("@/app/auth", () => ({
@@ -23,9 +26,15 @@ vi.mock("@/api/client", async (original) => ({
   request: vi.fn(() => new Promise(() => {})),
 }));
 
-const detail = (id: string, agentId = "9") => ({
-  data: { configuration: { id, agent_id: agentId, title: `Session ${id}` } },
-});
+function SelectedConversation({
+  configuration,
+}: {
+  configuration?: SessionConfiguration;
+}) {
+  useSessionHeading(configuration?.id, configuration, false);
+  return null;
+}
+
 const row = (id: string, agentId = "9") => ({
   id,
   agent_id: agentId,
@@ -40,7 +49,6 @@ function mount() {
   const cache = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  cache.setQueryData(["agent-session", "31", "detail"], detail("31"));
   cache.setQueryData(["agent-summary", "9"], {
     data: { id: "9", name: "Agent 9" },
   });
@@ -55,19 +63,39 @@ function mount() {
     pages: [{ data: [row("31"), row("32")], pagination: { total: 2 } }],
     pageParams: [1],
   });
-  render(
+  const shell = (configuration?: SessionConfiguration) => (
     <QueryClientProvider client={cache}>
       <MemoryRouter initialEntries={["/chats/31"]}>
-        <Shell />
+        <Routes>
+          <Route element={<Shell />}>
+            <Route
+              path="/chats/:sessionId"
+              element={<SelectedConversation configuration={configuration} />}
+            />
+          </Route>
+        </Routes>
         <Link to="/chats/99">Other session</Link>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return cache;
+  const { rerender } = render(shell());
+  return {
+    cache,
+    showSnapshot(id: string, agentId = "9") {
+      rerender(
+        shell({
+          ...session.configuration,
+          id,
+          agent_id: agentId,
+          title: `Session ${id}`,
+        }),
+      );
+    },
+  };
 }
 
-it("preserves sidebar DOM and scroll while fetching another session's detail", async () => {
-  const cache = mount();
+it("preserves sidebar DOM and scroll while another session opens", () => {
+  const { showSnapshot } = mount();
   const previous = screen.getByRole("link", { name: "Session 32" });
   const sidebar = screen.getByRole("complementary", { name: "对话导航" });
   sidebar.scrollTop = 120;
@@ -76,16 +104,14 @@ it("preserves sidebar DOM and scroll while fetching another session's detail", a
   expect(screen.getByRole("link", { name: "Session 32" })).toBe(previous);
   expect(previous).toHaveAttribute("aria-current", "page");
   expect(sidebar.scrollTop).toBe(120);
-  await act(async () => {
-    cache.setQueryData(["agent-session", "32", "detail"], detail("32"));
-  });
+  showSnapshot("32");
   expect(screen.getByRole("link", { name: "Session 32" })).toBe(previous);
   fireEvent.click(screen.getByRole("link", { name: "Session 31" }));
   expect(screen.getByRole("link", { name: "Session 32" })).toBe(previous);
 });
 
-it("uses cached search results for a different agent, then trusts the fetched detail", async () => {
-  const cache = mount();
+it("uses cached search results for a different agent, then trusts the conversation snapshot", async () => {
+  const { cache, showSnapshot } = mount();
   cache.setQueryData(["agent-sessions", "interactive", "search"], {
     data: [row("99", "10")],
   });
@@ -94,9 +120,7 @@ it("uses cached search results for a different agent, then trusts the fetched de
     screen.getByRole("button", { name: "选择智能体：Agent 10" }),
   ).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Session 31" })).toBeNull();
-  await act(async () => {
-    cache.setQueryData(["agent-session", "99", "detail"], detail("99", "9"));
-  });
+  showSnapshot("99");
   expect(
     await screen.findByRole("button", { name: "选择智能体：Agent 9" }),
   ).toBeInTheDocument();

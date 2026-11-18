@@ -187,13 +187,9 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspace.Request
 		if name != "/data/home" {
 			return workspace.Response{}, integrity()
 		}
-		info, statErr := f.StatFile(ctx, a.Resource, name)
-		exists := statErr == nil
-		if exists && info.Kind != "directory" {
-			return workspace.Response{}, httpx.E(409, "WORKSPACE_NOT_DIRECTORY", "/data/home 已被非目录文件占用")
-		}
-		if statErr != nil && !nativeMissing(statErr) {
-			return workspace.Response{}, statErr
+		exists, checkErr := nativeHomeExists(ctx, f, a.Resource)
+		if checkErr != nil {
+			return workspace.Response{}, checkErr
 		}
 		if !exists && q.Operation == "ensure_home" {
 			err = f.MakeDirectory(ctx, a.Resource, name, 755)
@@ -207,20 +203,7 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspace.Request
 		}
 		value = map[string]any{"filesystem": "native", "version": 1}
 	case "list":
-		entries := []workspace.Entry{}
-		values, e := f.ListFiles(ctx, a.Resource, name)
-		err = e
-		for _, v := range values {
-			relative, ok := nativeRelative(v.Path)
-			if !ok || path.Dir(v.Path) != name || v.Path == name {
-				continue
-			}
-			entries = append(entries, workspace.Entry{Name: path.Base(v.Path), Path: relative, Kind: v.Kind, Size: v.Size, ModifiedAt: v.ModifiedAt.Format(time.RFC3339Nano), Identity: nativeIdentity(v)})
-		}
-		sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
-		start := min(max(0, int(q.Offset)), len(entries))
-		end := min(start+max(1, q.Limit), len(entries))
-		value = map[string]any{"entries": entries[start:end], "total": len(entries), "has_more": end < len(entries)}
+		value, err = listNativeDirectory(ctx, f, a.Resource, name, int(q.Offset), q.Limit)
 	case "read":
 		info, e := f.StatFile(ctx, a.Resource, name)
 		if e != nil {
@@ -337,6 +320,45 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspace.Request
 		return workspace.Response{}, err
 	}
 	return workspace.Result(value, changed, nil), nil
+}
+
+func nativeHomeExists(ctx context.Context, files sandboxcore.Filesystem, ref sandboxcore.ResourceRef) (bool, error) {
+	info, err := files.StatFile(ctx, ref, "/data/home")
+	if nativeMissing(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if info.Kind != "directory" {
+		return false, httpx.E(409, "WORKSPACE_NOT_DIRECTORY", "/data/home 已被非目录文件占用")
+	}
+	return true, nil
+}
+
+type nativeDirectoryPage struct {
+	Entries []workspace.Entry `json:"entries"`
+	Total   int               `json:"total"`
+	HasMore bool              `json:"has_more"`
+}
+
+func listNativeDirectory(ctx context.Context, files sandboxcore.Filesystem, ref sandboxcore.ResourceRef, name string, offset, limit int) (nativeDirectoryPage, error) {
+	values, err := files.ListFiles(ctx, ref, name)
+	if err != nil {
+		return nativeDirectoryPage{}, err
+	}
+	entries := []workspace.Entry{}
+	for _, v := range values {
+		relative, ok := nativeRelative(v.Path)
+		if !ok || path.Dir(v.Path) != name || v.Path == name {
+			continue
+		}
+		entries = append(entries, workspace.Entry{Name: path.Base(v.Path), Path: relative, Kind: v.Kind, Size: v.Size, ModifiedAt: v.ModifiedAt.Format(time.RFC3339Nano), Identity: nativeIdentity(v)})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	start := min(max(0, offset), len(entries))
+	end := min(start+max(1, limit), len(entries))
+	return nativeDirectoryPage{Entries: entries[start:end], Total: len(entries), HasMore: end < len(entries)}, nil
 }
 
 func validNumericID(v string) bool {

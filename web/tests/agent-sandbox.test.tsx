@@ -560,7 +560,7 @@ it("prepares home on each visit and displays directory loading in its own row", 
   );
 });
 
-it("waits for a busy computer before retrying home preparation", async () => {
+it("reads the root while a busy computer delays home preparation", async () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   let busy = true;
   override = async (path) => {
@@ -572,9 +572,12 @@ it("waits for a busy computer before retrying home preparation", async () => {
   };
   mount("/computer");
   await screen.findByText("电脑忙碌，空闲后自动准备主目录。");
-  expect(mocked.mock.calls.some(([path]) => path.includes("/entries?"))).toBe(
-    false,
+  const listed = mocked.mock.calls.filter(([path]) =>
+    path.includes("/entries?"),
   );
+  expect(
+    listed.map(([path]) => new URLSearchParams(path.split("?")[1]).get("path")),
+  ).toEqual([""]);
   busy = false;
   await act(async () => vi.advanceTimersByTimeAsync(3001));
   await screen.findByRole("button", { name: "home" });

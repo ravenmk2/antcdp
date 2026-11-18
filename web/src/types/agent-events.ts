@@ -341,6 +341,8 @@ export interface ActiveAttempt {
   content: StreamDraftBlock[];
 }
 export interface SnapshotState {
+  root_session_id: string | null;
+  agent_access_available: boolean;
   conversation?: ConversationSummary;
   configuration: SessionConfiguration;
   selection: EffectiveSelection;

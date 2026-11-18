@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { ApiError, request, type RequestOptions } from "@/api/client";
 import { useState } from "react";
 import { AgentSessionPage } from "@/areas/workspace/pages/session-page";
@@ -104,6 +105,7 @@ const intersectionCallbacks: IntersectionObserverCallback[] = [];
 const sockets: Socket[] = [];
 class Socket {
   subscriptionId = "";
+  subscriptionCount = 0;
   globalSubscriptionId = "";
   readyState = 0;
   onopen: ((event: Event) => void) | null = null;
@@ -137,6 +139,7 @@ class Socket {
       );
     }
     if (value.type === "subscribe") {
+      this.subscriptionCount++;
       this.subscriptionId = value.subscription_id;
       queueMicrotask(() =>
         this.onmessage?.(
@@ -242,6 +245,29 @@ function mount(element: React.ReactNode, route = "/agents/sessions/10") {
     user: userEvent.setup(),
   };
 }
+
+it("opens the transcript from one snapshot and loads full detail only when opening the workspace", async () => {
+  const { user } = mount(
+    <StrictMode>
+      <AgentSessionPage />
+    </StrictMode>,
+  );
+  await screen.findByRole("button", { name: "打开会话工作区" });
+  expect(
+    sockets.reduce((total, socket) => total + socket.subscriptionCount, 0),
+  ).toBe(1);
+  expect(
+    mock.mock.calls.some(
+      ([url]) =>
+        url === "/agents/sessions/10" || url.endsWith("/10/configuration"),
+    ),
+  ).toBe(false);
+  await user.click(screen.getByRole("button", { name: "打开会话工作区" }));
+  await screen.findByRole("heading", { name: "会话工作区" });
+  expect(
+    mock.mock.calls.filter(([url]) => url === "/agents/sessions/10"),
+  ).toHaveLength(1);
+});
 
 it.each([false, true])(
   "changes thinking in a locked conversation (active run: %s)",

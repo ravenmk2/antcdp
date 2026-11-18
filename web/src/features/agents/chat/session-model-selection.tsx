@@ -17,9 +17,16 @@ import { ModelSelectionControls } from "./model-selection";
 export function SessionModelSelection({
   session,
   onPending,
+  onRefresh,
 }: {
-  session: SessionDetail;
+  session: Pick<
+    SessionDetail,
+    "configuration" | "permissions" | "selection"
+  > & {
+    state: Pick<SessionDetail["state"], "agent_access_available">;
+  };
   onPending: (pending: boolean) => void;
+  onRefresh: () => Promise<unknown>;
 }) {
   const cache = useQueryClient();
   const config = session.configuration;
@@ -63,7 +70,7 @@ export function SessionModelSelection({
     } finally {
       // Refresh even after an uncertain response. Do not resend a mutation or
       // send input with the previous selection hash while reconciliation runs.
-      await cache.invalidateQueries({ queryKey: ["agent-session", config.id] });
+      await onRefresh();
       setPending(false);
       onPending(false);
     }

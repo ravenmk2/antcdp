@@ -71,16 +71,22 @@ func (s *Service) sessionAccess(st StateRepository, id uint64, a *identity.Auth,
 		return nil, e
 	}
 	if lock {
-		v, e = st.Session(id, true)
-		if e != nil {
-			return nil, e
-		}
-		if e = contentAccess(v, a); e != nil {
-			return nil, e
-		}
+		return lockSessionContent(st, id, a)
 	}
 	return v, nil
 }
+
+func lockSessionContent(st StateRepository, id uint64, auth *identity.Auth) (*SessionRow, error) {
+	v, err := st.Session(id, true)
+	if err != nil {
+		return nil, err
+	}
+	if err = contentAccess(v, auth); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
 func (s *Service) configuration(v *SessionRow) SessionConfiguration {
 	return SessionConfiguration{ID: v.ID, AgentID: v.AgentID, Mode: v.ExecutionMode, Title: v.Title, Selection: ModelSelection{strconv.FormatUint(v.SelectedModelBindingID, 10), v.SelectedThinkingOptionKey}, ModelLockedAt: v.ModelLockedAt, ArchivedAt: v.ArchivedAt, Version: strings.Trim(s.tag("session", v.ID, v.RowVersion), `"`), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
 }
@@ -237,6 +243,41 @@ func (s *Service) viewState(st StateRepository, v *SessionRow, user uint64) (Vie
 	out.HasUnviewed = out.UnviewedCount > 0
 	return out, e
 }
+func activeSessionRun(st StateRepository, session *SessionRow) (*RunRow, error) {
+	if session.ActiveRunID == nil {
+		return nil, nil
+	}
+	run, err := st.Run(*session.ActiveRunID, false)
+	if err == nil && run == nil {
+		err = integrity()
+	}
+	return run, err
+}
+
+func sessionPermissions(tx identity.Tx, r Repository, v *SessionRow, agent *Definition, selection EffectiveSelection, user *identity.User) (Permissions, bool, error) {
+	executor := user
+	if v.ExecutionMode != "interactive" || v.ExecutorUserID != user.ID {
+		var err error
+		executor, err = executionAccount(tx, v, false)
+		if err != nil {
+			return Permissions{}, false, err
+		}
+	}
+	allowed, err := canUseSessionAgent(r, agent, executor)
+	if err != nil {
+		return Permissions{}, false, err
+	}
+	permissions := Permissions{Read: true}
+	if v.RootSessionID == nil {
+		permissions.Manage = true
+		permissions.Control = v.ArchivedAt == nil
+		permissions.Submit = permissions.Control && agent.Enabled && selection.Availability.Available && allowed
+		permissions.Answer = permissions.Submit
+		permissions.Approve = permissions.Submit && v.ExecutionMode == "interactive"
+	}
+	return permissions, allowed, nil
+}
+
 func (s *Service) detail(ctx context.Context, tx identity.Tx, r Repository, st StateRepository, v *SessionRow, a *identity.Auth) (SessionDetail, error) {
 	_, selection, e := s.selection(tx, r, v)
 	if e != nil {
@@ -259,14 +300,11 @@ func (s *Service) detail(ctx context.Context, tx identity.Tx, r Repository, st S
 	}
 	out := SessionDetail{Configuration: s.configuration(v), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.ExecutorUserID)}, RootSessionID: v.RootSessionID, Selection: selection, State: SessionState{LastSeq: v.LastSeq, ActiveRunID: v.ActiveRunID, QueuePaused: v.QueuePaused, PendingInputCount: counts.Inputs, PendingInteractionCount: counts.Interactions, LastActivityAt: v.LastActivityAt, ScopeKind: agent.ScopeKind, Workspace: WorkspaceState{CWD: cwd, Availability: "not_allocated"}}, Permissions: Permissions{Read: true}}
 	var activeRootID *uint64
-	if v.ActiveRunID != nil {
-		run, e := st.Run(*v.ActiveRunID, false)
-		if e != nil {
-			return out, e
-		}
-		if run == nil {
-			return out, integrity()
-		}
+	run, e := activeSessionRun(st, v)
+	if e != nil {
+		return out, e
+	}
+	if run != nil {
 		out.State.ActiveRunStatus = &run.Status
 		activeRootID = &run.ID
 		if run.RootRunID != nil {
@@ -312,21 +350,11 @@ func (s *Service) detail(ctx context.Context, tx identity.Tx, r Repository, st S
 		}
 		out.State.Workspace.BindingID = activeRootID
 	}
-	executor, e := executionAccount(tx, v, false)
+	out.Permissions, out.State.AgentAccessAvailable, e = sessionPermissions(tx, r, v, agent, selection, a.User)
 	if e != nil {
 		return out, e
 	}
-	allowed, e := canUseSessionAgent(r, agent, executor)
-	if e != nil {
-		return out, e
-	}
-	out.State.AgentAccessAvailable = allowed
 	if v.RootSessionID == nil {
-		out.Permissions.Manage = true
-		out.Permissions.Control = v.ArchivedAt == nil
-		out.Permissions.Submit = v.ArchivedAt == nil && agent.Enabled && selection.Availability.Available && allowed
-		out.Permissions.Answer = out.Permissions.Submit
-		out.Permissions.Approve = out.Permissions.Submit && v.ExecutionMode == "interactive"
 		pref, e := st.Preference(a.User.ID, v.ID, false)
 		if e != nil {
 			return out, e

@@ -129,10 +129,20 @@ export class AgentStreamClient {
       getSnapshot: () => entry.state,
       subscribe: (listener) => {
         entry.listeners.add(listener);
-        if (entry.listeners.size === 1) this.activate(entry);
+        if (entry.listeners.size === 1 && this.entries.get(sessionId) !== entry)
+          this.activate(entry);
         return () => {
           entry.listeners.delete(listener);
-          if (!entry.listeners.size) this.deactivate(entry);
+          if (!entry.listeners.size) {
+            // React can detach and immediately reattach the same observer.
+            queueMicrotask(() => {
+              if (
+                !entry.listeners.size &&
+                this.entries.get(sessionId) === entry
+              )
+                this.deactivate(entry);
+            });
+          }
         };
       },
       mergeHistory: (page, generation, baselineGeneration) => {
@@ -168,6 +178,19 @@ export class AgentStreamClient {
     return entry.observation;
   }
   private activate(entry: Entry) {
+    if (
+      !/^[1-9]\d{0,19}$/.test(entry.sessionId) ||
+      (entry.sessionId.length === 20 &&
+        entry.sessionId > "18446744073709551615")
+    ) {
+      entry.state = {
+        ...entry.state,
+        phase: "closed",
+        reason: "INVALID_SESSION_ID",
+      };
+      this.notify(entry);
+      return;
+    }
     if (this.disposed || this.stopped) {
       entry.state = {
         ...entry.state,
@@ -177,6 +200,9 @@ export class AgentStreamClient {
       this.notify(entry);
       return;
     }
+    // Free slots from views that were replaced before their cleanup ran.
+    for (const active of this.entries.values())
+      if (!active.listeners.size) this.deactivate(active);
     if (
       this.entries.size >= (this.options.maxSubscriptions ?? 8) &&
       !this.entries.has(entry.sessionId)
@@ -196,11 +222,9 @@ export class AgentStreamClient {
   private deactivate(entry: Entry) {
     entry.cancelPublish?.();
     entry.cancelPublish = undefined;
-    this.send({
-      type: "unsubscribe",
-      subscription_id: entry.state.subscriptionId,
-    });
-    this.subscriptions.delete(entry.state.subscriptionId);
+    const subscription = entry.state.subscriptionId;
+    if (this.subscriptions.delete(subscription))
+      this.send({ type: "unsubscribe", subscription_id: subscription });
     this.entries.delete(entry.sessionId);
     // Content lives only as long as a mounted observer, never in browser storage.
     entry.state = initialConversationState(entry.sessionId, "");

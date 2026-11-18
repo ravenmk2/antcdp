@@ -57,6 +57,8 @@ function snapshot(overrides: Partial<SnapshotFrame> = {}): SnapshotFrame {
     session_id: "10",
     through_seq: "9007199254740993",
     state: {
+      root_session_id: null,
+      agent_access_available: true,
       configuration: {
         id: "10",
         agent_id: "1",

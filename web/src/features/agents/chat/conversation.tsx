@@ -93,11 +93,6 @@ export function Conversation({
   const { state, observation, connection } = useConversationStream(sessionId);
   const submissions = useSubmissionPresentation(sessionId, state.records);
   const revoked = state.reason === "access_revoked";
-  const query = useApiQuery<SessionDetail>(
-    ["agent-session", sessionId, "detail"],
-    `${agentRoot}/sessions/${sessionId}`,
-    { enabled: !revoked },
-  );
   const { draft, state: draftState } = useConversationDraft(
     `session:${sessionId}`,
   );
@@ -124,28 +119,71 @@ export function Conversation({
   } = useScrollFollow();
   const workspaceToggle = useRef<HTMLButtonElement>(null);
   const action = useAgentCommand<unknown>(`session:${sessionId}:control`);
+  const snapshot = state.snapshot;
+  const unavailable =
+    !snapshot && (state.phase === "closed" || connection === "closed");
+  const config = snapshot?.configuration;
+  const shown =
+    config &&
+    config.agent_type === (service ? "service" : "interactive") &&
+    (!expectedAgentId || expectedAgentId === config.agent_id);
+  const refreshDetails = useMemo(() => {
+    const baseline = BigInt(state.baselineSeq);
+    for (let i = state.records.length - 1; i >= 0; i--) {
+      const record = state.records[i];
+      if (BigInt(record.seq) <= baseline) break;
+      if (sessionDetailChanged(record.event_type)) return true;
+    }
+    return false;
+  }, [state.baselineSeq, state.records]);
+  const query = useApiQuery<SessionDetail>(
+    ["agent-session", sessionId, "detail"],
+    `${agentRoot}/sessions/${sessionId}`,
+    {
+      enabled: Boolean(
+        shown &&
+        !revoked &&
+        (workspaceOpen || panel === "settings" || refreshDetails),
+      ),
+    },
+  );
   const configuration = useApiQuery<SessionConfiguration>(
     ["agent-session", sessionId, "configuration"],
     `${agentRoot}/sessions/${sessionId}/configuration`,
-    { enabled: !revoked },
+    { enabled: false },
   );
+  const [recoveredETag, setRecoveredETag] = useState<{
+    version: string;
+    etag: string;
+  }>();
   const viewed = useRef("0"),
     viewedCandidate = useRef("0"),
     viewing = useRef(false),
     pendingHistory = useRef(false);
   const detail = query.data?.data;
-  const snapshot = state.snapshot;
-  const config = snapshot?.configuration ?? detail?.configuration;
-  useSessionHeading(sideActions ? config : undefined, service);
-  const permissions = snapshot?.permissions ?? detail?.permissions;
-  const activeRunId = snapshot ? snapshot.run_id : detail?.state.active_run_id;
-  const activeStatus = snapshot
-    ? snapshot.run_status
-    : detail?.state.active_run_status;
-  const queuePaused =
-    snapshot?.queue_paused ?? detail?.state.queue_paused ?? false;
-  const pendingInputs =
-    snapshot?.input_total ?? detail?.state.pending_input_count ?? 0;
+  const currentDetail =
+    query.isFetchedAfterMount &&
+    detail &&
+    BigInt(detail.state.last_seq) >= BigInt(state.baselineSeq)
+      ? detail
+      : undefined;
+  const view = currentDetail?.view_state ?? snapshot?.view_state;
+  useSessionHeading(
+    sideActions ? sessionId : undefined,
+    shown ? config : undefined,
+    unavailable,
+  );
+  const permissions = currentDetail?.permissions ?? snapshot?.permissions;
+  const selection = currentDetail?.selection ?? snapshot?.selection;
+  const agentAccessAvailable =
+    currentDetail?.state.agent_access_available ??
+    snapshot?.agent_access_available ??
+    false;
+  const activeRunId = snapshot?.run_id;
+  const activeStatus = snapshot?.run_status;
+  const queuePaused = snapshot?.queue_paused ?? false;
+  const pendingInputs = snapshot?.input_total ?? 0;
+  const pendingInteractions = snapshot?.interaction_total ?? 0;
   const transcriptInputs = useMemo(
     () =>
       new Set([
@@ -168,7 +206,7 @@ export function Conversation({
   const handingOff =
     submissions.sending.phase === "sending" &&
     submissions.sending.plan?.placement === "transcript";
-  const continuation = detail?.view_state?.continuation;
+  const continuation = view?.continuation;
   const canContinue = Boolean(
     continuation &&
     !activeRunId &&
@@ -193,7 +231,7 @@ export function Conversation({
     followedSubmission.current = newestSubmission;
     scrollToBottom();
   }, [newestSubmission, scrollToBottom]);
-  const root = detail?.root_session_id === null;
+  const root = snapshot?.root_session_id === null;
   const archived = Boolean(config?.archived_at);
   const interactions = snapshot?.interactions ?? [];
   const waiting = interactions.filter((item) =>
@@ -225,6 +263,7 @@ export function Conversation({
     )
       setOperation((result as Operation).id);
     setConfirm(null);
+    setRecoveredETag(undefined);
     action.command.reset();
     refresh();
   });
@@ -242,16 +281,20 @@ export function Conversation({
       cache.removeQueries({ queryKey: ["agent-session", sessionId] });
       return;
     }
+    const through = BigInt(invalidatedThrough.current);
+    const baseline = BigInt(state.baselineSeq);
+    const previous = through > baseline ? through : baseline;
     for (let i = state.records.length - 1; i >= 0; i--) {
       const record = state.records[i];
-      if (BigInt(record.seq) <= BigInt(invalidatedThrough.current)) break;
+      if (BigInt(record.seq) <= previous) break;
       const type = record.event_type;
       if (
         type.startsWith("session/") ||
         type.startsWith("context/") ||
         type.startsWith("run/") ||
         type.startsWith("step/") ||
-        type.startsWith("compaction/")
+        type.startsWith("compaction/") ||
+        sessionDetailChanged(type)
       )
         pending.keys.add("detail");
       if (type === "session/configured" || type === "session/title")
@@ -281,7 +324,14 @@ export function Conversation({
         pending.keys.clear();
         pending.timer = undefined;
       }, 200);
-  }, [state.records, state.throughSeq, revoked, cache, sessionId]);
+  }, [
+    state.records,
+    state.throughSeq,
+    state.baselineSeq,
+    revoked,
+    cache,
+    sessionId,
+  ]);
   useEffect(() => {
     const pending = invalidation.current;
     return () => {
@@ -385,7 +435,7 @@ export function Conversation({
       !document.hasFocus()
     )
       return;
-    const existing = detail?.view_state?.viewed_through_seq ?? "0";
+    const existing = view?.viewed_through_seq ?? "0";
     if (
       BigInt(record.seq) <= BigInt(existing) ||
       BigInt(record.seq) <= BigInt(viewed.current)
@@ -472,9 +522,10 @@ export function Conversation({
         ...(kind === "archive" || kind === "restore" || kind === "title/refresh"
           ? {
               etag:
-                kind === "title/refresh"
-                  ? versionEtag(config.version)
-                  : configuration.data?.etag,
+                kind !== "title/refresh" &&
+                recoveredETag?.version === config.version
+                  ? recoveredETag.etag
+                  : versionEtag(config.version),
             }
           : {}),
       },
@@ -490,7 +541,11 @@ export function Conversation({
           pending={configuration.isFetching}
           onClick={() => {
             void configuration.refetch().then((result) => {
-              if (result.isSuccess) {
+              if (result.isSuccess && config && result.data.etag) {
+                setRecoveredETag({
+                  version: config.version,
+                  etag: result.data.etag,
+                });
                 action.command.reset();
                 refresh();
               }
@@ -516,19 +571,15 @@ export function Conversation({
         />
       </div>
     );
-  if (
-    detail &&
-    expectedAgentId &&
-    detail.configuration.agent_id !== expectedAgentId
-  )
+  if (config && expectedAgentId && config.agent_id !== expectedAgentId)
     return <Notice tone="warning">此会话不属于当前智能体。</Notice>;
-  if (detail && service !== (detail.configuration.agent_type === "service"))
+  if (config && service !== (config.agent_type === "service"))
     return (
       <Navigate
         replace
         to={
-          detail.configuration.agent_type === "service"
-            ? `/admin/agents/${detail.configuration.agent_id}/debug/${sessionId}`
+          config.agent_type === "service"
+            ? `/admin/agents/${config.agent_id}/debug/${sessionId}`
             : `/chats/${sessionId}`
         }
       />
@@ -536,12 +587,14 @@ export function Conversation({
   return (
     <>
       <AsyncBoundary
-        loading={query.isPending}
+        loading={!snapshot && !unavailable}
         loadingFallback={<ConversationLoading />}
-        error={query.error}
-        onRetry={() => query.refetch()}
+        error={unavailable}
+        errorFallback={() => (
+          <Notice tone="warning">无法加载会话，请刷新页面重试。</Notice>
+        )}
       >
-        {detail && config && permissions && (
+        {config && snapshot && permissions && selection && (
           <>
             <div
               className="agent-conversation-frame"
@@ -675,8 +728,7 @@ export function Conversation({
                               disabled={
                                 Boolean(activeRunId) ||
                                 action.pending ||
-                                action.uncertain ||
-                                !configuration.data
+                                action.uncertain
                               }
                               onSelect={() => setConfirm("archive")}
                             >
@@ -804,18 +856,18 @@ export function Conversation({
                       )}
                       {!archived &&
                         (waiting.length > 0 ||
-                          detail.state.pending_interaction_count > 0 ||
+                          pendingInteractions > 0 ||
                           snapshot?.interactions_truncated) && (
                           <div className="agent-pending-interactions">
                             {(waiting.length > 1 ||
-                              detail.state.pending_interaction_count > 1 ||
+                              pendingInteractions > 1 ||
                               snapshot?.interactions_truncated) && (
                               <div className="agent-interaction-switcher">
                                 <span>
                                   待处理问题与审批 ·{" "}
                                   {Math.max(
                                     waiting.length,
-                                    detail.state.pending_interaction_count,
+                                    pendingInteractions,
                                   )}
                                 </span>
                                 <button
@@ -918,11 +970,7 @@ export function Conversation({
                           {root && permissions.manage && (
                             <Button
                               variant="outline"
-                              disabled={
-                                action.pending ||
-                                action.uncertain ||
-                                !configuration.data
-                              }
+                              disabled={action.pending || action.uncertain}
                               onClick={() => control("restore")}
                             >
                               <RotateCcw />
@@ -939,13 +987,12 @@ export function Conversation({
                           id={`session:${sessionId}`}
                           target={{
                             id: sessionId,
-                            selection_hash:
-                              detail.selection.model_selection_hash,
+                            selection_hash: selection.model_selection_hash,
                           }}
                           disabled={
                             selectionPending ||
                             !permissions.submit ||
-                            !detail.selection.availability.available
+                            !selection.availability.available
                           }
                           queuePaused={queuePaused}
                           running={Boolean(activeRunId)}
@@ -958,16 +1005,21 @@ export function Conversation({
                               <ContextUsage sessionId={sessionId} />
                               <SessionModelSelection
                                 session={{
-                                  ...detail,
                                   configuration: config,
+                                  selection,
                                   permissions,
+                                  state: {
+                                    agent_access_available:
+                                      agentAccessAvailable,
+                                  },
                                 }}
                                 onPending={setSelectionPending}
+                                onRefresh={() => query.refetch()}
                               />
                             </>
                           }
                           footerLeading={
-                            detail.state.agent_access_available ? undefined : (
+                            agentAccessAvailable ? undefined : (
                               <span
                                 role="status"
                                 className="text-xs text-muted"
@@ -997,20 +1049,28 @@ export function Conversation({
                   </footer>
                 </main>
                 {workspaceOpen && (
-                  <SessionWorkspace
-                    session={{ ...detail, configuration: config }}
-                    conversation={snapshot?.conversation}
-                    records={state.records}
-                    activeRunId={activeRunId}
-                    activeStatus={activeStatus}
-                    readonly={archived || !root || !permissions.manage}
-                    onClose={() => {
-                      setWorkspaceOpen(false);
-                      workspaceToggle.current?.focus();
-                    }}
-                    onRuns={() => setPanel("runs")}
-                    onFiles={() => setPanel("files")}
-                  />
+                  <AsyncBoundary
+                    loading={query.isPending}
+                    error={query.error}
+                    onRetry={() => void query.refetch()}
+                  >
+                    {detail && (
+                      <SessionWorkspace
+                        session={{ ...detail, configuration: config }}
+                        conversation={snapshot?.conversation}
+                        records={state.records}
+                        activeRunId={activeRunId}
+                        activeStatus={activeStatus}
+                        readonly={archived || !root || !permissions.manage}
+                        onClose={() => {
+                          setWorkspaceOpen(false);
+                          workspaceToggle.current?.focus();
+                        }}
+                        onRuns={() => setPanel("runs")}
+                        onFiles={() => setPanel("files")}
+                      />
+                    )}
+                  </AsyncBoundary>
                 )}
               </div>
             </div>
@@ -1040,16 +1100,24 @@ export function Conversation({
               />
             )}
             {panel === "settings" && (
-              <SessionSettings
-                session={detail}
-                onClose={() => setPanel(null)}
-                onSaved={refresh}
-              />
+              <AsyncBoundary
+                loading={query.isPending}
+                error={query.error}
+                onRetry={() => void query.refetch()}
+              >
+                {detail && (
+                  <SessionSettings
+                    session={detail}
+                    onClose={() => setPanel(null)}
+                    onSaved={refresh}
+                  />
+                )}
+              </AsyncBoundary>
             )}
             {panel === "interactions" && (
               <InteractionList
                 sessionId={sessionId}
-                detail={detail}
+                permissions={permissions}
                 archived={archived}
                 onClose={() => setPanel(null)}
                 onChanged={refresh}
@@ -1087,6 +1155,20 @@ export function Conversation({
     </>
   );
 }
+
+function sessionDetailChanged(type: DurableRecord["event_type"]) {
+  return (
+    type === "session/configured" ||
+    type === "run/ended" ||
+    type === "run/settled" ||
+    type === "queue/state" ||
+    type === "input/removed" ||
+    type === "input/expired" ||
+    type === "input/cancelled" ||
+    type.startsWith("compaction/")
+  );
+}
+
 function SessionPin({ sessionId }: { sessionId: string }) {
   const query = useApiQuery<SessionPreference>(
     ["agent-session", sessionId, "preference"],
@@ -1144,13 +1226,13 @@ function PinButton({
 }
 function InteractionList({
   sessionId,
-  detail,
+  permissions,
   archived,
   onClose,
   onChanged,
 }: {
   sessionId: string;
-  detail: SessionDetail;
+  permissions: SessionDetail["permissions"];
   archived: boolean;
   onClose: () => void;
   onChanged: () => void;
@@ -1180,8 +1262,8 @@ function InteractionList({
               id={item.id}
               sessionId={sessionId}
               status={item.status}
-              canAnswer={detail.permissions.answer}
-              canApprove={detail.permissions.approve}
+              canAnswer={permissions.answer}
+              canApprove={permissions.approve}
               archived={archived}
               onChanged={() => {
                 void query.refetch();

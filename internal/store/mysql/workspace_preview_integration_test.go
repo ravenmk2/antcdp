@@ -40,6 +40,20 @@ func workspacePreviewIntegration(t *testing.T, f *agentIntegrationFixture, svc *
 		return result
 	}
 	before := counts()
+	listing, err := svc.ListWorkspaceEntries(ctx, f.AdminToken, computerID, a.WorkspaceEntryQuery{Path: strings.TrimPrefix(cwd, "/data/")})
+	if err != nil {
+		t.Fatal("list directory", err)
+	}
+	entries := listing.Data.([]a.WorkspaceEntry)
+	if len(entries) == 0 || entries[0].EntryToken == "" || listing.Pagination.Total != len(entries) {
+		t.Fatal("listing lost entries or mutation preconditions", entries, listing.Pagination)
+	}
+	if _, err := svc.ListWorkspaceEntries(ctx, outsider, computerID, a.WorkspaceEntryQuery{}); err == nil {
+		t.Fatal("unauthorized directory listing")
+	}
+	if after := counts(); after != before {
+		t.Fatal("directory listing created operation, lease or resource records", before, after)
+	}
 	for _, file := range []struct{ name, key string }{{"note.md", noteKey}, {"large.bin", largeKey}} {
 		stats, downloads := remote.stats, remote.downloads
 		_, content, err := svc.OpenWorkspaceFile(ctx, f.AdminToken, computerID, strings.TrimPrefix(cwd, "/data/")+"/"+file.name, "")

@@ -7,16 +7,24 @@ import {
 } from "react";
 import type { SessionConfiguration } from "@/types/agents";
 
+export interface SessionHeading {
+  sessionId: string;
+  configuration?: SessionConfiguration;
+  unavailable: boolean;
+}
+
 export const SessionHeadingContext = createContext<Dispatch<
-  SetStateAction<SessionConfiguration | undefined>
+  SetStateAction<SessionHeading | undefined>
 > | null>(null);
 
 export function useSessionHeading(
+  sessionId: string | undefined,
   configuration: SessionConfiguration | undefined,
-  service: boolean,
+  unavailable: boolean,
 ) {
   const publish = useContext(SessionHeadingContext);
   useEffect(() => {
-    if (!service && configuration) publish?.(configuration);
-  }, [configuration, publish, service]);
+    if (sessionId && (configuration || unavailable))
+      publish?.({ sessionId, configuration, unavailable });
+  }, [sessionId, configuration, unavailable, publish]);
 }

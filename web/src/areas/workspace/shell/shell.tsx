@@ -10,13 +10,11 @@ import { resolveSiteName } from "@/lib/site-name";
 import type { Resource } from "@/types/collaboration";
 import { Suspense, useEffect, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router";
-import type {
-  AgentNavigationSummary,
-  SessionConfiguration,
-  SessionDetail,
-  SessionSummary,
-} from "@/types/agents";
-import { SessionHeadingContext } from "@/features/agents/chat/navigation-context";
+import type { AgentNavigationSummary, SessionSummary } from "@/types/agents";
+import {
+  SessionHeadingContext,
+  type SessionHeading,
+} from "@/features/agents/chat/navigation-context";
 import { ConversationSidebar } from "@/features/agents/chat/conversation-sidebar";
 import { workspaceBreadcrumbs } from "../pages/workspace-breadcrumbs";
 import { WorkspaceSidebar } from "../pages/workspace-sidebar";
@@ -28,7 +26,7 @@ export function Shell() {
   const cache = useQueryClient();
   const location = useLocation();
   const { user } = useSession();
-  const [heading, setHeading] = useState<SessionConfiguration>();
+  const [heading, setHeading] = useState<SessionHeading>();
   const [mobile, setMobile] = useState(false);
   const logout = useLogout();
   const { settings } = useAuth();
@@ -36,17 +34,12 @@ export function Shell() {
   const conversationArea =
     location.pathname === "/chats" || location.pathname.startsWith("/chats/");
   const sessionId = location.pathname.match(/^\/chats\/([1-9]\d*)\/?$/)?.[1];
-  const detail = useApiQuery<SessionDetail>(
-    ["agent-session", sessionId, "detail"],
-    `/agents/sessions/${sessionId}`,
-    { enabled: Boolean(sessionId) },
-  );
-  const config =
-    heading?.id === sessionId ? heading : detail.data?.data.configuration;
-  // List navigation already knows the owner; don't unmount its history while
-  // fetching the newly selected session's detail.
+  const activeHeading = heading?.sessionId === sessionId ? heading : undefined;
+  const config = activeHeading?.configuration;
+  const missingSession = activeHeading?.unavailable;
+  // Reuse the visible list row while the selected conversation opens.
   const listedSession =
-    sessionId && !config
+    sessionId && !config && !missingSession
       ? cache
           .getQueriesData<
             | ApiResponse<SessionSummary[]>
@@ -73,8 +66,6 @@ export function Shell() {
     `/agents/${agentId}/summary`,
     { enabled: conversationArea && Boolean(agentId) },
   );
-  const missingSession =
-    detail.error?.status === 404 || detail.error?.status === 403;
   const conversationCrumbs = missingSession
     ? [{ label: "对话" }]
     : [
@@ -92,9 +83,7 @@ export function Shell() {
         ...(sessionId
           ? [
               {
-                label:
-                  config?.title ??
-                  (detail.isError ? "会话不可用" : "加载会话…"),
+                label: config?.title ?? listedSession?.title ?? "加载会话…",
               },
             ]
           : agentId

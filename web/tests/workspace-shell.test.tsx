@@ -2,7 +2,10 @@ import type { Resource, Shortcuts } from "@/types/collaboration";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
+import type { ReactNode } from "react";
+import { useSessionHeading } from "@/features/agents/chat/navigation-context";
+import { session } from "./fixtures/agents";
 import { beforeEach, expect, it, vi } from "vitest";
 import { AppShell } from "./fixtures/area-shell";
 
@@ -87,14 +90,6 @@ const shortcuts: Shortcuts = {
 
 vi.mock("@/hooks/use-api", () => ({
   useApiQuery: (_key: unknown, path: string) => {
-    if (path === "/agents/sessions/31")
-      return {
-        data: {
-          data: {
-            configuration: { id: "31", agent_id: "9", title: "发布方案核对" },
-          },
-        },
-      };
     if (path === "/agents/9/summary")
       return {
         data: { data: { id: "9", name: "交付助手", favorited: false } },
@@ -124,11 +119,15 @@ vi.mock("@/hooks/use-api", () => ({
   },
 }));
 
-function mount(route: string) {
+function mount(route: string, child?: ReactNode) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter initialEntries={[route]}>
-        <AppShell />
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route path="*" element={child} />
+          </Route>
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -263,9 +262,21 @@ it("omits an empty creation menu for a member outside a project", () => {
   expect(screen.getByRole("link", { name: "对话" })).toBeVisible();
 });
 
+const activeConversation = {
+  ...session.configuration,
+  id: "31",
+  agent_id: "9",
+  title: "发布方案核对",
+};
+
+function ConversationHeading() {
+  useSessionHeading(activeConversation.id, activeConversation, false);
+  return null;
+}
+
 it("uses the independent agent summary and session title in conversation breadcrumbs", async () => {
   const user = userEvent.setup();
-  const { container } = mount("/chats/31");
+  const { container } = mount("/chats/31", <ConversationHeading />);
   const crumbs = screen.getByRole("navigation", { name: "当前位置" });
   expect(
     within(crumbs).getByRole("link", { name: "交付助手" }),

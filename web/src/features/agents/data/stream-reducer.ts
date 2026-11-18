@@ -265,6 +265,7 @@ export interface ConversationStreamState {
   subscriptionId: string;
   phase: "subscribing" | "live" | "resyncing" | "closed";
   throughSeq: string;
+  baselineSeq: string;
   epoch: string | null;
   revision: string;
   snapshot: SnapshotState | null;
@@ -286,6 +287,7 @@ export function initialConversationState(
     subscriptionId,
     phase: "subscribing",
     throughSeq: "0",
+    baselineSeq: "0",
     epoch: null,
     revision: "0",
     snapshot: null,
@@ -406,6 +408,7 @@ function installSnapshot(
     ...state,
     phase: "live",
     throughSeq: frame.through_seq,
+    baselineSeq: frame.through_seq,
     epoch: frame.stream.runtime_epoch,
     revision: frame.stream.revision,
     snapshot: frame.state,

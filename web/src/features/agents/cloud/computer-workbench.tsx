@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
@@ -85,7 +85,7 @@ export function ComputerWorkbench({
   const homeReady = home.isSuccess;
   const targetDirectory = useQuery({
     ...directoryQuery(id, directory, 1),
-    enabled: Boolean(ready && homeReady),
+    enabled: Boolean(ready && (directory !== "home" || homeReady)),
   });
   const reading =
     useIsFetching({ queryKey: [...sandboxKeys, "tree", id] }) +
@@ -321,26 +321,12 @@ function Directory(props: DirectoryProps) {
   } = props;
   const [expanded, setExpanded] = useState(depth === 0 || path === "home");
   const [page, setPage] = useState(1);
-  const cache = useQueryClient();
   const query = useQuery({
     ...directoryQuery(computerId, path, page),
-    enabled: expanded && prepared,
+    enabled: expanded && (path !== "home" || prepared),
     retry: false,
     refetchOnWindowFocus: false,
   });
-  useEffect(() => {
-    if (!query.isFetched || query.isFetching) return;
-    void cache.invalidateQueries({
-      queryKey: [...sandboxKeys, "workspace", computerId],
-    });
-  }, [
-    cache,
-    computerId,
-    query.isFetched,
-    query.isFetching,
-    query.dataUpdatedAt,
-    query.errorUpdatedAt,
-  ]);
   const entries = [...(query.data?.data || [])].sort((a, b) =>
     a.kind === b.kind
       ? a.name.localeCompare(b.name, "zh-CN", { numeric: true })

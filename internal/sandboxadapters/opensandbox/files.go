@@ -50,7 +50,7 @@ func (p *Provider) OpenFile(ctx context.Context, ref sandboxcore.ResourceRef, f 
 			byteRange += fmt.Sprint(f.Offset + f.Length - 1)
 		}
 	}
-	stream, err := p.openDownload(ctx, ref, func(endpoint *sdk.Endpoint) (*sandboxcore.FileStream, error) {
+	stream, err := withReadEndpoint(ctx, p, ref, func(endpoint *sdk.Endpoint) (*sandboxcore.FileStream, error) {
 		reader, e := p.downloadFile(ctx, endpoint, f, byteRange)
 		if e != nil {
 			return nil, e
@@ -64,33 +64,36 @@ func (p *Provider) OpenFile(ctx context.Context, ref sandboxcore.ResourceRef, f 
 	return &limitedReadCloser{Reader: &boundedReader{source: stream.Reader, remaining: f.MaxBytes}, closer: stream.Reader, cancel: cancel}, nil
 }
 
-func (p *Provider) openDownload(ctx context.Context, ref sandboxcore.ResourceRef, download func(*sdk.Endpoint) (*sandboxcore.FileStream, error)) (*sandboxcore.FileStream, error) {
-	endpoint := p.endpoints.get(p.endpointKey(ref))
+func withReadEndpoint[T any](ctx context.Context, p *Provider, ref sandboxcore.ResourceRef, read func(*sdk.Endpoint) (T, error)) (T, error) {
+	var result T
+	key := p.endpointKey(ref)
+	endpoint := p.endpoints.get(key)
 	cached := endpoint != nil
 	var err error
 	if endpoint == nil {
 		endpoint, err = p.dataEndpoint(ctx, ref)
 	}
 	if err != nil {
-		return nil, err
+		return result, err
 	}
-	stream, err := download(endpoint)
-	// Only a failed cached route is refreshed. File errors, authentication errors
-	// and failures after reading starts must not cause another download.
-	if cached && ctx.Err() == nil && p.staleDownloadEndpoint(err) {
-		p.endpoints.remove(p.endpointKey(ref), endpoint)
+	result, err = read(endpoint)
+	// Only a failed cached route is refreshed. Request errors from a reachable
+	// file service must not cause endpoint discovery or another attempt.
+	if cached && ctx.Err() == nil && p.staleReadEndpoint(err) {
+		p.endpoints.remove(key, endpoint)
 		endpoint, err = p.dataEndpoint(ctx, ref)
 		if err == nil {
-			stream, err = download(endpoint)
-			if p.staleDownloadEndpoint(err) {
-				p.endpoints.remove(p.endpointKey(ref), endpoint)
+			result, err = read(endpoint)
+			if p.staleReadEndpoint(err) {
+				p.endpoints.remove(key, endpoint)
 			}
 		}
 	}
 	if err != nil {
-		return nil, remoteError(err, false)
+		var zero T
+		return zero, remoteError(err, false)
 	}
-	return stream, nil
+	return result, nil
 }
 
 func (p *Provider) downloadFile(ctx context.Context, endpoint *sdk.Endpoint, f sandboxcore.FileRequest, byteRange string) (io.ReadCloser, error) {
@@ -106,7 +109,7 @@ func (p *Provider) downloadFile(ctx context.Context, endpoint *sdk.Endpoint, f s
 	return files.DownloadFile(ctx, f.Path, byteRange)
 }
 
-func (p *Provider) staleDownloadEndpoint(err error) bool {
+func (p *Provider) staleReadEndpoint(err error) bool {
 	var network *net.OpError
 	if errors.As(err, &network) && network.Op == "dial" {
 		return true
@@ -162,14 +165,25 @@ func (p *Provider) nativeFiles(ctx context.Context, ref sandboxcore.ResourceRef,
 	return p.execd(ctx, ref)
 }
 
+func withFilesystemRead[T any](ctx context.Context, p *Provider, ref sandboxcore.ResourceRef, name string, read func(*sdk.ExecdClient) (T, error)) (T, error) {
+	var zero T
+	if !validFilePath(name) {
+		return zero, failure("SANDBOX_FILE_REQUEST_INVALID", false)
+	}
+	if err := validateRef(ref); err != nil {
+		return zero, err
+	}
+	return withReadEndpoint(ctx, p, ref, func(endpoint *sdk.Endpoint) (T, error) {
+		return read(sdk.NewExecdClient(endpoint.Endpoint, "", sdk.WithHTTPClient(p.http), sdk.WithHeaders(endpoint.Headers)))
+	})
+}
+
 func (p *Provider) StatFile(ctx context.Context, ref sandboxcore.ResourceRef, name string) (sandboxcore.FileInfo, error) {
-	c, err := p.nativeFiles(ctx, ref, name)
+	values, err := withFilesystemRead(ctx, p, ref, name, func(client *sdk.ExecdClient) (map[string]sdk.FileInfo, error) {
+		return client.GetFileInfo(ctx, name)
+	})
 	if err != nil {
 		return sandboxcore.FileInfo{}, err
-	}
-	values, err := c.GetFileInfo(ctx, name)
-	if err != nil {
-		return sandboxcore.FileInfo{}, remoteError(err, false)
 	}
 	v, ok := values[name]
 	if !ok {
@@ -185,13 +199,11 @@ func (p *Provider) StatFile(ctx context.Context, ref sandboxcore.ResourceRef, na
 }
 
 func (p *Provider) ListFiles(ctx context.Context, ref sandboxcore.ResourceRef, name string) ([]sandboxcore.FileInfo, error) {
-	c, err := p.nativeFiles(ctx, ref, name)
+	values, err := withFilesystemRead(ctx, p, ref, name, func(client *sdk.ExecdClient) ([]sdk.FileInfo, error) {
+		return client.ListDirectory(ctx, name)
+	})
 	if err != nil {
 		return nil, err
-	}
-	values, err := c.ListDirectory(ctx, name)
-	if err != nil {
-		return nil, remoteError(err, false)
 	}
 	return fileInfos(values), nil
 }

@@ -129,35 +129,35 @@ func (s *CloudService) startWorkspaceOperation(st StateRepository, repo CloudRep
 	return op, nil
 }
 
-func (s *CloudService) beginWorkspaceRead(ctx context.Context, raw string, id uint64, kind string, intent workspaceFileIntent) (*Result, *CloudOperationRow, *SandboxAccess, error) {
-	var op *CloudOperationRow
+// Workspace browsing takes the same bounded, generation-specific read path as a preview.
+func (s *CloudService) workspaceReadAccess(ctx context.Context, raw string, id uint64) (*Result, *SandboxAccess, uint64, error) {
 	var access *SandboxAccess
 	var connection CloudConnection
-	result, err := s.cloudAccess(ctx, raw, false, func(_ identity.Tx, _ Repository, st StateRepository, repo CloudRepository, a *identity.Auth, out *Result) error {
-		w, err := repo.Computer(id, true)
-		if err != nil {
-			return err
+	var fence uint64
+	result, err := s.cloudAccess(ctx, raw, false, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository, auth *identity.Auth, out *Result) error {
+		computer, e := repo.Computer(id, false)
+		if e != nil {
+			return e
 		}
-		if err = workspaceContentAccess(w, a); err != nil {
-			return err
+		if e = workspaceContentAccess(computer, auth); e != nil {
+			return e
 		}
-		access, connection, err = s.accessRows(repo, id, nil)
-		if err != nil {
-			return err
+		provider, e := repo.Connection(false)
+		if e != nil {
+			return e
 		}
-		intent.WorkspaceFence = w.FenceVersion
-		op, err = s.startWorkspaceOperation(st, repo, access, kind, "user", idString(a.User.ID), intent)
-		out.Tag = s.tag("computer", id, w.RowVersion)
-		return err
+		access, connection, e = s.accessFromRows(provider, computer)
+		if e == nil {
+			fence = computer.FenceVersion
+			out.Tag = s.tag("computer", id, computer.RowVersion)
+		}
+		return e
 	})
 	if err != nil {
-		return result, nil, nil, err
+		return result, nil, 0, err
 	}
 	access.Provider, err = s.openProvider(ctx, connection)
-	if err != nil {
-		_ = s.finishWorkspaceOperation(ctx, op.ID, access, nil, err)
-	}
-	return result, op, access, err
+	return result, access, fence, err
 }
 
 func (s *CloudService) ListWorkspaceEntries(ctx context.Context, raw string, id uint64, q WorkspaceEntryQuery) (*Result, error) {
@@ -174,49 +174,35 @@ func (s *CloudService) ListWorkspaceEntries(ctx context.Context, raw string, id 
 	if q.PageSize > 100 || q.Page > 100 {
 		return nil, httpx.Invalid("page", "out_of_range")
 	}
-	result, op, access, err := s.beginWorkspaceRead(ctx, raw, id, "workspace_read", workspaceFileIntent{Path: name})
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	result, access, fence, err := s.workspaceReadAccess(ctx, raw, id)
 	if err != nil {
 		return result, err
 	}
-	ctx, cancel := context.WithDeadline(ctx, op.DeadlineAt)
-	defer cancel()
-	response, err := s.workspaceRequest(ctx, access, op.ID, workspace.Request{Operation: "list", Path: name, Offset: int64((q.Page - 1) * q.PageSize), Limit: q.PageSize})
-	var listing struct {
-		Entries []workspace.Entry `json:"entries"`
-		Total   int               `json:"total"`
-		HasMore bool              `json:"has_more"`
+	files, err := nativeFiles(access)
+	if err != nil {
+		return result, err
 	}
-	if err == nil && json.Unmarshal(response.Result, &listing) != nil {
-		err = integrity()
+	listing, err := listNativeDirectory(ctx, files, access.Resource, path.Join("/data", name), (q.Page-1)*q.PageSize, q.PageSize)
+	if err != nil {
+		return result, err
 	}
 	items := make([]WorkspaceEntry, 0, len(listing.Entries))
-	var intent workspaceFileIntent
-	if json.Unmarshal(op.Intent, &intent) != nil {
-		err = integrity()
-	}
-	if err == nil {
-		for _, entry := range listing.Entries {
-			if entry.Kind != "file" && entry.Kind != "directory" {
-				continue
-			}
-			when, parseErr := time.Parse(time.RFC3339Nano, entry.ModifiedAt)
-			if parseErr != nil || entry.Size < 0 {
-				err = integrity()
-				break
-			}
-			item := WorkspaceEntry{Name: entry.Name, Path: entry.Path, Kind: entry.Kind, ModifiedAt: &when, EntryToken: s.entryToken(workspaceEntryCondition{ComputerID: id, Fence: intent.WorkspaceFence, Path: entry.Path, Identity: entry.Identity})}
-			if entry.Kind == "file" {
-				size := uint64(entry.Size)
-				item.Size = &size
-			}
-			items = append(items, item)
+	for _, entry := range listing.Entries {
+		if entry.Kind != "file" && entry.Kind != "directory" {
+			continue
 		}
-	}
-	if finishErr := s.finishWorkspaceOperation(ctx, op.ID, access, nil, err); err == nil {
-		err = finishErr
-	}
-	if err != nil {
-		return result, err
+		when, parseErr := time.Parse(time.RFC3339Nano, entry.ModifiedAt)
+		if parseErr != nil || entry.Size < 0 {
+			return result, integrity()
+		}
+		item := WorkspaceEntry{Name: entry.Name, Path: entry.Path, Kind: entry.Kind, ModifiedAt: &when, EntryToken: s.entryToken(workspaceEntryCondition{ComputerID: id, Fence: fence, Path: entry.Path, Identity: entry.Identity})}
+		if entry.Kind == "file" {
+			size := uint64(entry.Size)
+			item.Size = &size
+		}
+		items = append(items, item)
 	}
 	result.Data = items
 	result.Pagination = &Pagination{Page: q.Page, PageSize: q.PageSize, Total: listing.Total}
@@ -229,26 +215,21 @@ func (s *CloudService) EnsureWorkspaceHome(ctx context.Context, raw string, id u
 	if !keyPattern.MatchString(key) {
 		return nil, httpx.Invalid("idempotency_key", "invalid_format")
 	}
-	out, op, access, err := s.beginWorkspaceRead(ctx, raw, id, "workspace_read", workspaceFileIntent{Path: "home"})
-	if err != nil {
-		return out, err
-	}
-	bounded, cancel := context.WithDeadline(ctx, op.DeadlineAt)
+	bounded, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	response, err := s.workspaceRequest(bounded, access, op.ID, workspace.Request{Operation: "directory_exists", Path: "home"})
-	var result struct {
-		Exists bool `json:"exists"`
-	}
-	if err == nil && json.Unmarshal(response.Result, &result) != nil {
-		err = integrity()
-	}
-	if finishErr := s.finishWorkspaceOperation(ctx, op.ID, access, nil, err); err == nil {
-		err = finishErr
-	}
+	out, access, _, err := s.workspaceReadAccess(bounded, raw, id)
 	if err != nil {
 		return out, err
 	}
-	if result.Exists {
+	files, err := nativeFiles(access)
+	if err != nil {
+		return out, err
+	}
+	exists, err := nativeHomeExists(bounded, files, access.Resource)
+	if err != nil {
+		return out, err
+	}
+	if exists {
 		out.Data = map[string]any{"status": "succeeded"}
 		return out, nil
 	}

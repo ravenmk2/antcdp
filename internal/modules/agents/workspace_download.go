@@ -20,31 +20,8 @@ func (s *CloudService) OpenWorkspaceFile(ctx context.Context, raw string, id uin
 	if !sandboxcore.ValidFileRange(byteRange) {
 		return nil, nil, httpx.E(416, "FILE_RANGE_INVALID", "文件范围无效")
 	}
-	var access *SandboxAccess
-	var connection CloudConnection
-	result, err := s.cloudAccess(ctx, raw, false, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository, auth *identity.Auth, out *Result) error {
-		computer, e := repo.Computer(id, false)
-		if e != nil {
-			return e
-		}
-		if e = workspaceContentAccess(computer, auth); e != nil {
-			return e
-		}
-		provider, e := repo.Connection(false)
-		if e != nil {
-			return e
-		}
-		access, connection, e = s.accessFromRows(provider, computer)
-		if e == nil {
-			out.Tag = s.tag("computer", id, computer.RowVersion)
-		}
-		return e
-	})
-	if err != nil {
-		return result, nil, err
-	}
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	access.Provider, err = s.openProvider(ctx, connection)
+	result, access, _, err := s.workspaceReadAccess(ctx, raw, id)
 	if err != nil {
 		cancel()
 		return result, nil, err

@@ -24,7 +24,7 @@ func (p *Provider) StreamFile(ctx context.Context, ref sandboxcore.ResourceRef, 
 		return nil, failure("SANDBOX_FILE_REQUEST_INVALID", false)
 	}
 	ctx, cancel := context.WithTimeout(ctx, p.connection.OperationTimeout)
-	stream, err := p.openDownload(ctx, ref, func(endpoint *sdk.Endpoint) (*sandboxcore.FileStream, error) {
+	stream, err := withReadEndpoint(ctx, p, ref, func(endpoint *sdk.Endpoint) (*sandboxcore.FileStream, error) {
 		request, e := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint.Endpoint, "/")+"/files/download?"+url.Values{"path": {f.Path}}.Encode(), nil)
 		if e != nil {
 			return nil, e

@@ -13,13 +13,13 @@ import (
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
-func TestDownloadEndpointReuseRefreshAndIsolation(t *testing.T) {
-	for _, mode := range []string{"read", "stream"} {
-		t.Run(mode, func(t *testing.T) { testDownloadEndpointCache(t, mode == "stream") })
+func TestReadEndpointReuseRefreshAndIsolation(t *testing.T) {
+	for _, mode := range []string{"read", "stream", "list"} {
+		t.Run(mode, func(t *testing.T) { testReadEndpointCache(t, mode) })
 	}
 }
 
-func testDownloadEndpointCache(t *testing.T, streaming bool) {
+func testReadEndpointCache(t *testing.T, mode string) {
 	var requests, downloadStatus, route atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
@@ -32,12 +32,16 @@ func testDownloadEndpointCache(t *testing.T, streaming bool) {
 				endpoint += "/new"
 			}
 			jsonReply(t, w, sdk.Endpoint{Endpoint: endpoint})
-		case strings.HasSuffix(r.URL.Path, "/files/download"):
+		case strings.HasSuffix(r.URL.Path, "/files/download"), strings.HasSuffix(r.URL.Path, "/directories/list"):
 			if r.Header.Get("X-EXECD-ACCESS-TOKEN") != testControlToken(t) || r.Header.Get("OPEN-SANDBOX-API-KEY") == "" {
-				t.Error("download lost scoped or proxy credential")
+				t.Error("filesystem read lost scoped or proxy credential")
 			}
-			if r.URL.Query().Get("path") != "/data/home/test.py" {
-				t.Error("download path lost")
+			wantPath := "/data/home/test.py"
+			if mode == "list" {
+				wantPath = "/data/home"
+			}
+			if r.URL.Query().Get("path") != wantPath {
+				t.Error("filesystem read path lost")
 			}
 			if route.Load() != 0 && !strings.Contains(r.URL.Path, "/new/") {
 				w.WriteHeader(http.StatusBadGateway)
@@ -47,7 +51,11 @@ func testDownloadEndpointCache(t *testing.T, streaming bool) {
 				w.WriteHeader(int(status))
 				return
 			}
-			_, _ = io.WriteString(w, "print('hello')")
+			if mode == "list" {
+				jsonReply(t, w, []sdk.FileInfo{{Path: "/data/home/test.py", Type: "file"}})
+			} else {
+				_, _ = io.WriteString(w, "print('hello')")
+			}
 		default:
 			t.Errorf("unexpected request: %s", r.URL.Path)
 			w.WriteHeader(500)
@@ -57,7 +65,7 @@ func testDownloadEndpointCache(t *testing.T, streaming bool) {
 	factory := NewFactory()
 	connection := sandboxcore.Connection{Endpoint: server.URL, AccessMode: "server_proxy", APIKey: "test-key", ControlKey: []byte(strings.Repeat("k", 32))}
 	ref := testRef()
-	download := func(wantRequests int32, wantError bool) {
+	read := func(wantRequests int32, wantError bool) {
 		t.Helper()
 		requests.Store(0)
 		// A new provider is opened for every host request in production.
@@ -67,13 +75,20 @@ func testDownloadEndpointCache(t *testing.T, streaming bool) {
 		}
 		var reader io.ReadCloser
 		request := sandboxcore.FileRequest{Path: "/data/home/test.py", MaxBytes: 100}
-		if streaming {
+		switch mode {
+		case "stream":
 			var stream *sandboxcore.FileStream
 			stream, err = provider.(sandboxcore.FileStreamer).StreamFile(context.Background(), ref, request, "")
 			if stream != nil {
 				reader = stream.Reader
 			}
-		} else {
+		case "list":
+			var entries []sandboxcore.FileInfo
+			entries, err = provider.(sandboxcore.Filesystem).ListFiles(context.Background(), ref, "/data/home")
+			if err == nil && (len(entries) != 1 || entries[0].Path != request.Path) {
+				t.Fatalf("directory contents: %+v", entries)
+			}
+		default:
 			reader, err = provider.OpenFile(context.Background(), ref, request)
 		}
 		if (err != nil) != wantError {
@@ -90,25 +105,25 @@ func testDownloadEndpointCache(t *testing.T, streaming bool) {
 			t.Fatalf("requests = %d, want %d", requests.Load(), wantRequests)
 		}
 	}
-	download(3, false) // cold: inspect, endpoint, download
-	download(1, false) // warm: download only, even with a new Provider
+	read(3, false) // cold: inspect, endpoint, download
+	read(1, false) // warm: download only, even with a new Provider
 	route.Store(1)
-	download(4, false) // stale route: failed download, inspect, endpoint, download
-	download(1, false)
+	read(4, false) // stale route: failed download, inspect, endpoint, download
+	read(1, false)
 	for _, status := range []int32{400, 401, 403, 404, 429, 500} {
 		downloadStatus.Store(status)
-		download(1, true)
+		read(1, true)
 	}
 	downloadStatus.Store(502)
-	download(4, true) // never loop if the refreshed address also fails
+	read(4, true) // never loop if the refreshed address also fails
 	downloadStatus.Store(0)
-	download(3, false) // failed refreshed route was evicted
+	read(3, false) // failed refreshed route was evicted
 	ref.BackendGeneration++
-	download(3, false)
-	download(1, false)
+	read(3, false)
+	read(1, false)
 	connection.APIKey = "rotated-key"
-	download(3, false)
-	download(1, false)
+	read(3, false)
+	read(1, false)
 	ref.Ownership.CreationToken = strings.Repeat("c", 32)
-	download(1, true) // fresh ownership check rejects a mismatched instance before download
+	read(1, true) // fresh ownership check rejects a mismatched instance before download
 }

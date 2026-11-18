@@ -463,21 +463,47 @@ func (s *Service) Snapshot(ctx context.Context, raw string, id uint64, limit int
 		if e != nil {
 			return e
 		}
-		// Match the writer's provider/model before Session lock order. detail's
-		// repeated projection only reacquires the locks already held here.
-		if _, _, e = s.selection(tx, r, initial); e != nil {
+		// Acquire model and agent locks before the Session lock, as writers do.
+		_, selection, e := s.selection(tx, r, initial)
+		if e != nil {
 			return e
 		}
-		v, e := s.sessionAccess(st, id, a, false, true)
+		v, e := lockSessionContent(st, id, a)
 		if e != nil {
 			return e
 		}
 		if v.RowVersion != initial.RowVersion {
 			return httpx.E(409, "SNAPSHOT_CHANGED", "会话配置已变化，请重试快照")
 		}
-		detail, e := s.detail(ctx, tx, r, st, v, a)
+		agent, e := r.Definition(v.AgentID, false)
 		if e != nil {
 			return e
+		}
+		if agent == nil {
+			return integrity()
+		}
+		permissions, available, e := sessionPermissions(tx, r, v, agent, selection, a.User)
+		if e != nil {
+			return e
+		}
+		state := SnapshotState{
+			RootSessionID: v.RootSessionID, AgentAccessAvailable: available,
+			Configuration: s.configuration(v), Selection: selection, Permissions: permissions,
+			RunID: v.ActiveRunID, QueuePaused: v.QueuePaused, Inputs: []InputSummary{}, Interactions: []InteractionView{},
+		}
+		run, e := activeSessionRun(st, v)
+		if e != nil {
+			return e
+		}
+		if run != nil {
+			state.RunStatus = &run.Status
+		}
+		if v.RootSessionID == nil {
+			view, err := s.viewState(st, v, a.User.ID)
+			if err != nil {
+				return err
+			}
+			state.View = &view
 		}
 		repo, e := observationsFor(tx)
 		if e != nil {
@@ -487,7 +513,6 @@ func (s *Service) Snapshot(ctx context.Context, raw string, id uint64, limit int
 		if e != nil {
 			return e
 		}
-		state := SnapshotState{Configuration: detail.Configuration, Selection: detail.Selection, Permissions: detail.Permissions, View: detail.ViewState, RunID: v.ActiveRunID, RunStatus: detail.State.ActiveRunStatus, QueuePaused: v.QueuePaused, Inputs: []InputSummary{}, Interactions: []InteractionView{}}
 		state.Conversation, e = loadConversationProjection(st, id, v.LastSeq)
 		if e != nil {
 			return e

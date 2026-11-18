@@ -60,7 +60,7 @@ function setup(maxSubscriptions = 8, onSessionsChanged = vi.fn()) {
   return { client, sockets, check, lost };
 }
 
-it("keeps one runtime connection across content subscriptions and restores global observation after reconnect", () => {
+it("keeps one runtime connection across content subscriptions and restores global observation after reconnect", async () => {
   const changed = vi.fn();
   const { client, sockets } = setup(8, changed);
   client.start();
@@ -78,6 +78,7 @@ it("keeps one runtime connection across content subscriptions and restores globa
   expect(changed).toHaveBeenCalledOnce();
   const unsubscribe = client.observe("10").subscribe(vi.fn());
   unsubscribe();
+  await Promise.resolve();
   expect(sockets[0].readyState).toBe(1);
   expect(sockets[0].frames().at(-1)?.type).toBe("unsubscribe");
   sockets[0].receive({
@@ -206,6 +207,8 @@ function frame(subscriptionId: string, sessionId = "10"): SnapshotFrame {
     session_id: sessionId,
     through_seq: "8",
     state: {
+      root_session_id: null,
+      agent_access_available: true,
       configuration: {
         id: sessionId,
         agent_id: "1",
@@ -263,7 +266,7 @@ function frame(subscriptionId: string, sessionId = "10"): SnapshotFrame {
 afterEach(() => vi.useRealTimers());
 
 describe("agent stream transport", () => {
-  it("shares observers created before either component subscribes", () => {
+  it("shares observers created before either component subscribes", async () => {
     const { client, sockets } = setup();
     const first = client.observe("10"),
       second = client.observe("10");
@@ -275,10 +278,11 @@ describe("agent stream transport", () => {
     end1();
     expect(sockets[0].readyState).toBe(1);
     end2();
+    await Promise.resolve();
     expect(sockets[0].readyState).toBe(3);
     client.dispose();
   });
-  it("shares a connection and unsubscribes without sending execution commands", () => {
+  it("shares a connection and unsubscribes without sending execution commands", async () => {
     const { client, sockets } = setup();
     const first = client.observe("10"),
       second = client.observe("11");
@@ -295,13 +299,49 @@ describe("agent stream transport", () => {
       new Set(subscriptions.map((item) => item.subscription_id)).size,
     ).toBe(2);
     release1();
+    await Promise.resolve();
     expect(sockets[0].readyState).toBe(1);
     expect(sockets[0].frames().at(-1)?.type).toBe("unsubscribe");
     release2();
+    await Promise.resolve();
     expect(sockets[0].readyState).toBe(3);
     expect(client.getConnectionStatus()).toBe("disconnected");
     vi.advanceTimersByTime(120000);
     expect(sockets).toHaveLength(1);
+    client.dispose();
+  });
+
+  it("reuses an opening across a synchronous detach and reattach", async () => {
+    const { client, sockets } = setup(1);
+    client.start();
+    sockets[0].open();
+    const observer = client.observe("10");
+    const detach = observer.subscribe(vi.fn());
+    const opening = sockets[0].frames().at(-1)!;
+    detach();
+    const detachAgain = observer.subscribe(vi.fn());
+    await Promise.resolve();
+    expect(sockets[0].frames().map((item) => item.type)).toEqual([
+      "subscribe_sessions",
+      "subscribe",
+    ]);
+    sockets[0].receive(frame(opening.subscription_id));
+    expect(observer.getSnapshot().phase).toBe("live");
+
+    detachAgain();
+    const next = client.observe("11");
+    next.subscribe(vi.fn());
+    await Promise.resolve();
+    expect(
+      sockets[0]
+        .frames()
+        .slice(-2)
+        .map((item) => item.type),
+    ).toEqual(["unsubscribe", "subscribe"]);
+    expect(observer.getSnapshot().snapshot).toBeNull();
+    sockets[0].receive(frame(opening.subscription_id));
+    expect(observer.getSnapshot().snapshot).toBeNull();
+    expect(next.getSnapshot().snapshot).toBeNull();
     client.dispose();
   });
 

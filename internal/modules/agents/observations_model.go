@@ -147,6 +147,8 @@ type InputSummary struct {
 	Version  string             `json:"version"`
 }
 type SnapshotState struct {
+	RootSessionID         *uint64                `json:"root_session_id,string"`
+	AgentAccessAvailable  bool                   `json:"agent_access_available"`
 	Conversation          ConversationProjection `json:"conversation"`
 	Configuration         SessionConfiguration   `json:"configuration"`
 	Selection             EffectiveSelection     `json:"selection"`
