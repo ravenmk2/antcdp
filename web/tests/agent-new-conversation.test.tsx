@@ -103,7 +103,7 @@ function setup(fixed: boolean) {
               </>
             ),
           },
-          { path: "/agents/sessions/10", element: <p>已打开会话</p> },
+          { path: "/chats/10", element: <p>已打开会话</p> },
           { path: "/other", element: <p>其他页面</p> },
         ],
       },

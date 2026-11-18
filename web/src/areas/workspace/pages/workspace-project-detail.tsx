@@ -8,18 +8,9 @@ import {
   useSearchParams,
 } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowRight,
-  Cable,
-  FileText,
-  Server,
-  Shield,
-  Users,
-  UsersRound,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { request } from "@/api/client";
 import { useAuth, useSession } from "@/app/auth";
-import { Button } from "@/components/button";
 import { CopyButton } from "@/components/copy-button";
 import { AsyncBoundary, ErrorNotice } from "@/components/feedback";
 import { DescriptionList, PageHeader, Panel } from "@/components/layout";
@@ -42,6 +33,7 @@ import { WorkspaceResourceActions } from "@/areas/workspace/pages/workspace-reso
 import { WorkspaceShortcutFeedback } from "@/areas/workspace/pages/workspace-shortcut-feedback";
 import { WorkspaceProjectFrame } from "@/areas/workspace/pages/workspace-project-frame";
 import {
+  projectSectionRoutes,
   resolveWorkspaceProjectView,
   type WorkspaceProjectSettingSection,
 } from "@/areas/workspace/pages/workspace-navigation";
@@ -118,6 +110,23 @@ function ProjectContent({
   if (view.page === "jobs")
     return <Navigate replace to={`/projects/${project.id}/jobs`} />;
 
+  const destination =
+    view.page === "settings" && projectSectionRoutes[view.section];
+  if (destination) {
+    const next = new URLSearchParams(params);
+    next.delete("tab");
+    next.delete("section");
+    return (
+      <Navigate
+        replace
+        to={{
+          pathname: "/projects/" + project.id + "/" + destination,
+          search: next.toString(),
+        }}
+      />
+    );
+  }
+
   const actions = (
     <WorkspaceResourceActions
       kind="projects"
@@ -131,11 +140,7 @@ function ProjectContent({
   );
 
   return (
-    <WorkspaceProjectFrame
-      project={project}
-      active={view.page}
-      actions={actions}
-    >
+    <WorkspaceProjectFrame project={project} actions={actions}>
       {Boolean(shortcut.error) && (
         <WorkspaceShortcutFeedback
           error={shortcut.error}
@@ -208,150 +213,57 @@ function WorkspaceProjectSettings({
   section: WorkspaceProjectSettingSection;
   timezone: string;
 }) {
-  const [, setParams] = useSearchParams();
-  const links = [
-    { key: "profile", label: "基本资料", icon: FileText },
-    { key: "members", label: "成员管理", icon: Users },
-    { key: "roles", label: "角色管理", icon: Shield },
-    { key: "teams", label: "团队授权", icon: UsersRound },
-
-    { key: "integrations", label: "服务连接", icon: Cable },
-    { key: "hosts", label: "SSH 凭证", icon: Server },
-  ] as const;
-
-  function select(key: WorkspaceProjectSettingSection) {
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      next.set("tab", "settings");
-      next.set("section", key);
-      next.delete("release");
-      return next;
-    });
-  }
-
   return (
-    <div className="settings-layout workspace-project-settings">
-      <nav className="settings-nav" aria-label="项目设置分类">
-        {project.can_manage && (
-          <Link
-            className="link p-3 text-sm"
-            to={`/projects/${project.id}/dingtalk`}
-          >
-            钉钉机器人
-          </Link>
-        )}
-        {links.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={section === key}
-            onClick={() => select(key)}
-          >
-            <Icon />
-            {label}
-          </button>
-        ))}
-      </nav>
-      <div className="min-w-0">
-        {section === "profile" && (
-          <Panel title="项目资料">
-            <DescriptionList
-              items={[
-                { label: "项目名称", value: project.name },
-                {
-                  label: "项目编码",
-                  value: (
-                    <span className="inline-flex items-center gap-1">
-                      <span className="mono">{project.code}</span>
-                      <CopyButton value={project.code} label="复制项目编码" />
-                    </span>
-                  ),
-                },
-                {
-                  label: "项目状态",
-                  value: project.status === "active" ? "正常" : "已归档",
-                },
-                { label: "成员数量", value: `${project.member_count} 人` },
-                {
-                  label: "创建时间",
-                  value: formatDate(project.created_at, timezone),
-                },
-                {
-                  label: "最近更新",
-                  value: formatDate(project.updated_at, timezone),
-                },
-                {
-                  label: "摘要",
-                  value: project.summary || "—",
-                  full: true,
-                },
-              ]}
-            />
-            <div className="mt-5 border-t border-t-border-subtle pt-4">
-              <Link
-                className="link inline-flex items-center gap-2"
-                to={`/projects/${project.id}?tab=description`}
-              >
-                阅读项目介绍 <ArrowRight />
-              </Link>
-            </div>
-          </Panel>
-        )}
-        {section === "members" && (
-          <MembersPanel kind="projects" resource={project} />
-        )}
-        {section === "roles" && <ProjectRoles project={project} />}
-        {section === "teams" && <ProjectTeams resource={project} />}
-
-        {section === "integrations" && (
-          <CredentialLinkPanel
-            title="项目服务连接"
-            description="维护项目自己的连接和凭证，并使用平台授权的共享连接。"
-            to={`/projects/${project.id}/integrations`}
-            label="管理服务连接"
+    <div className="min-w-0">
+      {section === "profile" && (
+        <Panel title="项目资料">
+          <DescriptionList
+            items={[
+              { label: "项目名称", value: project.name },
+              {
+                label: "项目编码",
+                value: (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="mono">{project.code}</span>
+                    <CopyButton value={project.code} label="复制项目编码" />
+                  </span>
+                ),
+              },
+              {
+                label: "项目状态",
+                value: project.status === "active" ? "正常" : "已归档",
+              },
+              { label: "成员数量", value: `${project.member_count} 人` },
+              {
+                label: "创建时间",
+                value: formatDate(project.created_at, timezone),
+              },
+              {
+                label: "最近更新",
+                value: formatDate(project.updated_at, timezone),
+              },
+              {
+                label: "摘要",
+                value: project.summary || "—",
+                full: true,
+              },
+            ]}
           />
-        )}
-        {section === "hosts" && (
-          <CredentialLinkPanel
-            title="项目 SSH 凭证"
-            description="主机地址与公钥信任由系统管理员维护；此处只维护项目归属凭证。"
-            to={`/projects/${project.id}/remote-hosts`}
-            label="管理 SSH 凭证"
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function CredentialLinkPanel({
-  title,
-  description,
-  to,
-  label,
-}: {
-  title: string;
-  description: string;
-  to: string;
-  label: string;
-}) {
-  return (
-    <Panel
-      title={title}
-      action={
-        <Button
-          render={
-            <Link to={to}>
-              {label} <ArrowRight />
+          <div className="mt-5 border-t border-t-border-subtle pt-4">
+            <Link
+              className="link inline-flex items-center gap-2"
+              to={`/projects/${project.id}?tab=description`}
+            >
+              阅读项目介绍 <ArrowRight />
             </Link>
-          }
-          nativeButton={false}
-          role="link"
-          size="sm"
-        />
-      }
-    >
-      <p className="text-sm text-muted">{description}</p>
-    </Panel>
+          </div>
+        </Panel>
+      )}
+      {section === "members" && (
+        <MembersPanel kind="projects" resource={project} />
+      )}
+      {section === "roles" && <ProjectRoles project={project} />}
+      {section === "teams" && <ProjectTeams resource={project} />}
+    </div>
   );
 }

@@ -61,21 +61,26 @@ export function ConversationSidebar({
       <div className="conversation-navigation-top">
         <Popover open={selecting} onOpenChange={setSelecting}>
           <PopoverTrigger
-            className="conversation-agent-selector"
+            className="workspace-sidebar-switcher"
             aria-label={`选择智能体${selectedName ? `：${selectedName}` : ""}`}
           >
             <span className="conversation-agent-mark">
-              <Bot aria-hidden />
+              <Bot aria-hidden strokeWidth={1.7} />
             </span>
-            <span className="conversation-agent-name">
-              {selectedName ?? (agentId ? "智能体" : "选择智能体")}
+            <span className="min-w-0 flex-1">
+              <strong className="block truncate text-sm">
+                {selectedName ?? (agentId ? "智能体" : "选择智能体")}
+              </strong>
+              <small className="mt-0.5 block truncate text-[11px] text-muted">
+                {agentId ? "智能体 #" + agentId : "从收藏中选择"}
+              </small>
             </span>
-            <ChevronDown className="conversation-agent-chevron" aria-hidden />
+            <ChevronDown className="size-4 shrink-0 text-muted" aria-hidden />
           </PopoverTrigger>
           <PopoverContent
             align="start"
-            sideOffset={8}
-            className="conversation-agent-menu w-72 p-1.5"
+            sideOffset={4}
+            className="conversation-agent-menu w-80 p-1"
             aria-label="选择智能体"
           >
             {favorites.isPending && (
@@ -100,7 +105,7 @@ export function ConversationSidebar({
               {visible.map((agent) => (
                 <div className="conversation-favorite-row" key={agent.id}>
                   <Link
-                    to={`/agents?agent=${agent.id}`}
+                    to={`/chats?agent=${agent.id}`}
                     className="conversation-nav-row"
                     aria-current={agentId === agent.id ? "page" : undefined}
                     title={agent.name}
@@ -117,7 +122,10 @@ export function ConversationSidebar({
                       setSelecting(false);
                     }}
                   >
-                    <Bot className="size-4 shrink-0" />
+                    <Bot
+                      className="mx-1 size-5 shrink-0 text-muted"
+                      strokeWidth={1.7}
+                    />
                     <span>{agent.name}</span>
                     {!agent.availability.available && <small>暂不可用</small>}
                     {agentId === agent.id && (
@@ -187,7 +195,7 @@ export function ConversationSidebar({
               title="新建对话"
               render={
                 <Link
-                  to={agentId ? `/agents?agent=${agentId}` : "/agent-catalog"}
+                  to={agentId ? `/chats?agent=${agentId}` : "/agents/catalog"}
                 >
                   <SquarePen />
                 </Link>
@@ -259,11 +267,11 @@ function ConversationHistory({ agentId }: { agentId?: string }) {
         {sessions.map((session) => (
           <Link
             key={session.id}
-            to={`/agents/sessions/${session.id}`}
+            to={`/chats/${session.id}`}
             className="conversation-nav-row"
             title={session.title}
             aria-current={
-              pathname === `/agents/sessions/${session.id}` ? "page" : undefined
+              pathname === `/chats/${session.id}` ? "page" : undefined
             }
           >
             {session.pinned && <Pin className="size-3 shrink-0" />}

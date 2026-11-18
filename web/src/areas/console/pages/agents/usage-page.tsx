@@ -368,7 +368,7 @@ function RunMetadataView({
                         to={
                           run.agent_type === "service"
                             ? `/admin/agents/${run.agent_id}/debug/${run.session_id}`
-                            : `/agents/sessions/${run.session_id}`
+                            : `/chats/${run.session_id}`
                         }
                       >
                         查看会话

@@ -508,7 +508,7 @@ export function Conversation({
           当前会话的访问权限已撤销，已停止观察并清除内容。
         </Notice>
         <Button
-          render={<Link to={service ? "/admin/agents" : "/agents"}>返回</Link>}
+          render={<Link to={service ? "/admin/agents" : "/chats"}>返回</Link>}
           nativeButton={false}
           role="link"
           variant="outline"
@@ -529,7 +529,7 @@ export function Conversation({
         to={
           detail.configuration.agent_type === "service"
             ? `/admin/agents/${detail.configuration.agent_id}/debug/${sessionId}`
-            : `/agents/sessions/${sessionId}`
+            : `/chats/${sessionId}`
         }
       />
     );
@@ -570,6 +570,7 @@ export function Conversation({
                   {sideActions && (
                     <>
                       <Button
+                        className="session-rail-action"
                         variant="ghost"
                         size="icon"
                         aria-label="附件与成果"
@@ -577,8 +578,10 @@ export function Conversation({
                         onClick={() => setPanel("files")}
                       >
                         <FolderOpen />
+                        <span>文件</span>
                       </Button>
                       <Button
+                        className="session-rail-action"
                         variant="ghost"
                         size="icon"
                         aria-label="运行记录"
@@ -586,8 +589,10 @@ export function Conversation({
                         onClick={() => setPanel("runs")}
                       >
                         <History />
+                        <span>运行</span>
                       </Button>
                       <Button
+                        className="session-rail-action"
                         variant="ghost"
                         size="icon"
                         aria-label="问题与审批记录"
@@ -595,6 +600,7 @@ export function Conversation({
                         onClick={() => setPanel("interactions")}
                       >
                         <MessageCircleQuestion />
+                        <span>交互</span>
                       </Button>
                     </>
                   )}
@@ -692,11 +698,16 @@ export function Conversation({
                     aria-expanded={workspaceOpen}
                     aria-controls="session-workspace"
                     className={
-                      workspaceOpen ? "agent-workspace-toggle-active" : ""
+                      sideActions
+                        ? "session-rail-action session-rail-workspace"
+                        : workspaceOpen
+                          ? "agent-workspace-toggle-active"
+                          : ""
                     }
                     onClick={() => setWorkspaceOpen(!workspaceOpen)}
                   >
                     <PanelRight />
+                    {sideActions && <span>工作区</span>}
                   </Button>
                 </div>
               </Header>

@@ -182,6 +182,7 @@ export function ResourceProfileEditor({
               />
             </Field>
             <ResourceIconField
+              projectId={kind === "projects" ? resource.id : undefined}
               value={icon}
               onChange={setIcon}
               previewName={form.name}

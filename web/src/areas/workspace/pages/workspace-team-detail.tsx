@@ -1,16 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, FileText, FolderGit2, Users } from "lucide-react";
+import { SimpleTable } from "@/components/table";
 import { request } from "@/api/client";
 import { useSession } from "@/app/auth";
 import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
-import {
-  Panel,
-  ResourceDetailShell,
-  ResourceHeader,
-  Tabs,
-} from "@/components/layout";
+import { Panel, ResourceDetailShell } from "@/components/layout";
 import { ConfirmDialog } from "@/components/overlays";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { ResourceIcon } from "@/components/resource-icon";
@@ -18,13 +13,11 @@ import { useApiQuery } from "@/hooks/use-api";
 import { useSubmission } from "@/hooks/use-form";
 import { recordRecent } from "@/lib/recent";
 import type { Resource } from "@/types/collaboration";
-import {
-  ResourceDocument,
-  ResourceMetadata,
-} from "@/features/collaboration/resource-detail";
+import { ResourceDocument } from "@/features/collaboration/resource-detail";
 import { MembersPanel } from "@/areas/workspace/pages/member-panels";
 import { WorkspaceResourceProfileEditor } from "@/areas/workspace/pages/resource-profile-editor";
 import { useWorkspaceShortcut } from "@/areas/workspace/pages/use-workspace-shortcut";
+import { WorkspaceResourceHeader } from "./workspace-resource-header";
 import { WorkspaceResourceActions } from "@/areas/workspace/pages/workspace-resource-actions";
 import { WorkspaceShortcutFeedback } from "@/areas/workspace/pages/workspace-shortcut-feedback";
 import { normalizeWorkspaceTeamTab } from "@/areas/workspace/pages/workspace-navigation";
@@ -62,43 +55,13 @@ function TeamContent({
 }) {
   const session = useSession();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const queryClient = useQueryClient();
   const [edit, setEdit] = useState(false);
   const [leave, setLeave] = useState(false);
   const submission = useSubmission();
   const shortcut = useWorkspaceShortcut("teams");
   const tab = normalizeWorkspaceTeamTab(params.get("tab"));
-  const tabs = [
-    {
-      value: "overview",
-      label: (
-        <span className="inline-flex items-center gap-2">
-          <FileText />
-          团队介绍
-        </span>
-      ),
-    },
-    {
-      value: "members",
-      label: (
-        <span className="inline-flex items-center gap-2">
-          <Users />
-          成员管理
-        </span>
-      ),
-    },
-    {
-      value: "projects",
-      label: (
-        <span className="inline-flex items-center gap-2">
-          <FolderGit2 />
-          关联项目
-        </span>
-      ),
-    },
-  ];
-
   useEffect(() => {
     recordRecent(session.user.id, {
       id: team.id,
@@ -107,15 +70,6 @@ function TeamContent({
       to: `/teams/${team.id}`,
     });
   }, [session.user.id, team.id, team.name]);
-
-  function changeTab(value: string) {
-    setParams((current) => {
-      const next = new URLSearchParams(current);
-      if (value === "overview") next.delete("tab");
-      else next.set("tab", value);
-      return next;
-    });
-  }
 
   async function leaveTeam() {
     const ok = await submission.run(async () => {
@@ -128,18 +82,9 @@ function TeamContent({
   return (
     <ResourceDetailShell
       header={
-        <ResourceHeader
-          icon={<ResourceIcon resource={team} className="size-11" />}
-          title={team.name}
-          badge={
-            <StatusBadge
-              tone={team.status === "active" ? "success" : "neutral"}
-            >
-              {team.status === "active" ? "正常" : "已解散"}
-            </StatusBadge>
-          }
-          meta={<ResourceMetadata resource={team} kind="teams" />}
-          summary={team.summary}
+        <WorkspaceResourceHeader
+          resource={team}
+          kind="teams"
           actions={
             <WorkspaceResourceActions
               kind="teams"
@@ -151,14 +96,6 @@ function TeamContent({
               onLeave={() => setLeave(true)}
             />
           }
-        />
-      }
-      navigation={
-        <Tabs
-          label={`${team.name}功能`}
-          items={tabs}
-          value={tab}
-          onChange={changeTab}
         />
       }
     >
@@ -226,30 +163,38 @@ function TeamProjects({ team }: { team: Resource }) {
         emptyTitle="尚未加入项目"
         emptyDescription="团队被授权加入项目后，会在这里显示你可见的项目。"
       >
-        <ul className="divide-y divide-border-subtle">
+        <SimpleTable
+          label="关联项目"
+          headers={["项目名称", "摘要", "成员", "状态"]}
+        >
           {query.data?.data.map((project) => (
-            <li key={project.id}>
-              <Link
-                to={`/projects/${project.id}`}
-                className="flex items-center gap-3 px-5 py-4 hover:bg-surface-hover"
-              >
-                <ResourceIcon resource={project} />
-                <div className="min-w-0 flex-1">
-                  <strong>{project.name}</strong>
-                  <small className="mono block text-muted">
-                    {project.code}
-                  </small>
-                </div>
+            <tr key={project.id}>
+              <td>
+                <Link
+                  to={"/projects/" + project.id}
+                  className="inline-flex max-w-full items-center gap-3 rounded-md text-foreground hover:text-primary"
+                >
+                  <ResourceIcon resource={project} projectId={project.id} />
+                  <span className="min-w-0">
+                    <strong className="block truncate">{project.name}</strong>
+                    <small className="mono block truncate text-muted">
+                      {project.code}
+                    </small>
+                  </span>
+                </Link>
+              </td>
+              <td>{project.summary || "—"}</td>
+              <td>{project.member_count} 人</td>
+              <td>
                 <StatusBadge
                   tone={project.status === "active" ? "success" : "neutral"}
                 >
                   {project.status === "active" ? "正常" : "已归档"}
                 </StatusBadge>
-                <ArrowRight className="size-4 text-faint" />
-              </Link>
-            </li>
+              </td>
+            </tr>
           ))}
-        </ul>
+        </SimpleTable>
       </AsyncBoundary>
     </Panel>
   );

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider, Outlet } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { request } from "@/api/client";
+import { ApiError, request } from "@/api/client";
 import { NavigationGuardProvider } from "@/components/navigation-guard";
 import { Workbench } from "@/areas/workspace/pages/workbench";
 import {
@@ -109,7 +109,7 @@ beforeEach(() => {
     throw new Error(`Unexpected request: ${url}`);
   });
 });
-function mount(route = "/agent-catalog", sidebar = false) {
+function mount(route = "/agents/catalog", sidebar = false) {
   const router = createMemoryRouter(
     [
       {
@@ -122,9 +122,9 @@ function mount(route = "/agent-catalog", sidebar = false) {
         ),
         children: [
           { path: "home", element: <Workbench /> },
-          { path: "agent-catalog", element: <AgentDirectory /> },
-          { path: "agents", element: <ConversationsPage /> },
-          { path: "agents/sessions/:id", element: <div>恢复的会话</div> },
+          { path: "agents/catalog", element: <AgentDirectory /> },
+          { path: "chats", element: <ConversationsPage /> },
+          { path: "chats/:id", element: <div>恢复的会话</div> },
         ],
       },
     ],
@@ -149,12 +149,13 @@ it("keeps the workbench as a decorative vector canvas without fetching business 
   );
   expect(mock).not.toHaveBeenCalled();
 });
-it("opens an agent by its card and changes favorites without navigating or creating sessions", async () => {
+it("opens an agent from the catalog table and changes favorites without navigating or creating sessions", async () => {
   const user = userEvent.setup();
   const router = mount();
-  expect(await screen.findByRole("link", { name: agent.name })).toHaveAttribute(
+  const table = await screen.findByRole("table", { name: "智能体" });
+  expect(within(table).getByRole("link", { name: agent.name })).toHaveAttribute(
     "href",
-    "/agents?agent=1",
+    "/chats?agent=1",
   );
   expect(
     screen.queryByRole("button", { name: "开始对话" }),
@@ -178,12 +179,12 @@ it("opens an agent by its card and changes favorites without navigating or creat
 });
 it("isolates new conversation drafts by selected agent and restores each draft", async () => {
   const user = userEvent.setup();
-  const router = mount("/agents?agent=1");
+  const router = mount("/chats?agent=1");
   await user.type(
     await screen.findByRole("textbox", { name: "消息内容" }),
     "第一位助手的草稿",
   );
-  await act(() => router.navigate("/agents?agent=2"));
+  await act(() => router.navigate("/chats?agent=2"));
   expect(await screen.findByRole("textbox", { name: "消息内容" })).toHaveValue(
     "",
   );
@@ -191,14 +192,14 @@ it("isolates new conversation drafts by selected agent and restores each draft",
     screen.getByRole("textbox", { name: "消息内容" }),
     "第二位助手的草稿",
   );
-  await act(() => router.navigate("/agents?agent=1"));
+  await act(() => router.navigate("/chats?agent=1"));
   expect(await screen.findByRole("textbox", { name: "消息内容" })).toHaveValue(
     "第一位助手的草稿",
   );
 });
 it("shows five favorites and ten filtered sessions, with independent expansion", async () => {
   const user = userEvent.setup();
-  mount("/agents?agent=1", true);
+  mount("/chats?agent=1", true);
   expect(
     screen.queryByRole("link", { name: "收藏助手1" }),
   ).not.toBeInTheDocument();
@@ -252,31 +253,31 @@ it("shows five favorites and ten filtered sessions, with independent expansion",
 });
 
 it("opens a new conversation for the last selected agent per user without restoring its session", async () => {
-  const router = mount("/agents");
+  const router = mount("/chats");
   expect(screen.queryByRole("heading")).not.toBeInTheDocument();
   expect(mock).not.toHaveBeenCalled();
   localStorage.setItem(
     "antcdp.workspace.last-conversation:2",
     JSON.stringify({ agentId: "2", sessionId: "99" }),
   );
-  await act(() => router.navigate("/agents"));
-  expect(router.state.location.pathname).toBe("/agents");
+  await act(() => router.navigate("/chats"));
+  expect(router.state.location.pathname).toBe("/chats");
   localStorage.setItem(
     "antcdp.workspace.last-conversation:1",
     JSON.stringify({ agentId: "1", sessionId: "31" }),
   );
-  await act(() => router.navigate("/agents"));
+  await act(() => router.navigate("/chats"));
   expect(await screen.findByRole("region", { name: "新对话" })).toBeVisible();
-  expect(router.state.location.pathname).toBe("/agents");
+  expect(router.state.location.pathname).toBe("/chats");
   expect(router.state.location.search).toBe("?agent=1");
   expect(screen.queryByText("恢复的会话")).not.toBeInTheDocument();
-  await act(() => router.navigate("/agents/sessions/31"));
+  await act(() => router.navigate("/chats/31"));
   await screen.findByText("恢复的会话");
   localStorage.setItem(
     "antcdp.workspace.last-conversation:1",
     JSON.stringify({ agentId: "1" }),
   );
-  await act(() => router.navigate("/agents"));
+  await act(() => router.navigate("/chats"));
   expect(
     await screen.findByRole("textbox", { name: "消息内容" }),
   ).toBeVisible();
@@ -285,7 +286,7 @@ it("opens a new conversation for the last selected agent per user without restor
 
 it("offers a dedicated new conversation view with inline model selection", async () => {
   const user = userEvent.setup();
-  mount("/agents?agent=1");
+  mount("/chats?agent=1");
   const input = await screen.findByRole("textbox", { name: "消息内容" });
   expect(
     within(screen.getByRole("region", { name: "新对话" })).getByRole(
@@ -315,7 +316,7 @@ it("offers a dedicated new conversation view with inline model selection", async
 it("shows an empty favorite hint and removes favorites through the item menu", async () => {
   favoriteIds = ["1"];
   const user = userEvent.setup();
-  const router = mount("/agents?agent=1", true);
+  const router = mount("/chats?agent=1", true);
   await user.click(
     await screen.findByRole("button", { name: "选择智能体：收藏助手1" }),
   );
@@ -342,17 +343,41 @@ it("shows an empty favorite hint and removes favorites through the item menu", a
 });
 it("closes the agent selector on selection without resetting the current conversation", async () => {
   const user = userEvent.setup();
-  const router = mount("/agents/sessions/31", true);
+  const router = mount("/chats/31", true);
   const trigger = await screen.findByRole("button", {
     name: "选择智能体：收藏助手1",
   });
   await user.click(trigger);
   await user.click(await screen.findByRole("link", { name: "收藏助手1" }));
-  expect(router.state.location.pathname).toBe("/agents/sessions/31");
+  expect(router.state.location.pathname).toBe("/chats/31");
   expect(trigger).toHaveAttribute("aria-expanded", "false");
   await user.click(trigger);
   await user.click(await screen.findByRole("link", { name: "收藏助手2" }));
-  expect(router.state.location.pathname).toBe("/agents");
+  expect(router.state.location.pathname).toBe("/chats");
   expect(router.state.location.search).toBe("?agent=2");
   expect(trigger).toHaveAttribute("aria-expanded", "false");
 });
+
+it.each(["deleted", "disabled"])(
+  "clears a remembered %s agent and leaves the conversation blank",
+  async (state) => {
+    localStorage.setItem(
+      "antcdp.workspace.last-conversation:1",
+      JSON.stringify({ agentId: "8" }),
+    );
+    mock.mockImplementation(async () => {
+      if (state === "deleted")
+        throw new ApiError("NOT_FOUND", "资源不存在", 404);
+      return response({ ...agent, availability: { available: false } });
+    });
+    const router = mount("/chats");
+    await waitFor(() =>
+      expect(
+        localStorage.getItem("antcdp.workspace.last-conversation:1"),
+      ).toBeNull(),
+    );
+    expect(router.state.location.search).toBe("");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  },
+);

@@ -57,9 +57,9 @@ function mount() {
   });
   render(
     <QueryClientProvider client={cache}>
-      <MemoryRouter initialEntries={["/agents/sessions/31"]}>
+      <MemoryRouter initialEntries={["/chats/31"]}>
         <Shell />
-        <Link to="/agents/sessions/99">Other session</Link>
+        <Link to="/chats/99">Other session</Link>
       </MemoryRouter>
     </QueryClientProvider>,
   );

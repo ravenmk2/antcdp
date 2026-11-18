@@ -12,6 +12,8 @@ export function Frame({
   children,
   overlays,
   secondary,
+  secondaryName,
+  resourceDetail,
 }: {
   navigation: ReactNode;
   crumbs: Crumb[];
@@ -20,6 +22,8 @@ export function Frame({
   children: ReactNode;
   overlays: ReactNode;
   secondary?: ReactNode;
+  secondaryName: string;
+  resourceDetail: boolean;
 }) {
   const [secondaryOpen, setSecondaryOpen] = useState(true);
   const [mobileSecondary, setMobileSecondary] = useState(false);
@@ -46,14 +50,15 @@ export function Frame({
               <>
                 <IconButton
                   className="max-[820px]:hidden"
-                  label={secondaryOpen ? "收起对话侧栏" : "展开对话侧栏"}
+                  aria-expanded={secondaryOpen}
+                  label={`${secondaryOpen ? "收起" : "展开"}${secondaryName}侧栏`}
                   onClick={() => setSecondaryOpen(!secondaryOpen)}
                 >
                   {secondaryOpen ? <PanelLeftClose /> : <PanelLeftOpen />}
                 </IconButton>
                 <IconButton
                   className="min-[821px]:hidden"
-                  label="打开对话列表"
+                  label={`打开${secondaryName}导航`}
                   onClick={() => setMobileSecondary(true)}
                 >
                   <PanelLeftOpen />
@@ -66,10 +71,14 @@ export function Frame({
         </header>
         <div
           className="workspace-body"
+          data-resource-detail={resourceDetail || undefined}
           data-secondary={Boolean(secondary) && secondaryOpen}
         >
           {secondary && secondaryOpen && (
-            <aside className="workspace-secondary" aria-label="对话导航">
+            <aside
+              className="workspace-secondary"
+              aria-label={`${secondaryName}导航`}
+            >
               {secondary}
             </aside>
           )}
@@ -81,7 +90,7 @@ export function Frame({
       {overlays}
       <Drawer
         open={mobileSecondary && Boolean(secondary)}
-        title="对话导航"
+        title={`${secondaryName}导航`}
         onClose={() => setMobileSecondary(false)}
       >
         <div

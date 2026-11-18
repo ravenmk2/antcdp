@@ -15,6 +15,7 @@ export function ResourceIconField({
   value,
   onChange,
   previewName,
+  projectId,
   disabled = false,
   label = "图标",
   triggerLabel = "更换图标",
@@ -25,6 +26,7 @@ export function ResourceIconField({
   value: ResourceIconValue;
   onChange: (value: ResourceIconValue) => void;
   previewName: string;
+  projectId?: string;
   disabled?: boolean;
   label?: string;
   triggerLabel?: string;
@@ -63,7 +65,11 @@ export function ResourceIconField({
               disabled={disabled}
               aria-label={triggerLabel}
             >
-              <ResourceIcon resource={preview} className="size-12" />
+              <ResourceIcon
+                resource={preview}
+                projectId={projectId}
+                className="size-12"
+              />
               <span className="text-sm text-foreground">{triggerText}</span>
             </Button>
           }
@@ -89,6 +95,7 @@ export function ResourceIconField({
                   }}
                 >
                   <ResourceIcon
+                    projectId={projectId}
                     resource={{
                       name: iconLabel,
                       icon_key: key,

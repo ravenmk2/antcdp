@@ -15,7 +15,7 @@ export function lastAgentConversationPath(userId: string): string | null {
       !validId(value.agentId)
     )
       return null;
-    return `/agents?agent=${value.agentId}`;
+    return `/chats?agent=${value.agentId}`;
   } catch {
     return null;
   }
@@ -31,5 +31,14 @@ export function rememberConversation(userId: string, value: LastConversation) {
     localStorage.setItem(key(userId), JSON.stringify(value));
   } catch {
     /* Navigation remains usable when browser storage is unavailable. */
+  }
+}
+
+export function forgetUnavailableAgent(userId: string, agentId: string) {
+  if (lastAgentConversationPath(userId) !== `/chats?agent=${agentId}`) return;
+  try {
+    localStorage.removeItem(key(userId));
+  } catch {
+    /* The current view can still render without browser storage. */
   }
 }

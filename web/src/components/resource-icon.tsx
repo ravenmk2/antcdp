@@ -1,25 +1,17 @@
 import {
   Box,
-  Code2,
+  CodeXml,
   Folder,
   Globe,
   Layers,
+  UserRound,
   Users,
   Zap,
-  UserRound,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ShortcutItem } from "@/types/collaboration";
 
-const icons = {
-  folder: Folder,
-  code: Code2,
-  box: Box,
-  globe: Globe,
-  bolt: Zap,
-  layers: Layers,
-  team: Users,
-};
 export const iconLabels = {
   folder: "文件夹",
   code: "代码",
@@ -30,11 +22,33 @@ export const iconLabels = {
   team: "团队",
 };
 
+const icons = {
+  folder: Folder,
+  code: CodeXml,
+  box: Box,
+  globe: Globe,
+  bolt: Zap,
+  layers: Layers,
+  team: Users,
+} satisfies Record<keyof typeof iconLabels, LucideIcon>;
+
+const projectTones = ["slate-blue", "indigo", "teal", "graphite"] as const;
+
+function projectIconTone(id: string) {
+  let index = 0;
+  for (const digit of id) {
+    index = (index * 31 + digit.charCodeAt(0)) % projectTones.length;
+  }
+  return projectTones[index];
+}
+
 export function ResourceIcon({
   resource,
+  projectId,
   className,
 }: {
   resource: Pick<ShortcutItem, "icon_key" | "icon_file_id" | "name">;
+  projectId?: string;
   className?: string;
 }) {
   if (resource.icon_file_id)
@@ -45,10 +59,20 @@ export function ResourceIcon({
         className={cn("resource-icon object-cover", className)}
       />
     );
-  const Icon = icons[resource.icon_key as keyof typeof icons] ?? Folder;
+  const key = resource.icon_key as keyof typeof icons | null;
+  const builtin = key && Object.hasOwn(icons, key) ? key : "folder";
+  const Icon = icons[builtin];
   return (
-    <span className={cn("resource-icon", className)} title={resource.name}>
-      <Icon className="size-4" aria-hidden />
+    <span
+      className={cn(
+        "inline-grid size-9 shrink-0 place-items-center text-primary",
+        className,
+      )}
+      data-builtin-icon={builtin}
+      data-project-tone={projectId ? projectIconTone(projectId) : undefined}
+      title={resource.name}
+    >
+      <Icon strokeWidth={1.7} className="size-[72.22%]" aria-hidden />
     </span>
   );
 }

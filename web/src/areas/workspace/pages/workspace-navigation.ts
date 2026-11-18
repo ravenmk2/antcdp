@@ -8,16 +8,24 @@ export const workspaceProjectPages = [
 ] as const;
 export type WorkspaceProjectPage = (typeof workspaceProjectPages)[number];
 
-export const workspaceProjectSettingSections = [
-  "profile",
-  "members",
-  "roles",
-  "teams",
-  "integrations",
-  "hosts",
-] as const;
-export type WorkspaceProjectSettingSection =
-  (typeof workspaceProjectSettingSections)[number];
+export const projectSectionLabels = {
+  profile: "基本资料",
+  members: "项目成员",
+  roles: "角色管理",
+  teams: "团队授权",
+  integrations: "服务连接",
+  hosts: "SSH 凭证",
+  dingtalk: "钉钉机器人",
+} as const;
+export type WorkspaceProjectSettingSection = keyof typeof projectSectionLabels;
+
+export const projectSectionRoutes: Partial<
+  Record<WorkspaceProjectSettingSection, string>
+> = {
+  integrations: "integrations",
+  hosts: "remote-hosts",
+  dingtalk: "dingtalk",
+};
 
 export interface WorkspaceProjectView {
   projectId: string;
@@ -28,9 +36,7 @@ export interface WorkspaceProjectView {
 export function normalizeWorkspaceProjectSetting(
   value: string | null,
 ): WorkspaceProjectSettingSection {
-  return workspaceProjectSettingSections.includes(
-    value as WorkspaceProjectSettingSection,
-  )
+  return value && Object.hasOwn(projectSectionLabels, value)
     ? (value as WorkspaceProjectSettingSection)
     : "profile";
 }
@@ -50,7 +56,7 @@ export function resolveWorkspaceProjectView(
   if (/^jobs(?:\/(?:new|[1-9]\d*)(?:\/runs\/[1-9]\d*)?)?$/.test(remainder))
     return { projectId, page: "jobs", section: "profile" };
   if (/^dingtalk(?:\/[1-9]\d*)?$/.test(remainder))
-    return { projectId, page: "settings", section: "profile" };
+    return { projectId, page: "settings", section: "dingtalk" };
   if (/^variants(?:\/[1-9]\d*)?$/.test(remainder))
     return { projectId, page: "overview", section: "profile" };
   if (/^integrations(?:\/[1-9]\d*)?$/.test(remainder))

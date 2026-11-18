@@ -110,7 +110,7 @@ export function NewConversation({
     navigate(
       service
         ? `/admin/agents/${requested}/debug/${sessionId}`
-        : `/agents/sessions/${sessionId}`,
+        : `/chats/${sessionId}`,
     );
   };
   const selectionControls = (

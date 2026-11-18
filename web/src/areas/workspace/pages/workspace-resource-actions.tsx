@@ -28,13 +28,7 @@ export function WorkspaceResourceActions({
 }) {
   const project = kind === "projects";
   const selected = shortcut.selected(resource.id);
-  const label = project
-    ? selected
-      ? "取消关注"
-      : "关注项目"
-    : selected
-      ? "取消固定"
-      : "固定团队";
+  const label = selected ? "取消关注" : project ? "关注项目" : "关注团队";
   return (
     <RowActions label={resource.name}>
       <RowAction

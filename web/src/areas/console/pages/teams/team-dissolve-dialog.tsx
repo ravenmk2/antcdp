@@ -68,7 +68,7 @@ export function TeamDissolveDialog({
     >
       <ErrorNotice error={submission.error || query.error} />
       <p className="text-sm leading-6 text-muted">
-        解散不可恢复，将清除团队成员关系、项目授权和固定入口。名称与编码仍保留。
+        解散不可恢复，将清除团队成员关系、项目授权和关注入口。名称与编码仍保留。
       </p>
       {current?.status === "dissolved" && (
         <Notice>该团队已解散，无需再次操作。</Notice>

@@ -2,7 +2,12 @@ import { RemovedProjectPage } from "@/features/collaboration/removed-project-pag
 import { NotFound } from "@/app/not-found";
 import { RegionError, RegionLoader } from "@/app/region-loader";
 import { lazy } from "react";
-import { Navigate, type RouteObject } from "react-router";
+import {
+  Navigate,
+  useLocation,
+  useParams,
+  type RouteObject,
+} from "react-router";
 const HomePage = lazy(() =>
   import("@/areas/workspace/pages/home-page").then((m) => ({
     default: m.HomePage,
@@ -70,6 +75,17 @@ const AgentDirectory = lazy(() =>
     default: m.AgentDirectory,
   })),
 );
+function LegacyWorkspaceLink({ directory = false }: { directory?: boolean }) {
+  const { search, hash } = useLocation();
+  const { sessionId } = useParams();
+  const pathname = directory
+    ? "/agents/catalog"
+    : sessionId
+      ? "/chats/" + sessionId
+      : "/chats";
+  return <Navigate replace to={{ pathname, search, hash }} />;
+}
+
 export const workspaceRoutes: RouteObject[] = [
   {
     element: (
@@ -82,9 +98,12 @@ export const workspaceRoutes: RouteObject[] = [
       { index: true, element: <Navigate to="/home" replace /> },
       { path: "home", element: <HomePage /> },
       { path: "computer", element: <PersonalCloudComputerPage /> },
-      { path: "agents", element: <ConversationsPage /> },
-      { path: "agent-catalog", element: <AgentDirectory /> },
-      { path: "agents/sessions/:sessionId", element: <AgentSessionPage /> },
+      { path: "chats", element: <ConversationsPage /> },
+      { path: "agents/catalog", element: <AgentDirectory /> },
+      { path: "chats/:sessionId", element: <AgentSessionPage /> },
+      { path: "agents", element: <LegacyWorkspaceLink /> },
+      { path: "agent-catalog", element: <LegacyWorkspaceLink directory /> },
+      { path: "agents/sessions/:sessionId", element: <LegacyWorkspaceLink /> },
       { path: "projects", element: <WorkspaceProjectList /> },
       { path: "teams", element: <WorkspaceTeamList /> },
       {

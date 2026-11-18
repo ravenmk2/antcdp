@@ -1,12 +1,21 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, it, vi } from "vitest";
 import { WorkspaceProjectDetail } from "@/areas/workspace/pages/workspace-project-detail";
+import { Shell } from "@/areas/workspace/shell/shell";
 import { WorkspaceTeamDetail } from "@/areas/workspace/pages/workspace-team-detail";
 import type { Resource, Shortcuts } from "@/types/collaboration";
 
+vi.mock("@/app/theme", async (original) => ({
+  ...(await original<typeof import("@/app/theme")>()),
+  useTheme: () => ({
+    resolved: "light",
+    appearance: "light",
+    setAppearance: vi.fn(),
+  }),
+}));
 vi.mock("@/app/auth", () => ({
   useSession: () => ({
     user: {
@@ -105,7 +114,10 @@ function mount(
   routes: { path: string; element: React.ReactNode }[],
   entry: string,
 ) {
-  const router = createMemoryRouter(routes, { initialEntries: [entry] });
+  const router = createMemoryRouter(
+    [{ element: <Shell />, children: routes }],
+    { initialEntries: [entry] },
+  );
   render(
     <QueryClientProvider client={new QueryClient()}>
       <RouterProvider router={router} />
@@ -118,6 +130,14 @@ function mountProject(entry: string) {
   return mount(
     [
       { path: "/projects/:projectId", element: <WorkspaceProjectDetail /> },
+      {
+        path: "/projects/:projectId/integrations",
+        element: <section>连接目录</section>,
+      },
+      {
+        path: "/projects/:projectId/remote-hosts",
+        element: <section>主机目录</section>,
+      },
       {
         path: "/projects/:projectId/variants",
         element: <section>产品分支页面</section>,
@@ -151,17 +171,17 @@ it("redirects removed delivery tabs to the project overview", async () => {
   expect(router.state.location.search).toBe("");
 });
 
-it("uses shared project tabs with the existing content routes", async () => {
+it("opens existing project content routes from the secondary navigation", async () => {
   const { router, user } = mountProject("/projects/7");
-  await user.click(screen.getByRole("tab", { name: "项目介绍" }));
+  await user.click(screen.getByRole("link", { name: "项目介绍" }));
   expect(router.state.location.search).toBe("?tab=description");
   expect(await screen.findByText("项目介绍内容")).toBeVisible();
 
-  await user.click(screen.getByRole("tab", { name: "Git 仓库" }));
+  await user.click(screen.getByRole("link", { name: "Git 仓库" }));
   expect(await screen.findByText("仓库列表内容")).toBeVisible();
   expect(router.state.location.search).toBe("?tab=repositories");
   expect(
-    screen.queryByRole("tab", { name: "产品分支" }),
+    screen.queryByRole("link", { name: "产品分支" }),
   ).not.toBeInTheDocument();
 });
 
@@ -169,14 +189,17 @@ it("keeps project credential links in the workspace", async () => {
   const { user } = mountProject(
     "/projects/7?tab=settings&section=integrations",
   );
-  expect(screen.getByRole("link", { name: "管理服务连接" })).toHaveAttribute(
-    "href",
-    "/projects/7/integrations",
+  expect(await screen.findByText("连接目录")).toBeVisible();
+  const rail = within(screen.getByRole("complementary", { name: "项目导航" }));
+  expect(rail.getByRole("link", { name: "服务连接" })).toHaveAttribute(
+    "aria-current",
+    "page",
   );
-  await user.click(screen.getByRole("button", { name: "SSH 凭证" }));
-  expect(screen.getByRole("link", { name: "管理 SSH 凭证" })).toHaveAttribute(
-    "href",
-    "/projects/7/remote-hosts",
+  await user.click(rail.getByRole("link", { name: "SSH 凭证" }));
+  expect(await screen.findByText("主机目录")).toBeVisible();
+  expect(rail.getByRole("link", { name: "SSH 凭证" })).toHaveAttribute(
+    "aria-current",
+    "page",
   );
 });
 
@@ -187,15 +210,16 @@ it("renders team information and preserves member and project navigation", async
   );
   expect(screen.getByRole("heading", { name: /平台团队/ })).toBeVisible();
   expect(screen.getByText("团队协作约定")).toBeVisible();
-  expect(screen.getByRole("tab", { name: "团队介绍" })).toHaveAttribute(
-    "aria-selected",
-    "true",
+  const rail = within(screen.getByRole("complementary", { name: "团队导航" }));
+  expect(rail.getByRole("link", { name: "团队介绍" })).toHaveAttribute(
+    "aria-current",
+    "page",
   );
-  expect(screen.getByRole("tab", { name: "成员管理" })).toBeInTheDocument();
+  expect(rail.getByRole("link", { name: "团队成员" })).toBeInTheDocument();
 
-  await user.click(screen.getByRole("tab", { name: /成员管理/ }));
+  await user.click(rail.getByRole("link", { name: /团队成员/ }));
   expect(screen.getByText("团队成员内容")).toBeVisible();
-  await user.click(screen.getByRole("tab", { name: "关联项目" }));
+  await user.click(rail.getByRole("link", { name: "关联项目" }));
   expect(screen.getByRole("link", { name: /交付平台/ })).toHaveAttribute(
     "href",
     "/projects/7",

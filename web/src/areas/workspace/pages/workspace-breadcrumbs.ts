@@ -2,6 +2,7 @@ import type { Crumb } from "@/components/layout";
 import type { Resource } from "@/types/collaboration";
 import {
   normalizeWorkspaceTeamTab,
+  projectSectionLabels,
   resolveWorkspaceProjectView,
 } from "@/areas/workspace/pages/workspace-navigation";
 
@@ -14,7 +15,7 @@ export function workspaceBreadcrumbs(
   if (path === "/home") return [{ label: "工作区" }, { label: "工作台" }];
   if (path === "/computer")
     return [{ label: "工作区", to: "/home" }, { label: "我的云电脑" }];
-  if (/^\/agents\/sessions\/[1-9]\d*\/?$/.test(path))
+  if (/^\/chats\/[1-9]\d*\/?$/.test(path))
     return [{ label: "工作台", to: "/home" }, { label: "对话" }];
   if (path.startsWith("/account"))
     return [{ label: "工作区", to: "/home" }, { label: "个人设置" }];
@@ -39,7 +40,7 @@ export function workspaceBreadcrumbs(
         ...(tab !== "overview" ? { to: path } : {}),
       },
     ];
-    if (tab === "members") items.push({ label: "成员管理" });
+    if (tab === "members") items.push({ label: "团队成员" });
     if (tab === "projects") items.push({ label: "关联项目" });
     return items;
   }
@@ -49,7 +50,6 @@ export function workspaceBreadcrumbs(
       repositories: "Git 仓库",
       jobs: "任务",
       events: "事件",
-      settings: "项目设置",
       description: "项目介绍",
     };
     const items: Crumb[] = [
@@ -83,6 +83,8 @@ export function workspaceBreadcrumbs(
         },
         { label: "编辑项目介绍" },
       );
+    } else if (view?.page === "settings") {
+      items.push({ label: projectSectionLabels[view.section] });
     } else if (view && view.page !== "overview") {
       items.push({ label: labels[view.page] ?? "项目总览" });
     }
@@ -99,7 +101,7 @@ export function workspaceBreadcrumbs(
       { label: "主机详情" },
     ];
   const names: Record<string, string> = {
-    "/agent-catalog": "智能体",
+    "/agents/catalog": "智能体",
     "/projects": "我的项目",
     "/teams": "我的团队",
   };

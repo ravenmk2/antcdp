@@ -3,10 +3,8 @@
   --cloud-rail: var(--workspace-chat-rail, var(--surface-subtle));
   display: flex;
   flex-direction: column;
-  gap: 14px;
   height: calc(100dvh - 64px);
   min-height: 620px;
-  padding: 14px 24px 20px;
   background: var(--cloud-rail);
 }
 .cloud-workbench {
@@ -15,10 +13,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--cloud-line);
-  border-radius: 16px;
   background: var(--surface);
-  box-shadow: 0 4px 24px rgb(25 40 65 / 4%);
 }
 .cloud-explorer,
 .cloud-preview,
@@ -484,9 +479,6 @@
   }
 }
 @media (max-width: 1250px) {
-  .cloud-computer-page {
-    padding: 20px 18px;
-  }
   .cloud-workbench {
     grid-template-columns: 230px minmax(0, 1fr) 250px;
   }
@@ -522,10 +514,6 @@
   }
 }
 @media (max-width: 640px) {
-  .cloud-computer-page {
-    padding: 16px 10px;
-    gap: 16px;
-  }
   .cloud-workbench {
     display: flex;
     flex-direction: column;

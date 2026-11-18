@@ -76,7 +76,7 @@ async function advance(milliseconds: number) {
 function mount() {
   return render(
     <QueryClientProvider client={cache}>
-      <MemoryRouter initialEntries={["/agents/sessions/1"]}>
+      <MemoryRouter initialEntries={["/chats/1"]}>
         <ConversationSidebar agentId="1" />
       </MemoryRouter>
     </QueryClientProvider>,

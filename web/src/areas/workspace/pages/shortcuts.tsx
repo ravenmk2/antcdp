@@ -54,7 +54,7 @@ export function ShortcutEditor({
   );
   const dirty =
     JSON.stringify(ids) !== JSON.stringify(group.items.map((item) => item.id));
-  const title = kind === "projects" ? "管理关注项目" : "管理固定团队";
+  const title = kind === "projects" ? "管理关注项目" : "管理关注团队";
   const available =
     candidates.data?.data.items.filter((item) => !ids.includes(item.id)) ?? [];
 
@@ -75,7 +75,7 @@ export function ShortcutEditor({
       open
       wide
       title={title}
-      description="调整仅影响你的个人入口；关注项目不会开启消息通知。"
+      description="关注后可从个人入口快速访问。"
       dirty={dirty}
       pending={submission.pending}
       onClose={onClose}
@@ -112,7 +112,11 @@ export function ShortcutEditor({
                 key={item.id}
                 className="flex items-center gap-2 rounded-lg border p-2"
               >
-                <ResourceIcon resource={item} className="size-8" />
+                <ResourceIcon
+                  resource={item}
+                  projectId={kind === "projects" ? item.id : undefined}
+                  className="size-8"
+                />
                 <span className="min-w-0 flex-1 break-all">{item.name}</span>
                 <IconButton
                   size="iconSm"
@@ -208,7 +212,11 @@ export function ShortcutEditor({
                     setIds([...ids, item.id]);
                   }}
                 >
-                  <ResourceIcon resource={item} className="size-8" />
+                  <ResourceIcon
+                    resource={item}
+                    projectId={kind === "projects" ? item.id : undefined}
+                    className="size-8"
+                  />
                   <span className="min-w-0 flex-1">
                     <strong className="block text-sm">{item.name}</strong>
                     <small className="text-muted">{item.code}</small>

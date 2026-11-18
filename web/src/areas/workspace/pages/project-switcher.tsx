@@ -13,18 +13,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useApiQuery } from "@/hooks/use-api";
 import { useDebouncedSearch } from "@/hooks/use-search";
-import { cn } from "@/lib/utils";
 import type { Page, Resource } from "@/types/collaboration";
 
-export function ProjectSwitcher({
-  project,
-  compact,
-  close,
-}: {
-  project: Resource;
-  compact: boolean;
-  close?: () => void;
-}) {
+export function ProjectSwitcher({ project }: { project: Resource }) {
   const session = useSession();
   const [open, setOpen] = useState(false);
   const [submitted, setSubmitted] = useState("");
@@ -54,18 +45,16 @@ export function ProjectSwitcher({
       <DropdownMenuTrigger
         render={
           <button
-            className={cn(
-              "project-switcher flex items-center gap-2 rounded-lg bg-surface-subtle text-left text-navigation hover:border-border-strong hover:bg-surface-hover",
-              "w-52 max-w-full px-3 py-2",
-            )}
+            className="workspace-sidebar-switcher"
             aria-label={`切换项目，当前 ${project.name}`}
           >
-            <ResourceIcon resource={project} className="size-8" />
-            <span
-              className="sidebar-label min-w-0 flex-1"
-              aria-hidden={compact}
-            >
-              <strong className="block truncate text-xs" title={project.name}>
+            <ResourceIcon
+              resource={project}
+              projectId={project.id}
+              className="size-8"
+            />
+            <span className="min-w-0 flex-1">
+              <strong className="block truncate text-sm" title={project.name}>
                 {project.name}
               </strong>
               <small className="mt-0.5 block truncate text-[11px] text-muted">
@@ -79,7 +68,7 @@ export function ProjectSwitcher({
       />
       <DropdownMenuContent
         side="bottom"
-        align="end"
+        align="start"
         className="w-80 overflow-hidden p-0"
       >
         <div className="border-b border-b-border-subtle p-2">
@@ -126,10 +115,13 @@ export function ProjectSwitcher({
                 render={
                   <Link
                     to={`/projects/${item.id}`}
-                    onClick={close}
                     className="flex items-center gap-2"
                   >
-                    <ResourceIcon resource={item} className="size-7" />
+                    <ResourceIcon
+                      resource={item}
+                      projectId={item.id}
+                      className="size-7"
+                    />
                     <span className="min-w-0 flex-1">
                       <strong className="block truncate text-sm">
                         {item.name}

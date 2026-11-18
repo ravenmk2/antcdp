@@ -20,6 +20,8 @@ import { SessionHeadingContext } from "@/features/agents/chat/navigation-context
 import { ConversationSidebar } from "@/features/agents/chat/conversation-sidebar";
 import { workspaceBreadcrumbs } from "../pages/workspace-breadcrumbs";
 import { WorkspaceSidebar } from "../pages/workspace-sidebar";
+import { ProjectSidebar, TeamSidebar } from "../pages/resource-sidebar";
+import { resolveWorkspaceProjectView } from "../pages/workspace-navigation";
 import { rememberConversation } from "../pages/conversation-memory";
 import { Frame } from "./frame";
 export function Shell() {
@@ -32,10 +34,8 @@ export function Shell() {
   const { settings } = useAuth();
   const brand = resolveSiteName(settings.site_name);
   const conversationArea =
-    location.pathname === "/agents" || location.pathname.startsWith("/agents/");
-  const sessionId = location.pathname.match(
-    /^\/agents\/sessions\/([1-9]\d*)\/?$/,
-  )?.[1];
+    location.pathname === "/chats" || location.pathname.startsWith("/chats/");
+  const sessionId = location.pathname.match(/^\/chats\/([1-9]\d*)\/?$/)?.[1];
   const detail = useApiQuery<SessionDetail>(
     ["agent-session", sessionId, "detail"],
     `/agents/sessions/${sessionId}`,
@@ -65,37 +65,42 @@ export function Shell() {
     ? (config?.agent_id ?? listedSession?.agent_id)
     : new URLSearchParams(location.search).get("agent") || undefined;
   useEffect(() => {
-    if (conversationArea && agentId)
+    if (conversationArea && sessionId && config && agentId)
       rememberConversation(user.id, { agentId, sessionId });
-  }, [conversationArea, agentId, sessionId, user.id]);
+  }, [conversationArea, agentId, sessionId, config, user.id]);
   const summary = useApiQuery<AgentNavigationSummary>(
     ["agent-summary", agentId],
     `/agents/${agentId}/summary`,
     { enabled: conversationArea && Boolean(agentId) },
   );
-  const conversationCrumbs = [
-    { label: "对话", ...(agentId || sessionId ? { to: "/agents" } : {}) },
-    ...(agentId
-      ? [
-          {
-            label:
-              summary.data?.data.name ??
-              (summary.isError ? "智能体不可用" : "加载智能体…"),
-            ...(sessionId ? { to: `/agents?agent=${agentId}` } : {}),
-          },
-        ]
-      : []),
-    ...(sessionId
-      ? [
-          {
-            label:
-              config?.title ?? (detail.isError ? "会话不可用" : "加载会话…"),
-          },
-        ]
-      : agentId
-        ? [{ label: "新对话" }]
-        : []),
-  ];
+  const missingSession =
+    detail.error?.status === 404 || detail.error?.status === 403;
+  const conversationCrumbs = missingSession
+    ? [{ label: "对话" }]
+    : [
+        { label: "对话", ...(agentId || sessionId ? { to: "/chats" } : {}) },
+        ...(agentId
+          ? [
+              {
+                label:
+                  summary.data?.data.name ??
+                  (summary.isError ? "智能体不可用" : "加载智能体…"),
+                ...(sessionId ? { to: `/chats?agent=${agentId}` } : {}),
+              },
+            ]
+          : []),
+        ...(sessionId
+          ? [
+              {
+                label:
+                  config?.title ??
+                  (detail.isError ? "会话不可用" : "加载会话…"),
+              },
+            ]
+          : agentId
+            ? [{ label: "新对话" }]
+            : []),
+      ];
   const projectId = location.pathname.match(/^\/projects\/([1-9]\d*)/)?.[1];
   const teamId = location.pathname.match(/^\/teams\/([1-9]\d*)(?:\/|$)/)?.[1];
   const project = useApiQuery<Resource>(
@@ -107,6 +112,10 @@ export function Shell() {
     ["team", teamId],
     `/teams/${teamId ?? ""}`,
     { enabled: Boolean(teamId) },
+  );
+  const projectView = resolveWorkspaceProjectView(
+    location.pathname,
+    location.search,
   );
   const navigation = (compact: boolean, close?: () => void) => (
     <div
@@ -121,15 +130,21 @@ export function Shell() {
         title={brand}
         onClick={close}
       >
-        <img src="/logo.svg" alt="" className="size-7 dark:hidden" />
-        <img
-          src="/logo-inverse.svg"
-          alt=""
-          className="hidden size-7 dark:block"
-        />
+        {compact ? (
+          <img src="/logo-inverse.svg" alt="" className="size-7" />
+        ) : (
+          <>
+            <img src="/logo.svg" alt="" className="size-7 dark:hidden" />
+            <img
+              src="/logo-inverse.svg"
+              alt=""
+              className="hidden size-7 dark:block"
+            />
+          </>
+        )}
       </Link>
       <div className="sidebar-scroll">
-        <WorkspaceSidebar compact={compact} close={close} />
+        <WorkspaceSidebar close={close} />
       </div>
       <UserMenu compact={compact} onLogout={logout.open} area="workspace" />
     </div>
@@ -138,13 +153,21 @@ export function Shell() {
     <SessionHeadingContext value={setHeading}>
       <Frame
         navigation={navigation(true)}
+        resourceDetail={Boolean(projectView || teamId)}
+        secondaryName={conversationArea ? "对话" : teamId ? "团队" : "项目"}
         secondary={
           conversationArea ? (
             <ConversationSidebar
               agentId={agentId}
               agentName={summary.data?.data.name}
-              ready={!sessionId || Boolean(agentId)}
+              ready={missingSession || !sessionId || Boolean(agentId)}
             />
+          ) : projectView &&
+            project.data?.data &&
+            !location.pathname.includes("/variants") ? (
+            <ProjectSidebar project={project.data.data} view={projectView} />
+          ) : teamId && team.data?.data ? (
+            <TeamSidebar team={team.data.data} />
           ) : undefined
         }
         crumbs={

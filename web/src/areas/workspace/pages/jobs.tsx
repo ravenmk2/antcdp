@@ -18,11 +18,7 @@ export function ProjectJobsPage({ robots = false }: { robots?: boolean }) {
       onRetry={() => void q.refetch()}
     >
       {q.data && (
-        <WorkspaceProjectFrame
-          project={q.data.data}
-          active={robots ? "settings" : "jobs"}
-          wide
-        >
+        <WorkspaceProjectFrame project={q.data.data} wide>
           {robots ? (
             q.data.data.can_manage ? (
               <DingTalkPage />

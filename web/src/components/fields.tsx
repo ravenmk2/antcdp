@@ -158,7 +158,7 @@ export function useFieldProps() {
 }
 
 const controlClass =
-  "min-h-10 w-full rounded-(--control-radius) border border-border-strong bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:opacity-60 read-only:bg-surface-subtle";
+  "min-h-10 w-full rounded-(--control-radius) border border-border-strong bg-surface px-3 py-2 text-sm text-foreground placeholder:text-muted disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:opacity-60 [&[readonly]]:bg-surface-subtle";
 
 export function Input({
   className,

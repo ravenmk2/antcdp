@@ -18,7 +18,7 @@ export function ProjectEventsPage() {
       onRetry={() => query.refetch()}
     >
       {query.data && (
-        <WorkspaceProjectFrame project={query.data.data} active="events" wide>
+        <WorkspaceProjectFrame project={query.data.data} wide>
           <EventsPage project={query.data.data} />
         </WorkspaceProjectFrame>
       )}

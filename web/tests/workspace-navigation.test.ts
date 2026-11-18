@@ -20,6 +20,7 @@ it.each([
   ["/projects/7", "?tab=settings&section=unknown", "settings", "profile"],
   ["/projects/7/integrations", "", "settings", "integrations"],
   ["/projects/7/integrations/9", "", "settings", "integrations"],
+  ["/projects/7/dingtalk/2", "", "settings", "dingtalk"],
   ["/projects/7/remote-hosts", "", "settings", "hosts"],
   ["/projects/7/remote-hosts/9", "", "settings", "hosts"],
 ])("resolves %s%s", (pathname, search, page, section) => {

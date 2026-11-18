@@ -99,7 +99,10 @@ vi.mock("@/hooks/use-api", () => ({
       return {
         data: { data: { id: "9", name: "交付助手", favorited: false } },
       };
-    if (path === "/projects/7") return { data: { data: project } };
+    if (path === "/projects/7")
+      return {
+        data: { data: { ...project, can_manage: identity.role === "admin" } },
+      };
     if (path === "/teams/11") return { data: { data: team } };
     if (path === "/me/sidebar-shortcuts")
       return { data: { data: shortcuts }, refetch: vi.fn() };
@@ -132,16 +135,22 @@ function mount(route: string) {
 }
 
 function mainLink(_role: "link", options: { name: string }) {
-  return within(screen.getByRole("complementary")).getByRole("link", options);
+  return within(screen.getAllByRole("complementary")[0]!).getByRole(
+    "link",
+    options,
+  );
 }
 
-it("keeps project navigation in page content and highlights its primary menu", () => {
+it("shows project navigation in a collapsible secondary rail and highlights its primary menu", async () => {
+  const user = userEvent.setup();
   const { container } = mount("/projects/7?tab=description");
-  const sidebar = screen.getByRole("complementary");
+  const sidebar = screen.getByRole("complementary", { name: "项目导航" });
   expect(
-    screen.queryByRole("button", { name: /切换项目/ }),
-  ).not.toBeInTheDocument();
-  expect(within(sidebar).queryByRole("link", { name: "项目介绍" })).toBeNull();
+    within(sidebar).getByRole("button", { name: /切换项目/ }),
+  ).toBeVisible();
+  expect(
+    within(sidebar).getByRole("link", { name: "项目介绍" }),
+  ).toHaveAttribute("aria-current", "page");
   expect(mainLink("link", { name: "项目" })).toHaveAttribute(
     "aria-current",
     "page",
@@ -151,6 +160,8 @@ it("keeps project navigation in page content and highlights its primary menu", (
   expect(
     container.querySelectorAll('.sidebar [aria-current="page"]'),
   ).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "收起项目侧栏" }));
+  expect(screen.queryByRole("complementary", { name: "项目导航" })).toBeNull();
 });
 
 it("keeps a fixed icon rail with six menus and no conversation sidebar on the workbench", () => {
@@ -180,13 +191,12 @@ it("does not restore project task links on product branch routes", () => {
   expect(within(sidebar).queryByRole("link", { name: "发布管理" })).toBeNull();
 });
 
-it("keeps credential details inside project settings and breadcrumbs", () => {
+it("keeps credential details highlighted in the project rail and breadcrumbs", () => {
   mount("/projects/7/integrations/9");
-  const sidebar = screen.getByRole("complementary");
+  const sidebar = screen.getByRole("complementary", { name: "项目导航" });
   expect(
-    screen.queryByRole("button", { name: /切换项目/ }),
-  ).not.toBeInTheDocument();
-  expect(within(sidebar).queryByRole("link", { name: "项目设置" })).toBeNull();
+    within(sidebar).getByRole("link", { name: "服务连接" }),
+  ).toHaveAttribute("aria-current", "page");
   const navigation = screen.getByRole("navigation", { name: "当前位置" });
   expect(
     within(navigation).getByRole("link", { name: "项目服务连接" }),
@@ -204,7 +214,7 @@ it("shows the real workspace team name and current team task", () => {
   expect(
     within(navigation).getByRole("link", { name: "平台团队" }),
   ).toHaveAttribute("href", "/teams/11");
-  expect(within(navigation).getByText("成员管理")).toHaveAttribute(
+  expect(within(navigation).getByText("团队成员")).toHaveAttribute(
     "aria-current",
     "page",
   );
@@ -255,11 +265,11 @@ it("omits an empty creation menu for a member outside a project", () => {
 
 it("uses the independent agent summary and session title in conversation breadcrumbs", async () => {
   const user = userEvent.setup();
-  const { container } = mount("/agents/sessions/31");
+  const { container } = mount("/chats/31");
   const crumbs = screen.getByRole("navigation", { name: "当前位置" });
   expect(
     within(crumbs).getByRole("link", { name: "交付助手" }),
-  ).toHaveAttribute("href", "/agents?agent=9");
+  ).toHaveAttribute("href", "/chats?agent=9");
   expect(within(crumbs).getByText("发布方案核对")).toHaveAttribute(
     "aria-current",
     "page",
@@ -282,7 +292,7 @@ it("uses the independent agent summary and session title in conversation breadcr
 });
 
 it("keeps the agent catalog independent from the conversation sidebar", () => {
-  mount("/agent-catalog");
+  mount("/agents/catalog");
   expect(mainLink("link", { name: "智能体" })).toHaveAttribute(
     "aria-current",
     "page",
@@ -293,4 +303,15 @@ it("keeps the agent catalog independent from the conversation sidebar", () => {
   expect(
     screen.queryByRole("complementary", { name: "对话导航" }),
   ).not.toBeInTheDocument();
+});
+
+it("shows collaboration to members and reserves robot management for project managers", () => {
+  identity.role = "user";
+  mount("/projects/7?tab=members");
+  const rail = within(screen.getByRole("complementary", { name: "项目导航" }));
+  expect(rail.getByRole("link", { name: "项目成员" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(rail.queryByRole("link", { name: "钉钉机器人" })).toBeNull();
 });

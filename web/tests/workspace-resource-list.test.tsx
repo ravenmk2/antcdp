@@ -9,6 +9,7 @@ import {
   WorkspaceTeamList,
 } from "@/areas/workspace/pages/workspace-resource-list";
 import type { Resource, ResourceKind, Shortcuts } from "@/types/collaboration";
+import { ResourceIcon } from "@/components/resource-icon";
 
 vi.mock("@/app/auth", () => ({
   useSession: () => ({
@@ -163,9 +164,35 @@ function mount(kind: ResourceKind) {
   return userEvent.setup();
 }
 
-it("renders project cards and applies the confirmed follow result", async () => {
+it("keeps project tones stable across renames and distinguishes consecutive 64-bit IDs", () => {
+  const ids = [
+    "9007199254741000",
+    "9007199254741001",
+    "9007199254741002",
+    "9007199254741003",
+  ];
+  function icons(name: string) {
+    return ids.map((id) => (
+      <ResourceIcon key={id} resource={{ ...project, name }} projectId={id} />
+    ));
+  }
+  const { container, rerender } = render(<>{icons("交付平台")}</>);
+  const tones = () =>
+    Array.from(container.querySelectorAll("[data-project-tone]"), (icon) =>
+      icon.getAttribute("data-project-tone"),
+    );
+  const original = tones();
+  expect(new Set(original)).toEqual(
+    new Set(["slate-blue", "indigo", "teal", "graphite"]),
+  );
+  rerender(<>{icons("新项目名称")}</>);
+  expect(tones()).toEqual(original);
+});
+
+it("renders the project table and applies the confirmed follow result", async () => {
   const user = mount("projects");
-  expect(await screen.findByRole("link", { name: "交付平台" })).toBeVisible();
+  const table = await screen.findByRole("table", { name: "我的项目" });
+  expect(within(table).getByRole("link", { name: "交付平台" })).toBeVisible();
   expect(screen.getByText("项目管理员")).toBeVisible();
   expect(screen.getByText("12 位成员")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "关注 交付平台" }));
@@ -182,13 +209,14 @@ it("renders project cards and applies the confirmed follow result", async () => 
   );
 });
 
-it("renders team rows and applies the confirmed pin result", async () => {
+it("renders the team table and applies the confirmed follow result", async () => {
   const user = mount("teams");
-  expect(await screen.findByRole("link", { name: "平台团队" })).toBeVisible();
+  const table = await screen.findByRole("table", { name: "我的团队" });
+  expect(within(table).getByRole("link", { name: "平台团队" })).toBeVisible();
   expect(screen.getByText("团队管理员")).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "固定 平台团队" }));
+  await user.click(screen.getByRole("button", { name: "关注 平台团队" }));
   expect(
-    await screen.findByRole("button", { name: "取消固定 平台团队" }),
+    await screen.findByRole("button", { name: "取消关注 平台团队" }),
   ).toHaveAttribute("aria-pressed", "true");
 });
 

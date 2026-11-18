@@ -134,7 +134,7 @@ export function SessionList({
               className="flex items-start justify-between gap-5 rounded-lg p-4 hover:bg-surface-hover"
               key={session.id}
               onClick={onNavigate}
-              to={`/agents/sessions/${session.id}`}
+              to={`/chats/${session.id}`}
             >
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
