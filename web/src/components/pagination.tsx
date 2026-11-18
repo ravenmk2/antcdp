@@ -6,7 +6,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
 } from "lucide-react";
-import { IconButton } from "./button";
+import { Button, IconButton } from "./button";
 import {
   Select,
   SelectContent,
@@ -14,6 +14,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+
+export function CursorPagination({
+  before,
+  next,
+  onChange,
+  olderLabel = "更早记录",
+}: {
+  before: string;
+  next?: string;
+  onChange: (before: string) => void;
+  olderLabel?: string;
+}) {
+  if (!before && !next) return null;
+  return (
+    <nav aria-label="分页导航" className="flex flex-wrap gap-3 py-4">
+      <Button variant="outline" disabled={!before} onClick={() => onChange("")}>
+        返回最新
+      </Button>
+      <Button
+        variant="outline"
+        disabled={!next}
+        onClick={() => next && onChange(next)}
+      >
+        {olderLabel}
+      </Button>
+    </nav>
+  );
+}
 
 export function Pagination({
   page,

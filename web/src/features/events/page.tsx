@@ -10,9 +10,11 @@ import {
   StatusBadge,
 } from "@/components/feedback";
 import { StandaloneSelect } from "@/components/fields";
-import { PageHeader, Panel, Tabs } from "@/components/layout";
+import { PageHeader, Panel, PanelRoot, Tabs } from "@/components/layout";
 import { Drawer, ConfirmDialog } from "@/components/overlays";
+import { CursorPagination } from "@/components/pagination";
 import { SimpleTable } from "@/components/table";
+import { TableToolbar } from "@/components/table-toolbar";
 import { useApiQuery } from "@/hooks/use-api";
 import { formatDate } from "@/lib/utils";
 import type { Resource } from "@/types/collaboration";
@@ -32,6 +34,7 @@ export function EventsPage({ project }: { project: Resource }) {
   const selected = params.get("selected") ?? "";
   const before = params.get("before") ?? "";
   const filter = params.get("filter") ?? "";
+  const subscriptionId = params.get("subscription_id") ?? "";
   const base = `/projects/${project.id}`;
   const manage = project.can_manage && project.status === "active";
   const catalog = useApiQuery<{ groups: Group[] }>(
@@ -48,14 +51,8 @@ export function EventsPage({ project }: { project: Resource }) {
     { enabled: tab === "events" },
   );
   const runs = useApiQuery<{ items: Consumption[] }>(
-    [
-      "event-consumptions",
-      project.id,
-      before,
-      filter,
-      params.get("subscription_id"),
-    ],
-    `${base}/event-consumptions?${new URLSearchParams({ before, status: filter, subscription_id: params.get("subscription_id") ?? "" })}`,
+    ["event-consumptions", project.id, before, filter, subscriptionId],
+    `${base}/event-consumptions?${new URLSearchParams({ before, status: filter, subscription_id: subscriptionId })}`,
     { enabled: tab === "consumptions" },
   );
   const [editor, setEditor] = useState<Subscription | "new">();
@@ -68,6 +65,8 @@ export function EventsPage({ project }: { project: Resource }) {
       g.types.map((t) => [t.code, t.name] as const),
     ),
   );
+  const events = history.data?.data.items ?? [];
+  const consumptions = runs.data?.data.items ?? [];
   function navigate(next: Record<string, string>) {
     setParams(next);
   }
@@ -100,21 +99,14 @@ export function EventsPage({ project }: { project: Resource }) {
       setPending(false);
     }
   }
+  const newSubscription = manage && (
+    <Button onClick={() => setEditor("new")}>新建订阅</Button>
+  );
   return (
     <div className="space-y-5">
       <PageHeader
         title="项目事件"
         description="查看关联仓库事件，通过订阅脚本触发任务和服务型智能体。"
-        actions={
-          <>
-            <Button variant="outline" onClick={refresh}>
-              刷新
-            </Button>
-            {manage && (
-              <Button onClick={() => setEditor("new")}>新建订阅</Button>
-            )}
-          </>
-        }
       />
       <Tabs
         label="事件视图"
@@ -131,34 +123,42 @@ export function EventsPage({ project }: { project: Resource }) {
         <Notice>项目已归档，可以查看历史事件与日志。</Notice>
       )}
       {tab === "events" && (
-        <Panel bodyClassName="space-y-4 p-5">
-          <StandaloneSelect
-            aria-label="事件类型筛选"
-            value={filter}
-            onValueChange={(value) => navigate({ tab, filter: value })}
+        <PanelRoot>
+          <TableToolbar
+            onReset={() => navigate({ tab })}
+            onRefresh={() => void history.refetch()}
+            refreshing={history.isFetching}
+            actions={newSubscription}
           >
-            <option value="">全部类型</option>
-            {catalog.data?.data.groups.flatMap((g) =>
-              g.types.map((t) => (
-                <option key={t.code} value={t.code}>
-                  {g.name} · {t.name}
-                </option>
-              )),
-            )}
-          </StandaloneSelect>
+            <StandaloneSelect
+              aria-label="事件类型筛选"
+              value={filter}
+              onValueChange={(value) => navigate({ tab, filter: value })}
+            >
+              <option value="">全部类型</option>
+              {catalog.data?.data.groups.flatMap((g) =>
+                g.types.map((t) => (
+                  <option key={t.code} value={t.code}>
+                    {g.name} · {t.name}
+                  </option>
+                )),
+              )}
+            </StandaloneSelect>
+          </TableToolbar>
           <AsyncBoundary
             loading={history.isPending}
             error={history.error}
             onRetry={() => history.refetch()}
-            empty={history.data?.data.items.length === 0}
+            empty={!events.length}
             emptyTitle="暂无项目事件"
             emptyDescription="关联 GitLab 仓库后，新收到的 Webhook 事件会出现在这里。"
           >
             <SimpleTable
+              actions
               label="项目事件"
               headers={["事件", "对象", "接收时间", "操作"]}
             >
-              {history.data?.data.items.map((ref) => (
+              {events.map((ref) => (
                 <tr key={ref.id}>
                   <td>
                     <strong>
@@ -186,99 +186,116 @@ export function EventsPage({ project }: { project: Resource }) {
               ))}
             </SimpleTable>
           </AsyncBoundary>
-          <Cursor
+          <CursorPagination
             before={before}
-            last={history.data?.data.items.at(-1)?.id}
-            count={history.data?.data.items.length ?? 0}
-            change={(value) => navigate({ tab, filter, before: value })}
+            next={events.length >= 100 ? events.at(-1)?.id : undefined}
+            onChange={(value) => navigate({ tab, filter, before: value })}
           />
-        </Panel>
+        </PanelRoot>
       )}
       {tab === "subscriptions" && (
-        <AsyncBoundary
-          loading={subscriptions.isPending}
-          error={subscriptions.error}
-          onRetry={() => subscriptions.refetch()}
-          empty={subscriptions.data?.data.items.length === 0}
-          emptyTitle="暂无订阅"
-        >
-          <SimpleTable
-            label="事件订阅"
-            headers={["订阅", "事件类型", "执行配置", "状态", "操作"]}
+        <PanelRoot>
+          <TableToolbar
+            onRefresh={() => void subscriptions.refetch()}
+            refreshing={subscriptions.isFetching}
+            actions={newSubscription}
+          />
+          <AsyncBoundary
+            loading={subscriptions.isPending}
+            error={subscriptions.error}
+            onRetry={() => subscriptions.refetch()}
+            empty={subscriptions.data?.data.items.length === 0}
+            emptyTitle="暂无订阅"
           >
-            {subscriptions.data?.data.items.map((sub) => (
-              <tr key={sub.id}>
-                <td>
-                  <strong>{sub.name}</strong>
-                  <p className="text-xs text-muted">{sub.description}</p>
-                </td>
-                <td>
-                  {sub.config.event_types.map((t) => (
-                    <div key={t}>{names.get(t) ?? t}</div>
-                  ))}
-                </td>
-                <td>
-                  机器人 #{sub.config.executor_user_id}
-                  <p className="text-xs text-muted">
-                    超时 {sub.config.timeout_ms / 1000} 秒 · 最多重试{" "}
-                    {sub.config.max_retries} 次
-                  </p>
-                </td>
-                <td>
-                  {sub.deleted_at
-                    ? "已删除"
-                    : sub.enabled
-                      ? "已启用"
-                      : "已停用"}
-                </td>
-                <td>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        navigate({
-                          tab: "consumptions",
-                          subscription_id: sub.id,
-                        })
-                      }
-                    >
-                      消费记录
-                    </Button>
-                    {sub.can_manage && (
-                      <Button variant="outline" onClick={() => setEditor(sub)}>
-                        {manage && !sub.deleted_at ? "编辑" : "查看配置"}
+            <SimpleTable
+              actions
+              label="事件订阅"
+              headers={["订阅", "事件类型", "执行配置", "状态", "操作"]}
+            >
+              {subscriptions.data?.data.items.map((sub) => (
+                <tr key={sub.id}>
+                  <td>
+                    <strong>{sub.name}</strong>
+                    <p className="text-xs text-muted">{sub.description}</p>
+                  </td>
+                  <td>
+                    {sub.config.event_types.map((t) => (
+                      <div key={t}>{names.get(t) ?? t}</div>
+                    ))}
+                  </td>
+                  <td>
+                    机器人 #{sub.config.executor_user_id}
+                    <p className="text-xs text-muted">
+                      超时 {sub.config.timeout_ms / 1000} 秒 · 最多重试{" "}
+                      {sub.config.max_retries} 次
+                    </p>
+                  </td>
+                  <td>
+                    {sub.deleted_at
+                      ? "已删除"
+                      : sub.enabled
+                        ? "已启用"
+                        : "已停用"}
+                  </td>
+                  <td>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          navigate({
+                            tab: "consumptions",
+                            subscription_id: sub.id,
+                          })
+                        }
+                      >
+                        消费记录
                       </Button>
-                    )}
-                    {manage && !sub.deleted_at && (
-                      <>
+                      {sub.can_manage && (
                         <Button
                           variant="outline"
-                          pending={pending}
-                          onClick={() => void change(sub)}
+                          onClick={() => setEditor(sub)}
                         >
-                          {sub.enabled ? "停用" : "启用"}
+                          {manage && !sub.deleted_at ? "编辑" : "查看配置"}
                         </Button>
-                        <Button
-                          variant="outline"
-                          onClick={() => setDeleting(sub)}
-                        >
-                          删除
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </SimpleTable>
-          <Notice>
-            普通成员可以查看配置与消费日志；脚本源码和修订历史仅项目管理员可见。
-          </Notice>
-        </AsyncBoundary>
+                      )}
+                      {manage && !sub.deleted_at && (
+                        <>
+                          <Button
+                            variant="outline"
+                            pending={pending}
+                            onClick={() => void change(sub)}
+                          >
+                            {sub.enabled ? "停用" : "启用"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => setDeleting(sub)}
+                          >
+                            删除
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </SimpleTable>
+            <div className="mt-4">
+              <Notice>
+                普通成员可以查看配置与消费日志；脚本源码和修订历史仅项目管理员可见。
+              </Notice>
+            </div>
+          </AsyncBoundary>
+        </PanelRoot>
       )}
       {tab === "consumptions" && (
-        <Panel bodyClassName="space-y-4 p-5">
-          <div className="flex gap-3">
+        <PanelRoot>
+          <TableToolbar
+            onReset={() => navigate({ tab })}
+            onRefresh={() => void runs.refetch()}
+            refreshing={runs.isFetching}
+            actions={newSubscription}
+          >
             <StandaloneSelect
               aria-label="消费状态筛选"
               value={filter}
@@ -286,7 +303,7 @@ export function EventsPage({ project }: { project: Resource }) {
                 navigate({
                   tab,
                   filter: value,
-                  subscription_id: params.get("subscription_id") ?? "",
+                  subscription_id: subscriptionId,
                 })
               }
             >
@@ -299,7 +316,7 @@ export function EventsPage({ project }: { project: Resource }) {
             </StandaloneSelect>
             <StandaloneSelect
               aria-label="订阅筛选"
-              value={params.get("subscription_id") ?? ""}
+              value={subscriptionId}
               onValueChange={(value) =>
                 navigate({ tab, filter, subscription_id: value })
               }
@@ -311,19 +328,20 @@ export function EventsPage({ project }: { project: Resource }) {
                 </option>
               ))}
             </StandaloneSelect>
-          </div>
+          </TableToolbar>
           <AsyncBoundary
             loading={runs.isPending}
             error={runs.error}
             onRetry={() => runs.refetch()}
-            empty={runs.data?.data.items.length === 0}
+            empty={!consumptions.length}
             emptyTitle="暂无消费记录"
           >
             <SimpleTable
+              actions
               label="事件消费记录"
               headers={["记录", "订阅", "状态", "尝试", "创建时间", "操作"]}
             >
-              {runs.data?.data.items.map((run) => (
+              {consumptions.map((run) => (
                 <tr key={run.id}>
                   <td>
                     #{run.id}
@@ -362,7 +380,7 @@ export function EventsPage({ project }: { project: Resource }) {
                           selected: run.id,
                           filter,
                           before,
-                          subscription_id: params.get("subscription_id") ?? "",
+                          subscription_id: subscriptionId,
                         })
                       }
                     >
@@ -373,20 +391,21 @@ export function EventsPage({ project }: { project: Resource }) {
               ))}
             </SimpleTable>
           </AsyncBoundary>
-          <Cursor
+          <CursorPagination
             before={before}
-            last={runs.data?.data.items.at(-1)?.id}
-            count={runs.data?.data.items.length ?? 0}
-            change={(value) =>
+            next={
+              consumptions.length >= 100 ? consumptions.at(-1)?.id : undefined
+            }
+            onChange={(value) =>
               navigate({
                 tab,
                 filter,
                 before: value,
-                subscription_id: params.get("subscription_id") ?? "",
+                subscription_id: subscriptionId,
               })
             }
           />
-        </Panel>
+        </PanelRoot>
       )}
       {selected && tab === "events" && (
         <EventDetail
@@ -439,33 +458,6 @@ export function EventsPage({ project }: { project: Resource }) {
         onClose={() => setDeleting(undefined)}
         onConfirm={() => deleting && void change(deleting, true)}
       />
-    </div>
-  );
-}
-
-function Cursor({
-  before,
-  last,
-  count,
-  change,
-}: {
-  before: string;
-  last?: string;
-  count: number;
-  change: (value: string) => void;
-}) {
-  return (
-    <div className="flex gap-2">
-      <Button variant="outline" disabled={!before} onClick={() => change("")}>
-        最新记录
-      </Button>
-      <Button
-        variant="outline"
-        disabled={count < 100 || !last}
-        onClick={() => last && change(last)}
-      >
-        更早记录
-      </Button>
     </div>
   );
 }

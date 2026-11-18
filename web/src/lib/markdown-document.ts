@@ -1,5 +1,31 @@
 import MarkdownIt from "markdown-it";
 
+const tableTextAlignment: Record<string, string> = {
+  "text-align:left": "text-left",
+  "text-align:center": "text-center",
+  "text-align:right": "text-right",
+};
+
+export function createMarkdownParser() {
+  const parser = new MarkdownIt({ html: false, linkify: true });
+  parser.core.ruler.after("block", "table_alignment", ({ tokens }) => {
+    for (const token of tokens) {
+      if (token.type !== "th_open" && token.type !== "td_open") continue;
+      // Markdown-it emits column alignment as an inline style. Render it with
+      // known classes so both previews can keep rejecting inline styles.
+      const style = token.attrGet("style");
+      if (token.attrs)
+        token.attrs = token.attrs.filter(([name]) => name !== "style");
+      const alignment =
+        token.type === "th_open"
+          ? "text-left"
+          : tableTextAlignment[style ?? ""];
+      if (alignment) token.attrJoin("class", alignment);
+    }
+  });
+  return parser;
+}
+
 export interface DocumentHeading {
   id: string;
   title: string;
@@ -14,7 +40,7 @@ export interface DocumentCode {
 }
 
 export function parseMarkdown(source: string) {
-  const renderer = new MarkdownIt({ html: false, linkify: true });
+  const renderer = createMarkdownParser();
   const headings: DocumentHeading[] = [];
   const blocks: DocumentCode[] = [];
   const tables: string[] = [];

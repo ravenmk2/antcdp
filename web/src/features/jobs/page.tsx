@@ -11,8 +11,18 @@ import {
   Notice,
   StatusBadge,
 } from "@/components/feedback";
-import { Field, Input, Textarea, Select } from "@/components/fields";
-import { Panel, PageHeader } from "@/components/layout";
+import {
+  Field,
+  Input,
+  Textarea,
+  Select,
+  StandaloneInput,
+  StandaloneSelect,
+} from "@/components/fields";
+import { Panel, PanelRoot, PageHeader } from "@/components/layout";
+import { CursorPagination } from "@/components/pagination";
+import { SimpleTable } from "@/components/table";
+import { TableToolbar } from "@/components/table-toolbar";
 import { useApiQuery } from "@/hooks/use-api";
 import { useUnsaved } from "@/hooks/use-unsaved";
 import type { Resource, MemberPage, ScopedRole } from "@/types/collaboration";
@@ -198,6 +208,7 @@ function JobList({ project, base }: { project: Resource; base: string }) {
   const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
   const session = useSession();
+  const navigate = useNavigate();
   const query = useQuery({
     queryKey: ["jobs", session.user.id, base, before, filter, status],
     queryFn: ({ signal }) =>
@@ -213,123 +224,138 @@ function JobList({ project, base }: { project: Resource; base: string }) {
       <PageHeader
         title="项目任务"
         description="通过脚本自动化项目流程，集中查看手动、调试与定时运行。"
-        actions={
-          project.can_manage && project.status === "active" ? (
-            <Button render={<Link to={`${base}/new`} />} nativeButton={false}>
-              <Plus />
-              创建任务
-            </Button>
-          ) : undefined
-        }
       />
-      <Panel
-        title="任务列表"
-        action={
-          project.can_manage && (
-            <Link
-              className="link text-sm"
-              to={`/projects/${project.id}/dingtalk`}
-            >
-              钉钉机器人
-            </Link>
-          )
-        }
-      >
-        <div className="flex items-end gap-5">
-          <Field label="搜索任务">
-            <Input
-              value={filter}
-              placeholder="任务名称或说明"
-              onChange={(e) => {
-                setFilter(e.target.value);
-                setBefore("");
-              }}
-            />
-          </Field>
-          <Field label="启用状态">
-            <Select
-              value={status}
-              onValueChange={(value) => {
-                setStatus(value);
-                setBefore("");
-              }}
-            >
-              <option value="">全部状态</option>
-              <option value="enabled">已启用</option>
-              <option value="disabled">已停用 / 草稿</option>
-            </Select>
-          </Field>
-        </div>
+      <PanelRoot>
+        <TableToolbar
+          onReset={() => {
+            setFilter("");
+            setStatus("");
+            setBefore("");
+          }}
+          onRefresh={() => void query.refetch()}
+          refreshing={query.isFetching}
+          actions={
+            project.can_manage && (
+              <>
+                <Button
+                  variant="outline"
+                  render={<Link to={`/projects/${project.id}/dingtalk`} />}
+                  nativeButton={false}
+                >
+                  钉钉机器人
+                </Button>
+                {project.status === "active" && (
+                  <Button
+                    render={<Link to={`${base}/new`} />}
+                    nativeButton={false}
+                  >
+                    <Plus />
+                    创建任务
+                  </Button>
+                )}
+              </>
+            )
+          }
+        >
+          <StandaloneInput
+            aria-label="搜索任务"
+            value={filter}
+            placeholder="任务名称或说明"
+            onChange={(event) => {
+              setFilter(event.target.value);
+              setBefore("");
+            }}
+          />
+          <StandaloneSelect
+            aria-label="启用状态"
+            value={status}
+            onValueChange={(value) => {
+              setStatus(value);
+              setBefore("");
+            }}
+          >
+            <option value="">全部状态</option>
+            <option value="enabled">已启用</option>
+            <option value="disabled">已停用 / 草稿</option>
+          </StandaloneSelect>
+        </TableToolbar>
         <AsyncBoundary
           loading={query.isPending}
           error={query.error}
           onRetry={() => void query.refetch()}
+          empty={!rows.length}
+          emptyTitle={filter || status ? "没有符合筛选条件的任务" : "暂无任务"}
+          emptyDescription={
+            filter || status ? undefined : "创建一个脚本任务开始自动化。"
+          }
         >
-          <div className="mt-5 divide-y divide-border">
-            <div className="grid grid-cols-[minmax(240px,1fr)_85px_130px_90px_185px] gap-5 px-4 py-3 text-xs text-muted">
-              <span>任务</span>
-              <span>状态</span>
-              <span>排队 / 执行中</span>
-              <span>最近运行</span>
-              <span>下次计划</span>
-            </div>
-            {rows.map((j) => (
-              <Link
-                key={j.id}
-                to={`${base}/${j.id}`}
-                className="grid grid-cols-[minmax(240px,1fr)_85px_130px_90px_185px] items-center gap-5 rounded-lg px-4 py-5 hover:bg-surface-hover"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 font-medium">
-                    <Terminal className="size-4 shrink-0 text-primary" />
-                    <span className="truncate">{j.name}</span>
-                  </div>
-                  <p className="mt-1 truncate text-sm text-muted">
-                    {j.description || "暂无说明"}
-                  </p>
-                </div>
-                <StatusBadge tone={j.enabled ? "success" : "neutral"}>
-                  {!j.revision_id ? "草稿" : j.enabled ? "已启用" : "已停用"}
-                </StatusBadge>
-                <span className="text-sm text-muted">
-                  {j.queued_count} / {j.active_count}
-                  <span className="mt-1 block text-xs">
-                    并发上限 {j.max_concurrency}
-                  </span>
-                </span>
-                <span>
-                  {j.latest_status ? <Status value={j.latest_status} /> : "—"}
-                </span>
-                <span className="text-sm text-muted">
-                  {date(j.next_fire_at)}
-                </span>
-              </Link>
-            ))}
-            {!rows.length && (
-              <div className="py-16 text-center text-muted">
-                {filter || status
-                  ? "没有符合筛选条件的任务"
-                  : "暂无任务。创建一个脚本任务开始自动化。"}
-              </div>
-            )}
-          </div>
-          <div className="mt-4 flex gap-3">
-            {before && (
-              <Button variant="outline" onClick={() => setBefore("")}>
-                返回最新
-              </Button>
-            )}
-            {rows.length === 100 && (
-              <Button
-                variant="outline"
-                onClick={() => setBefore(rows.at(-1)!.id)}
-              >
-                更早任务
-              </Button>
-            )}
-          </div>
+          <SimpleTable
+            label="任务列表"
+            headers={["任务", "状态", "排队 / 执行中", "最近运行", "下次计划"]}
+          >
+            {rows.map((job) => {
+              const to = `${base}/${job.id}`;
+              return (
+                <tr
+                  key={job.id}
+                  className="cursor-pointer"
+                  onClick={() => navigate(to)}
+                >
+                  <td>
+                    <Link
+                      to={to}
+                      aria-label={job.name}
+                      className="flex w-fit max-w-full items-center gap-3 rounded-md text-foreground hover:text-primary"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <span className="grid size-9 shrink-0 place-items-center text-primary">
+                        <Terminal aria-hidden className="size-5" />
+                      </span>
+                      <span className="min-w-0 max-w-sm">
+                        <strong className="block truncate">{job.name}</strong>
+                        <small className="mt-1 block truncate text-muted">
+                          {job.description || "暂无说明"}
+                        </small>
+                      </span>
+                    </Link>
+                  </td>
+                  <td>
+                    <StatusBadge tone={job.enabled ? "success" : "neutral"}>
+                      {!job.revision_id
+                        ? "草稿"
+                        : job.enabled
+                          ? "已启用"
+                          : "已停用"}
+                    </StatusBadge>
+                  </td>
+                  <td>
+                    {job.queued_count} / {job.active_count}
+                    <small className="mt-1 block text-muted">
+                      并发上限 {job.max_concurrency}
+                    </small>
+                  </td>
+                  <td>
+                    {job.latest_status ? (
+                      <Status value={job.latest_status} />
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap">
+                    {date(job.next_fire_at)}
+                  </td>
+                </tr>
+              );
+            })}
+          </SimpleTable>
         </AsyncBoundary>
-      </Panel>
+        <CursorPagination
+          before={before}
+          next={rows.length === 100 ? rows.at(-1)?.id : undefined}
+          onChange={setBefore}
+          olderLabel="更早任务"
+        />
+      </PanelRoot>
     </>
   );
 }
@@ -413,6 +439,7 @@ function JobDetail({ job, base }: { job: Job; base: string }) {
 }
 function RunList({ base }: { base: string }) {
   const session = useSession();
+  const navigate = useNavigate();
   const [before, setBefore] = useState("");
   const query = useQuery({
     queryKey: ["job-runs", session.user.id, base, before],
@@ -421,56 +448,63 @@ function RunList({ base }: { base: string }) {
   });
   const rows = query.data?.data.items ?? [];
   return (
-    <Panel
-      title="运行记录"
-      action={<span className="text-xs text-muted">每 2 秒更新</span>}
-    >
+    <PanelRoot>
+      <TableToolbar
+        onRefresh={() => void query.refetch()}
+        refreshing={query.isFetching}
+      >
+        <span className="text-xs text-muted">每 2 秒更新</span>
+      </TableToolbar>
       <AsyncBoundary
         loading={query.isPending}
         error={query.error}
         onRetry={() => void query.refetch()}
+        empty={!rows.length}
+        emptyTitle="暂无运行记录"
       >
-        <div className="divide-y divide-border">
-          {rows.map((run) => (
-            <Link
-              to={`${base}/runs/${run.id}`}
-              key={run.id}
-              className="grid grid-cols-[140px_140px_120px_1fr_1fr] items-center gap-5 rounded-lg px-4 py-4 text-sm hover:bg-surface-hover"
-            >
-              <span className="font-mono">#{run.id}</span>
-              <span>
-                <Status value={runStatus(run)} />
-              </span>
-              <span>
-                {{ manual: "手动", debug: "调试", schedule: "定时" }[
-                  run.trigger_kind
-                ] ?? run.trigger_kind}
-              </span>
-              <span className="text-muted">提交于 {date(run.queued_at)}</span>
-              <span className="text-muted">结束于 {date(run.finished_at)}</span>
-            </Link>
-          ))}
-          {!rows.length && (
-            <p className="py-12 text-center text-muted">暂无运行记录</p>
-          )}
-        </div>
-        <div className="mt-4 flex gap-3">
-          {before && (
-            <Button variant="outline" onClick={() => setBefore("")}>
-              返回最新
-            </Button>
-          )}
-          {rows.length === 100 && (
-            <Button
-              variant="outline"
-              onClick={() => setBefore(rows.at(-1)!.id)}
-            >
-              更早记录
-            </Button>
-          )}
-        </div>
+        <SimpleTable
+          label="运行记录"
+          headers={["运行", "状态", "触发方式", "提交时间", "结束时间"]}
+        >
+          {rows.map((run) => {
+            const to = `${base}/runs/${run.id}`;
+            return (
+              <tr
+                key={run.id}
+                className="cursor-pointer"
+                onClick={() => navigate(to)}
+              >
+                <td>
+                  <Link
+                    to={to}
+                    className="link font-mono"
+                    aria-label={`运行 #${run.id}`}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    #{run.id}
+                  </Link>
+                </td>
+                <td>
+                  <Status value={runStatus(run)} />
+                </td>
+                <td>
+                  {{ manual: "手动", debug: "调试", schedule: "定时" }[
+                    run.trigger_kind
+                  ] ?? run.trigger_kind}
+                </td>
+                <td className="whitespace-nowrap">{date(run.queued_at)}</td>
+                <td className="whitespace-nowrap">{date(run.finished_at)}</td>
+              </tr>
+            );
+          })}
+        </SimpleTable>
       </AsyncBoundary>
-    </Panel>
+      <CursorPagination
+        before={before}
+        next={rows.length === 100 ? rows.at(-1)?.id : undefined}
+        onChange={setBefore}
+      />
+    </PanelRoot>
   );
 }
 function Triggers({ base }: { base: string }) {
@@ -481,38 +515,49 @@ function Triggers({ base }: { base: string }) {
   );
   const rows = q.data?.data.items ?? [];
   return (
-    <Panel title="触发记录">
+    <PanelRoot>
+      <TableToolbar
+        onRefresh={() => void q.refetch()}
+        refreshing={q.isFetching}
+      />
       <AsyncBoundary
         loading={q.isPending}
         error={q.error}
         onRetry={() => void q.refetch()}
+        empty={!rows.length}
+        emptyTitle="暂无手动或调试触发记录"
       >
-        {rows.map((r) => (
-          <div
-            key={r.id}
-            className="flex items-center gap-6 border-b border-border py-4 text-sm"
-          >
-            <span>{date(r.created_at)}</span>
-            <Status value={r.outcome} />
-            <span className="flex-1 text-muted">{r.reason_code}</span>
-            {r.run_id && (
-              <Link className="link" to={`${base}/runs/${r.run_id}`}>
-                运行 #{r.run_id}
-              </Link>
-            )}
-          </div>
-        ))}
-        {!rows.length && (
-          <p className="py-8 text-muted">暂无手动或调试触发记录</p>
-        )}
-        <div className="mt-4 flex gap-3">
-          {before && <Button onClick={() => setBefore("")}>返回最新</Button>}
-          {rows.length === 100 && (
-            <Button onClick={() => setBefore(rows.at(-1)!.id)}>更早记录</Button>
-          )}
-        </div>
+        <SimpleTable
+          actions
+          label="触发记录"
+          headers={["触发时间", "状态", "原因", "运行"]}
+        >
+          {rows.map((receipt) => (
+            <tr key={receipt.id}>
+              <td className="whitespace-nowrap">{date(receipt.created_at)}</td>
+              <td>
+                <Status value={receipt.outcome} />
+              </td>
+              <td>{receipt.reason_code || "—"}</td>
+              <td>
+                {receipt.run_id ? (
+                  <Link className="link" to={`${base}/runs/${receipt.run_id}`}>
+                    运行 #{receipt.run_id}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </td>
+            </tr>
+          ))}
+        </SimpleTable>
       </AsyncBoundary>
-    </Panel>
+      <CursorPagination
+        before={before}
+        next={rows.length === 100 ? rows.at(-1)?.id : undefined}
+        onChange={setBefore}
+      />
+    </PanelRoot>
   );
 }
 function StartForm({

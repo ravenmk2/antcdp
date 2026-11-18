@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { parseMarkdown } from "@/lib/markdown-document";
 import { MarkdownView } from "@/components/markdown";
 import { normalizeDiagram } from "@/components/mermaid-block";
+import { ChatMarkdown } from "@/features/agents/chat/markdown";
 
 const diagram = vi.hoisted(() => vi.fn());
 vi.mock("@/app/theme", () => ({ useTheme: () => ({ resolved: "light" }) }));
@@ -36,6 +37,27 @@ it("copies each complete table from its original Markdown source", async () => {
   await user.click(buttons[1]);
   expect(write).toHaveBeenLastCalledWith(second);
 });
+
+it.each([
+  ["document", MarkdownView],
+  ["chat", ChatMarkdown],
+] as const)(
+  "aligns every %s Markdown header left regardless of column alignment",
+  (_kind, Preview) => {
+    const source =
+      "| 左列 | 中列 | 右列 |\n| :--- | :---: | ---: |\n| 左 | 中 | 右 |";
+    render(<Preview source={source} />);
+    const table = within(screen.getByRole("table"));
+    for (const header of table.getAllByRole("columnheader")) {
+      expect(header).toHaveClass("text-left");
+      expect(header).not.toHaveClass("text-center");
+      expect(header).not.toHaveClass("text-right");
+    }
+    expect(table.getByRole("cell", { name: "左" })).toHaveClass("text-left");
+    expect(table.getByRole("cell", { name: "中" })).toHaveClass("text-center");
+    expect(table.getByRole("cell", { name: "右" })).toHaveClass("text-right");
+  },
+);
 
 it("reads explicit code filenames and bounded line ranges from fences", () => {
   const document = parseMarkdown(

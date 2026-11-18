@@ -1,9 +1,9 @@
 import { useParams } from "react-router";
 import { AsyncBoundary } from "@/components/feedback";
+import { ResourceDetailShell } from "@/components/layout";
 import { useApiQuery } from "@/hooks/use-api";
 import type { Resource } from "@/types/collaboration";
 import { EventsPage } from "@/features/events/page";
-import { WorkspaceProjectFrame } from "./workspace-project-frame";
 
 export function ProjectEventsPage() {
   const { projectId } = useParams();
@@ -18,9 +18,9 @@ export function ProjectEventsPage() {
       onRetry={() => query.refetch()}
     >
       {query.data && (
-        <WorkspaceProjectFrame project={query.data.data} wide>
+        <ResourceDetailShell wide>
           <EventsPage project={query.data.data} />
-        </WorkspaceProjectFrame>
+        </ResourceDetailShell>
       )}
     </AsyncBoundary>
   );

@@ -1,10 +1,10 @@
 import { useParams } from "react-router";
 import { AsyncBoundary, Notice } from "@/components/feedback";
+import { ResourceDetailShell } from "@/components/layout";
 import { useApiQuery } from "@/hooks/use-api";
 import type { Resource } from "@/types/collaboration";
 import { JobsPage } from "@/features/jobs/page";
 import { DingTalkPage } from "@/features/dingtalk/page";
-import { WorkspaceProjectFrame } from "./workspace-project-frame";
 export function ProjectJobsPage({ robots = false }: { robots?: boolean }) {
   const { projectId } = useParams();
   const q = useApiQuery<Resource>(
@@ -18,7 +18,7 @@ export function ProjectJobsPage({ robots = false }: { robots?: boolean }) {
       onRetry={() => void q.refetch()}
     >
       {q.data && (
-        <WorkspaceProjectFrame project={q.data.data} wide>
+        <ResourceDetailShell wide>
           {robots ? (
             q.data.data.can_manage ? (
               <DingTalkPage />
@@ -28,7 +28,7 @@ export function ProjectJobsPage({ robots = false }: { robots?: boolean }) {
           ) : (
             <JobsPage project={q.data.data} />
           )}
-        </WorkspaceProjectFrame>
+        </ResourceDetailShell>
       )}
     </AsyncBoundary>
   );

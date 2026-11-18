@@ -6,16 +6,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
 import { Download, WrapText } from "lucide-react";
 import { useTheme } from "@/app/theme";
+import { createMarkdownParser } from "@/lib/markdown-document";
 import { ChatCopyButton, ChatIconButton } from "./controls";
 
 // Conversation rendering owns its DOM, spacing and streaming lifecycle. Parsing
 // the token stream remains necessary for references and loose lists; unchanged
 // top-level blocks never rebuild their DOM or reset their local controls.
-const parser = new MarkdownIt({ html: false, linkify: true });
+const parser = createMarkdownParser();
 parser.renderer.rules.image = (tokens, index) =>
   parser.utils.escapeHtml(tokens[index].content || "图片");
 parser.renderer.rules.fence = parser.renderer.rules.code_block = (

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Users } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { request } from "@/api/client";
 import { Button } from "@/components/button";
 import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
@@ -8,7 +8,8 @@ import { Field, Select, StandaloneInput } from "@/components/fields";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { ConfirmDialog, Drawer, Modal } from "@/components/overlays";
 import { Pagination } from "@/components/pagination";
-import { Avatar } from "@/components/resource-icon";
+import { Avatar, ResourceIcon } from "@/components/resource-icon";
+import { RowAction, RowActions } from "@/components/row-actions";
 import { SimpleTable } from "@/components/table";
 import { TableToolbar } from "@/components/table-toolbar";
 import { useApiQuery } from "@/hooks/use-api";
@@ -337,7 +338,15 @@ function AddMember({
   );
 }
 
-export function ProjectTeams({ resource }: { resource: Resource }) {
+export function ProjectTeams({
+  resource,
+  label,
+}: {
+  resource: Resource;
+  label: string;
+}) {
+  const [input, setInput] = useState("");
+  const [q, setQ] = useState("");
   const [add, setAdd] = useState(false);
   const [remove, setRemove] = useState<Resource | null>(null);
   const queryClient = useQueryClient();
@@ -345,52 +354,113 @@ export function ProjectTeams({ resource }: { resource: Resource }) {
     ["project-teams", resource.id],
     `/projects/${resource.id}/teams`,
   );
+  const keyword = q.toLowerCase();
+  const teams = list.data?.data.filter((team) =>
+    [team.name, team.code, team.summary].some((value) =>
+      value.toLowerCase().includes(keyword),
+    ),
+  );
   const submission = useSubmission();
   async function refresh() {
-    await queryClient.invalidateQueries({
-      queryKey: ["project-teams", resource.id],
-    });
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["project-teams", resource.id],
+      }),
+      queryClient.invalidateQueries({ queryKey: ["project", resource.id] }),
+      queryClient.invalidateQueries({
+        queryKey: ["members", "projects", resource.id],
+      }),
+    ]);
   }
   return (
     <section className="panel">
-      <header className="panel-header">
-        <h2 className="panel-title">授权团队</h2>
-        {resource.can_manage && (
-          <Button size="sm" onClick={() => setAdd(true)}>
-            <Plus />
-            授权团队
+      <TableToolbar
+        onReset={() => {
+          setInput("");
+          setQ("");
+        }}
+        onRefresh={refresh}
+        refreshing={list.isFetching}
+        actions={
+          resource.can_manage && (
+            <Button onClick={() => setAdd(true)}>
+              <Plus />
+              授权团队
+            </Button>
+          )
+        }
+      >
+        <form
+          className="flex shrink-0 items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            setQ(input.trim());
+          }}
+        >
+          <StandaloneInput
+            aria-label={`搜索${label}`}
+            placeholder="搜索名称、编码或摘要"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+          />
+          <Button type="submit" variant="outline">
+            搜索
           </Button>
-        )}
-      </header>
+        </form>
+      </TableToolbar>
       <AsyncBoundary
         loading={list.isPending}
         error={list.error}
         onRetry={() => void list.refetch()}
-        empty={!list.data?.data.length}
-        emptyTitle="尚未授权团队"
-        emptyDescription="团队只提供项目成员权限，不继承团队管理员身份。"
+        empty={!teams?.length}
+        emptyTitle={q ? "没有匹配的团队" : `暂无${label}`}
+        emptyDescription={
+          q
+            ? "请调整搜索关键词。"
+            : "为团队授权后，团队成员可获得项目成员权限。"
+        }
       >
-        <ul className="divide-y divide-border-subtle">
-          {list.data?.data.map((team) => (
-            <li key={team.id} className="flex items-center gap-3 px-5 py-4">
-              <Users className="size-5 text-muted" />
-              <div className="min-w-0 flex-1">
-                <strong>{team.name}</strong>
-                <small className="mono block text-muted">{team.code}</small>
-              </div>
+        <SimpleTable
+          label={label}
+          actions={resource.can_manage}
+          headers={
+            resource.can_manage
+              ? ["团队名称", "摘要", "操作"]
+              : ["团队名称", "摘要"]
+          }
+        >
+          {teams?.map((team) => (
+            <tr key={team.id}>
+              <td>
+                <div className="flex items-center gap-3">
+                  <ResourceIcon resource={team} />
+                  <span className="min-w-0">
+                    <strong className="block truncate text-foreground">
+                      {team.name}
+                    </strong>
+                    <small className="mt-1 block truncate font-mono text-muted">
+                      {team.code}
+                    </small>
+                  </span>
+                </div>
+              </td>
+              <td>{team.summary || "—"}</td>
               {resource.can_manage && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-danger"
-                  onClick={() => setRemove(team)}
-                >
-                  撤销授权
-                </Button>
+                <td>
+                  <RowActions label={team.name}>
+                    <RowAction
+                      icon={<Trash2 />}
+                      variant="destructive"
+                      onSelect={() => setRemove(team)}
+                    >
+                      撤销授权
+                    </RowAction>
+                  </RowActions>
+                </td>
               )}
-            </li>
+            </tr>
           ))}
-        </ul>
+        </SimpleTable>
       </AsyncBoundary>
       {add && (
         <AuthorizeTeam
@@ -406,9 +476,10 @@ export function ProjectTeams({ resource }: { resource: Resource }) {
         description={remove?.name}
         confirmLabel="撤销授权"
         pending={submission.pending}
+        confirmDisabled={submission.uncertain}
         onClose={() => setRemove(null)}
         onConfirm={() => {
-          if (!remove) return;
+          if (!remove || submission.pending || submission.uncertain) return;
           void submission.run(async () => {
             await revokeProjectTeam(
               resource.id,
@@ -457,7 +528,7 @@ function AuthorizeTeam({
             取消
           </Button>
           <Button
-            disabled={!selected}
+            disabled={!selected || submission.uncertain}
             pending={submission.pending}
             onClick={() =>
               void submission.run(async () => {

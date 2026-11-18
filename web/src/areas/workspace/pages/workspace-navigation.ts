@@ -12,7 +12,7 @@ export const projectSectionLabels = {
   profile: "基本资料",
   members: "项目成员",
   roles: "角色管理",
-  teams: "团队授权",
+  teams: "参与团队",
   integrations: "服务连接",
   hosts: "SSH 凭证",
   dingtalk: "钉钉机器人",

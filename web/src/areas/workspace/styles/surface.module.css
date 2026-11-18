@@ -1303,7 +1303,10 @@
   }
 }
 
-.scope :global([data-resource-detail] .panel:has(> .table-toolbar)) {
+.scope
+  :global(
+    [data-resource-detail] .panel:has(> .table-toolbar, > div > .table-toolbar)
+  ) {
   border: 0;
   border-radius: 0;
   box-shadow: none;

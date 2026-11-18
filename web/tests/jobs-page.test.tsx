@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -119,9 +119,33 @@ function mount(
   return { user: userEvent.setup(), writes };
 }
 
+it("shows tasks in a table and retains row navigation after resetting filters", async () => {
+  const { user } = mount("/projects/1/jobs", job, (url) => {
+    const request = new URL(url, window.location.origin);
+    if (!request.pathname.endsWith("/jobs")) return undefined;
+    return response({ items: request.searchParams.get("q") ? [] : [job] });
+  });
+  const search = screen.getByRole("textbox", { name: "搜索任务" });
+  await screen.findByRole("table", { name: "任务列表" });
+  await user.type(search, "不存在");
+  expect(await screen.findByText("没有符合筛选条件的任务")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "重置筛选" }));
+  const table = within(await screen.findByRole("table", { name: "任务列表" }));
+  expect(table.getByRole("link", { name: job.name })).toHaveAttribute(
+    "href",
+    "/projects/1/jobs/2",
+  );
+  await user.click(table.getByRole("cell", { name: /并发上限/ }));
+  expect(await screen.findByRole("heading", { name: job.name })).toBeVisible();
+});
+
 it("lets project members inspect schedule history without management actions", async () => {
   const { user } = mount("/projects/1/jobs/2?tab=schedules");
-  await screen.findByText("每日检查");
+  expect(
+    within(await screen.findByRole("table", { name: "定时计划" })).getByText(
+      "每日检查",
+    ),
+  ).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "添加计划" }),
   ).not.toBeInTheDocument();

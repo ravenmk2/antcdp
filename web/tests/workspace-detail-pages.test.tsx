@@ -3,6 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import { expect, it, vi } from "vitest";
+import { ProjectEventsPage } from "@/areas/workspace/pages/events";
+import { ProjectJobsPage } from "@/areas/workspace/pages/jobs";
 import { WorkspaceProjectDetail } from "@/areas/workspace/pages/workspace-project-detail";
 import { Shell } from "@/areas/workspace/shell/shell";
 import { WorkspaceTeamDetail } from "@/areas/workspace/pages/workspace-team-detail";
@@ -36,11 +38,20 @@ vi.mock("@/features/repositories/repositories", () => ({
 vi.mock("@/areas/workspace/pages/project-description", () => ({
   ProjectDescription: () => <section>项目介绍内容</section>,
 }));
-vi.mock("@/features/collaboration/members", () => ({
+vi.mock("@/features/collaboration/members", async (original) => ({
+  ...(await original<typeof import("@/features/collaboration/members")>()),
   MembersPanel: ({ kind }: { kind: string }) => (
     <section>{kind === "teams" ? "团队成员内容" : "成员管理内容"}</section>
   ),
-  ProjectTeams: () => <section>团队授权内容</section>,
+}));
+vi.mock("@/features/jobs/page", () => ({
+  JobsPage: () => <section>任务列表内容</section>,
+}));
+vi.mock("@/features/events/page", () => ({
+  EventsPage: () => <section>事件列表内容</section>,
+}));
+vi.mock("@/features/dingtalk/page", () => ({
+  DingTalkPage: () => <section>机器人列表内容</section>,
 }));
 vi.mock("@/areas/workspace/pages/workspace-resource-actions", () => ({
   WorkspaceResourceActions: () => <div>对象操作</div>,
@@ -114,6 +125,7 @@ vi.mock("@/hooks/use-api", () => ({
     }
     const responses: Record<string, Resource | Resource[] | Shortcuts> = {
       "/projects/7": project,
+      "/projects/7/teams": [team, deliveryTeam],
       "/teams/11": team,
       "/teams/12": deliveryTeam,
       "/teams/11/projects": [project],
@@ -149,6 +161,15 @@ function mountProject(entry: string) {
   return mount(
     [
       { path: "/projects/:projectId", element: <WorkspaceProjectDetail /> },
+      { path: "/projects/:projectId/events", element: <ProjectEventsPage /> },
+      {
+        path: "/projects/:projectId/jobs/:jobId?",
+        element: <ProjectJobsPage />,
+      },
+      {
+        path: "/projects/:projectId/dingtalk/:robotId?",
+        element: <ProjectJobsPage robots />,
+      },
       {
         path: "/projects/:projectId/integrations",
         element: <section>连接目录</section>,
@@ -167,19 +188,39 @@ function mountProject(entry: string) {
 }
 
 it.each([
-  ["", "项目总览内容"],
-  ["?tab=unknown", "项目总览内容"],
-  ["?tab=releases", "项目总览内容"],
-  ["?tab=repositories", "仓库列表内容"],
-  ["?tab=description", "项目介绍内容"],
-  ["?tab=members", "成员管理内容"],
-  ["?tab=teams", "团队授权内容"],
-  ["?tab=branch-model", "项目总览内容"],
-  ["?tab=settings&section=unknown", "项目资料"],
-])("renders workspace project content for %s", (search, content) => {
-  mountProject(`/projects/7${search}`);
-  expect(screen.getByText(content)).toBeVisible();
-});
+  ["", "项目总览内容", true],
+  ["?tab=unknown", "项目总览内容", true],
+  ["?tab=releases", "项目总览内容", true],
+  ["?tab=repositories", "仓库列表内容", false],
+  ["?tab=description", "项目介绍内容", false],
+  ["?tab=members", "成员管理内容", false],
+  ["?tab=teams", "平台团队", false],
+  ["?tab=branch-model", "项目总览内容", true],
+  ["?tab=settings&section=unknown", "项目资料", false],
+  ["/jobs", "任务列表内容", false],
+  ["/events", "事件列表内容", false],
+  ["/dingtalk", "机器人列表内容", false],
+] as const)(
+  "keeps the project heading on the overview when opening %s",
+  (suffix, content, overview) => {
+    mountProject(`/projects/7${suffix}`);
+    const main = within(screen.getByRole("main"));
+    expect(main.getByText(content)).toBeVisible();
+    const projectHeading = main.queryByRole("heading", {
+      name: project.name,
+    });
+    if (overview) {
+      expect(projectHeading).toBeVisible();
+      expect(main.getByText("对象操作")).toBeVisible();
+    } else {
+      expect(projectHeading).not.toBeInTheDocument();
+      expect(main.queryByText("对象操作")).not.toBeInTheDocument();
+    }
+    expect(
+      screen.getByRole("button", { name: `切换项目，当前 ${project.name}` }),
+    ).toBeVisible();
+  },
+);
 
 it("redirects removed delivery tabs to the project overview", async () => {
   const { router } = mountProject(
@@ -202,6 +243,36 @@ it("opens existing project content routes from the secondary navigation", async 
   expect(
     screen.queryByRole("link", { name: "产品分支" }),
   ).not.toBeInTheDocument();
+});
+
+it("names participating teams consistently and keeps the team controls available", async () => {
+  const { user } = mountProject("/projects/7");
+  const rail = within(screen.getByRole("complementary", { name: "项目导航" }));
+  await user.click(rail.getByRole("link", { name: "参与团队" }));
+  expect(
+    within(screen.getByRole("navigation", { name: "当前位置" })).getByText(
+      "参与团队",
+    ),
+  ).toHaveAttribute("aria-current", "page");
+  const main = within(screen.getByRole("main"));
+  let table = within(main.getByRole("table", { name: "参与团队" }));
+  expect(table.getByText("交付团队")).toBeVisible();
+  await user.type(
+    main.getByRole("textbox", { name: "搜索参与团队" }),
+    "platform{Enter}",
+  );
+  expect(table.getByText("平台团队")).toBeVisible();
+  expect(table.queryByText("交付团队")).not.toBeInTheDocument();
+  await user.click(main.getByRole("button", { name: "重置筛选" }));
+  table = within(main.getByRole("table", { name: "参与团队" }));
+  expect(table.getByText("交付团队")).toBeVisible();
+  expect(main.getByRole("button", { name: "授权团队" })).toBeVisible();
+
+  await user.click(table.getByRole("button", { name: "平台团队的操作" }));
+  await user.click(await screen.findByRole("menuitem", { name: "撤销授权" }));
+  expect(
+    await screen.findByRole("dialog", { name: "撤销团队授权" }),
+  ).toBeVisible();
 });
 
 it("keeps project credential links in the workspace", async () => {

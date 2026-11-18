@@ -13,7 +13,12 @@ import { request } from "@/api/client";
 import { useAuth, useSession } from "@/app/auth";
 import { CopyButton } from "@/components/copy-button";
 import { AsyncBoundary, ErrorNotice } from "@/components/feedback";
-import { DescriptionList, PageHeader, Panel } from "@/components/layout";
+import {
+  DescriptionList,
+  PageHeader,
+  Panel,
+  ResourceDetailShell,
+} from "@/components/layout";
 import { ConfirmDialog } from "@/components/overlays";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { useApiQuery } from "@/hooks/use-api";
@@ -31,8 +36,9 @@ import { ProjectOverview } from "@/areas/workspace/pages/project-overview";
 import { useWorkspaceShortcut } from "@/areas/workspace/pages/use-workspace-shortcut";
 import { WorkspaceResourceActions } from "@/areas/workspace/pages/workspace-resource-actions";
 import { WorkspaceShortcutFeedback } from "@/areas/workspace/pages/workspace-shortcut-feedback";
-import { WorkspaceProjectFrame } from "@/areas/workspace/pages/workspace-project-frame";
+import { WorkspaceResourceHeader } from "./workspace-resource-header";
 import {
+  projectSectionLabels,
   projectSectionRoutes,
   resolveWorkspaceProjectView,
   type WorkspaceProjectSettingSection,
@@ -127,29 +133,40 @@ function ProjectContent({
     );
   }
 
-  const actions = (
-    <WorkspaceResourceActions
-      kind="projects"
-      resource={project}
-      shortcut={shortcut}
-      onEdit={() => setEdit(true)}
-      editDescriptionTo={`/projects/${project.id}/description/edit`}
-      onRefresh={onRefresh}
-      onLeave={() => setLeave(true)}
-    />
-  );
-
   return (
-    <WorkspaceProjectFrame project={project} actions={actions}>
-      {Boolean(shortcut.error) && (
-        <WorkspaceShortcutFeedback
-          error={shortcut.error}
-          pending={shortcut.shortcuts.isFetching}
-          onReload={() => void shortcut.reload()}
-        />
+    <ResourceDetailShell
+      header={
+        view.page === "overview" && (
+          <WorkspaceResourceHeader
+            resource={project}
+            kind="projects"
+            actions={
+              <WorkspaceResourceActions
+                kind="projects"
+                resource={project}
+                shortcut={shortcut}
+                onEdit={() => setEdit(true)}
+                editDescriptionTo={`/projects/${project.id}/description/edit`}
+                onRefresh={onRefresh}
+                onLeave={() => setLeave(true)}
+              />
+            }
+          />
+        )
+      }
+    >
+      {view.page === "overview" && (
+        <>
+          {Boolean(shortcut.error) && (
+            <WorkspaceShortcutFeedback
+              error={shortcut.error}
+              pending={shortcut.shortcuts.isFetching}
+              onReload={() => void shortcut.reload()}
+            />
+          )}
+          <ProjectOverview project={project} />
+        </>
       )}
-
-      {view.page === "overview" && <ProjectOverview project={project} />}
 
       {view.page === "repositories" && (
         <>
@@ -200,7 +217,7 @@ function ProjectContent({
           只移除你的直接关系；团队继承来源可能仍然保留。若退出最后一位管理员，之后需由系统管理员接管。
         </p>
       </ConfirmDialog>
-    </WorkspaceProjectFrame>
+    </ResourceDetailShell>
   );
 }
 
@@ -263,7 +280,9 @@ function WorkspaceProjectSettings({
         <MembersPanel kind="projects" resource={project} />
       )}
       {section === "roles" && <ProjectRoles project={project} />}
-      {section === "teams" && <ProjectTeams resource={project} />}
+      {section === "teams" && (
+        <ProjectTeams resource={project} label={projectSectionLabels.teams} />
+      )}
     </div>
   );
 }

@@ -5,7 +5,10 @@ import { request } from "@/api/client";
 import { Button } from "@/components/button";
 import { AsyncBoundary, ErrorNotice, Notice } from "@/components/feedback";
 import { Field, Input, Select } from "@/components/fields";
-import { Panel } from "@/components/layout";
+import { Panel, PanelRoot } from "@/components/layout";
+import { CursorPagination } from "@/components/pagination";
+import { SimpleTable } from "@/components/table";
+import { TableToolbar } from "@/components/table-toolbar";
 import { useApiQuery } from "@/hooks/use-api";
 import type { CredentialSet, ServiceConnection } from "@/types/integrations";
 import type { Job, Schedule } from "./types";
@@ -18,54 +21,72 @@ export function Schedules({ job, base }: { job: Job; base: string }) {
   );
   const [edit, setEdit] = useState<Schedule | null>();
   const [fires, setFires] = useState<string>();
+  const schedules = q.data?.data.items ?? [];
   return (
     <div className="space-y-6">
-      <Panel
-        title="定时计划"
-        action={
-          job.can_manage && (
-            <Button disabled={!job.revision_id} onClick={() => setEdit(null)}>
-              添加计划
-            </Button>
-          )
-        }
-      >
-        <p className="mb-5 text-sm text-muted">
-          使用五段 Cron 表达式。服务离线期间的执行时间会跳过，不补跑。
-        </p>
+      <PanelRoot>
+        <TableToolbar
+          onRefresh={() => void q.refetch()}
+          refreshing={q.isFetching}
+          actions={
+            job.can_manage && (
+              <Button disabled={!job.revision_id} onClick={() => setEdit(null)}>
+                添加计划
+              </Button>
+            )
+          }
+        >
+          <p className="text-sm text-muted">
+            使用五段 Cron 表达式。服务离线期间的执行时间会跳过，不补跑。
+          </p>
+        </TableToolbar>
         <AsyncBoundary
           loading={q.isPending}
           error={q.error}
           onRetry={() => void q.refetch()}
+          empty={!schedules.length}
+          emptyTitle="暂无定时计划"
         >
-          {q.data?.data.items.map((s) => (
-            <div
-              key={s.id}
-              className="flex items-center gap-6 border-b border-border py-4 text-sm"
-            >
-              <div className="flex-1">
-                <strong>{s.name}</strong>
-                <p className="mt-1 font-mono text-muted">
-                  {s.cron} · {s.timezone}
-                </p>
-              </div>
-              <span>{s.enabled ? "启用" : "停用"}</span>
-              <span className="text-muted">下次：{date(s.next_fire_at)}</span>
-              <Button variant="ghost" onClick={() => setFires(s.id)}>
-                触发记录
-              </Button>
-              {job.can_manage && (
-                <Button variant="outline" onClick={() => setEdit(s)}>
-                  编辑
-                </Button>
-              )}
-            </div>
-          ))}
-          {!q.data?.data.items.length && (
-            <p className="py-5 text-muted">暂无定时计划</p>
-          )}
+          <SimpleTable
+            actions
+            label="定时计划"
+            headers={["计划", "状态", "下次运行", "操作"]}
+          >
+            {schedules.map((schedule) => (
+              <tr key={schedule.id}>
+                <td>
+                  <strong>{schedule.name}</strong>
+                  <small className="mt-1 block font-mono text-muted">
+                    {schedule.cron} · {schedule.timezone}
+                  </small>
+                </td>
+                <td>{schedule.enabled ? "启用" : "停用"}</td>
+                <td className="whitespace-nowrap">
+                  {date(schedule.next_fire_at)}
+                </td>
+                <td>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      onClick={() => setFires(schedule.id)}
+                    >
+                      触发记录
+                    </Button>
+                    {job.can_manage && (
+                      <Button
+                        variant="outline"
+                        onClick={() => setEdit(schedule)}
+                      >
+                        编辑
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </SimpleTable>
         </AsyncBoundary>
-      </Panel>
+      </PanelRoot>
       {edit !== undefined && (
         <ScheduleForm
           key={edit?.id ?? "new"}
@@ -219,35 +240,51 @@ function Fires({ base, id }: { base: string; id: string }) {
   );
   const rows = q.data?.data.items ?? [];
   return (
-    <Panel title="计划触发记录">
-      <ErrorNotice error={q.error} />
-      {rows.map((f) => (
-        <div
-          key={f.id}
-          className="flex items-center gap-5 border-b border-border py-3 text-sm"
+    <PanelRoot>
+      <TableToolbar
+        onRefresh={() => void q.refetch()}
+        refreshing={q.isFetching}
+      >
+        <h2 className="text-sm font-semibold">计划触发记录</h2>
+      </TableToolbar>
+      <AsyncBoundary
+        loading={q.isPending}
+        error={q.error}
+        onRetry={() => void q.refetch()}
+        empty={!rows.length}
+        emptyTitle="暂无触发记录"
+      >
+        <SimpleTable
+          actions
+          label="计划触发记录"
+          headers={["计划时间", "状态", "原因", "运行"]}
         >
-          <span>{date(f.scheduled_at)}</span>
-          <Status value={f.outcome} />
-          <span className="flex-1 text-muted">{f.reason_code}</span>
-          {f.run_id && (
-            <Link className="link" to={`${base}/runs/${f.run_id}`}>
-              查看运行
-            </Link>
-          )}
-        </div>
-      ))}
-      {!q.isPending && !rows.length && (
-        <p className="text-sm text-muted">暂无触发记录</p>
-      )}
-      {before && (
-        <Button variant="outline" onClick={() => setBefore("")}>
-          返回最新
-        </Button>
-      )}
-      {rows.length === 100 && (
-        <Button onClick={() => setBefore(rows.at(-1)!.id)}>更早记录</Button>
-      )}
-    </Panel>
+          {rows.map((fire) => (
+            <tr key={fire.id}>
+              <td className="whitespace-nowrap">{date(fire.scheduled_at)}</td>
+              <td>
+                <Status value={fire.outcome} />
+              </td>
+              <td>{fire.reason_code || "—"}</td>
+              <td>
+                {fire.run_id ? (
+                  <Link className="link" to={`${base}/runs/${fire.run_id}`}>
+                    查看运行
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </td>
+            </tr>
+          ))}
+        </SimpleTable>
+      </AsyncBoundary>
+      <CursorPagination
+        before={before}
+        next={rows.length === 100 ? rows.at(-1)?.id : undefined}
+        onChange={setBefore}
+      />
+    </PanelRoot>
   );
 }
 export function Resources({ job, base }: { job: Job; base: string }) {
