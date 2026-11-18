@@ -2,7 +2,7 @@ import { useId, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Bug, Plus, Save, X } from "lucide-react";
-import { ApiError, request } from "@/api/client";
+import { ApiError, errorMessage, request } from "@/api/client";
 import { Button, IconButton } from "@/components/button";
 import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
 import {
@@ -29,6 +29,14 @@ import {
   type Grant,
   type Parameter,
 } from "./types";
+
+const saveFieldLabels = new Map([
+  ["execution", "运行设置"],
+  ["parameters", "输入参数"],
+  ["bindings", "资源绑定"],
+  ["code", "任务编码"],
+  ["name", "任务名称与说明"],
+]);
 
 export function JobEditor({
   job: initialJob,
@@ -139,56 +147,78 @@ export function JobEditor({
     } catch (e) {
       if (e instanceof ApiError && e.code === "CODE_CONFLICT") {
         setCodeError(e.message);
-      } else {
-        setError(e);
       }
+      setError(e);
     } finally {
       setPending(undefined);
     }
   }
 
   const detailPath = job ? `${base}/${job.id}` : undefined;
+  const invalidField =
+    error instanceof ApiError &&
+    error.details.find((item) => item.field)?.field;
+  const invalidSection =
+    invalidField &&
+    (saveFieldLabels.get(invalidField) ??
+      (config.parameters.some((p) => p.name === invalidField)
+        ? "输入参数"
+        : undefined));
   return (
     <>
-      <PageHeader
-        className="sticky top-16 z-10 -mt-2 border-b border-border bg-surface py-3"
-        title={
-          initialJob
-            ? `编辑 ${initialJob.name}`
-            : job
-              ? "编辑任务草稿"
-              : "创建任务"
-        }
-        description={
-          <div className="flex flex-wrap items-center gap-3">
-            {job && <JobStatus job={job} />}
-            {dirty && <StatusBadge tone="warning">有未保存的修改</StatusBadge>}
-            {!initialJob && !job && (
-              <span>填写基本信息并编辑要运行的脚本。</span>
-            )}
+      <div className="sticky top-16 z-10 -mt-2 border-b border-border bg-surface">
+        <PageHeader
+          className="py-3"
+          title={
+            initialJob
+              ? `编辑 ${initialJob.name}`
+              : job
+                ? "编辑任务草稿"
+                : "创建任务"
+          }
+          description={
+            <div className="flex flex-wrap items-center gap-3">
+              {job && <JobStatus job={job} />}
+              {dirty && (
+                <StatusBadge tone="warning">有未保存的修改</StatusBadge>
+              )}
+              {!initialJob && !job && (
+                <span>填写基本信息并编辑要运行的脚本。</span>
+              )}
+            </div>
+          }
+          actions={
+            <>
+              <Button
+                variant="outline"
+                aria-expanded={debug}
+                disabled={Boolean(pending)}
+                onClick={openDebug}
+              >
+                <Bug /> {debug ? "收起调试" : job ? "调试" : "草稿调试"}
+              </Button>
+              <Button
+                pending={pending === "save"}
+                disabled={pending === "draft"}
+                onClick={() => void save()}
+              >
+                <Save /> 保存任务
+              </Button>
+            </>
+          }
+        />
+        {!confirmDraft && Boolean(error) && (
+          <div className="pb-3">
+            <ErrorNotice
+              error={
+                invalidSection
+                  ? `「${invalidSection}」校验失败。${errorMessage(error)}`
+                  : error
+              }
+            />
           </div>
-        }
-        actions={
-          <>
-            <Button
-              variant="outline"
-              aria-expanded={debug}
-              disabled={Boolean(pending)}
-              onClick={openDebug}
-            >
-              <Bug /> {debug ? "收起调试" : job ? "调试" : "草稿调试"}
-            </Button>
-            <Button
-              pending={pending === "save"}
-              disabled={pending === "draft"}
-              onClick={() => void save()}
-            >
-              <Save /> 保存任务
-            </Button>
-          </>
-        }
-      />
-      {!confirmDraft && <ErrorNotice error={error} />}
+        )}
+      </div>
       {confirmDraft && (
         <ConfirmDialog
           open
@@ -696,7 +726,9 @@ function ParameterEditor({
           </label>
           {p.default !== undefined && (
             <Inputs
-              parameters={[{ ...p, label: "默认值", required: false }]}
+              parameters={[
+                { ...p, label: "默认值", required: false, default: undefined },
+              ]}
               value={{ [p.name]: p.default }}
               onChange={(next) =>
                 change(i, {

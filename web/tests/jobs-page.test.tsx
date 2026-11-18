@@ -220,6 +220,101 @@ it("explains draft creation before making a write from the new-task editor", asy
   expect(writes).toHaveLength(0);
 });
 
+it("validates required rerun inputs and drops choices that the current configuration removed", async () => {
+  const definition: Job = {
+    ...job,
+    can_run: true,
+    parameters: [
+      {
+        name: "env",
+        label: "环境",
+        type: "select",
+        required: true,
+        options: ["测试", "正式"],
+      },
+      {
+        name: "regions",
+        label: "区域",
+        type: "multiselect",
+        required: false,
+        options: ["华东", "华南"],
+      },
+    ],
+  };
+  const { user, writes } = mount(
+    "/projects/1/jobs/2/runs/7",
+    definition,
+    (url, options) => {
+      if (url.includes("/runs/7?"))
+        return response({
+          run: {
+            id: "7",
+            status: "succeeded",
+            trigger_kind: "manual",
+            queued_at: "2026-11-16T09:00:00Z",
+            inputs: {
+              env: "已下线",
+              regions: ["华东", "已下线"],
+              removed: "旧参数",
+            },
+            last_log_seq: 0,
+          },
+          logs: [],
+          calls: [],
+          can_cancel: false,
+        });
+      if (url.endsWith("/runs") && options?.method === "POST") {
+        return response({
+          outcome: "skipped",
+          reason_code: "JOB_BUSY",
+          run_id: null,
+        });
+      }
+    },
+  );
+  await user.click(await screen.findByRole("button", { name: "重新运行" }));
+  const dialog = within(
+    await screen.findByRole("dialog", { name: "重新运行" }),
+  );
+  expect(dialog.getByText(/失效的参数或选项/)).toBeVisible();
+  expect(dialog.getByRole("checkbox", { name: "华东" })).toBeChecked();
+  await user.click(dialog.getByRole("button", { name: "确认运行" }));
+  expect(dialog.getByText("请选择此参数")).toBeVisible();
+  expect(writes).toHaveLength(0);
+
+  await user.click(dialog.getByRole("combobox", { name: "环境" }));
+  await user.click(await screen.findByRole("option", { name: "测试" }));
+  await user.click(dialog.getByRole("button", { name: "确认运行" }));
+  await dialog.findByText("任务并发已满");
+  expect(writes[0]?.body).toMatchObject({
+    inputs: { env: "测试", regions: ["华东"] },
+    rerun_of_run_id: "7",
+  });
+  expect(writes[0]?.body.inputs).not.toHaveProperty("removed");
+});
+
+it("names the configuration section rejected by the server in the editor feedback", async () => {
+  const { user } = mount(
+    "/projects/1/jobs/2?edit=1",
+    { ...job, can_manage: true },
+    (_url, options) => {
+      if (options?.method !== "PUT") return;
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "VALIDATION_FAILED",
+            message: "请检查输入内容",
+            details: [{ field: "parameters", code: "invalid_options" }],
+          },
+        }),
+        { status: 422 },
+      );
+    },
+  );
+  await user.click(await screen.findByRole("button", { name: "保存任务" }));
+  expect(await screen.findByText(/「输入参数」校验失败/)).toBeVisible();
+});
+
 it("drains terminal logs and merges call updates without duplicate calls", async () => {
   const reads: string[] = [];
   const { user } = mount("/projects/1/jobs/2/runs/7", job, (url) => {
@@ -270,4 +365,5 @@ it("drains terminal logs and merges call updates without duplicate calls", async
   await user.click(await screen.findByRole("option", { name: "错误" }));
   expect(screen.queryByText("发送意图")).not.toBeInTheDocument();
   expect(screen.getByText("最后一条日志")).toBeInTheDocument();
+  expect(screen.getByText("1 / 2 条 · 已结束")).toBeVisible();
 });

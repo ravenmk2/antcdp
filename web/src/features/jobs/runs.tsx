@@ -32,10 +32,33 @@ import {
   type Job,
   type Log,
   type Observation,
+  type Parameter,
   type Receipt,
   type ResourceCall,
   type Run,
 } from "./types";
+
+function compatibleInputs(parameters: Parameter[], values: Run["inputs"]) {
+  const entries: [string, string | string[]][] = [];
+  for (const parameter of parameters) {
+    if (!Object.hasOwn(values, parameter.name)) continue;
+    const value = values[parameter.name];
+    if (parameter.type === "multiselect") {
+      if (!Array.isArray(value)) continue;
+      const choices = value.filter((choice) =>
+        parameter.options?.includes(choice),
+      );
+      if (!value.length || choices.length)
+        entries.push([parameter.name, choices]);
+    } else if (
+      typeof value === "string" &&
+      (parameter.type === "text" || parameter.options?.includes(value))
+    ) {
+      entries.push([parameter.name, value]);
+    }
+  }
+  return Object.fromEntries(entries);
+}
 
 export function StartForm({
   job,
@@ -54,24 +77,33 @@ export function StartForm({
 }) {
   const debug = !!config;
   const parameters = config?.parameters ?? job.parameters ?? [];
-  const [values, setValues] = useState(() =>
-    rerun
-      ? Object.fromEntries(
-          Object.entries(rerun.inputs).filter(([k]) =>
-            parameters.some((p) => p.name === k),
-          ),
-        )
-      : defaults(parameters),
+  const [values, setValues] = useState<Run["inputs"]>(
+    () => rerun?.inputs ?? {},
   );
   const [state, setState] = useState("debug");
+  const [attempted, setAttempted] = useState(false);
   const currentValues = {
     ...defaults(parameters),
-    ...Object.fromEntries(
-      Object.entries(values).filter(([key]) =>
-        parameters.some((p) => p.name === key),
-      ),
-    ),
+    ...compatibleInputs(parameters, values),
   };
+  const missing = new Set(
+    parameters
+      .filter((p) => {
+        if (!p.required) return false;
+        const value = Object.hasOwn(currentValues, p.name)
+          ? currentValues[p.name]
+          : undefined;
+        return Array.isArray(value) ? !value.length : !value?.trim();
+      })
+      .map((p) => p.name),
+  );
+  const historical = rerun?.inputs ?? {};
+  const carried = compatibleInputs(parameters, historical);
+  const hasChangedInputs = Object.entries(historical).some(
+    ([key, value]) =>
+      !Object.hasOwn(carried, key) ||
+      JSON.stringify(carried[key]) !== JSON.stringify(value),
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>();
   const [receipt, setReceipt] = useState<Receipt>();
@@ -79,8 +111,11 @@ export function StartForm({
   const navigate = useNavigate();
   async function submit() {
     if (pending) return;
-    setPending(true);
     setError(undefined);
+    setReceipt(undefined);
+    setAttempted(true);
+    if (missing.size) return;
+    setPending(true);
     try {
       const body = {
         inputs: currentValues,
@@ -124,6 +159,7 @@ export function StartForm({
           parameters={parameters}
           value={currentValues}
           onChange={setValues}
+          missing={attempted ? missing : undefined}
         />
       )}
       {debug && (
@@ -180,9 +216,11 @@ export function StartForm({
         </>
       }
     >
-      {rerun && parameters.length > 0 && (
+      {rerun && (parameters.length > 0 || hasChangedInputs) && (
         <p className="mb-4 text-sm text-muted">
-          已带入上次运行中仍适用于当前配置的参数。
+          {hasChangedInputs
+            ? "已按当前配置处理上次运行中失效的参数或选项，请核对后再运行。"
+            : "已带入上次运行中仍适用于当前配置的参数。"}
         </p>
       )}
       {fields}
@@ -287,7 +325,9 @@ export function RunView({
           .toLocaleLowerCase()
           .includes(term)),
   );
-  const unseen = follow ? 0 : logs.filter((log) => log.seq > seenSeq).length;
+  const unseen = follow
+    ? 0
+    : visibleLogs.filter((log) => log.seq > seenSeq).length;
   const run = data?.run;
   const ended = run ? terminal(run.status) : false;
   const canCancel = data?.can_cancel && run && !ended;
@@ -428,7 +468,10 @@ export function RunView({
                       aria-hidden
                     />
                   )}
-                  {logs.length} 条 · {ended ? "已结束" : "实时更新"}
+                  {level || kind || term
+                    ? `${visibleLogs.length} / ${logs.length}`
+                    : logs.length}{" "}
+                  条 · {ended ? "已结束" : "实时更新"}
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -480,7 +523,7 @@ export function RunView({
                     自动跟随
                   </label>
                 )}
-                {!ended && unseen > 0 && (
+                {unseen > 0 && (
                   <Button
                     size="sm"
                     variant="outline"

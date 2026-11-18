@@ -126,15 +126,29 @@ export function Inputs({
   parameters,
   value,
   onChange,
+  missing,
 }: {
   parameters: Parameter[];
   value: Record<string, string | string[]>;
   onChange: (value: Record<string, string | string[]>) => void;
+  missing?: ReadonlySet<string>;
 }) {
   return (
     <div className="space-y-4">
       {parameters.map((p) => (
-        <Field key={p.name} label={p.label} required={p.required} hint={p.name}>
+        <Field
+          key={p.name}
+          label={p.label}
+          required={p.required}
+          hint={p.name}
+          error={
+            missing?.has(p.name)
+              ? p.type === "text"
+                ? "请填写此参数"
+                : "请选择此参数"
+              : undefined
+          }
+        >
           {p.type === "multiselect" ? (
             <div
               role="group"
@@ -182,7 +196,11 @@ export function Inputs({
                 onChange(next);
               }}
             >
-              <option value="">请选择</option>
+              <option value="">
+                {typeof p.default === "string" && p.default
+                  ? `使用默认值（${p.default}）`
+                  : "请选择"}
+              </option>
               {p.options?.map((o) => (
                 <option key={o} value={o}>
                   {o}
