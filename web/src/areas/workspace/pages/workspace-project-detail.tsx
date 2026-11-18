@@ -16,7 +16,6 @@ import { AsyncBoundary, ErrorNotice } from "@/components/feedback";
 import {
   DescriptionList,
   PageHeader,
-  Panel,
   ResourceDetailShell,
 } from "@/components/layout";
 import { ConfirmDialog } from "@/components/overlays";
@@ -172,6 +171,7 @@ function ProjectContent({
         <>
           <PageHeader
             title="Git 仓库"
+            variant="divided"
             description="查看本地快照、默认分支与同步结果，不代表远端实时健康。"
           />
           <ProjectRepositories project={project} />
@@ -232,8 +232,14 @@ function WorkspaceProjectSettings({
 }) {
   return (
     <div className="min-w-0">
+      <PageHeader
+        title={
+          section === "profile" ? "项目资料" : projectSectionLabels[section]
+        }
+        variant="divided"
+      />
       {section === "profile" && (
-        <Panel title="项目资料">
+        <div className="pt-5">
           <DescriptionList
             items={[
               { label: "项目名称", value: project.name },
@@ -274,7 +280,7 @@ function WorkspaceProjectSettings({
               阅读项目介绍 <ArrowRight />
             </Link>
           </div>
-        </Panel>
+        </div>
       )}
       {section === "members" && (
         <MembersPanel kind="projects" resource={project} />

@@ -106,6 +106,7 @@ export function EventsPage({ project }: { project: Resource }) {
     <div className="space-y-5">
       <PageHeader
         title="项目事件"
+        variant="divided"
         description="查看关联仓库事件，通过订阅脚本触发任务和服务型智能体。"
       />
       <Tabs

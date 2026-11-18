@@ -223,6 +223,7 @@ function JobList({ project, base }: { project: Resource; base: string }) {
     <>
       <PageHeader
         title="项目任务"
+        variant="divided"
         description="通过脚本自动化项目流程，集中查看手动、调试与定时运行。"
       />
       <PanelRoot>

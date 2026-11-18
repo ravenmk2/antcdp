@@ -21,7 +21,7 @@ export function ProjectJobsPage({ robots = false }: { robots?: boolean }) {
         <ResourceDetailShell wide>
           {robots ? (
             q.data.data.can_manage ? (
-              <DingTalkPage />
+              <DingTalkPage embedded />
             ) : (
               <Notice tone="danger">只有项目管理员可以管理项目机器人。</Notice>
             )

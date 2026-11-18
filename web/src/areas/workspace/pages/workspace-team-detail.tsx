@@ -8,7 +8,11 @@ import { TableToolbar } from "@/components/table-toolbar";
 import { request } from "@/api/client";
 import { useSession } from "@/app/auth";
 import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
-import { PanelRoot, ResourceDetailShell } from "@/components/layout";
+import {
+  PageHeader,
+  PanelRoot,
+  ResourceDetailShell,
+} from "@/components/layout";
 import { ConfirmDialog } from "@/components/overlays";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { ResourceIcon } from "@/components/resource-icon";
@@ -119,6 +123,9 @@ function TeamContent({
             )}
             <ResourceDocument source={team.description} kind="teams" />
           </>
+        )}
+        {tab !== "overview" && (
+          <PageHeader title={workspaceTeamTabLabels[tab]} variant="divided" />
         )}
         {tab === "members" && <MembersPanel kind="teams" resource={team} />}
         {tab === "projects" && <TeamProjects team={team} />}

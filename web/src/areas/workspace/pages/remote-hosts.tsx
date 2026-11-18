@@ -31,6 +31,7 @@ export function RemoteHostsPage() {
   return (
     <div className="page">
       <PageHeader
+        variant="divided"
         title={
           admin ? "远程主机" : projectId ? "项目 SSH 凭证" : "个人 SSH 凭证"
         }
@@ -42,7 +43,6 @@ export function RemoteHostsPage() {
       />
       <HostDirectory
         refreshing={directory.isFetching}
-
         items={directory.data?.data.items ?? []}
         loading={directory.isPending}
         error={directory.error}

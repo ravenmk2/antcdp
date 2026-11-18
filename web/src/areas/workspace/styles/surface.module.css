@@ -977,8 +977,10 @@
     flex-wrap: wrap;
     gap: 12px 24px;
   }
-  .scope :global(.page-header > .min-w-0) {
-    flex: 1 1 260px;
+  @media (min-width: 821px) {
+    .scope :global(.page-header > .min-w-0) {
+      flex: 1 1 260px;
+    }
   }
   .scope :global(.page-title) {
     font-size: 24px;
@@ -1071,10 +1073,6 @@
   }
   .scope :global(.workspace-resource-header .resource-meta > span) {
     min-height: 24px;
-  }
-  .scope :global(.workspace-project-overview) {
-    display: grid;
-    gap: 28px;
   }
   .scope :global(.workspace-project-overview .summary-strip) {
     background: var(--surface-subtle);
@@ -1318,6 +1316,14 @@
 .scope :global([data-resource-detail] .table-toolbar > .toolbar) {
   padding-inline: 0;
   padding-block: 16px;
+}
+@media (max-width: 480px) {
+  .scope :global([data-resource-detail] .member-table :is(th, td)) {
+    padding-inline: 8px;
+  }
+  .scope :global([data-resource-detail] .toolbar-filters > form input) {
+    width: 160px;
+  }
 }
 .scope :global([data-resource-detail] nav[aria-label="分页导航"]) {
   border: 0;

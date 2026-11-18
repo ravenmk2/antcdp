@@ -11,7 +11,13 @@ import {
   useIntegrationDirectory,
   type IntegrationContext,
 } from "@/features/integrations/directory";
-export function IntegrationPage({ context }: { context: IntegrationContext }) {
+export function IntegrationPage({
+  context,
+  divided = false,
+}: {
+  context: IntegrationContext;
+  divided?: boolean;
+}) {
   const {
     connectionId,
     projectId,
@@ -77,6 +83,7 @@ export function IntegrationPage({ context }: { context: IntegrationContext }) {
     <div className="page">
       <PageHeader
         title={admin ? "服务集成" : projectId ? "项目服务连接" : "个人服务凭证"}
+        variant={divided ? "divided" : "default"}
         description={
           admin
             ? "维护平台连接、项目与团队授权、平台凭证及 Webhook。"

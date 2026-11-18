@@ -108,6 +108,7 @@ export function MembersPanel({
         {list.data && (
           <SimpleTable
             actions
+            className="member-table"
             label={`${resource.name}成员`}
             headers={
               kind === "teams"
@@ -117,7 +118,7 @@ export function MembersPanel({
           >
             {list.data.data.items.map((member) => (
               <tr key={member.user_id}>
-                <td>
+                <td className="min-w-32">
                   <div className="flex items-center gap-3">
                     {kind === "teams" && (
                       <Avatar
@@ -133,20 +134,22 @@ export function MembersPanel({
                       <strong className="text-foreground">
                         {member.display_name}
                       </strong>
-                      <small className="mt-1 block text-muted">
+                      <small className="mt-1 block whitespace-nowrap text-muted">
                         @{member.username}
                       </small>
                     </div>
                   </div>
                 </td>
                 {kind === "projects" && (
-                  <td>
+                  <td className="whitespace-nowrap">
                     {member.effective_role === "admin"
                       ? "项目管理员"
                       : "项目成员"}
                   </td>
                 )}
-                <td>
+                <td
+                  className={kind === "teams" ? "whitespace-nowrap" : undefined}
+                >
                   {kind === "projects" ? (
                     <ProjectMemberRoles roles={member.custom_roles} />
                   ) : member.direct_role ? (

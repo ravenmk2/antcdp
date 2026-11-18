@@ -102,11 +102,7 @@ function WorkspaceResourceList({ kind }: { kind: ResourceKind }) {
 
   return (
     <div className="page workspace-directory-page">
-      <PageHeader
-        title={title}
-        className="mb-0 border-b border-border pb-5"
-        titleClassName="mb-0"
-      />
+      <PageHeader title={title} variant="divided" />
       <TableToolbar
         className="border-0"
         toolbarClassName="px-0 py-4"

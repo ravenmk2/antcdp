@@ -62,17 +62,21 @@ interface Page {
 }
 type Diagnostic = NonNullable<DingTalkRobot["latest"]>;
 
-export function DingTalkPage() {
+export function DingTalkPage({ embedded = false }: { embedded?: boolean }) {
   const { id, robotId } = useParams();
   const selectedId = robotId ?? id;
   return (
-    <div className="page">
-      {selectedId ? <RobotDetail id={selectedId} /> : <RobotList />}
+    <div className={embedded ? "min-w-0" : "page"}>
+      {selectedId ? (
+        <RobotDetail id={selectedId} />
+      ) : (
+        <RobotList divided={embedded} />
+      )}
     </div>
   );
 }
 
-function RobotList() {
+function RobotList({ divided }: { divided: boolean }) {
   const { base, root } = useDingTalkLocation();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
@@ -102,6 +106,7 @@ function RobotList() {
     <>
       <PageHeader
         title="钉钉机器人"
+        variant={divided ? "divided" : "default"}
         description="管理机器人资料、认证配置与启用状态。"
       />
       <Panel bodyClassName="p-0">

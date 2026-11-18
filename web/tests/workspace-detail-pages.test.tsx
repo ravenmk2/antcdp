@@ -29,14 +29,8 @@ vi.mock("@/app/auth", () => ({
   }),
   useAuth: () => ({ settings: { timezone: "Asia/Shanghai" } }),
 }));
-vi.mock("@/areas/workspace/pages/project-overview", () => ({
-  ProjectOverview: () => <section>项目总览内容</section>,
-}));
 vi.mock("@/features/repositories/repositories", () => ({
   ProjectRepositories: () => <section>仓库列表内容</section>,
-}));
-vi.mock("@/areas/workspace/pages/project-description", () => ({
-  ProjectDescription: () => <section>项目介绍内容</section>,
 }));
 vi.mock("@/features/collaboration/members", async (original) => ({
   ...(await original<typeof import("@/features/collaboration/members")>()),
@@ -65,7 +59,7 @@ const project: Resource = {
   code: "delivery",
   name: "交付平台",
   summary: "项目交付协作",
-  description: "## 项目目标",
+  description: "## 项目目标\n\n详细说明项目的目标、实施计划和协作约定。",
   icon_key: null,
   icon_file_id: null,
   created_by_user_id: "1",
@@ -188,14 +182,14 @@ function mountProject(entry: string) {
 }
 
 it.each([
-  ["", "项目总览内容", true],
-  ["?tab=unknown", "项目总览内容", true],
-  ["?tab=releases", "项目总览内容", true],
+  ["", "项目资源", true],
+  ["?tab=unknown", "项目资源", true],
+  ["?tab=releases", "项目资源", true],
   ["?tab=repositories", "仓库列表内容", false],
-  ["?tab=description", "项目介绍内容", false],
+  ["?tab=description", /详细说明项目的目标/, false],
   ["?tab=members", "成员管理内容", false],
   ["?tab=teams", "平台团队", false],
-  ["?tab=branch-model", "项目总览内容", true],
+  ["?tab=branch-model", "项目资源", true],
   ["?tab=settings&section=unknown", "项目资料", false],
   ["/jobs", "任务列表内容", false],
   ["/events", "事件列表内容", false],
@@ -226,19 +220,25 @@ it("redirects removed delivery tabs to the project overview", async () => {
   const { router } = mountProject(
     "/projects/7?tab=variants&return_to=%2Fprojects",
   );
-  expect(await screen.findByText("项目总览内容")).toBeVisible();
+  expect(
+    await screen.findByRole("heading", { name: "项目资源" }),
+  ).toBeVisible();
   expect(router.state.location.pathname).toBe("/projects/7");
   expect(router.state.location.search).toBe("");
 });
 
-it("opens existing project content routes from the secondary navigation", async () => {
+it("opens the full description from the overview and shows the repository heading", async () => {
   const { router, user } = mountProject("/projects/7");
-  await user.click(screen.getByRole("link", { name: "项目介绍" }));
+  const main = within(screen.getByRole("main"));
+  expect(main.queryByText(/详细说明项目的目标/)).not.toBeInTheDocument();
+  await user.click(main.getByRole("link", { name: "查看完整介绍" }));
   expect(router.state.location.search).toBe("?tab=description");
-  expect(await screen.findByText("项目介绍内容")).toBeVisible();
+  expect(main.getByRole("heading", { name: "项目介绍" })).toBeVisible();
+  expect(main.getByText(/详细说明项目的目标/)).toBeVisible();
 
   await user.click(screen.getByRole("link", { name: "Git 仓库" }));
   expect(await screen.findByText("仓库列表内容")).toBeVisible();
+  expect(main.getByRole("heading", { name: "Git 仓库" })).toBeVisible();
   expect(router.state.location.search).toBe("?tab=repositories");
   expect(
     screen.queryByRole("link", { name: "产品分支" }),
@@ -255,6 +255,7 @@ it("names participating teams consistently and keeps the team controls available
     ),
   ).toHaveAttribute("aria-current", "page");
   const main = within(screen.getByRole("main"));
+  expect(main.getByRole("heading", { name: "参与团队" })).toBeVisible();
   let table = within(main.getByRole("table", { name: "参与团队" }));
   expect(table.getByText("交付团队")).toBeVisible();
   await user.type(
@@ -311,6 +312,7 @@ it("shows team information on the introduction and opens the participating proje
 
   await user.click(rail.getByRole("link", { name: /团队成员/ }));
   expect(screen.getByText("团队成员内容")).toBeVisible();
+  expect(main.getByRole("heading", { name: "团队成员" })).toBeVisible();
   expect(
     main.queryByRole("heading", { name: /平台团队/ }),
   ).not.toBeInTheDocument();
@@ -324,6 +326,7 @@ it("shows team information on the introduction and opens the participating proje
       "参与项目",
     ),
   ).toHaveAttribute("aria-current", "page");
+  expect(main.getByRole("heading", { name: "参与项目" })).toBeVisible();
   const table = within(main.getByRole("table", { name: "参与项目" }));
   expect(table.getByRole("link", { name: /交付平台/ })).toHaveAttribute(
     "href",

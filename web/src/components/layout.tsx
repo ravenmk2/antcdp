@@ -9,6 +9,7 @@ export function PageHeader({
   description,
   actions,
   eyebrow,
+  variant = "default",
   className,
   titleClassName,
   descriptionClassName,
@@ -20,12 +21,20 @@ export function PageHeader({
   description?: ReactNode;
   actions?: ReactNode;
   eyebrow?: ReactNode;
+  variant?: "default" | "divided";
   titleClassName?: string;
   descriptionClassName?: string;
   actionsClassName?: string;
 }) {
   return (
-    <header className={cn("page-header", className)} {...props}>
+    <header
+      className={cn(
+        "page-header",
+        variant === "divided" && "mb-0 border-b border-border pb-5",
+        className,
+      )}
+      {...props}
+    >
       {children ?? (
         <>
           <div className="min-w-0">
@@ -35,7 +44,15 @@ export function PageHeader({
               </div>
             )}
             {title && (
-              <h1 className={cn("page-title", titleClassName)}>{title}</h1>
+              <h1
+                className={cn(
+                  "page-title",
+                  variant === "divided" && (description ? "mb-2" : "mb-0"),
+                  titleClassName,
+                )}
+              >
+                {title}
+              </h1>
             )}
             {description && (
               <div className={cn("page-description", descriptionClassName)}>
