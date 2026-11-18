@@ -47,7 +47,7 @@ const projectLinks: Destination[] = [
     suffix: "?tab=repositories",
   },
   { key: "jobs", label: "任务", icon: Play, suffix: "/jobs" },
-  { key: "events", label: "事件", icon: Radio, suffix: "/events" },
+  { key: "events", label: "事件订阅", icon: Radio, suffix: "/events" },
 ];
 function sectionLink(
   key: keyof typeof projectSectionLabels,

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryRouter, RouterProvider } from "react-router";
@@ -7,7 +7,11 @@ import { EventsPage } from "@/features/events/page";
 import { NavigationGuardProvider } from "@/components/navigation-guard";
 import { resetCSRF } from "@/api/client";
 import type { Resource } from "@/types/collaboration";
-import type { Consumption, Subscription } from "@/features/events/types";
+import type {
+  Consumption,
+  EventReference,
+  Subscription,
+} from "@/features/events/types";
 
 vi.mock("@/components/script-editor", () => ({
   ScriptEditor: ({ value }: { value: string }) => <pre>{value}</pre>,
@@ -53,15 +57,38 @@ const failed: Consumption = {
   has_result: false,
   last_log_seq: 1,
 };
+const eventReference: EventReference = {
+  id: "6",
+  event_id: "16",
+  created_at: "2026-11-17T00:00:01Z",
+  routing_basis: {},
+  event: {
+    id: "16",
+    group: "gitlab",
+    type: "gitlab.merge_request.created",
+    source_event_type: "Merge Request Hook",
+    source_repository_id: "10",
+    subject_kind: "merge_request",
+    subject_id: "42",
+    received_at: "2026-11-17T00:00:00Z",
+    occurred_at: null,
+    data: { title: "示例合并请求" },
+    raw: { object_kind: "merge_request" },
+    source_metadata: {},
+    routing_result: "matched",
+  },
+};
 function response(data: unknown) {
   return new Response(JSON.stringify({ data }));
 }
 function mount(query: string, manage = false, archived = false) {
   resetCSRF();
   const calls: { url: string; method: string }[] = [];
+  const writes: unknown[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input);
     calls.push({ url, method: init?.method ?? "GET" });
+    if (init?.body) writes.push(JSON.parse(String(init.body)));
     if (url.endsWith("/auth/csrf")) return response({ csrf_token: "test" });
     if (url.endsWith("/event-types"))
       return response({
@@ -81,6 +108,10 @@ function mount(query: string, manage = false, archived = false) {
       });
     if (url.endsWith("/event-subscriptions"))
       return response({ items: [{ ...subscription, can_manage: manage }] });
+    if (url.endsWith("/robot-options"))
+      return response({
+        items: [{ id: "9", name: "审查机器人", username: "reviewer" }],
+      });
     if (url.endsWith("/retry"))
       return response({
         ...failed,
@@ -104,6 +135,7 @@ function mount(query: string, manage = false, archived = false) {
         ],
       });
     if (url.endsWith("/event-consumptions/7")) return response(failed);
+    if (url.endsWith("/events/6")) return response(eventReference);
     if (url.endsWith("/event-consumptions/8"))
       return response({
         ...failed,
@@ -149,7 +181,7 @@ function mount(query: string, manage = false, archived = false) {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  return { calls, router, user: userEvent.setup() };
+  return { calls, writes, router, user: userEvent.setup() };
 }
 
 it("shows members public subscription configuration without requesting script source", async () => {
@@ -168,15 +200,25 @@ it("shows members public subscription configuration without requesting script so
 });
 
 it("opens the manual retry child and keeps its original consumption link", async () => {
-  const { user, router, calls } = mount("tab=consumptions&selected=7", true);
-  expect(await screen.findByText("消费脚本独立日志")).toBeVisible();
-  await user.click(
-    await screen.findByRole("button", { name: "使用当前配置人工重试" }),
+  const { user, router, calls } = mount(
+    "tab=consumptions&subscription_id=2&filter=failed&selected=7",
+    true,
   );
+  expect(await screen.findByText("消费脚本独立日志")).toBeVisible();
+  await user.type(screen.getByRole("textbox", { name: "搜索日志" }), "无匹配");
+  expect(screen.getByText("0 / 1 条")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "人工重试" }));
+  const confirm = await screen.findByRole("dialog", {
+    name: "重新消费该事件？",
+  });
+  expect(calls.some(({ method }) => method === "POST")).toBe(false);
+  await user.click(within(confirm).getByRole("button", { name: "确认重试" }));
   expect(
     await screen.findByRole("button", { name: "原消费 #7" }),
   ).toBeVisible();
   expect(router.state.location.search).toContain("selected=8");
+  expect(router.state.location.search).toContain("subscription_id=2");
+  expect(router.state.location.search).toContain("filter=failed");
   expect(calls.filter(({ method }) => method === "POST")).toEqual([
     { url: "/api/v1/projects/1/event-consumptions/7/retry", method: "POST" },
   ]);
@@ -190,9 +232,59 @@ it("keeps archived project history readable while hiding retry actions", async (
   mount("tab=consumptions&selected=7", true, true);
   expect(await screen.findByText("消费脚本独立日志")).toBeVisible();
   expect(
-    screen.queryByRole("button", { name: "使用当前配置人工重试" }),
+    screen.queryByRole("button", { name: "人工重试" }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "新建订阅" }),
   ).not.toBeInTheDocument();
+});
+
+it("keeps old event detail links and shows raw payloads on demand", async () => {
+  const { user } = mount("selected=6");
+  const detail = within(await screen.findByRole("dialog", { name: "事件 #6" }));
+  expect(await detail.findByText("来源未提供")).toBeVisible();
+  expect(detail.getByText(/示例合并请求/)).toBeVisible();
+  expect(detail.getByText(/object_kind/)).not.toBeVisible();
+  await user.click(detail.getByText("GitLab 原始事件"));
+  expect(detail.getByText(/object_kind/)).toBeVisible();
+});
+
+it("opens on subscriptions and saves the selected event and executor behind required-field checks", async () => {
+  const { user, writes } = mount("", true);
+  expect(await screen.findByRole("table", { name: "事件订阅" })).toBeVisible();
+  expect(screen.getByRole("tab", { name: "订阅列表" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await user.click(screen.getByRole("button", { name: "新建订阅" }));
+  const dialog = within(
+    await screen.findByRole("dialog", { name: "新建事件订阅" }),
+  );
+  await user.click(dialog.getByRole("button", { name: "保存订阅" }));
+  expect(dialog.getByText("请输入订阅名称")).toBeVisible();
+  expect(dialog.getByText("请选择至少一种事件类型")).toBeVisible();
+  expect(writes).toHaveLength(0);
+  await user.type(
+    dialog.getByRole("textbox", { name: "订阅名称" }),
+    "检查合并请求",
+  );
+  await user.type(
+    dialog.getByRole("textbox", { name: "搜索事件类型" }),
+    "无匹配",
+  );
+  expect(dialog.getByText("没有匹配的事件类型。")).toBeVisible();
+  await user.clear(dialog.getByRole("textbox", { name: "搜索事件类型" }));
+  await user.click(dialog.getByRole("checkbox", { name: /MR 创建/ }));
+  expect(dialog.getByText("已选 1 项")).toBeVisible();
+  await user.click(dialog.getByRole("combobox", { name: "执行机器人" }));
+  await user.click(await screen.findByRole("option", { name: /审查机器人/ }));
+  await user.click(dialog.getByRole("button", { name: "保存订阅" }));
+  await waitFor(() =>
+    expect(writes[0]).toMatchObject({
+      name: "检查合并请求",
+      event_types: ["gitlab.merge_request.created"],
+      executor_user_id: "9",
+      enabled: false,
+    }),
+  );
 });

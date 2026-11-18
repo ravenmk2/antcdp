@@ -47,7 +47,7 @@ export function workspaceBreadcrumbs(
     const labels: Record<string, string> = {
       repositories: "Git 仓库",
       jobs: "任务",
-      events: "事件",
+      events: "事件订阅",
       description: "项目介绍",
     };
     const items: Crumb[] = [
