@@ -25,7 +25,7 @@
 }
 .cloud-explorer {
   border-right: 1px solid var(--cloud-line);
-  background: var(--surface-subtle);
+  background: light-dark(#f6f6f6, #262626);
 }
 .cloud-inspector {
   border-left: 1px solid var(--cloud-line);
@@ -103,7 +103,7 @@
   background: var(--sidebar-selected);
 }
 .cloud-tree-item:hover {
-  background: var(--cloud-rail);
+  background: var(--surface-hover);
 }
 .cloud-tree-file-row {
   display: flex;

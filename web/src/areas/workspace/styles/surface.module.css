@@ -1,42 +1,43 @@
 .scope {
-  --workspace-canvas: #eef2f7;
-  --workspace-secondary: #f3f6fa;
-  --workspace-rail: #192940;
-  --workspace-divider: #d8e1ec;
+  --workspace-canvas: #ededed;
+  --workspace-secondary: #f6f6f6;
+  --workspace-secondary-selected: #e5e5e5;
+  --workspace-rail: #272727;
+  --workspace-divider: #e0e0e0;
+  --workspace-table-header: #ededed;
   --workspace-selection: #dce8fb;
   --workspace-selection-ink: #244e8e;
   --workspace-shell-surface: #fff;
   --workspace-chat-content: #fff;
-  --workspace-chat-rail: #f5f6f8;
+  --workspace-chat-rail: #f6f6f6;
   --workspace-chat-panel: #fff;
-  --workspace-chat-border: #e5e9ef;
-  --workspace-chat-hover: #e9edf2;
-  --workspace-chat-selected: #e8f0fc;
-  --workspace-conversation-selected-text: #243c59;
+  --workspace-chat-border: #e8e8e8;
+  --workspace-chat-hover: #ededed;
+  --workspace-chat-selected: #e5e5e5;
   --workspace-chat-input: #fff;
-  --workspace-chat-input-border: #dce2eb;
+  --workspace-chat-input-border: #e1e1e1;
   --workspace-chat-input-focus: #a6bbda;
   --workspace-chat-input-shadow:
-    0 4px 24px rgb(31 48 73 / 7%), 0 1px 3px rgb(31 48 73 / 3%);
-  --workspace-chat-panel-shadow: -5px 0 18px rgb(31 48 73 / 3%);
+    0 4px 24px rgb(0 0 0 / 7%), 0 1px 3px rgb(0 0 0 / 3%);
+  --workspace-chat-panel-shadow: -5px 0 18px rgb(0 0 0 / 3%);
 }
 :global(.dark) .scope {
-  --workspace-canvas: #151c26;
-  --workspace-secondary: #1d2734;
-  --workspace-rail: #101a29;
-  --workspace-divider: #344151;
+  --workspace-canvas: #1b1b1b;
+  --workspace-secondary: #262626;
+  --workspace-secondary-selected: #404040;
+  --workspace-rail: #191919;
+  --workspace-divider: #404040;
   --workspace-selection: #2a405f;
   --workspace-selection-ink: #cee2ff;
-  --workspace-shell-surface: #181c22;
-  --workspace-chat-content: #20242a;
-  --workspace-chat-rail: #191e25;
-  --workspace-chat-panel: #272c34;
-  --workspace-chat-border: #343c47;
-  --workspace-chat-hover: #29313c;
-  --workspace-chat-selected: #283e5a;
-  --workspace-conversation-selected-text: #edf3fc;
-  --workspace-chat-input: #2b313a;
-  --workspace-chat-input-border: #414b59;
+  --workspace-shell-surface: #1c1c1c;
+  --workspace-chat-content: #242424;
+  --workspace-chat-rail: #1e1e1e;
+  --workspace-chat-panel: #2c2c2c;
+  --workspace-chat-border: #3b3b3b;
+  --workspace-chat-hover: #303030;
+  --workspace-chat-selected: #404040;
+  --workspace-chat-input: #303030;
+  --workspace-chat-input-border: #494949;
   --workspace-chat-input-focus: #6b88b0;
   --workspace-chat-input-shadow:
     0 5px 24px rgb(0 0 0 / 22%), 0 1px 3px rgb(0 0 0 / 12%);
@@ -47,28 +48,28 @@
 .scope.business {
   --canvas: var(--workspace-canvas);
   --workspace-gutter: clamp(14px, 1.25vw, 24px);
-  --surface-subtle: #f6f8fb;
-  --surface-hover: #edf2f8;
+  --surface-subtle: #f8f8f8;
+  --surface-hover: #f1f1f1;
   --table-row-hover: var(--surface-subtle);
-  --text: #1d2b40;
-  --text-soft: #394b61;
-  --muted: #56677d;
-  --faint: #66778b;
-  --border: #dce4ed;
-  --border-subtle: #e7ecf2;
-  --border-strong: #c5d1df;
+  --text: #2a2a2a;
+  --text-soft: #494949;
+  --muted: #646464;
+  --faint: #747474;
+  --border: #e3e3e3;
+  --border-subtle: #ececec;
+  --border-strong: #cfcfcf;
 }
 :global(.dark) .scope.business {
-  --surface: #222d3b;
-  --surface-subtle: #1e2835;
-  --surface-hover: #2c3949;
-  --text: #ecf1f9;
-  --text-soft: #c6d1df;
-  --muted: #a6b4c7;
-  --faint: #94a3b7;
-  --border: #394758;
-  --border-subtle: #303c4c;
-  --border-strong: #49596d;
+  --surface: #2c2c2c;
+  --surface-subtle: #272727;
+  --surface-hover: #373737;
+  --text: #f0f0f0;
+  --text-soft: #cfcfcf;
+  --muted: #b3b3b3;
+  --faint: #a2a2a2;
+  --border: #464646;
+  --border-subtle: #3b3b3b;
+  --border-strong: #575757;
 }
 
 .scope :global([data-builtin-icon]) {
@@ -110,7 +111,6 @@
 .scope :global(.conversation-agent-menu) {
   --workspace-chat-panel: var(--surface);
   --workspace-chat-hover: var(--surface-hover);
-  --workspace-chat-selected: var(--surface-subtle);
 }
 
 .scope :global(.conversation-favorite-actions button),
@@ -222,10 +222,10 @@
     height: 100dvh;
     min-height: 0;
     flex-direction: column;
-    --navigation-text: #c5d3e6;
-    --surface-hover: #2a3d57;
+    --navigation-text: #d2d2d2;
+    --surface-hover: #3b3b3b;
     --sidebar-selected: #315b94;
-    --border-subtle: #34465f;
+    --border-subtle: #444;
     background: var(--workspace-rail);
   }
   .scope :global(.sidebar-navigation) {
@@ -441,9 +441,8 @@
     background: var(--surface-hover);
   }
   .scope :global(.workspace-resource-navigation nav a[aria-current="page"]) {
-    background: var(--workspace-selection);
-    color: var(--workspace-selection-ink);
-    font-weight: 600;
+    background: var(--workspace-secondary-selected);
+    color: var(--text);
   }
   .scope :global(.host-directory) {
     table-layout: fixed;
@@ -696,11 +695,17 @@
   .scope :global(.workspace-shortcut-feedback .notice) {
     flex: 1;
   }
-  .scope
+  :global(:root:not(.dark)) .scope :global(.data-table) {
+    --table-row-hover: #f4f4f4;
+  }
+  :global(:root:not(.dark)) .scope :global(.data-table thead th) {
+    background-color: var(--workspace-table-header);
+  }
+  :global(.dark) .scope
     :global(
       :is(.workspace-resource-table, [data-resource-detail] .data-table)
     ) {
-    --table-row-hover: light-dark(#e1edfc, #2c405b);
+    --table-row-hover: #3d3d3d;
   }
   .scope :global(.workspace-resource-table) {
     min-width: 1020px;
@@ -1150,9 +1155,9 @@
     min-width: 0;
   }
   .scope :global(.workspace-placeholder) {
-    --workbench-halo: #e9edf4;
-    --workbench-paper: #fafbfd;
-    --workbench-line: #cdd7e5;
+    --workbench-halo: #e8e8e8;
+    --workbench-paper: #fbfbfb;
+    --workbench-line: #d6d6d6;
     --workbench-blue: #8ba8d4;
     height: calc(100dvh - 64px);
     display: grid;
@@ -1165,9 +1170,9 @@
     max-height: 55%;
   }
   :global(.dark) .scope :global(.workspace-placeholder) {
-    --workbench-halo: #252f3d;
-    --workbench-paper: #374457;
-    --workbench-line: #4f627c;
+    --workbench-halo: #2e2e2e;
+    --workbench-paper: #424242;
+    --workbench-line: #606060;
     --workbench-blue: #7897c7;
   }
   .scope :global(.conversation-navigation) {
@@ -1209,10 +1214,7 @@
   }
   .scope :global(.conversation-nav-row[aria-current="page"]) {
     background: var(--workspace-chat-selected);
-    color: var(--workspace-conversation-selected-text);
-  }
-  .scope :global(.conversation-nav-row[aria-current="page"] > svg) {
-    color: var(--accent);
+    color: var(--text);
   }
   .scope :global(.conversation-nav-row > span) {
     overflow: hidden;

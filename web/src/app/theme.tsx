@@ -44,9 +44,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     document.documentElement.classList.toggle("dark", resolved === "dark");
     document.documentElement.dataset.appearance = appearance;
     document.documentElement.style.colorScheme = resolved;
-    const favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (favicon)
-      favicon.href = resolved === "dark" ? "/logo-inverse.svg" : "/logo.svg";
   }, [appearance, resolved]);
   const value = useMemo<ThemeValue>(
     () => ({
