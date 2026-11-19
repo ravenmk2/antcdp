@@ -698,7 +698,8 @@
   .scope:not(:global(.dark *)) :global(.data-table thead th) {
     background-color: var(--workspace-table-header);
   }
-  :global(.dark) .scope
+  :global(.dark)
+    .scope
     :global(
       :is(.workspace-resource-table, [data-resource-detail] .data-table)
     ) {
@@ -1129,13 +1130,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .scope :global(.workspace-body[data-secondary="true"]) {
-    grid-template-columns: var(
-        --workspace-rail-width,
-        clamp(264px, 15.84vw, 336px)
-      ) minmax(0, 1fr);
-  }
-  .scope :global(.workspace-body[data-resource-detail]) {
-    --workspace-rail-width: clamp(224px, 13.125vw, 268px);
+    grid-template-columns: clamp(224px, 13.125vw, 268px) minmax(0, 1fr);
   }
   .scope :global(.workspace-secondary) {
     position: sticky;

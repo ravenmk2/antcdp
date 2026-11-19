@@ -3,8 +3,12 @@ package mysql
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	a "github.com/ravenmk2/antcdp/internal/modules/agents"
@@ -34,6 +38,32 @@ type synchronousFileFactory struct{ provider *synchronousFileProvider }
 
 func (f synchronousFileFactory) Open(context.Context, sb.Connection) (sb.Provider, error) {
 	return f.provider, nil
+}
+
+func testWorkspaceUpload(t *testing.T, f *agentIntegrationFixture, svc *a.CloudService, id uint64, sandbox *sandboxMemoryProvider) {
+	t.Helper()
+	previous := svc.Factory
+	defer func() { svc.Factory = previous }()
+	provider := &synchronousFileProvider{artifactMemoryProvider: &artifactMemoryProvider{
+		sandboxMemoryProvider: sandbox,
+		files:                 map[string][]byte{"reports": nil},
+	}}
+	svc.Factory = synchronousFileFactory{provider}
+	const filename = "测试报告.txt"
+	result, err := svc.UploadWorkspaceFile(f.Context, f.AdminToken, id, "reports", filename, strings.NewReader("ready"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != 201 || string(provider.files["reports/"+filename]) != "ready" {
+		t.Fatalf("upload did not preserve the filename and content: %+v", result)
+	}
+	_, err = svc.UploadWorkspaceFile(f.Context, f.AdminToken, id, "reports", filename, strings.NewReader("replacement"))
+	modelsExpectCode(t, err, "WORKSPACE_PATH_EXISTS")
+	_, err = svc.UploadWorkspaceFile(f.Context, f.AdminToken, id, "reports", "partial.txt", io.MultiReader(strings.NewReader("partial"), iotest.ErrReader(errors.New("upload interrupted"))))
+	modelsExpectCode(t, err, "VALIDATION_FAILED")
+	if string(provider.files["reports/"+filename]) != "ready" || len(provider.files) != 3 {
+		t.Fatal("a failed upload changed the existing file or left a staged file", provider.files)
+	}
 }
 
 func testSynchronousWorkspaceMutations(t *testing.T, f *agentIntegrationFixture, svc *a.CloudService, id uint64, sandbox *sandboxMemoryProvider) {

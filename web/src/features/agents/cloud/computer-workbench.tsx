@@ -18,6 +18,7 @@ import {
   Monitor,
   RefreshCw,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { ApiError, request } from "@/api/client";
 import { Button, IconButton } from "@/components/button";
@@ -28,6 +29,7 @@ import { sandboxKeys, sandboxReason } from "../sandbox/shared";
 import { DirectoryCreate, WorkspaceMutation } from "../sandbox/workspace-files";
 import { CloudStatus } from "./computer-view";
 import { FilePreview, fileFormat } from "./file-preview";
+import { UploadDialog } from "./upload-dialog";
 import "./computer-workbench.css";
 
 export function ComputerWorkbench({
@@ -39,8 +41,9 @@ export function ComputerWorkbench({
 }) {
   const cache = useQueryClient();
   const [selected, setSelected] = useState<CloudFileEntry | null>(null);
-  const [directory, setDirectory] = useState("home");
+  const [directory, setDirectory] = useState("");
   const [create, setCreate] = useState(false);
+  const [uploadPath, setUploadPath] = useState<string | null>(null);
   const [remove, setRemove] = useState<CloudFileEntry | null>(null);
   const id = computer?.id || "";
   const workspace = useQuery({
@@ -102,6 +105,8 @@ export function ComputerWorkbench({
     Boolean(reading) ||
     workspace.isError ||
     !workspace.data;
+  const cannotWriteHere =
+    unavailable || targetDirectory.isPending || targetDirectory.isError;
   const refresh = () => {
     void cache.invalidateQueries({ queryKey: sandboxKeys });
   };
@@ -137,13 +142,17 @@ export function ComputerWorkbench({
               <RefreshCw />
             </IconButton>
             <IconButton
+              label="上传文件"
+              size="iconSm"
+              disabled={cannotWriteHere}
+              onClick={() => setUploadPath(directory)}
+            >
+              <Upload />
+            </IconButton>
+            <IconButton
               label="新建目录"
               size="iconSm"
-              disabled={
-                unavailable ||
-                targetDirectory.isPending ||
-                targetDirectory.isError
-              }
+              disabled={cannotWriteHere}
               onClick={() => setCreate(true)}
             >
               <FolderPlus />
@@ -151,9 +160,9 @@ export function ComputerWorkbench({
           </div>
         </header>
         <div className="cloud-explorer-location">
-          <HardDrive className="size-4" />
+          <HardDrive className="size-4 shrink-0" />
           <span
-            className="ml-auto truncate font-mono"
+            className="min-w-0 truncate font-mono"
             title={`/data${directory && `/${directory}`}`}
           >
             /data{directory && `/${directory}`}
@@ -246,11 +255,23 @@ export function ComputerWorkbench({
           <ErrorNotice error={workspace.error} />
           {busy && (
             <Notice>
-              任务、传输或待核实执行结束后，可新建目录和删除文件。
+              任务、传输或待核实执行结束后，可上传文件、新建目录和删除文件。
             </Notice>
           )}
         </div>
       </aside>
+      {uploadPath !== null && (
+        <UploadDialog
+          computerId={id}
+          path={uploadPath}
+          onClose={() => setUploadPath(null)}
+          onChanged={() =>
+            void cache.invalidateQueries({
+              queryKey: [...sandboxKeys, "tree", id, uploadPath],
+            })
+          }
+        />
+      )}
       {create && (
         <DirectoryCreate
           computerId={id}
@@ -319,7 +340,7 @@ function Directory(props: DirectoryProps) {
     prepared,
     preparing,
   } = props;
-  const [expanded, setExpanded] = useState(depth === 0 || path === "home");
+  const [expanded, setExpanded] = useState(depth === 0);
   const [page, setPage] = useState(1);
   const query = useQuery({
     ...directoryQuery(computerId, path, page),

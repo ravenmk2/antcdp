@@ -7,7 +7,14 @@ import { AgentRuntimeProvider } from "@/features/agents/data/agent-runtime";
 import { sandboxKeys } from "@/features/agents/sandbox/shared";
 import { WorkspaceFiles } from "@/features/agents/sandbox/workspace-files";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -523,7 +530,67 @@ it("prevents directory creation after a personal directory read fails", async ()
   expect(screen.getByRole("button", { name: "新建目录" })).toBeDisabled();
 });
 
-it("prepares home on each visit and displays directory loading in its own row", async () => {
+it("uploads selected and dropped files by name into the default /data directory", async () => {
+  const target = "/agents/cloud-computers/9/entries?path=&page=1&page_size=100";
+  const home =
+    "/agents/cloud-computers/9/entries?path=home&page=1&page_size=100";
+  const uploads: string[] = [];
+  override = async (path, options) => {
+    if (path === "/agents/cloud-computer") return response(computer);
+    if (path === "/agents/cloud-computers/9/file-uploads?path=") {
+      const file = (options.body as FormData).get("file") as File;
+      uploads.push(file.name);
+      if (file.name === "同名.txt")
+        throw new ApiError(
+          "WORKSPACE_PATH_EXISTS",
+          "当前目录已有同名文件或目录",
+          409,
+        );
+      return { ...response({ path: file.name }), status: 201 };
+    }
+    if (path === target)
+      return response(
+        uploads
+          .filter((name) => name !== "同名.txt")
+          .map((name) => ({
+            name,
+            path: name,
+            kind: "file",
+            size_bytes: "1",
+            modified_at: null,
+            entry_token: "v1",
+          })),
+      );
+  };
+  const { user } = mount("/computer");
+  const upload = await screen.findByRole("button", { name: "上传文件" });
+  await waitFor(() => expect(upload).toBeEnabled());
+  await user.click(upload);
+  expect(
+    screen.getByRole("dialog", { name: "上传文件" }),
+  ).toHaveAccessibleDescription("保存到 /data");
+  await user.upload(screen.getByLabelText("选择要上传的文件"), [
+    new File(["a"], "原名.txt"),
+    new File(["b"], "同名.txt"),
+  ]);
+  // The file picker and the drop zone feed the same upload queue.
+  fireEvent.drop(screen.getByText("将文件拖到这里"), {
+    dataTransfer: { files: [new File(["c"], "拖放.txt")] },
+  });
+  mocked.mockClear();
+  await user.click(screen.getByRole("button", { name: "开始上传" }));
+  await waitFor(() => expect(screen.getAllByText("已上传")).toHaveLength(2));
+  expect(screen.getByText("当前目录已有同名文件或目录")).toBeVisible();
+  expect(uploads).toEqual(["原名.txt", "同名.txt", "拖放.txt"]);
+  await waitFor(() =>
+    expect(mocked.mock.calls.filter(([path]) => path === target)).toHaveLength(
+      1,
+    ),
+  );
+  expect(mocked.mock.calls.some(([path]) => path === home)).toBe(false);
+});
+
+it("prepares home on each visit and lists its files only when expanded", async () => {
   let finish: (() => void) | undefined;
   let waiting = true;
   override = async (path) => {
@@ -541,8 +608,14 @@ it("prepares home on each visit and displays directory loading in its own row", 
     }
   };
   const first = mount("/computer");
+  const folder = await screen.findByRole("button", {
+    name: "home",
+    expanded: false,
+  });
+  expect(screen.getByText("/data")).toBeVisible();
+  expect(finish).toBeUndefined();
+  await first.user.click(folder);
   await waitFor(() => expect(finish).toBeTypeOf("function"));
-  const folder = screen.getByRole("button", { name: /home/ });
   expect(folder).toHaveAttribute("aria-expanded", "true");
   expect(folder).toHaveAttribute("aria-busy", "true");
   expect(screen.getByLabelText("正在加载 home").closest("button")).toBe(folder);
@@ -557,7 +630,7 @@ it("prepares home on each visit and displays directory loading in its own row", 
   expect(screen.getByRole("button", { name: "home" })).toBeVisible();
   cleanup();
   mount("/computer");
-  await screen.findByRole("button", { name: "home" });
+  await screen.findByRole("button", { name: "home", expanded: false });
   const preparations = mocked.mock.calls.filter(([path]) =>
     path.endsWith("/9/home"),
   );

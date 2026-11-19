@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"io"
 	"mime"
 	"net/http"
@@ -79,6 +80,32 @@ func registerSandboxFiles(u *gin.RouterGroup, o Options) {
 		}
 		return s.CreateWorkspaceDirectory(c.Request.Context(), rawSession(c), id, c.GetHeader("Idempotency-Key"), w)
 	}))
+	u.POST("/cloud-computers/:id/file-uploads", func(c *gin.Context) {
+		id, ok := agentID(c, "id")
+		if !ok {
+			return
+		}
+		q, ok := modelQuery(c, "path")
+		if !ok {
+			return
+		}
+		const bodyLimit = agents.WorkspaceUploadMaxBytes + 1<<20
+		if c.Request.ContentLength > bodyLimit {
+			httpx.Write(c, agents.WorkspaceUploadTooLarge())
+			return
+		}
+		source, name, err := agentSingleFileSource(c, bodyLimit)
+		if err != nil {
+			var limit *http.MaxBytesError
+			if errors.As(err, &limit) {
+				err = agents.WorkspaceUploadTooLarge()
+			}
+			httpx.Write(c, err)
+			return
+		}
+		out, err := s.UploadWorkspaceFile(c.Request.Context(), rawSession(c), id, q.Get("path"), name, source)
+		agentFinish(c, o, out, err)
+	})
 	u.POST("/cloud-computers/:id/file-removals", agentJSON[agents.WorkspaceRemovalWrite](o, 64<<10, func(c *gin.Context, w agents.WorkspaceRemovalWrite) (*agents.Result, error) {
 		id, ok := agentID(c, "id")
 		if !ok {

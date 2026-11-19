@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -34,7 +35,10 @@ func (r *finalMultipartReader) Read(p []byte) (int, error) {
 	}
 	r.finished = true
 	_, next := r.form.NextPart()
-	if next != io.EOF {
+	var limit *http.MaxBytesError
+	if errors.As(next, &limit) {
+		r.err = next
+	} else if next != io.EOF {
 		r.err = httpx.Invalid("body", "unexpected_or_invalid_part")
 	} else {
 		r.err = io.EOF
@@ -43,12 +47,25 @@ func (r *finalMultipartReader) Read(p []byte) (int, error) {
 }
 
 func agentAttachmentSource(c *gin.Context) (*finalMultipartReader, string, error) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 33<<20)
+	source, name, err := agentSingleFileSource(c, 33<<20)
+	var limit *http.MaxBytesError
+	if errors.As(err, &limit) {
+		err = httpx.Invalid("file", "required_single_file")
+	}
+	return source, name, err
+}
+
+func agentSingleFileSource(c *gin.Context, bodyLimit int64) (*finalMultipartReader, string, error) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, bodyLimit)
 	form, e := c.Request.MultipartReader()
 	if e != nil {
 		return nil, "", httpx.Invalid("body", "multipart_required")
 	}
 	part, e := form.NextPart()
+	var limit *http.MaxBytesError
+	if errors.As(e, &limit) {
+		return nil, "", e
+	}
 	if e != nil || part.FormName() != "file" {
 		return nil, "", httpx.Invalid("file", "required_single_file")
 	}

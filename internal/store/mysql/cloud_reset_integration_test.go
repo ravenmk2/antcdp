@@ -74,6 +74,9 @@ func TestCloudBackendResetAndVerifiedDeletion(t *testing.T) {
 	t.Run("synchronous_file_mutations", func(t *testing.T) {
 		testSynchronousWorkspaceMutations(t, f, svc, before.ID, remote.sandboxMemoryProvider)
 	})
+	t.Run("workspace_upload", func(t *testing.T) {
+		testWorkspaceUpload(t, f, svc, before.ID, remote.sandboxMemoryProvider)
+	})
 	t.Run("sandbox_admin", func(t *testing.T) { testSandboxAdmin(t, f, svc, remote, before.ID) })
 	terminatedBeforeReset := remote.terminated
 	agent := runtimeTestAgent(t, f)
