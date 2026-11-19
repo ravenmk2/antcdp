@@ -74,7 +74,7 @@ export function AuditPage() {
       );
   }, [total, size, page, setParams]);
   return (
-    <div className="page">
+    <div className="page page-wide">
       <PageHeader
         title="审计日志"
         description="查询系统与业务操作的白名单记录；审计只读。"

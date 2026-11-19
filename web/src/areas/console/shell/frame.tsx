@@ -1,6 +1,6 @@
 import { IconButton } from "@/components/button";
 import { Breadcrumbs, type Crumb } from "@/components/layout";
-import { Menu } from "lucide-react";
+import { Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import type { ReactNode } from "react";
 
 export function Frame({
@@ -8,6 +8,7 @@ export function Frame({
   navigation,
   crumbs,
   actions,
+  onToggleNavigation,
   onOpenNavigation,
   children,
   overlays,
@@ -16,6 +17,7 @@ export function Frame({
   navigation: ReactNode;
   crumbs: Crumb[];
   actions: ReactNode;
+  onToggleNavigation: () => void;
   onOpenNavigation: () => void;
   children: ReactNode;
   overlays: ReactNode;
@@ -28,13 +30,26 @@ export function Frame({
       >
         跳至正文
       </a>
-      <aside className="sidebar">{navigation}</aside>
+      <aside id="console-sidebar" className="sidebar">
+        {navigation}
+      </aside>
       <div className="min-w-0">
         <header className="topbar">
           <div className="flex min-w-0 items-center gap-2">
             <IconButton
+              className="max-[821px]:hidden"
+              label={collapsed ? "展开侧栏" : "收起侧栏"}
+              size="iconSm"
+              aria-expanded={!collapsed}
+              aria-controls="console-sidebar"
+              onClick={onToggleNavigation}
+            >
+              {collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+            </IconButton>
+            <IconButton
               className="min-[821px]:hidden"
               label="打开导航"
+              aria-haspopup="dialog"
               onClick={onOpenNavigation}
             >
               <Menu />

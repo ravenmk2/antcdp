@@ -63,7 +63,7 @@ export function SettingsPage() {
             </Link>
           ))}
         </nav>
-        <div className="min-w-0 max-w-[960px]">
+        <div className="min-w-0 max-w-[800px]">
           {tab === "system" ? (
             <SystemInformation />
           ) : (

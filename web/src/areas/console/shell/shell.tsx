@@ -1,26 +1,26 @@
 import { useAuth } from "@/app/auth";
-import { LogoutDialog, ShellActions, useLogout } from "@/app/session-actions";
-import { IconButton } from "@/components/button";
+import { LogoutDialog, useLogout } from "@/app/session-actions";
+import { Button } from "@/components/button";
 import { LoadingState } from "@/components/feedback";
 import { Drawer } from "@/components/overlays";
-import { SidebarBrand } from "@/components/platform/sidebar-brand";
 import { UserMenu } from "@/components/platform/user-menu";
 import { useApiQuery } from "@/hooks/use-api";
 import { useSidebarPreference } from "@/hooks/use-sidebar-preference";
 import { resolveSiteName } from "@/lib/site-name";
 import type { Resource } from "@/types/collaboration";
 import type { MCPServer } from "@/types/agent-resources";
-import { Home } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { Suspense, useState } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router";
+import { Link, Outlet, useLocation } from "react-router";
 import { adminBreadcrumbs } from "../pages/admin-breadcrumbs";
-import { AdminNavigation } from "../pages/admin-navigation";
+import { AdminMenuSearch, AdminNavigation } from "../pages/admin-navigation";
 import { Frame } from "./frame";
+import { SidebarBrand } from "./sidebar-brand";
 export function Shell() {
   const location = useLocation();
-  const navigate = useNavigate();
   const { collapsed, toggleCollapsed } = useSidebarPreference("console");
   const [mobile, setMobile] = useState(false);
+  const closeNavigation = () => setMobile(false);
   const logout = useLogout();
   const { settings } = useAuth();
   const brand = resolveSiteName(settings.site_name);
@@ -54,17 +54,16 @@ export function Shell() {
       data-compact={compact}
       data-mode="console"
     >
-      <SidebarBrand
-        brand={brand}
-        compact={compact}
-        collapsed={collapsed}
-        close={close}
-        onToggleCollapsed={toggleCollapsed}
-      />
+      <SidebarBrand brand={brand} onNavigate={close} />
       <div className="sidebar-scroll">
         <AdminNavigation compact={compact} close={close} />
       </div>
-      <UserMenu compact={compact} onLogout={logout.open} area="console" />
+      <UserMenu
+        compact={compact}
+        onLogout={logout.open}
+        onNavigate={close}
+        area="console"
+      />
     </div>
   );
   return (
@@ -77,13 +76,23 @@ export function Shell() {
         project.data?.data,
         mcpServer.data?.data.name,
       )}
+      onToggleNavigation={toggleCollapsed}
       onOpenNavigation={() => setMobile(true)}
       actions={
         <>
-          <IconButton label="返回工作区" onClick={() => navigate("/home")}>
-            <Home />
-          </IconButton>
-          <ShellActions />
+          <AdminMenuSearch onNavigate={closeNavigation} />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-text-soft max-[620px]:px-2"
+            render={<Link to="/home" />}
+            nativeButton={false}
+            aria-label="返回工作区"
+            title="返回工作区"
+          >
+            <span className="max-[620px]:hidden">返回工作区</span>
+            <ArrowUpRight aria-hidden />
+          </Button>
         </>
       }
       overlays={
@@ -91,9 +100,12 @@ export function Shell() {
           <Drawer
             open={mobile}
             title="页面导航"
-            onClose={() => setMobile(false)}
+            side="left"
+            className="max-w-72"
+            bodyClassName="flex flex-col p-0"
+            onClose={closeNavigation}
           >
-            {navigation(false, () => setMobile(false))}
+            {navigation(false, closeNavigation)}
           </Drawer>
           <LogoutDialog controller={logout} />
         </>

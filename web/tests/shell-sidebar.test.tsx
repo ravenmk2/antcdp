@@ -51,9 +51,10 @@ it.each(["/admin"])(
     ).not.toBeInTheDocument();
     const labels = container.querySelectorAll(".sidebar-navigation .nav-label");
     expect(screen.getByRole("button", { name: "平台管理" })).toBeVisible();
-    expect(
-      screen.queryByRole("link", { name: "系统概览" }),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "系统概览" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
     for (const label of labels) {
       expect(label).toHaveAttribute("aria-hidden", "true");
     }

@@ -2,7 +2,10 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Link, MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
-import { AdminNavigation } from "@/areas/console/pages/admin-navigation";
+import {
+  AdminMenuSearch,
+  AdminNavigation,
+} from "@/areas/console/pages/admin-navigation";
 
 afterEach(() => localStorage.clear());
 
@@ -11,6 +14,7 @@ function mount(route = "/admin/models/3", compact = false) {
   const user = userEvent.setup();
   render(
     <MemoryRouter initialEntries={[route]}>
+      <AdminMenuSearch onNavigate={close} />
       <AdminNavigation compact={compact} close={close} />
       <Link to="/admin/settings">外部设置入口</Link>
       <Link to="/admin/models/new">外部模型入口</Link>
@@ -70,6 +74,15 @@ it("restores only safe group preferences and reveals implemented routes", async 
     "aria-expanded",
     "false",
   );
+  expect(screen.getByRole("link", { name: "系统概览" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(screen.getByRole("button", { name: "平台管理" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await user.click(screen.getByRole("button", { name: "平台管理" }));
   await user.click(screen.getByRole("button", { name: "连接与资源" }));
   await user.click(screen.getByRole("button", { name: "系统维护" }));
   await user.click(screen.getByRole("button", { name: "助手" }));
@@ -142,7 +155,7 @@ it("finds technical names through keyboard menu search without fake counters", a
   );
 });
 
-it("restores focus to the compact search button when the dialog closes", async () => {
+it("restores focus to the topbar search button when the dialog closes", async () => {
   const { user } = mount("/admin", true);
   const trigger = screen.getByRole("button", { name: "搜索控制台菜单" });
   await user.tab();

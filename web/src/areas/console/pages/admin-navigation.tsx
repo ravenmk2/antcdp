@@ -29,13 +29,13 @@ import { Modal, OverlayCancelButton } from "@/components/overlays";
 import { StandaloneInput } from "@/components/fields";
 import { Button } from "@/components/button";
 
+const overview = { to: "/admin", label: "系统概览", icon: LayoutDashboard };
 const consoleGroups = [
   {
     id: "platform",
     label: "平台管理",
     icon: LayoutDashboard,
     items: [
-      { to: "/admin", label: "系统概览", icon: LayoutDashboard, end: true },
       { to: "/admin/users", label: "真人用户", icon: UserRound },
       { to: "/admin/robots", label: "机器人账号", icon: Bot },
       { to: "/admin/projects", label: "项目管理", icon: Folder },
@@ -118,10 +118,8 @@ export function AdminNavigation({
   const { pathname } = useLocation();
   const listId = useId();
   const activeGroup = consoleGroups.find((group) =>
-    group.items.some((item) =>
-      "end" in item && item.end
-        ? pathname === item.to
-        : pathname === item.to || pathname.startsWith(`${item.to}/`),
+    group.items.some(
+      (item) => pathname === item.to || pathname.startsWith(`${item.to}/`),
     ),
   )?.id;
   const [navigation, setNavigation] = useState(() => ({
@@ -145,8 +143,19 @@ export function AdminNavigation({
     } catch {}
   }, [navigation.expanded]);
   return (
-    <nav aria-label="主导航" className="admin-navigation py-3">
-      <MenuSearch compact={compact} close={close} />
+    <nav aria-label="主导航" className="admin-navigation py-2">
+      <NavLink
+        to={overview.to}
+        end
+        title={overview.label}
+        className="nav-link admin-nav-overview font-normal"
+        onClick={close}
+      >
+        <overview.icon className="size-[18px] shrink-0" aria-hidden />
+        <span className={compact ? "sr-only" : undefined}>
+          {overview.label}
+        </span>
+      </NavLink>
       {consoleGroups.map((group) => {
         const active = activeGroup === group.id;
         const expanded = navigation.expanded[group.id];
@@ -168,7 +177,6 @@ export function AdminNavigation({
           <NavLink
             key={item.to}
             to={item.to}
-            end={"end" in item && item.end}
             title={item.label}
             className="nav-link admin-nav-item text-sm font-normal focus:text-navigation"
             onClick={close}
@@ -208,7 +216,7 @@ export function AdminNavigation({
             </DropdownMenuContent>
           </DropdownMenu.Root>
         ) : (
-          <div key={group.id} className="mb-2">
+          <div key={group.id} className="mb-1">
             <button
               type="button"
               className="admin-nav-group"
@@ -237,13 +245,7 @@ export function AdminNavigation({
   );
 }
 
-function MenuSearch({
-  compact,
-  close,
-}: {
-  compact: boolean;
-  close?: () => void;
-}) {
+export function AdminMenuSearch({ onNavigate }: { onNavigate?: () => void }) {
   const [dialog, setDialog] = useState<{
     returnFocus: HTMLElement | null;
   } | null>(null);
@@ -290,31 +292,30 @@ function MenuSearch({
     "/admin/agents": "agent",
     "/admin/agent-usage": "usage tokens",
   };
-  const options = consoleGroups
-    .flatMap((group) =>
+  const options = [
+    { ...overview, group: "" },
+    ...consoleGroups.flatMap((group) =>
       group.items.map((item) => ({ ...item, group: group.label })),
-    )
-    .filter((item) =>
-      `${item.label} ${item.group} ${keywords[item.to] ?? ""}`
-        .toLowerCase()
-        .includes(search.trim().toLowerCase()),
-    );
+    ),
+  ].filter((item) =>
+    `${item.label} ${item.group} ${keywords[item.to] ?? ""}`
+      .toLowerCase()
+      .includes(search.trim().toLowerCase()),
+  );
   function choose(to: string) {
     setDialog(null);
-    close?.();
+    onNavigate?.();
     void navigate(to);
   }
   return (
-    <div className={compact ? "mb-2 px-[10px]" : "mb-2 px-2"}>
+    <>
       <Button
         ref={searchButton}
         variant="ghost"
-        className={
-          compact
-            ? "min-h-[44px] w-full px-0 text-navigation hover:text-navigation"
-            : "w-full justify-start text-navigation hover:text-navigation"
-        }
+        size="sm"
+        className="md:border-border max-[620px]:px-2"
         aria-label="搜索控制台菜单"
+        aria-keyshortcuts="Control+K Meta+K"
         title="搜索菜单（Ctrl K / Cmd K）"
         onClick={(event) => {
           setSearch("");
@@ -322,13 +323,11 @@ function MenuSearch({
           setDialog({ returnFocus: event.currentTarget });
         }}
       >
-        <Search className="size-4" />
-        {!compact && (
-          <>
-            <span className="flex-1 text-left">搜索菜单</span>
-            <kbd className="text-[10px] text-muted">Ctrl K</kbd>
-          </>
-        )}
+        <Search aria-hidden />
+        <span className="max-[620px]:hidden">搜索菜单</span>
+        <kbd className="rounded bg-canvas px-1 text-[11px] max-[1000px]:hidden">
+          Ctrl K
+        </kbd>
       </Button>
       {dialog && (
         <Modal
@@ -401,6 +400,6 @@ function MenuSearch({
           </div>
         </Modal>
       )}
-    </div>
+    </>
   );
 }

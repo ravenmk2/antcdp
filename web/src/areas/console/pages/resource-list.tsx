@@ -204,10 +204,16 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
   ];
 
   return (
-    <div className="page">
+    <div className="page page-wide">
       <PageHeader
         title={title}
         description={`管理全部${kind === "projects" ? "项目，包括你未参与的对象" : "团队及直接成员"}。`}
+        actions={
+          <Button onClick={() => setCreate(true)}>
+            <Plus />
+            创建{kind === "projects" ? "项目" : "团队"}
+          </Button>
+        }
       />
       <ErrorNotice error={submission.error} />
       <section className="panel">
@@ -218,15 +224,6 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
           }}
           onRefresh={() => void list.refetch()}
           refreshing={list.isFetching}
-          actions={
-            <Button
-              className="flex items-center gap-2"
-              onClick={() => setCreate(true)}
-            >
-              <Plus />
-              创建{kind === "projects" ? "项目" : "团队"}
-            </Button>
-          }
         >
           <form
             className="flex shrink-0 items-center gap-2"
