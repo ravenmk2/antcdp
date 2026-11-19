@@ -39,7 +39,7 @@ export function JobsPage({ project }: { project: Resource }) {
     return project.can_manage ? (
       <JobEditor key={`${base}/new`} project={project} base={base} />
     ) : (
-      <Notice tone="danger">只有项目管理员可以创建任务。</Notice>
+      <Notice tone="danger">只有项目管理员可以创建作业。</Notice>
     );
   if (!jobId) return <JobList project={project} base={base} />;
   return (
@@ -93,13 +93,13 @@ function JobList({ project, base }: { project: Resource; base: string }) {
   return (
     <>
       <PageHeader
-        title="项目任务"
+        title="项目作业"
         description="管理项目脚本、定时计划和运行记录。"
         actions={
           canCreate && (
             <Button render={<Link to={`${base}/new`} />} nativeButton={false}>
               <Plus />
-              创建任务
+              创建作业
             </Button>
           )
         }
@@ -115,9 +115,9 @@ function JobList({ project, base }: { project: Resource; base: string }) {
           refreshing={query.isFetching}
         >
           <StandaloneInput
-            aria-label="搜索任务"
+            aria-label="搜索作业"
             value={filter}
-            placeholder="任务名称或说明"
+            placeholder="作业名称或说明"
             onChange={(event) => {
               setFilter(event.target.value);
               setBefore("");
@@ -141,19 +141,19 @@ function JobList({ project, base }: { project: Resource; base: string }) {
           error={query.error}
           onRetry={() => void query.refetch()}
           empty={!rows.length}
-          emptyTitle={filter || status ? "没有符合筛选条件的任务" : "暂无任务"}
+          emptyTitle={filter || status ? "没有符合筛选条件的作业" : "暂无作业"}
           emptyDescription={
             filter || status || !canCreate
               ? undefined
-              : "点击右上角的「创建任务」添加项目脚本。"
+              : "点击右上角的「创建作业」添加项目脚本。"
           }
           emptyIcon={Terminal}
         >
           <SimpleTable
             actions
-            label="任务列表"
+            label="作业列表"
             headers={[
-              "任务",
+              "作业",
               "状态",
               "最近运行",
               "下次计划",
@@ -223,7 +223,7 @@ function JobList({ project, base }: { project: Resource; base: string }) {
           before={before}
           next={rows.length === 100 ? rows.at(-1)?.id : undefined}
           onChange={setBefore}
-          olderLabel="更早任务"
+          olderLabel="更早作业"
         />
       </PanelRoot>
     </>
@@ -243,7 +243,7 @@ function JobDetail({ job, base }: { job: Job; base: string }) {
   const disabledReason = !job.revision_id
     ? "保存脚本后可运行"
     : !job.enabled
-      ? "启用任务后可运行"
+      ? "启用作业后可运行"
       : !job.can_run
         ? "需要运行授权"
         : "";
@@ -278,7 +278,7 @@ function JobDetail({ job, base }: { job: Job; base: string }) {
                 onClick={() => setStart(true)}
               >
                 <Play />
-                运行任务
+                运行作业
               </Button>
               {disabledReason && (
                 <p className="mt-1 text-right text-xs text-muted">
@@ -293,7 +293,7 @@ function JobDetail({ job, base }: { job: Job; base: string }) {
         <StartForm job={job} base={base} onClose={() => setStart(false)} />
       )}
       <Tabs
-        label="任务详情"
+        label="作业详情"
         items={items}
         value={tab}
         onChange={(value) => setParams({ tab: value })}

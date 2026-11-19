@@ -205,8 +205,8 @@ export function StartForm({
       open
       onClose={onClose}
       pending={pending}
-      title={rerun ? "重新运行" : "运行任务"}
-      description={`「${job.name}」将使用当前已保存的配置。${parameters.length ? "" : "此任务无需输入参数。"}`}
+      title={rerun ? "重新运行" : "运行作业"}
+      description={`「${job.name}」将使用当前已保存的配置。${parameters.length ? "" : "此作业无需输入参数。"}`}
       footer={
         <>
           <Button variant="outline" disabled={pending} onClick={onClose}>

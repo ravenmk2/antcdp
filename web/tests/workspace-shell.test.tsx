@@ -150,6 +150,9 @@ it("shows project navigation in a collapsible secondary rail and highlights its 
   expect(
     within(sidebar).getByRole("link", { name: "项目介绍" }),
   ).toHaveAttribute("aria-current", "page");
+  expect(
+    within(sidebar).getByRole("link", { name: "项目作业" }),
+  ).toHaveAttribute("href", "/projects/7/jobs");
   expect(mainLink("link", { name: "项目" })).toHaveAttribute(
     "aria-current",
     "page",

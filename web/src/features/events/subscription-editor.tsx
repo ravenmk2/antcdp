@@ -222,14 +222,12 @@ ctx.log.info("处理完成", { eventId: ctx.event.id });
 await ctx.sleep(1000);`}</pre>
                 <p>
                   路径可省略开头的 /。单段编码指向当前项目；完整路径支持
-                  platform/code、team/team-code/code、project/project-code/code。Job
-                  仅可启动本项目任务。
+                  platform/code、team/team-code/code、project/project-code/code。只能启动当前项目的作业。
                 </p>
                 <p>
                   requestKey
                   在同一订阅内长期有效；已受理的相同请求返回原结果，参数改变会报冲突。调用返回受理结果，不等待
-                  Job
-                  或助手完成。助手总是开启新会话，其内容仅平台管理员可在控制台查看。
+                  作业或助手完成。助手总是开启新会话，其内容仅平台管理员可在控制台查看。
                 </p>
                 <p>
                   ctx.state

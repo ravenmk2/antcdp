@@ -29,7 +29,7 @@ vi.mock("@/features/jobs/script-editor", () => ({
 const job: Job = {
   code: "test_job",
   id: "2",
-  name: "示例任务",
+  name: "示例作业",
   description: "",
   revision_id: "1",
   enabled: true,
@@ -119,18 +119,18 @@ function mount(
   return { user: userEvent.setup(), writes };
 }
 
-it("shows tasks in a table and retains row navigation after resetting filters", async () => {
+it("shows jobs in a table and retains row navigation after resetting filters", async () => {
   const { user } = mount("/projects/1/jobs", job, (url) => {
     const request = new URL(url, window.location.origin);
     if (!request.pathname.endsWith("/jobs")) return undefined;
     return response({ items: request.searchParams.get("q") ? [] : [job] });
   });
-  const search = screen.getByRole("textbox", { name: "搜索任务" });
-  await screen.findByRole("table", { name: "任务列表" });
+  const search = screen.getByRole("textbox", { name: "搜索作业" });
+  await screen.findByRole("table", { name: "作业列表" });
   await user.type(search, "不存在");
-  expect(await screen.findByText("没有符合筛选条件的任务")).toBeVisible();
+  expect(await screen.findByText("没有符合筛选条件的作业")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "重置筛选" }));
-  const table = within(await screen.findByRole("table", { name: "任务列表" }));
+  const table = within(await screen.findByRole("table", { name: "作业列表" }));
   expect(table.getByRole("link", { name: job.name })).toHaveAttribute(
     "href",
     "/projects/1/jobs/2",
@@ -178,7 +178,7 @@ it("saves a new binding with numeric ID strings alongside the script", async () 
   await user.click(
     await screen.findByRole("option", { name: "授权 #4 · 连接 #5 / 凭证 #6" }),
   );
-  await user.click(screen.getByRole("button", { name: "保存任务" }));
+  await user.click(screen.getByRole("button", { name: "保存作业" }));
   await waitFor(() => expect(writes).toHaveLength(1));
   expect(writes[0]!.body.config).toEqual({
     script: "function main(){}",
@@ -194,29 +194,29 @@ it("keeps the run history visible behind the confirmation and starts only when c
     ...job,
     can_run: true,
   });
-  await user.click(await screen.findByRole("button", { name: "运行任务" }));
-  const dialog = await screen.findByRole("dialog", { name: "运行任务" });
-  expect(within(dialog).getByText(/此任务无需输入参数/)).toBeVisible();
+  await user.click(await screen.findByRole("button", { name: "运行作业" }));
+  const dialog = await screen.findByRole("dialog", { name: "运行作业" });
+  expect(within(dialog).getByText(/此作业无需输入参数/)).toBeVisible();
   expect(writes).toHaveLength(0);
   await user.click(within(dialog).getByRole("button", { name: "取消" }));
   expect(await screen.findByText("暂无运行记录")).toBeVisible();
   expect(writes).toHaveLength(0);
 });
 
-it("explains draft creation before making a write from the new-task editor", async () => {
+it("explains draft creation before making a write from the new job editor", async () => {
   const { user, writes } = mount("/projects/1/jobs/new", {
     ...job,
     can_manage: true,
   });
   await user.type(
-    await screen.findByRole("textbox", { name: "任务编码" }),
+    await screen.findByRole("textbox", { name: "作业编码" }),
     "verify_job",
   );
   await user.click(screen.getByRole("button", { name: "草稿调试" }));
   const dialog = await screen.findByRole("dialog", {
     name: "创建草稿并调试？",
   });
-  expect(within(dialog).getByText(/固定任务编码/)).toBeVisible();
+  expect(within(dialog).getByText(/固定作业编码/)).toBeVisible();
   expect(writes).toHaveLength(0);
 });
 
@@ -285,7 +285,7 @@ it("validates required rerun inputs and drops choices that the current configura
   await user.click(dialog.getByRole("combobox", { name: "环境" }));
   await user.click(await screen.findByRole("option", { name: "测试" }));
   await user.click(dialog.getByRole("button", { name: "确认运行" }));
-  await dialog.findByText("任务并发已满");
+  await dialog.findByText("作业并发已满");
   expect(writes[0]?.body).toMatchObject({
     inputs: { env: "测试", regions: ["华东"] },
     rerun_of_run_id: "7",
@@ -311,7 +311,7 @@ it("names the configuration section rejected by the server in the editor feedbac
       );
     },
   );
-  await user.click(await screen.findByRole("button", { name: "保存任务" }));
+  await user.click(await screen.findByRole("button", { name: "保存作业" }));
   expect(await screen.findByText(/「输入参数」校验失败/)).toBeVisible();
 });
 

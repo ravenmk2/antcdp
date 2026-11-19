@@ -65,7 +65,7 @@ func (t *jobTx) SaveJob(v *jobs.Job) error {
 		if err != nil {
 			var duplicate *driver.MySQLError
 			if errors.As(err, &duplicate) && duplicate.Number == 1062 {
-				return httpx.E(409, "CODE_CONFLICT", "项目中已存在此任务编码")
+				return httpx.E(409, "CODE_CONFLICT", "项目中已存在此作业编码")
 			}
 			return err
 		}

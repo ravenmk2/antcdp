@@ -28,10 +28,10 @@ const triggerLabels: Record<string, string> = {
 };
 
 const reasonLabels: Record<string, string> = {
-  JOB_DISABLED: "任务已停用",
-  NO_CONFIGURATION: "任务尚无已保存的脚本配置",
-  INVALID_INPUTS: "参数与任务配置不匹配",
-  JOB_BUSY: "任务并发已满",
+  JOB_DISABLED: "作业已停用",
+  NO_CONFIGURATION: "作业尚无已保存的脚本配置",
+  INVALID_INPUTS: "参数与作业配置不匹配",
+  JOB_BUSY: "作业并发已满",
 };
 
 export function triggerLabel(value: string) {

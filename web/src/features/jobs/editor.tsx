@@ -34,8 +34,8 @@ const saveFieldLabels = new Map([
   ["execution", "运行设置"],
   ["parameters", "输入参数"],
   ["bindings", "资源绑定"],
-  ["code", "任务编码"],
-  ["name", "任务名称与说明"],
+  ["code", "作业编码"],
+  ["name", "作业名称与说明"],
 ]);
 
 export function JobEditor({
@@ -85,7 +85,7 @@ export function JobEditor({
     const parsed = resourceCodeSchema.safeParse(form.code);
     if (parsed.success) return true;
     setCodeError(
-      form.code ? parsed.error.issues[0]!.message : "请输入任务编码",
+      form.code ? parsed.error.issues[0]!.message : "请输入作业编码",
     );
     document.getElementById(codeInputId)?.focus();
     return false;
@@ -100,7 +100,7 @@ export function JobEditor({
         method: "POST",
         body: {
           ...form,
-          name: form.name.trim() || "未命名任务草稿",
+          name: form.name.trim() || "未命名作业草稿",
           enabled: false,
           grants: [],
           config: null,
@@ -127,7 +127,7 @@ export function JobEditor({
     if (pending) return;
     setError(undefined);
     if (!form.name.trim()) {
-      setNameError("请输入任务名称");
+      setNameError("请输入作业名称");
       document.getElementById(nameInputId)?.focus();
       return;
     }
@@ -173,8 +173,8 @@ export function JobEditor({
             initialJob
               ? `编辑 ${initialJob.name}`
               : job
-                ? "编辑任务草稿"
-                : "创建任务"
+                ? "编辑作业草稿"
+                : "创建作业"
           }
           description={
             <div className="flex flex-wrap items-center gap-3">
@@ -202,7 +202,7 @@ export function JobEditor({
                 disabled={pending === "draft"}
                 onClick={() => void save()}
               >
-                <Save /> 保存任务
+                <Save /> 保存作业
               </Button>
             </>
           }
@@ -223,7 +223,7 @@ export function JobEditor({
         <ConfirmDialog
           open
           title="创建草稿并调试？"
-          description="系统会先创建一条停用的任务草稿并固定任务编码。当前脚本和参数仍可继续编辑。"
+          description="系统会先创建一条停用的作业草稿并固定作业编码。当前脚本和参数仍可继续编辑。"
           confirmLabel="创建草稿"
           pending={pending === "draft"}
           onClose={() => {
@@ -301,11 +301,11 @@ export function JobEditor({
 
         <aside
           className="min-w-0 overflow-hidden rounded-xl border border-border"
-          aria-label="任务配置"
+          aria-label="作业配置"
         >
           <div className="space-y-3 p-4">
             <h2 className="text-sm font-semibold">基本信息</h2>
-            <Field id={nameInputId} label="任务名称" required error={nameError}>
+            <Field id={nameInputId} label="作业名称" required error={nameError}>
               <Input
                 value={form.name}
                 placeholder="例如 每日构建检查"
@@ -317,11 +317,11 @@ export function JobEditor({
             </Field>
             <Field
               id={codeInputId}
-              label="任务编码"
+              label="作业编码"
               required
               hint={
                 job
-                  ? "创建后固定，用于标识任务。"
+                  ? "创建后固定，用于标识作业。"
                   : "小写字母、数字、下划线或连字符，创建后固定。"
               }
               error={codeError}
@@ -341,7 +341,7 @@ export function JobEditor({
             <Field label="说明">
               <Textarea
                 rows={2}
-                placeholder="用于说明任务的用途"
+                placeholder="用于说明作业的用途"
                 value={form.description}
                 onChange={(e) =>
                   setForm({ ...form, description: e.target.value })
@@ -381,7 +381,7 @@ export function JobEditor({
             title="运行设置"
             detail={`${form.enabled ? "启用" : "停用"} · 并发 ${form.max_concurrency}`}
           >
-            <Field label="任务状态">
+            <Field label="作业状态">
               <Select
                 value={String(form.enabled)}
                 onValueChange={(value) =>
@@ -748,7 +748,7 @@ function ParameterEditor({
         </div>
       ))}
       {!value.length && (
-        <p className="text-sm text-muted">此任务无需输入参数。</p>
+        <p className="text-sm text-muted">此作业无需输入参数。</p>
       )}
     </div>
   );

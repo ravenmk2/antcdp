@@ -46,7 +46,7 @@ const projectLinks: Destination[] = [
     icon: FolderGit2,
     suffix: "?tab=repositories",
   },
-  { key: "jobs", label: "任务", icon: Play, suffix: "/jobs" },
+  { key: "jobs", label: "项目作业", icon: Play, suffix: "/jobs" },
   { key: "events", label: "事件订阅", icon: Radio, suffix: "/events" },
 ];
 function sectionLink(

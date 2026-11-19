@@ -112,7 +112,7 @@ export interface Schedule {
   version: string;
 }
 export const exampleScript = `async function main(ctx) {
-  ctx.log.info("任务开始", { inputs: ctx.inputs });
+  ctx.log.info("作业开始", { inputs: ctx.inputs });
   const previous = ctx.state.get("运行次数");
   const count = (previous?.value ?? 0) + 1;
   ctx.state.put("运行次数", count, previous ? { ifMatch: previous.etag } : { ifAbsent: true });

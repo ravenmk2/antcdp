@@ -39,7 +39,7 @@ vi.mock("@/features/collaboration/members", async (original) => ({
   ),
 }));
 vi.mock("@/features/jobs/page", () => ({
-  JobsPage: () => <section>任务列表内容</section>,
+  JobsPage: () => <section>作业列表内容</section>,
 }));
 vi.mock("@/features/events/page", () => ({
   EventsPage: () => <section>事件列表内容</section>,
@@ -185,13 +185,13 @@ function mountProject(entry: string) {
   );
 }
 
-it("uses workspace breadcrumbs to return from a run to its task and then to the task list", async () => {
+it("uses workspace breadcrumbs to return from a run to its job and then to the job list", async () => {
   const { router, user } = mountProject("/projects/7/jobs/9/runs/4");
   const crumbs = within(screen.getByRole("navigation", { name: "当前位置" }));
   expect(crumbs.getByText("运行 #4")).toHaveAttribute("aria-current", "page");
-  await user.click(crumbs.getByRole("link", { name: "任务详情" }));
+  await user.click(crumbs.getByRole("link", { name: "作业详情" }));
   expect(router.state.location.pathname).toBe("/projects/7/jobs/9");
-  await user.click(crumbs.getByRole("link", { name: "任务" }));
+  await user.click(crumbs.getByRole("link", { name: "项目作业" }));
   expect(router.state.location.pathname).toBe("/projects/7/jobs");
 });
 
@@ -205,7 +205,7 @@ it.each([
   ["?tab=teams", "平台团队", false],
   ["?tab=branch-model", "项目资源", true],
   ["?tab=settings&section=unknown", "项目资料", false],
-  ["/jobs", "任务列表内容", false],
+  ["/jobs", "作业列表内容", false],
   ["/events", "事件列表内容", false],
   ["/dingtalk", "机器人列表内容", false],
 ] as const)(

@@ -57,8 +57,8 @@ export function Schedules({ job, base }: { job: Job; base: string }) {
         >
           <p className="text-sm text-muted">
             {job.revision_id
-              ? "按计划触发任务，服务离线期间错过的执行会跳过。"
-              : "保存任务脚本后可添加定时计划。"}
+              ? "按计划触发作业，服务离线期间错过的执行会跳过。"
+              : "保存作业脚本后可添加定时计划。"}
           </p>
         </TableToolbar>
         <AsyncBoundary
@@ -213,7 +213,7 @@ function ScheduleForm({
       open
       wide
       title={schedule ? "编辑定时计划" : "添加定时计划"}
-      description="设置触发时间和任务参数。"
+      description="设置触发时间和作业参数。"
       onClose={close}
       pending={Boolean(pending)}
       dirty={changes !== initial.current}
@@ -319,7 +319,7 @@ function ScheduleForm({
               onChange={(inputs) => setForm({ ...form, inputs })}
             />
           ) : (
-            <p className="text-sm text-muted">此任务无需输入参数。</p>
+            <p className="text-sm text-muted">此作业无需输入参数。</p>
           )}
         </div>
       </div>
@@ -580,12 +580,12 @@ export function Resources({ job, base }: { job: Job; base: string }) {
                   void act(
                     "/resource-grants",
                     "POST",
-                    "已授予任务，可在编辑器里添加资源绑定。",
+                    "已授予作业，可在编辑器里添加资源绑定。",
                     { connection_id: connection, credential_id: credential },
                   )
                 }
               >
-                授予任务
+                授予作业
               </Button>
             </>
           }

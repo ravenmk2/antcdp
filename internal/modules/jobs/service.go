@@ -19,7 +19,7 @@ import (
 func repository(tx identity.Tx) (Repository, error) {
 	v, ok := tx.(interface{ Jobs() Repository })
 	if !ok {
-		return nil, httpx.E(503, "FEATURE_UNAVAILABLE", "任务服务暂不可用")
+		return nil, httpx.E(503, "FEATURE_UNAVAILABLE", "作业服务暂不可用")
 	}
 	return v.Jobs(), nil
 }
@@ -37,7 +37,7 @@ func projectAccess(tx identity.Tx, project, user uint64) (*collaboration.Resourc
 	}
 	return p, nil
 }
-func missing() error   { return httpx.E(404, "NOT_FOUND", "任务对象不存在或不可见") }
+func missing() error   { return httpx.E(404, "NOT_FOUND", "作业对象不存在或不可见") }
 func forbidden() error { return httpx.E(403, "FORBIDDEN", "没有此操作权限") }
 func (s *Service) access(ctx context.Context, raw string, project, job uint64, manage bool, fn func(identity.Tx, Repository, *identity.Auth, *Job, *collaboration.Resource) error) (*identity.Auth, error) {
 	return s.Identity.BusinessAccess(ctx, raw, nil, func(tx identity.Tx, a *identity.Auth) error {
@@ -255,7 +255,7 @@ func (s *Service) Save(ctx context.Context, raw string, project, job uint64, w W
 			for i := range active {
 				v := &active[i]
 				if v.Status == "queued" && v.Trigger != "debug" {
-					if err = finish(r, v, "cancelled", "JOB_DISABLED", "任务已停用"); err != nil {
+					if err = finish(r, v, "cancelled", "JOB_DISABLED", "作业已停用"); err != nil {
 						return err
 					}
 				}

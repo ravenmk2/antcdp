@@ -46,7 +46,7 @@ export function workspaceBreadcrumbs(
     const view = resolveWorkspaceProjectView(path, search);
     const labels: Record<string, string> = {
       repositories: "Git 仓库",
-      jobs: "任务",
+      jobs: "项目作业",
       events: "事件订阅",
       description: "项目介绍",
     };
@@ -74,15 +74,15 @@ export function workspaceBreadcrumbs(
     } else if (jobMatch) {
       const [, jobId, runId] = jobMatch;
       const jobsPath = `/projects/${project.id}/jobs`;
-      items.push({ label: "任务", ...(jobId ? { to: jobsPath } : {}) });
+      items.push({ label: labels.jobs, ...(jobId ? { to: jobsPath } : {}) });
       if (jobId === "new") {
-        items.push({ label: "创建任务" });
+        items.push({ label: "创建作业" });
       } else if (jobId) {
         const editing = new URLSearchParams(search).get("edit") === "1";
         if (runId || editing)
-          items.push({ label: "任务详情", to: `${jobsPath}/${jobId}` });
+          items.push({ label: "作业详情", to: `${jobsPath}/${jobId}` });
         items.push({
-          label: runId ? `运行 #${runId}` : editing ? "编辑任务" : "任务详情",
+          label: runId ? `运行 #${runId}` : editing ? "编辑作业" : "作业详情",
         });
       }
     } else if (path.includes("/dingtalk")) {

@@ -84,10 +84,10 @@ func (s *Service) StartAutomation(ctx context.Context, w AutomationStart) (Recei
 			return nil
 		}
 		if !j.Enabled {
-			return httpx.E(409, "JOB_DISABLED", "任务已停用")
+			return httpx.E(409, "JOB_DISABLED", "作业已停用")
 		}
 		if j.RevisionID == nil {
-			return httpx.E(409, "NO_CONFIGURATION", "任务尚未配置")
+			return httpx.E(409, "NO_CONFIGURATION", "作业尚未配置")
 		}
 		rev, err := r.Revision(*j.RevisionID)
 		if err != nil {
