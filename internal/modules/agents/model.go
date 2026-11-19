@@ -102,18 +102,18 @@ type DefinitionSummary struct {
 	UpdatedAt             time.Time `json:"updated_at"`
 }
 type DefinitionCreate struct {
-	Code             string            `json:"code"`
-	RobotUserID      *string           `json:"robot_user_id"`
-	CloudEnvironment *CloudEnvironment `json:"cloud_environment"`
-	Name             string            `json:"name"`
-	Mode             string            `json:"agent_type"`
-	ScopeKind        string            `json:"scope_kind"`
-	ScopeID          *string           `json:"scope_id"`
-	PoolCapacity     *int              `json:"pool_capacity"`
-	Description      string            `json:"description"`
-	SystemPrompt     string            `json:"system_prompt"`
-	Enabled          Field[bool]       `json:"enabled"`
-	RuntimePolicy    *RuntimePolicy    `json:"runtime_policy"`
+	Code          string         `json:"code"`
+	RobotUserID   *string        `json:"robot_user_id"`
+	SandboxSpecID *uint64        `json:"sandbox_spec_id,string"`
+	Name          string         `json:"name"`
+	Mode          string         `json:"agent_type"`
+	ScopeKind     string         `json:"scope_kind"`
+	ScopeID       *string        `json:"scope_id"`
+	PoolCapacity  *int           `json:"pool_capacity"`
+	Description   string         `json:"description"`
+	SystemPrompt  string         `json:"system_prompt"`
+	Enabled       Field[bool]    `json:"enabled"`
+	RuntimePolicy *RuntimePolicy `json:"runtime_policy"`
 }
 type DefinitionPatch struct {
 	Name          Field[string]        `json:"name"`

@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
@@ -22,17 +23,23 @@ func configureTestCloud(t *testing.T, f *agentIntegrationFixture, svc *a.CloudSe
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = svc.SaveConnection(f.Context, f.AdminToken, connection.Tag, cryptox.ID(), a.ConnectionWrite{Endpoint: "https://cloud.invalid", Authentication: &m.AuthenticationWrite{Method: "api_key", Secret: m.SecretWrite{Operation: "replace", Value: new("cloud-fixture-secret")}}})
-	if err != nil {
-		t.Fatal("configure cloud", err)
+	if connection.Data.(a.ConnectionView).Endpoint == nil {
+		_, err = svc.SaveConnection(f.Context, f.AdminToken, connection.Tag, cryptox.ID(), a.ConnectionWrite{Endpoint: "https://cloud.invalid", Authentication: &m.AuthenticationWrite{Method: "api_key", Secret: m.SecretWrite{Operation: "replace", Value: new("cloud-fixture-secret")}}})
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	template, err := svc.GetCloudTemplate(f.Context, f.AdminToken, nil)
+	binding, err := svc.GetBinding(f.Context, f.AdminToken, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = svc.SaveCloudTemplate(f.Context, f.AdminToken, template.Tag, cryptox.ID(), nil, a.CloudEnvironment{Image: "test/runtime:fixed", CPU: 2000, Memory: 4096, Network: a.NetworkPolicy{DefaultAction: "allow"}})
+	spec, err := svc.SaveSpec(f.Context, f.AdminToken, "", cryptox.ID(), 0, a.SpecWrite{Name: cryptox.ID(), CloudEnvironment: a.CloudEnvironment{Image: "test/runtime:fixed", CPU: 2000, Memory: 4096, Network: a.NetworkPolicy{DefaultAction: "allow"}}})
 	if err != nil {
-		t.Fatal("configure personal template", err)
+		t.Fatal(err)
+	}
+	_, err = svc.SaveBinding(f.Context, f.AdminToken, binding.Tag, cryptox.ID(), nil, a.BindingWrite{SpecID: a.Field[string]{Set: true, Value: strconv.FormatUint(spec.Data.(*a.SandboxSpec).ID, 10)}})
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -124,11 +131,12 @@ func cloudLifecycleIntegration(t *testing.T, f *agentIntegrationFixture) {
 		if workspace.ComputerID == nil || *workspace.ComputerID != before.ID || workspace.BindingID != nil || workspace.Availability != "available" {
 			t.Fatalf("settled session lost its permanent computer: %+v", workspace)
 		}
-		template, err := svc.GetCloudTemplate(ctx, f.AdminToken, nil)
+		binding, err := svc.GetBinding(ctx, f.AdminToken, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = svc.SaveCloudTemplate(ctx, f.AdminToken, template.Tag, cryptox.ID(), nil, a.CloudEnvironment{Image: "test/runtime:updated", CPU: 3000, Memory: 4096, Network: a.NetworkPolicy{DefaultAction: "allow"}})
+		spec := binding.Data.(*a.SpecBinding).Spec
+		_, err = svc.SaveSpec(ctx, f.AdminToken, `"`+spec.Version+`"`, cryptox.ID(), spec.ID, a.SpecWrite{Name: spec.Name, CloudEnvironment: a.CloudEnvironment{Image: "test/runtime:updated", CPU: 3000, Memory: 4096, Network: a.NetworkPolicy{DefaultAction: "allow"}}})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -1,8 +1,6 @@
 import { ApiError, request, type RequestOptions } from "@/api/client";
-import {
-  CloudComputerDetailPage,
-  CloudSettingsPage,
-} from "@/areas/console/pages/cloud-computers";
+import { CloudComputerDetailPage } from "@/areas/console/pages/cloud-computers";
+import { SandboxesPage } from "@/areas/console/pages/sandboxes";
 import { PersonalCloudComputerPage } from "@/areas/workspace/pages/personal-cloud-computer";
 import { NavigationGuardProvider } from "@/components/navigation-guard";
 import { AgentRuntimeProvider } from "@/features/agents/data/agent-runtime";
@@ -47,7 +45,7 @@ beforeEach(() => {
   mocked.mockImplementation(async (path, options = {}) => {
     const custom = await override?.(path, options);
     if (custom) return custom;
-    if (path === "/admin/agents/sandbox-connection")
+    if (path === "/admin/sandboxes/connection")
       return response(sandboxConnection);
     if (
       path === "/admin/agents/cloud-computers/9" ||
@@ -91,8 +89,8 @@ function mount(entry: string) {
         ),
         children: [
           {
-            path: "/admin/cloud-computers/settings",
-            element: <CloudSettingsPage />,
+            path: "/admin/sandboxes",
+            element: <SandboxesPage />,
           },
           {
             path: "/admin/cloud-computers/:computerId",
@@ -165,21 +163,30 @@ it("requires a preview and second confirmation before changing the endpoint", as
         '"v2"',
       );
   };
-  const { user } = mount("/admin/cloud-computers/settings");
+  const { user } = mount("/admin/sandboxes");
   const endpoint = await screen.findByLabelText("服务地址");
+  expect(endpoint).toBeDisabled();
+  await user.click(
+    screen.getByRole("button", { name: "修改连接（极度危险）" }),
+  );
   await user.clear(endpoint);
   await user.type(endpoint, "https://new.example.com");
-  await user.click(screen.getByRole("button", { name: "检查更换影响" }));
+  await user.click(screen.getByRole("button", { name: "预览连接变更" }));
   expect(
-    await screen.findByRole("dialog", { name: "确认更换沙箱服务地址？" }),
+    await screen.findByRole("dialog", { name: "确认修改沙箱连接？" }),
   ).toBeVisible();
   expect(
     mocked.mock.calls.some(([, options]) => options?.method === "PUT"),
   ).toBe(false);
-  await user.click(screen.getByRole("button", { name: "承担后果并更换地址" }));
+  expect(screen.getByRole("button", { name: "确认提交" })).toBeDisabled();
+  await user.type(
+    screen.getByLabelText("输入「确认修改沙箱连接」"),
+    "确认修改沙箱连接",
+  );
+  await user.click(screen.getByRole("button", { name: "确认提交" }));
   await waitFor(() =>
     expect(mocked).toHaveBeenCalledWith(
-      "/admin/agents/sandbox-connection",
+      "/admin/sandboxes/connection",
       expect.objectContaining({
         method: "PUT",
         etag: '"v1"',

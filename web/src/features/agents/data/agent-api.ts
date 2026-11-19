@@ -3,9 +3,13 @@ import type { CommandReceipt } from "@/types/agents";
 
 export const agentAdminRoot = "/admin/agents";
 export const agentRoot = "/agents";
+export const sandboxAdminRoot = "/admin/sandboxes";
 export const webAccessRoot = "/admin/web-access";
 export type AgentApiDomain =
-  typeof agentAdminRoot | typeof agentRoot | typeof webAccessRoot;
+  | typeof sandboxAdminRoot
+  | typeof agentAdminRoot
+  | typeof agentRoot
+  | typeof webAccessRoot;
 export const agentKeys = ["agents"] as const;
 export const webAccessKeys = ["web-access"] as const;
 export function agentRequest<T>(path: string, options?: RequestOptions) {

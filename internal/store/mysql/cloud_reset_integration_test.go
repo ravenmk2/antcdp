@@ -10,6 +10,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	a "github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	m "github.com/ravenmk2/antcdp/internal/modules/models"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	sb "github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
@@ -73,6 +74,8 @@ func TestCloudBackendResetAndVerifiedDeletion(t *testing.T) {
 	t.Run("synchronous_file_mutations", func(t *testing.T) {
 		testSynchronousWorkspaceMutations(t, f, svc, before.ID, remote.sandboxMemoryProvider)
 	})
+	t.Run("sandbox_admin", func(t *testing.T) { testSandboxAdmin(t, f, svc, remote, before.ID) })
+	terminatedBeforeReset := remote.terminated
 	agent := runtimeTestAgent(t, f)
 	session := runtimeSession(t, f, agent.ID)
 	x := runtimeClaim(t, f, session.Configuration.ID, "hold reset")
@@ -80,7 +83,7 @@ func TestCloudBackendResetAndVerifiedDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := a.ConnectionWrite{Endpoint: "https://new-cloud.invalid"}
+	target := a.ConnectionWrite{Endpoint: "https://new-cloud.invalid", ConfirmationText: "确认修改沙箱连接", Authentication: &m.AuthenticationWrite{Method: "api_key", Secret: m.SecretWrite{Operation: "replace", Value: new("new-fixture-secret")}}}
 	preview, err := svc.PreviewConnection(ctx, f.AdminToken, target)
 	if err != nil {
 		t.Fatal(err)
@@ -140,7 +143,7 @@ func TestCloudBackendResetAndVerifiedDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	current := created.Data.(a.CloudView)
-	if current.State != "ready" || current.VolumeID == nil || *current.VolumeID == *before.VolumeID || remote.terminated != 0 || !remote.volumes[*before.VolumeID] {
+	if current.State != "ready" || current.VolumeID == nil || *current.VolumeID == *before.VolumeID || remote.terminated != terminatedBeforeReset || !remote.volumes[*before.VolumeID] {
 		t.Fatal("reset reused storage or cleaned old backend")
 	}
 	remote.deleteUnknown = true

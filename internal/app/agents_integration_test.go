@@ -142,7 +142,15 @@ func TestAgentApplicationIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal("connection:", err)
 	}
-	created, err := app.Service.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Name: "Application agent", Mode: "service", ScopeKind: "platform", CloudEnvironment: &a.CloudEnvironment{Image: os.Getenv("ANTCDP_TEST_OPENSANDBOX_IMAGE"), CPU: 1000, Memory: 1024, Network: a.NetworkPolicy{DefaultAction: "allow"}}})
+	spec, err := app.Sandboxes.SaveSpec(ctx, raw, "", cryptox.ID(), 0, a.SpecWrite{Name: "Integration", CloudEnvironment: a.CloudEnvironment{Image: os.Getenv("ANTCDP_TEST_OPENSANDBOX_IMAGE"), CPU: 1000, Memory: 1024, Network: a.NetworkPolicy{DefaultAction: "allow"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	robot, _, err := accounts.CreateRobot(ctx, raw, identity.RobotCreate{Username: "application_robot", DisplayName: "Application robot"}, identity.Metadata{})
+	if err != nil {
+		t.Fatal("robot:", err)
+	}
+	created, err := app.Service.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: "application_agent", Name: "Application agent", Mode: "service", RobotUserID: new(strconv.FormatUint(robot.ID, 10)), ScopeKind: "platform", SandboxSpecID: &spec.Data.(*a.SandboxSpec).ID})
 	if err != nil {
 		t.Fatal("agent:", err)
 	}
@@ -248,7 +256,7 @@ func cleanupApplicationSandboxes(t *testing.T, db *sql.DB, installer *install.Se
 		t.Error(err)
 		return
 	}
-	rows, err := db.QueryContext(ctx, "SELECT backend_generation,id,runtime_creation_token,runtime_id FROM cloud_computer WHERE runtime_id IS NOT NULL")
+	rows, err := db.QueryContext(ctx, "SELECT i.backend_generation,i.id,i.creation_token,i.remote_id FROM sandbox_instance i JOIN cloud_computer c ON c.sandbox_instance_id=i.id WHERE i.remote_id IS NOT NULL")
 	if err != nil {
 		t.Error(err)
 		return

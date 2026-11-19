@@ -96,7 +96,7 @@ func (s *CloudService) cloudView(cr CloudRepository, v *CloudComputerRow) (Cloud
 	if e != nil {
 		return CloudView{}, e
 	}
-	out := CloudView{ID: v.ID, OwnerUserID: v.OwnerUserID, PoolAgentID: v.PoolAgentID, State: v.State, BackendGeneration: v.BackendGeneration, InstanceID: v.InstanceID, StorageGeneration: v.StorageGeneration, Environment: v.EffectiveEnvironment, AppliedTemplateVersion: v.AppliedTemplateVersion, VolumeState: v.VolumeState, RuntimeID: v.RuntimeID, VolumeID: v.VolumeID, VolumeName: v.VolumeName, VolumeCleanupState: v.VolumeCleanupState, ActiveLeases: activity.Leases, PendingTransfers: activity.Transfers, UnknownExecutions: activity.Unknown, IdleSince: v.IdleSince, LastActivityAt: v.LastActivityAt, ErrorCode: v.ErrorCode, Version: strings.Trim(s.tag("computer", v.ID, v.RowVersion), `"`)}
+	out := CloudView{ID: v.ID, OwnerUserID: v.OwnerUserID, PoolAgentID: v.PoolAgentID, State: v.State, BackendGeneration: v.BackendGeneration, InstanceID: v.InstanceID, StorageGeneration: v.StorageGeneration, Environment: v.EffectiveEnvironment, AppliedSpecID: v.AppliedSpecID, AppliedSpecVersion: v.AppliedSpecVersion, AppliedTemplateVersion: v.AppliedSpecVersion, VolumeState: v.VolumeState, RuntimeID: v.RuntimeID, VolumeID: v.VolumeID, VolumeName: v.VolumeName, VolumeCleanupState: v.VolumeCleanupState, ActiveLeases: activity.Leases, PendingTransfers: activity.Transfers, UnknownExecutions: activity.Unknown, IdleSince: v.IdleSince, LastActivityAt: v.LastActivityAt, ErrorCode: v.ErrorCode, Version: strings.Trim(s.tag("computer", v.ID, v.RowVersion), `"`)}
 	if latest != nil {
 		out.LatestOperationID = &latest.ID
 	}

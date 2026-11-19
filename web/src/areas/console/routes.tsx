@@ -173,6 +173,9 @@ const CloudComputersPage = lazy(() =>
     default: m.CloudComputersPage,
   })),
 );
+const SandboxesPage = lazy(() =>
+  import("./pages/sandboxes").then((m) => ({ default: m.SandboxesPage })),
+);
 const CloudSettingsPage = lazy(() =>
   import("./pages/cloud-computers").then((m) => ({
     default: m.CloudSettingsPage,
@@ -205,6 +208,7 @@ export const consoleRoutes: RouteObject[] = [
       { path: "agents", element: <AgentsPage /> },
       { path: "agent-usage", element: <AgentUsagePage /> },
       { path: "robots", element: <RobotsPage /> },
+      { path: "sandboxes", element: <SandboxesPage /> },
       { path: "cloud-computers", element: <CloudComputersPage /> },
       { path: "cloud-computers/settings", element: <CloudSettingsPage /> },
       {

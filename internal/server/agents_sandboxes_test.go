@@ -11,11 +11,11 @@ import (
 
 func TestSandboxUnavailableAndCSRFBoundary(t *testing.T) {
 	h := testHandler(t)
-	for _, path := range []string{"/admin/agents/sandbox-connection", "/admin/agents/cloud-computer-template", "/admin/agents/cloud-computers", "/agents/cloud-computer", "/agents/cloud-computers/1/entries"} {
+	for _, path := range []string{"/admin/sandboxes/connection", "/admin/agents/cloud-computer-spec", "/admin/agents/cloud-computers", "/agents/cloud-computer", "/agents/cloud-computers/1/entries"} {
 		w := request(h, "GET", "/api/v1"+path, "", "", nil, "")
 		assertError(t, w, 503, "INSTANCE_NOT_READY")
 	}
-	w := request(h, "POST", "/api/v1/admin/agents/sandbox-connection/preview", `{}`, "", nil, "http://antcdp.test")
+	w := request(h, "POST", "/api/v1/admin/sandboxes/connection/preview", `{}`, "", nil, "http://antcdp.test")
 	assertError(t, w, 403, "CSRF_INVALID")
 }
 
@@ -28,7 +28,7 @@ func TestSandboxStrictConfigurationRejectsUntrustedDerivedFields(t *testing.T) {
 		c.Next()
 	})
 	api := router.Group("/api/v1")
-	registerAgentSandboxes(api.Group("/agents"), api.Group("/admin/agents"), Options{Sandboxes: &agents.CloudService{}})
+	registerAgentSandboxes(api.Group("/agents"), api.Group("/admin/agents"), api.Group("/admin/sandboxes"), Options{Sandboxes: &agents.CloudService{}})
 	for _, tc := range []struct {
 		body, code string
 		status     int
@@ -43,7 +43,7 @@ func TestSandboxStrictConfigurationRejectsUntrustedDerivedFields(t *testing.T) {
 		{`{"config":{"network":{"user_default":{"default_action":"allow","default_action":"deny"}}}}`, "BAD_REQUEST", 400},
 	} {
 		t.Run(tc.body, func(t *testing.T) {
-			w := request(router, "POST", "/api/v1/admin/agents/sandbox-connection/preview", tc.body, "", nil, "")
+			w := request(router, "POST", "/api/v1/admin/sandboxes/connection/preview", tc.body, "", nil, "")
 			assertError(t, w, tc.status, tc.code)
 		})
 	}
@@ -77,12 +77,12 @@ func TestSandboxQueryRejectsDuplicateFiltersAndForeignSelectors(t *testing.T) {
 func TestSandboxReadsRejectBodyAndQueryBeforeObservingResources(t *testing.T) {
 	router := gin.New()
 	api := router.Group("/api/v1")
-	registerAgentSandboxes(api.Group("/agents"), api.Group("/admin/agents"), Options{Sandboxes: &agents.CloudService{}})
+	registerAgentSandboxes(api.Group("/agents"), api.Group("/admin/agents"), api.Group("/admin/sandboxes"), Options{Sandboxes: &agents.CloudService{}})
 	for _, tc := range []struct{ path, body string }{
 		{"/agents/cloud-computer?user_id=2", ""},
 		{"/admin/agents/cloud-computers/01", ""},
 		{"/agents/cloud-computers/2/entries?provider_id=1", ""},
-		{"/admin/agents/cloud-computer-template", `{"default_provider_id":"1"}`},
+		{"/admin/agents/cloud-computer-spec", `{"default_provider_id":"1"}`},
 	} {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", "/api/v1"+tc.path, strings.NewReader(tc.body))

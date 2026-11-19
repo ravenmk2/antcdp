@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -104,20 +105,48 @@ func (s *CloudService) cloudReceipt(ctx context.Context, tx identity.Tx, cr Clou
 	return audit(ctx, tx, a, command, kind, target)
 }
 
-func normalizeConnection(w *ConnectionWrite) error {
-	w.Endpoint = strings.TrimRight(strings.TrimSpace(w.Endpoint), "/")
-	if w.Endpoint != "" {
-		u, e := url.Parse(w.Endpoint)
-		if e != nil || u == nil || len(w.Endpoint) > 2048 || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || (u.Scheme != "http" && u.Scheme != "https") || strings.ContainsAny(w.Endpoint, "\r\n\x00\\") {
-			return httpx.Invalid("endpoint", "invalid_url")
+func normalizeSandboxEndpoint(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", nil
+	}
+	value = strings.TrimRight(value, "/")
+	u, err := url.Parse(value)
+	if err != nil || len(value) > 2048 || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || (u.Scheme != "http" && u.Scheme != "https") || strings.ContainsAny(value, "\r\n\x00\\") {
+		return "", httpx.Invalid("endpoint", "invalid_url")
+	}
+	host := u.Hostname()
+	if !strings.Contains(host, ":") {
+		host = strings.ToLower(host)
+	}
+	port := u.Port()
+	if port != "" {
+		n, e := strconv.Atoi(port)
+		if e != nil || n < 1 || n > 65535 {
+			return "", httpx.Invalid("endpoint", "invalid_url")
 		}
-		if u.Port() != "" {
-			n, e := strconv.Atoi(u.Port())
-			if e != nil || n < 1 || n > 65535 {
-				return httpx.Invalid("endpoint", "invalid_url")
-			}
+		port = strconv.Itoa(n)
+		if u.Scheme == "https" && n == 443 || u.Scheme == "http" && n == 80 {
+			port = ""
 		}
 	}
+	switch {
+	case port != "":
+		u.Host = net.JoinHostPort(host, port)
+	case strings.Contains(host, ":"):
+		u.Host = "[" + host + "]"
+	default:
+		u.Host = host
+	}
+	return u.String(), nil
+}
+
+func normalizeConnection(w *ConnectionWrite) error {
+	endpoint, err := normalizeSandboxEndpoint(w.Endpoint)
+	if err != nil {
+		return err
+	}
+	w.Endpoint = endpoint
 	if w.AccessMode == "" {
 		w.AccessMode = "direct"
 	}
@@ -180,7 +209,7 @@ func (s *CloudService) connectionView(row *SandboxConnectionRow) ConnectionView 
 	if json.Unmarshal(row.LastDiagnostic, &diagnostic) == nil && diagnostic.Version == row.ConfigVersion {
 		_ = json.Unmarshal(row.VerifiedCapabilities, &caps)
 	}
-	return ConnectionView{Endpoint: row.Endpoint, AccessMode: row.AccessMode, ConnectTimeout: row.ConnectTimeout, OperationTimeout: row.OperationTimeout, Authentication: models.Authentication{Method: "api_key", HasSecret: len(row.SecretCiphertext) > 0}, BackendGeneration: row.BackendGeneration, MaintenanceState: row.MaintenanceState, Capabilities: caps, LastDiagnostic: row.LastDiagnostic, LastDiagnosticAt: row.LastDiagnosticAt, Version: strings.Trim(s.Host.tag("sandbox-connection", 1, row.RowVersion), `"`)}
+	return ConnectionView{RequiresConfirmation: row.ConfigVersion > 1, ConfigVersion: row.ConfigVersion, Endpoint: row.Endpoint, AccessMode: row.AccessMode, ConnectTimeout: row.ConnectTimeout, OperationTimeout: row.OperationTimeout, Authentication: models.Authentication{Method: "api_key", HasSecret: len(row.SecretCiphertext) > 0}, BackendGeneration: row.BackendGeneration, MaintenanceState: row.MaintenanceState, Capabilities: caps, LastDiagnostic: row.LastDiagnostic, LastDiagnosticAt: row.LastDiagnosticAt, Version: strings.Trim(s.Host.tag("sandbox-connection", 1, row.RowVersion), `"`)}
 }
 func (s *CloudService) GetConnection(ctx context.Context, raw string) (*Result, error) {
 	return s.cloudAccess(ctx, raw, true, func(_ identity.Tx, _ Repository, _ StateRepository, cr CloudRepository, _ *identity.Auth, out *Result) error {
@@ -198,77 +227,179 @@ func (s *CloudService) GetConnection(ctx context.Context, raw string) (*Result, 
 }
 
 type connectionConfirmation struct {
-	Config, Backend, Topology uint64
-	Count                     int
-	Target                    string
-	Expires                   int64
+	Actor, Config, Backend, Topology uint64
+	Count                            int
+	Target                           string
+	Expires                          int64
 }
 
 func (s *CloudService) connectionTarget(w ConnectionWrite) string {
 	w.ConfirmationToken = ""
+	w.ConfirmationText = ""
 	b, _ := agentcore.CanonicalJSON(w)
 	h := sha256.Sum256([]byte(s.Host.ETag("sandbox/change/" + string(b))))
 	return hex.EncodeToString(h[:])
 }
-func (s *CloudService) PreviewConnection(ctx context.Context, raw string, w ConnectionWrite) (*Result, error) {
-	if e := normalizeConnection(&w); e != nil {
-		return nil, e
+
+const confirmConnectionText = "确认修改沙箱连接"
+
+func endpointOf(row *SandboxConnectionRow) string {
+	if row.Endpoint == nil {
+		return ""
 	}
+	value, err := normalizeSandboxEndpoint(*row.Endpoint)
+	if err != nil {
+		return *row.Endpoint
+	}
+	return value
+}
+func validateTarget(row *SandboxConnectionRow, w ConnectionWrite) error {
+	if w.Endpoint == "" {
+		if row.ConfigVersion == 1 {
+			return httpx.Invalid("endpoint", "required")
+		}
+		if w.Authentication != nil && w.Authentication.Secret.Operation == "replace" {
+			return httpx.Invalid("authentication.secret", "unexpected_value")
+		}
+		return nil
+	}
+	old := endpointOf(row)
+	if old != "" && old != w.Endpoint {
+		from, _ := url.Parse(old)
+		to, _ := url.Parse(w.Endpoint)
+		if from == nil || !strings.EqualFold(from.Host, to.Host) || from.Scheme != to.Scheme {
+			if w.Authentication == nil || w.Authentication.Secret.Operation != "replace" {
+				return httpx.Invalid("authentication.secret", "new_target_requires_credentials")
+			}
+		}
+	}
+	return nil
+}
+func (s *CloudService) previewClaims(cr CloudRepository, row *SandboxConnectionRow, w ConnectionWrite, actor uint64) (connectionConfirmation, int, error) {
+	c := connectionConfirmation{Actor: actor, Config: row.ConfigVersion, Target: s.connectionTarget(w), Expires: time.Now().Add(5 * time.Minute).Unix()}
+	if w.Endpoint == endpointOf(row) {
+		return c, 0, nil
+	}
+	count, busy, e := cr.CloudTopology()
+	c.Count, c.Backend, c.Topology = count, row.BackendGeneration, row.TopologyVersion
+	return c, busy, e
+}
+func (s *CloudService) probeConnection(ctx context.Context, target CloudConnection) error {
+	bounded, cancel := context.WithTimeout(ctx, target.ConnectTimeout+10*time.Second)
+	defer cancel()
+	provider, e := s.openProvider(bounded, target)
+	if e != nil {
+		return e
+	}
+	return sandboxFailure(provider.Health(bounded, nil))
+}
+func (s *CloudService) CheckConnection(ctx context.Context, raw string) (*Result, error) {
+	start := time.Now().UTC()
 	var target CloudConnection
-	out, err := s.cloudAccess(ctx, raw, true, func(_ identity.Tx, _ Repository, _ StateRepository, cr CloudRepository, _ *identity.Auth, out *Result) error {
-		row, e := cr.Connection(true)
+	var version uint64
+	var probeErr error
+	_, e := s.cloudAccess(ctx, raw, true, func(_ identity.Tx, _ Repository, _ StateRepository, cr CloudRepository, _ *identity.Auth, _ *Result) error {
+		row, e := cr.Connection(false)
 		if e != nil {
 			return e
 		}
 		if row == nil {
 			return integrity()
 		}
+		version = row.ConfigVersion
+		target, probeErr = s.runtimeConnection(row)
+		if row.Endpoint == nil {
+			return probeErr
+		}
+		return nil
+	})
+	if e != nil {
+		return nil, e
+	}
+	if probeErr == nil {
+		probeErr = s.probeConnection(ctx, target)
+	}
+	record := map[string]any{"config_version": idString(version), "started_ns": strconv.FormatInt(start.UnixNano(), 10), "healthy": probeErr == nil, "elapsed_ms": time.Since(start).Milliseconds(), "error_code": remoteSandboxError(probeErr)}
+	data, e := json.Marshal(record)
+	if e != nil {
+		return nil, e
+	}
+	return s.cloudAccess(ctx, raw, true, func(_ identity.Tx, _ Repository, _ StateRepository, cr CloudRepository, _ *identity.Auth, out *Result) error {
+		if e := cr.SaveConnectionDiagnostic(version, start, data); e != nil {
+			return e
+		}
+		row, e := cr.Connection(false)
+		if e != nil {
+			return e
+		}
+		if row == nil {
+			return integrity()
+		}
+		out.Tag = s.Host.tag("sandbox-connection", 1, row.RowVersion)
+		out.Data = s.connectionView(row)
+		return nil
+	})
+}
+func (s *CloudService) PreviewConnection(ctx context.Context, raw string, w ConnectionWrite) (*Result, error) {
+	if e := normalizeConnection(&w); e != nil {
+		return nil, e
+	}
+	var target CloudConnection
+	out, err := s.cloudAccess(ctx, raw, true, func(_ identity.Tx, _ Repository, _ StateRepository, cr CloudRepository, a *identity.Auth, out *Result) error {
+		row, e := cr.Connection(false)
+		if e != nil {
+			return e
+		}
+		if row == nil {
+			return integrity()
+		}
+		if e = validateTarget(row, w); e != nil {
+			return e
+		}
+		old := endpointOf(row)
 		if e = s.connectionSecret(row, w.Authentication); e != nil {
 			return e
 		}
-		if w.Endpoint != "" {
-			candidate := *row
-			candidate.Endpoint = &w.Endpoint
-			candidate.AccessMode, candidate.ConnectTimeout, candidate.OperationTimeout = w.AccessMode, w.ConnectTimeout, w.OperationTimeout
-			target, e = s.runtimeConnection(&candidate)
+		if w.Endpoint != "" && len(row.SecretCiphertext) == 0 {
+			return httpx.Invalid("authentication.secret", "required")
+		}
+		claims, busy, e := s.previewClaims(cr, row, w, a.User.ID)
+		if e != nil {
+			return e
+		}
+		if old != w.Endpoint && w.Endpoint != "" {
+			row.Endpoint = &w.Endpoint
+			row.AccessMode = w.AccessMode
+			row.ConnectTimeout = w.ConnectTimeout
+			row.OperationTimeout = w.OperationTimeout
+			target, e = s.runtimeConnection(row)
 			if e != nil {
 				return e
 			}
 		}
-		count, busy, e := cr.CloudTopology()
+		b, e := json.Marshal(claims)
 		if e != nil {
 			return e
 		}
-		if w.Endpoint == "" && count > 0 {
-			return httpx.E(409, "CLOUD_RESOURCES_EXIST", "永久删除所有云电脑后才能清除连接")
-		}
-		claims := connectionConfirmation{Config: row.ConfigVersion, Backend: row.BackendGeneration, Topology: row.TopologyVersion, Count: count, Target: s.connectionTarget(w), Expires: time.Now().Add(5 * time.Minute).Unix()}
-		b, _ := json.Marshal(claims)
 		payload := base64.RawURLEncoding.EncodeToString(b)
 		token := payload + "." + base64.RawURLEncoding.EncodeToString([]byte(s.Host.ETag("sandbox-confirm/"+payload)))
-		out.Data = map[string]any{"confirmation_token": token, "affected_computers": count, "busy_activities": busy, "expires_at": time.Unix(claims.Expires, 0).UTC(), "resets_storage": row.Endpoint != nil && *row.Endpoint != w.Endpoint}
+		out.Data = map[string]any{"confirmation_token": token, "affected_computers": claims.Count, "busy_activities": busy, "expires_at": time.Unix(claims.Expires, 0).UTC(), "resets_storage": old != "" && old != w.Endpoint}
 		return nil
 	})
-	if err != nil || w.Endpoint == "" {
-		return out, err
-	}
-	// No database locks or remote mutations are held during the connectivity
-	// check. The signed preview is still fenced against changes at commit time.
-	bounded, cancel := context.WithTimeout(ctx, target.ConnectTimeout+10*time.Second)
-	defer cancel()
-	provider, err := s.openProvider(bounded, target)
 	if err != nil {
 		return nil, err
 	}
-	if err = provider.Health(bounded, nil); err != nil {
-		return nil, sandboxFailure(err)
+	if target.Endpoint != "" {
+		if err = s.probeConnection(ctx, target); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }
-func (s *CloudService) verifyConnectionConfirmation(row *SandboxConnectionRow, w ConnectionWrite, count int) error {
+func (s *CloudService) verifyConnectionConfirmation(w ConnectionWrite, expected connectionConfirmation) error {
 	parts := strings.Split(w.ConfirmationToken, ".")
-	if len(parts) != 2 {
-		return httpx.E(409, "CONNECTION_CONFIRMATION_REQUIRED", "请先查看影响范围并确认更换服务地址")
+	if len(parts) != 2 || w.ConfirmationText != confirmConnectionText {
+		return httpx.E(409, "CONNECTION_CONFIRMATION_REQUIRED", "请先预览变更并输入确认文字")
 	}
 	mac, e := base64.RawURLEncoding.DecodeString(parts[1])
 	if e != nil || !hmac.Equal(mac, []byte(s.Host.ETag("sandbox-confirm/"+parts[0]))) {
@@ -276,7 +407,7 @@ func (s *CloudService) verifyConnectionConfirmation(row *SandboxConnectionRow, w
 	}
 	b, e := base64.RawURLEncoding.DecodeString(parts[0])
 	var v connectionConfirmation
-	if e != nil || json.Unmarshal(b, &v) != nil || v.Config != row.ConfigVersion || v.Backend != row.BackendGeneration || v.Topology != row.TopologyVersion || v.Count != count || v.Target != s.connectionTarget(w) || v.Expires < time.Now().Unix() {
+	if e != nil || json.Unmarshal(b, &v) != nil || v.Actor != expected.Actor || v.Config != expected.Config || v.Backend != expected.Backend || v.Topology != expected.Topology || v.Count != expected.Count || v.Target != expected.Target || v.Expires <= time.Now().Unix() {
 		return httpx.E(409, "CONNECTION_CONFIRMATION_INVALID", "配置或云电脑范围已变化，请重新确认")
 	}
 	return nil
@@ -296,46 +427,46 @@ func (s *CloudService) SaveConnection(ctx context.Context, raw, tag, key string,
 		if e = checkTag(tag, s.Host.tag("sandbox-connection", 1, row.RowVersion)); e != nil {
 			return e
 		}
-		old := ""
-		if row.Endpoint != nil {
-			old = *row.Endpoint
+		if e = validateTarget(row, w); e != nil {
+			return e
 		}
+		old := endpointOf(row)
 		changed := old != w.Endpoint
 		now := time.Now().UTC().Truncate(time.Millisecond)
-		if changed {
-			count, busy, e := cr.CloudTopology()
+		if row.ConfigVersion > 1 {
+			claims, busy, e := s.previewClaims(cr, row, w, a.User.ID)
 			if e != nil {
 				return e
 			}
-			if w.Endpoint == "" && count > 0 {
+			if e = s.verifyConnectionConfirmation(w, claims); e != nil {
+				return e
+			}
+			if w.Endpoint == "" && claims.Count > 0 {
 				return httpx.E(409, "CLOUD_RESOURCES_EXIST", "永久删除所有云电脑后才能清除连接")
 			}
-			if old != "" {
-				if e = s.verifyConnectionConfirmation(row, w, count); e != nil {
-					return e
-				}
-				if busy > 0 {
-					return httpx.E(409, "CLOUD_COMPUTERS_BUSY", "仍有在途或结果未确认的活动，请等待收尾后重试")
-				}
-				row.MaintenanceState = "resetting"
-				if e = cr.SaveConnection(row); e != nil {
-					return e
-				}
-				row.BackendGeneration++
-				if e = cr.ResetCloudResources(row.BackendGeneration, now); e != nil {
-					return e
-				}
-				sessions, e := cr.CloudResetSessions()
+			if changed && busy > 0 {
+				return httpx.E(409, "CLOUD_COMPUTERS_BUSY", "仍有在途或结果未确认的活动，请等待收尾后重试")
+			}
+		}
+		if changed && old != "" {
+			row.MaintenanceState = "resetting"
+			if e = cr.SaveConnection(row); e != nil {
+				return e
+			}
+			row.BackendGeneration++
+			if e = cr.ResetCloudResources(row.BackendGeneration, now); e != nil {
+				return e
+			}
+			sessions, e := cr.CloudResetSessions()
+			if e != nil {
+				return e
+			}
+			for i := range sessions {
+				receipt, e := cancelSessionQueue(st, &sessions[i], "SANDBOX_BACKEND_CHANGED", now)
 				if e != nil {
 					return e
 				}
-				for i := range sessions {
-					receipt, e := cancelSessionQueue(st, &sessions[i], "SANDBOX_BACKEND_CHANGED", now)
-					if e != nil {
-						return e
-					}
-					out.Commits = append(out.Commits, receipt)
-				}
+				out.Commits = append(out.Commits, receipt)
 			}
 		}
 		if e = s.connectionSecret(row, w.Authentication); e != nil {
@@ -343,6 +474,10 @@ func (s *CloudService) SaveConnection(ctx context.Context, raw, tag, key string,
 		}
 		if w.Endpoint != "" && len(row.SecretCiphertext) == 0 {
 			return httpx.Invalid("authentication.secret", "required")
+		}
+		if w.Endpoint == "" && len(row.SecretCiphertext) > 0 {
+			row.SecretCiphertext, row.SecretFormatVersion, row.SecretKeyVersion = nil, nil, nil
+			row.SecretRevision++
 		}
 		row.Endpoint = nil
 		if w.Endpoint != "" {

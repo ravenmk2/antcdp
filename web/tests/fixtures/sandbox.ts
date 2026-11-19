@@ -14,6 +14,8 @@ export const sandboxCapabilities: CloudCapabilities = {
   volume_deletion: "unsupported",
 };
 export const sandboxConnection: SandboxConnection = {
+  requires_confirmation: true,
+  config_version: "2",
   endpoint: "https://sandbox.example.com",
   access_mode: "direct",
   connect_timeout_seconds: 10,

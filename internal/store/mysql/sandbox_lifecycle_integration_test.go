@@ -119,7 +119,11 @@ func (f sandboxMemoryFactory) Open(context.Context, sb.Connection) (sb.Provider,
 
 func sandboxServiceAgent(t *testing.T, f *agentIntegrationFixture, mode string) *a.Definition {
 	t.Helper()
-	created, e := f.Agents.CreateDefinition(f.Context, f.AdminToken, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: "Service computer " + mode, Mode: "service", RobotUserID: new(fmt.Sprint(createTestRobot(t, f).ID)), ScopeKind: "platform", CloudEnvironment: &a.CloudEnvironment{Image: "test/runtime:fixed", CPU: 2000, Memory: 4096, Network: a.NetworkPolicy{DefaultAction: "allow"}}})
+	binding, e := f.Agents.Sandboxes.GetBinding(f.Context, f.AdminToken, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	created, e := f.Agents.CreateDefinition(f.Context, f.AdminToken, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: "Service computer " + mode, Mode: "service", RobotUserID: new(fmt.Sprint(createTestRobot(t, f).ID)), ScopeKind: "platform", SandboxSpecID: binding.Data.(*a.SpecBinding).SpecID})
 	if e != nil {
 		t.Fatal(e)
 	}

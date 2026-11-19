@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { request } from "@/api/client";
 import { Button } from "@/components/button";
@@ -28,8 +28,7 @@ import {
   ComputerFacts,
   cloudStateNames,
 } from "@/features/agents/cloud/computer-view";
-import { CloudTemplateEditor } from "@/features/agents/cloud/template-editor";
-import { ConnectionEditor } from "@/features/agents/cloud/connection-editor";
+import { CloudSpecBindingEditor } from "@/features/agents/cloud/spec-binding-editor";
 import { WorkspaceFiles } from "@/features/agents/sandbox/workspace-files";
 import {
   CapabilitiesView,
@@ -61,9 +60,7 @@ export function CloudComputersPage() {
         actions={
           <Button
             render={
-              <Link to="/admin/cloud-computers/settings">
-                连接与个人电脑配置
-              </Link>
+              <Link to="/admin/cloud-computers/settings">个人云电脑配置</Link>
             }
             nativeButton={false}
             role="link"
@@ -186,41 +183,13 @@ export function CloudComputersPage() {
   );
 }
 export function CloudSettingsPage() {
-  const [params, setParams] = useSearchParams();
-  const tab = params.get("tab") === "personal" ? "personal" : "connection";
   return (
     <div className="page space-y-5">
       <PageHeader
-        title="云电脑配置"
-        description="平台维护一份服务连接，个人电脑与各服务型助手分别配置运行环境。"
-        actions={
-          <Button
-            render={<Link to="/admin/cloud-computers">返回云电脑</Link>}
-            nativeButton={false}
-            role="link"
-            variant="outline"
-          />
-        }
+        title="个人云电脑配置"
+        description="为新建和重建的个人云电脑选择沙箱规格。"
       />
-      <div className="flex gap-2">
-        <Button
-          variant={tab === "connection" ? "default" : "outline"}
-          onClick={() => setParams({ tab: "connection" })}
-        >
-          服务连接
-        </Button>
-        <Button
-          variant={tab === "personal" ? "default" : "outline"}
-          onClick={() => setParams({ tab: "personal" })}
-        >
-          个人电脑配置
-        </Button>
-      </div>
-      {tab === "connection" ? (
-        <ConnectionEditor />
-      ) : (
-        <CloudTemplateEditor onSaved={() => {}} />
-      )}
+      <CloudSpecBindingEditor onSaved={() => {}} />
     </div>
   );
 }
@@ -355,6 +324,12 @@ export function CloudComputerDetailPage() {
                 实际能力与配置
               </summary>
               <div className="mt-5 space-y-4">
+                <p>
+                  已应用规格{" "}
+                  {v.applied_spec_id
+                    ? `#${v.applied_spec_id} · 版本 ${v.applied_spec_version}`
+                    : "暂无"}
+                </p>
                 <CapabilitiesView value={v.capabilities} />
                 <pre className="overflow-auto whitespace-pre-wrap rounded-lg border p-4 text-xs">
                   {JSON.stringify(v.effective_environment, null, 2)}

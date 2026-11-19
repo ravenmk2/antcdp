@@ -20,6 +20,7 @@ const names: Record<string, string> = {
   "/admin/sms": "短信管理",
   "/admin/dingtalk": "钉钉机器人",
   "/admin/audit": "审计日志",
+  "/admin/sandboxes": "沙箱配置",
   "/admin/settings": "系统设置",
 };
 
@@ -44,7 +45,7 @@ export function adminBreadcrumbs(
     return [
       { label: "控制台", to: "/admin" },
       { label: "云电脑", to: "/admin/cloud-computers" },
-      { label: path.endsWith("/settings") ? "连接与创建配置" : "云电脑详情" },
+      { label: path.endsWith("/settings") ? "个人云电脑配置" : "云电脑详情" },
     ];
   const debug = path.match(/^\/admin\/agents\/([1-9]\d*)\/debug/);
   if (debug)

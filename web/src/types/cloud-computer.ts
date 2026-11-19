@@ -20,10 +20,19 @@ export interface CloudEnvironment {
   memory_mib: number;
   network: SandboxNetworkPolicy;
 }
-export interface CloudTemplate extends Versioned {
-  agent_id: string | null;
-  environment: CloudEnvironment;
+export interface SandboxSpec extends CloudEnvironment, Versioned {
+  id: string;
+  name: string;
   config_version: string;
+}
+export interface SpecBinding extends Versioned {
+  agent_id: string | null;
+  spec_id: string | null;
+  spec: SandboxSpec | null;
+}
+export interface SpecReference {
+  agent_id: string | null;
+  name: string;
 }
 export interface SandboxConnection extends Versioned {
   endpoint: string | null;
@@ -34,7 +43,14 @@ export interface SandboxConnection extends Versioned {
   backend_generation: string;
   maintenance_state: string;
   capabilities: CloudCapabilities;
-  last_diagnostic: unknown;
+  requires_confirmation: boolean;
+  config_version: string;
+  last_diagnostic: {
+    config_version: string;
+    healthy: boolean;
+    elapsed_ms: number;
+    error_code: string;
+  } | null;
   last_diagnostic_at: string | null;
 }
 export interface CloudConnectionWrite {
@@ -72,6 +88,8 @@ export interface CloudComputer extends Versioned {
   sandbox_instance_id: string;
   storage_generation: string;
   effective_environment: CloudEnvironment | null;
+  applied_spec_id?: string | null;
+  applied_spec_version?: string | null;
   applied_template_version: string | null;
   volume_state: string;
   runtime_id: string | null;

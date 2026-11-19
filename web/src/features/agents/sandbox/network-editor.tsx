@@ -4,7 +4,7 @@ import { AsyncBoundary, Notice } from "@/components/feedback";
 import { useApiQuery } from "@/hooks/use-api";
 import type { SandboxNetworkPolicy } from "@/types/agents";
 import type { NetworkPresetCatalog } from "@/types/agent-sandbox";
-import { agentAdminRoot } from "../data/agent-api";
+import { sandboxAdminRoot } from "../data/agent-api";
 
 export function initialNetworkPolicy(): SandboxNetworkPolicy {
   return {
@@ -32,7 +32,7 @@ export function NetworkPolicyEditor({
 }) {
   const catalog = useApiQuery<NetworkPresetCatalog>(
     ["sandbox", "network-presets"],
-    `${agentAdminRoot}/sandbox-network-presets`,
+    `${sandboxAdminRoot}/network-presets`,
   );
   return (
     <fieldset disabled={disabled} className="sandbox-network-editor">

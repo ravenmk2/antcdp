@@ -1,19 +1,18 @@
 -- +goose NO TRANSACTION
 -- +goose Up
 
-CREATE TABLE `cloud_computer_template` (
+CREATE TABLE `cloud_computer_spec_binding` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `agent_id` BIGINT UNSIGNED NULL,
-    `environment` JSON NOT NULL,
-    `config_schema_version` BIGINT UNSIGNED NOT NULL,
-    `config_version` BIGINT UNSIGNED NOT NULL,
+    `spec_id` BIGINT UNSIGNED NULL,
     `row_version` BIGINT UNSIGNED NOT NULL,
     `updated_by_user_id` BIGINT UNSIGNED NULL,
     `created_at` DATETIME(3) NOT NULL,
     `updated_at` DATETIME(3) NOT NULL,
     `owner_key` BIGINT UNSIGNED GENERATED ALWAYS AS (COALESCE(agent_id,0)) STORED,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_cloud_template_owner (owner_key)
+    UNIQUE KEY uq_cloud_spec_binding_owner (owner_key),
+    KEY idx_cloud_binding_spec (spec_id,owner_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `cloud_computer` (
@@ -28,7 +27,8 @@ CREATE TABLE `cloud_computer` (
     `volume_name` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NULL,
     `volume_state` VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     `volume_cleanup_state` VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    `applied_template_version` BIGINT UNSIGNED NULL,
+    `applied_spec_id` BIGINT UNSIGNED NULL,
+    `applied_spec_version` BIGINT UNSIGNED NULL,
     `idle_since` DATETIME(3) NOT NULL,
     `last_activity_at` DATETIME(3) NOT NULL,
     `error_code` VARCHAR(100) CHARACTER SET ascii COLLATE ascii_bin NULL,
@@ -47,7 +47,7 @@ CREATE TABLE `cloud_computer` (
     KEY idx_cloud_owner (owner_user_id,deleted_at,id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-INSERT INTO cloud_computer_template(agent_id,environment,config_schema_version,config_version,row_version,created_at,updated_at) VALUES(NULL,JSON_OBJECT('image','','cpu_millicores',2000,'memory_mib',4096,'network',JSON_OBJECT('default_action','allow','preset_ids',JSON_ARRAY(),'allow_targets',JSON_ARRAY(),'deny_targets',JSON_ARRAY())),1,1,1,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3));
+INSERT INTO cloud_computer_spec_binding(agent_id,spec_id,row_version,created_at,updated_at) VALUES(NULL,NULL,1,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3));
 
 -- +goose Down
 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Restore matching database and data backups to downgrade';

@@ -19,21 +19,24 @@ type ConnectionWrite struct {
 	ConnectTimeout    int                         `json:"connect_timeout_seconds"`
 	OperationTimeout  int                         `json:"operation_timeout_seconds"`
 	Authentication    *models.AuthenticationWrite `json:"authentication"`
+	ConfirmationText  string                      `json:"confirmation_text,omitempty"`
 	ConfirmationToken string                      `json:"confirmation_token,omitempty"`
 }
 
 type ConnectionView struct {
-	Endpoint          *string               `json:"endpoint"`
-	AccessMode        string                `json:"access_mode"`
-	ConnectTimeout    int                   `json:"connect_timeout_seconds"`
-	OperationTimeout  int                   `json:"operation_timeout_seconds"`
-	Authentication    models.Authentication `json:"authentication"`
-	BackendGeneration uint64                `json:"backend_generation,string"`
-	MaintenanceState  string                `json:"maintenance_state"`
-	Capabilities      SandboxCapabilities   `json:"capabilities"`
-	LastDiagnostic    json.RawMessage       `json:"last_diagnostic"`
-	LastDiagnosticAt  *time.Time            `json:"last_diagnostic_at"`
-	Version           string                `json:"version"`
+	RequiresConfirmation bool                  `json:"requires_confirmation"`
+	ConfigVersion        uint64                `json:"config_version,string"`
+	Endpoint             *string               `json:"endpoint"`
+	AccessMode           string                `json:"access_mode"`
+	ConnectTimeout       int                   `json:"connect_timeout_seconds"`
+	OperationTimeout     int                   `json:"operation_timeout_seconds"`
+	Authentication       models.Authentication `json:"authentication"`
+	BackendGeneration    uint64                `json:"backend_generation,string"`
+	MaintenanceState     string                `json:"maintenance_state"`
+	Capabilities         SandboxCapabilities   `json:"capabilities"`
+	LastDiagnostic       json.RawMessage       `json:"last_diagnostic"`
+	LastDiagnosticAt     *time.Time            `json:"last_diagnostic_at"`
+	Version              string                `json:"version"`
 }
 
 type CloudEnvironment struct {
@@ -41,13 +44,6 @@ type CloudEnvironment struct {
 	CPU     int           `json:"cpu_millicores"`
 	Memory  int           `json:"memory_mib"`
 	Network NetworkPolicy `json:"network"`
-}
-
-type CloudTemplateView struct {
-	AgentID       *uint64          `json:"agent_id,string"`
-	Environment   CloudEnvironment `json:"environment"`
-	ConfigVersion uint64           `json:"config_version,string"`
-	Version       string           `json:"version"`
 }
 
 type CloudView struct {
@@ -59,6 +55,8 @@ type CloudView struct {
 	InstanceID             uint64              `json:"sandbox_instance_id,string"`
 	StorageGeneration      uint64              `json:"storage_generation,string"`
 	Environment            json.RawMessage     `json:"effective_environment"`
+	AppliedSpecID          *uint64             `json:"applied_spec_id,string"`
+	AppliedSpecVersion     *uint64             `json:"applied_spec_version,string"`
 	AppliedTemplateVersion *uint64             `json:"applied_template_version,string"`
 	VolumeState            string              `json:"volume_state"`
 	RuntimeID              *string             `json:"runtime_id"`

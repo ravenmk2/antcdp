@@ -150,7 +150,7 @@ func (t *agentsTx) CloudTopology() (int, int, error) {
 	return v.Count, v.Busy, e
 }
 func (t *agentsTx) ResetCloudResources(generation uint64, now time.Time) error {
-	_, e := t.tx.ExecContext(t.ctx, `UPDATE cloud_computer SET state='uninitialized',backend_generation=?,sandbox_instance_id=NULL,storage_generation=storage_generation+1,volume_id=NULL,volume_name=NULL,volume_state='absent',volume_cleanup_state='not_requested',applied_template_version=NULL,error_code=NULL,fence_version=fence_version+1,row_version=row_version+1,idle_since=?,updated_at=? WHERE deleted_at IS NULL`, generation, now, now)
+	_, e := t.tx.ExecContext(t.ctx, `UPDATE cloud_computer SET state='uninitialized',backend_generation=?,sandbox_instance_id=NULL,storage_generation=storage_generation+1,volume_id=NULL,volume_name=NULL,volume_state='absent',volume_cleanup_state='not_requested',applied_spec_id=NULL,applied_spec_version=NULL,error_code=NULL,fence_version=fence_version+1,row_version=row_version+1,idle_since=?,updated_at=? WHERE deleted_at IS NULL`, generation, now, now)
 	if e != nil {
 		return e
 	}

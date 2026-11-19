@@ -96,7 +96,10 @@ import { ResourcePicker } from "@/features/agents/resources/resource-picker";
 import type { Resource } from "@/types/collaboration";
 import { AgentSkillBindings } from "@/features/agents/resources/skill-bindings";
 import { RobotResources } from "@/features/agents/resources/robot-resources";
-import { CloudTemplateEditor } from "@/features/agents/cloud/template-editor";
+import {
+  CloudSpecBindingEditor,
+  SpecPicker,
+} from "@/features/agents/cloud/spec-binding-editor";
 import { AgentOverview, AgentActivation } from "./agent-overview";
 
 export function AgentsPage() {
@@ -197,14 +200,7 @@ export function AgentsPage() {
           {agents.data?.data.length ? (
             <SimpleTable
               label="助手列表"
-              headers={[
-                "助手",
-                "类型",
-                "归属",
-                "模型 / 工具",
-                "状态",
-                "操作",
-              ]}
+              headers={["助手", "类型", "归属", "模型 / 工具", "状态", "操作"]}
               actions
             >
               {agents.data.data.map((agent) => (
@@ -298,6 +294,7 @@ export function AgentsPage() {
 export function AgentCreatePage() {
   const navigate = useNavigate(),
     errors = useFormErrors();
+  const [specID, setSpecID] = useState("");
   const robots = useApiQuery<(User & { managed_agent_id: string | null })[]>(
     ["unbound-robots"],
     "/admin/robots?page_size=100&unbound=true",
@@ -357,6 +354,9 @@ export function AgentCreatePage() {
         method: "POST",
         body: {
           ...draft,
+          ...(draft.agent_type === "service" && specID
+            ? { sandbox_spec_id: specID }
+            : {}),
           robot_user_id:
             draft.agent_type === "service" ? draft.robot_user_id : null,
           enabled: false,
@@ -445,6 +445,7 @@ export function AgentCreatePage() {
             </Notice>
             {draft.agent_type === "service" && (
               <>
+                <SpecPicker value={specID} onChange={setSpecID} />
                 <ErrorNotice error={robots.error} />
                 <Field
                   label="执行机器人"
@@ -811,7 +812,7 @@ export function AgentDetailPage() {
                   )}
                 {tab === "computer" &&
                   agent.data.data.agent_type === "service" && (
-                    <CloudTemplateEditor
+                    <CloudSpecBindingEditor
                       key={String(editing)}
                       agent={agent.data}
                       onSaved={refresh}

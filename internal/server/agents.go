@@ -313,7 +313,7 @@ func registerAgents(api *gin.RouterGroup, o Options) {
 	registerAgentFiles(u, o)
 	registerAgentUsage(u, a, o)
 	registerAgentResources(a, o)
-	registerAgentSandboxes(u, a, o)
+	registerAgentSandboxes(u, a, api.Group("/admin/sandboxes"), o)
 	a.GET("/operations/:id", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
 		id, ok := agentID(c, "id")
 		if !ok || !modelNoQuery(c) {

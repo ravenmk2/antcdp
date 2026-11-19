@@ -333,7 +333,7 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 		if e = r.InsertDefinition(v); e != nil {
 			return e
 		}
-		if e = insertServiceCloudTemplate(tx, v, w.CloudEnvironment); e != nil {
+		if e = insertServiceSpecBinding(tx, v, w.SandboxSpecID); e != nil {
 			return e
 		}
 		if e = s.definition(v); e != nil {
@@ -439,6 +439,15 @@ func (s *Service) DeleteDefinition(ctx context.Context, raw string, id uint64, t
 			return e
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
+		if v.Mode == "service" {
+			cr, err := CloudStateFor(tx)
+			if err != nil {
+				return err
+			}
+			if err = cr.DeleteSpecBinding(v.ID); err != nil {
+				return err
+			}
+		}
 		v.Enabled, v.DeletedAt = false, &now
 		v.RowVersion++
 		if e = encodeDefinition(v); e != nil {

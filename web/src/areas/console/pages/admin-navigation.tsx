@@ -84,6 +84,7 @@ const consoleGroups = [
     label: "系统维护",
     icon: Settings,
     items: [
+      { to: "/admin/sandboxes", label: "沙箱配置", icon: Server },
       { to: "/admin/audit", label: "审计日志", icon: ScrollText },
       { to: "/admin/settings", label: "系统设置", icon: Settings },
     ],

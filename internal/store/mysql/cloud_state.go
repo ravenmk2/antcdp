@@ -26,36 +26,11 @@ func (t *agentsTx) Connection(lock bool) (*a.SandboxConnectionRow, error) {
 }
 
 func (t *agentsTx) SaveConnection(v *a.SandboxConnectionRow) error {
-	_, e := t.named("UPDATE sandbox_connection SET `endpoint`=:endpoint,`access_mode`=:access_mode,`connect_timeout_seconds`=:connect_timeout_seconds,`operation_timeout_seconds`=:operation_timeout_seconds,`secret_ciphertext`=:secret_ciphertext,`secret_format_version`=:secret_format_version,`secret_key_version`=:secret_key_version,`secret_revision`=:secret_revision,`config_version`=:config_version,`row_version`=:row_version,`backend_generation`=:backend_generation,`topology_version`=:topology_version,`maintenance_state`=:maintenance_state,`verified_capabilities`=:verified_capabilities,`last_diagnostic`=:last_diagnostic,`last_diagnostic_at`=:last_diagnostic_at,`updated_by_user_id`=:updated_by_user_id,`updated_at`=:updated_at WHERE id=:id", v)
+	_, e := t.named("UPDATE sandbox_connection SET `endpoint`=:endpoint,`access_mode`=:access_mode,`connect_timeout_seconds`=:connect_timeout_seconds,`operation_timeout_seconds`=:operation_timeout_seconds,`secret_ciphertext`=:secret_ciphertext,`secret_format_version`=:secret_format_version,`secret_key_version`=:secret_key_version,`secret_revision`=:secret_revision,`config_version`=:config_version,`row_version`=:row_version,`backend_generation`=:backend_generation,`maintenance_state`=:maintenance_state,`updated_by_user_id`=:updated_by_user_id,`updated_at`=:updated_at WHERE id=:id", v)
 	return e
 }
 
-const cloudTemplateColumns = "`id`,`agent_id`,`environment`,`config_schema_version`,`config_version`,`row_version`,`updated_by_user_id`,`created_at`,`updated_at`"
-
-func (t *agentsTx) CloudTemplate(agentID *uint64, lock bool) (*a.CloudTemplateRow, error) {
-	q := "SELECT " + cloudTemplateColumns + " FROM cloud_computer_template WHERE owner_key=COALESCE(?,0)"
-	if lock {
-		q += " FOR UPDATE"
-	}
-	v := &a.CloudTemplateRow{}
-	e := t.tx.GetContext(t.ctx, v, q, agentID)
-	if errors.Is(e, sql.ErrNoRows) {
-		return nil, nil
-	}
-	return v, e
-}
-
-func (t *agentsTx) InsertCloudTemplate(v *a.CloudTemplateRow) error {
-	r, e := t.named("INSERT INTO cloud_computer_template(`agent_id`,`environment`,`config_schema_version`,`config_version`,`row_version`,`updated_by_user_id`,`created_at`,`updated_at`) VALUES(:agent_id,:environment,:config_schema_version,:config_version,:row_version,:updated_by_user_id,:created_at,:updated_at)", v)
-	return modelID(r, e, &v.ID)
-}
-
-func (t *agentsTx) SaveCloudTemplate(v *a.CloudTemplateRow) error {
-	_, e := t.named("UPDATE cloud_computer_template SET `agent_id`=:agent_id,`environment`=:environment,`config_schema_version`=:config_schema_version,`config_version`=:config_version,`row_version`=:row_version,`updated_by_user_id`=:updated_by_user_id,`updated_at`=:updated_at WHERE id=:id", v)
-	return e
-}
-
-const computerColumns = "`id`,`owner_user_id`,`pool_agent_id`,`state`,`backend_generation`,COALESCE(sandbox_instance_id,0) AS sandbox_instance_id,`storage_generation`,`volume_id`,`volume_name`,`volume_state`,`volume_cleanup_state`,`applied_template_version`,`idle_since`,`last_activity_at`,`error_code`,`fence_version`,`row_version`,`deleted_at`,`created_at`,`updated_at`"
+const computerColumns = "`id`,`owner_user_id`,`pool_agent_id`,`state`,`backend_generation`,COALESCE(sandbox_instance_id,0) AS sandbox_instance_id,`storage_generation`,`volume_id`,`volume_name`,`volume_state`,`volume_cleanup_state`,`applied_spec_id`,`applied_spec_version`,`idle_since`,`last_activity_at`,`error_code`,`fence_version`,`row_version`,`deleted_at`,`created_at`,`updated_at`"
 
 func (t *agentsTx) hydrateComputer(v *a.CloudComputerRow, lock bool) error {
 	if v.InstanceID == 0 {
@@ -92,7 +67,7 @@ func (t *agentsTx) Computer(id uint64, lock bool) (*a.CloudComputerRow, error) {
 	return v, e
 }
 func (t *agentsTx) InsertComputer(v *a.CloudComputerRow) error {
-	r, e := t.named("INSERT INTO cloud_computer(`owner_user_id`,`pool_agent_id`,`state`,`backend_generation`,`sandbox_instance_id`,`storage_generation`,`volume_id`,`volume_name`,`volume_state`,`volume_cleanup_state`,`applied_template_version`,`idle_since`,`last_activity_at`,`error_code`,`fence_version`,`row_version`,`deleted_at`,`created_at`,`updated_at`) VALUES(:owner_user_id,:pool_agent_id,:state,:backend_generation,NULLIF(:sandbox_instance_id,0),:storage_generation,:volume_id,:volume_name,:volume_state,:volume_cleanup_state,:applied_template_version,:idle_since,:last_activity_at,:error_code,:fence_version,:row_version,:deleted_at,:created_at,:updated_at)", v)
+	r, e := t.named("INSERT INTO cloud_computer(`owner_user_id`,`pool_agent_id`,`state`,`backend_generation`,`sandbox_instance_id`,`storage_generation`,`volume_id`,`volume_name`,`volume_state`,`volume_cleanup_state`,`applied_spec_id`,`applied_spec_version`,`idle_since`,`last_activity_at`,`error_code`,`fence_version`,`row_version`,`deleted_at`,`created_at`,`updated_at`) VALUES(:owner_user_id,:pool_agent_id,:state,:backend_generation,NULLIF(:sandbox_instance_id,0),:storage_generation,:volume_id,:volume_name,:volume_state,:volume_cleanup_state,:applied_spec_id,:applied_spec_version,:idle_since,:last_activity_at,:error_code,:fence_version,:row_version,:deleted_at,:created_at,:updated_at)", v)
 	return modelID(r, e, &v.ID)
 }
 func (t *agentsTx) SaveComputer(v *a.CloudComputerRow) error {
@@ -126,7 +101,7 @@ func (t *agentsTx) SaveComputer(v *a.CloudComputerRow) error {
 			return e
 		}
 	}
-	_, e := t.named("UPDATE cloud_computer SET `owner_user_id`=:owner_user_id,`pool_agent_id`=:pool_agent_id,`state`=:state,`backend_generation`=:backend_generation,`sandbox_instance_id`=NULLIF(:sandbox_instance_id,0),`storage_generation`=:storage_generation,`volume_id`=:volume_id,`volume_name`=:volume_name,`volume_state`=:volume_state,`volume_cleanup_state`=:volume_cleanup_state,`applied_template_version`=:applied_template_version,`idle_since`=:idle_since,`last_activity_at`=:last_activity_at,`error_code`=:error_code,`fence_version`=:fence_version,`row_version`=:row_version,`deleted_at`=:deleted_at,`created_at`=:created_at,`updated_at`=:updated_at WHERE id=:id", v)
+	_, e := t.named("UPDATE cloud_computer SET `owner_user_id`=:owner_user_id,`pool_agent_id`=:pool_agent_id,`state`=:state,`backend_generation`=:backend_generation,`sandbox_instance_id`=NULLIF(:sandbox_instance_id,0),`storage_generation`=:storage_generation,`volume_id`=:volume_id,`volume_name`=:volume_name,`volume_state`=:volume_state,`volume_cleanup_state`=:volume_cleanup_state,`applied_spec_id`=:applied_spec_id,`applied_spec_version`=:applied_spec_version,`idle_since`=:idle_since,`last_activity_at`=:last_activity_at,`error_code`=:error_code,`fence_version`=:fence_version,`row_version`=:row_version,`deleted_at`=:deleted_at,`created_at`=:created_at,`updated_at`=:updated_at WHERE id=:id", v)
 	return e
 }
 
@@ -250,7 +225,7 @@ func (t *agentsTx) SaveCloudExecution(v *a.CloudExecutionRow) error {
 	return t.Sandbox().SaveExecution(cloudPhysicalExecution(v))
 }
 
-const cloudOperationColumns = "`sandbox_operation_id`,`id`,`cloud_computer_id`,`root_run_id`,`kind`,`status`,`operation_token`,`command_receipt_id`,`backend_generation`,`sandbox_instance_id`,`storage_generation`,COALESCE(`target_environment`,CAST('null' AS JSON)) AS `target_environment`,`target_template_version`,`intent`,COALESCE(`observation`,CAST('null' AS JSON)) AS `observation`,`actor_kind`,`actor_id`,`executor_epoch`,`fence_version`,`error_code`,`created_at`,`started_at`,`deadline_at`,`cancel_requested_at`,`finished_at`,`updated_at`"
+const cloudOperationColumns = "`sandbox_operation_id`,`id`,`cloud_computer_id`,`root_run_id`,`kind`,`status`,`operation_token`,`command_receipt_id`,`backend_generation`,`sandbox_instance_id`,`storage_generation`,COALESCE(`target_environment`,CAST('null' AS JSON)) AS `target_environment`,`target_spec_id`,`target_spec_version`,`intent`,COALESCE(`observation`,CAST('null' AS JSON)) AS `observation`,`actor_kind`,`actor_id`,`executor_epoch`,`fence_version`,`error_code`,`created_at`,`started_at`,`deadline_at`,`cancel_requested_at`,`finished_at`,`updated_at`"
 
 func (t *agentsTx) CloudOperation(id uint64, lock bool) (*a.CloudOperationRow, error) {
 	q := "SELECT " + cloudOperationColumns + " FROM cloud_computer_operation WHERE id=?"
@@ -266,7 +241,7 @@ func (t *agentsTx) CloudOperation(id uint64, lock bool) (*a.CloudOperationRow, e
 }
 
 func (t *agentsTx) InsertCloudOperation(v *a.CloudOperationRow) error {
-	r, e := t.named("INSERT INTO cloud_computer_operation(`cloud_computer_id`,`root_run_id`,`kind`,`status`,`operation_token`,`command_receipt_id`,`backend_generation`,`sandbox_instance_id`,`storage_generation`,`target_environment`,`target_template_version`,`intent`,`observation`,`actor_kind`,`actor_id`,`executor_epoch`,`fence_version`,`error_code`,`created_at`,`started_at`,`deadline_at`,`cancel_requested_at`,`finished_at`,`updated_at`) VALUES(:cloud_computer_id,:root_run_id,:kind,:status,:operation_token,:command_receipt_id,:backend_generation,:sandbox_instance_id,:storage_generation,:target_environment,:target_template_version,:intent,:observation,:actor_kind,:actor_id,:executor_epoch,:fence_version,:error_code,:created_at,:started_at,:deadline_at,:cancel_requested_at,:finished_at,:updated_at)", v)
+	r, e := t.named("INSERT INTO cloud_computer_operation(`cloud_computer_id`,`root_run_id`,`kind`,`status`,`operation_token`,`command_receipt_id`,`backend_generation`,`sandbox_instance_id`,`storage_generation`,`target_environment`,`target_spec_id`,`target_spec_version`,`intent`,`observation`,`actor_kind`,`actor_id`,`executor_epoch`,`fence_version`,`error_code`,`created_at`,`started_at`,`deadline_at`,`cancel_requested_at`,`finished_at`,`updated_at`) VALUES(:cloud_computer_id,:root_run_id,:kind,:status,:operation_token,:command_receipt_id,:backend_generation,:sandbox_instance_id,:storage_generation,:target_environment,:target_spec_id,:target_spec_version,:intent,:observation,:actor_kind,:actor_id,:executor_epoch,:fence_version,:error_code,:created_at,:started_at,:deadline_at,:cancel_requested_at,:finished_at,:updated_at)", v)
 	if e = modelID(r, e, &v.ID); e != nil {
 		return e
 	}
@@ -277,6 +252,6 @@ func (t *agentsTx) SaveCloudOperation(v *a.CloudOperationRow) error {
 	if e := t.saveCloudFileHold(v); e != nil {
 		return e
 	}
-	_, e := t.named("UPDATE cloud_computer_operation SET `cloud_computer_id`=:cloud_computer_id,`root_run_id`=:root_run_id,`kind`=:kind,`status`=:status,`operation_token`=:operation_token,`command_receipt_id`=:command_receipt_id,`backend_generation`=:backend_generation,`sandbox_instance_id`=:sandbox_instance_id,`storage_generation`=:storage_generation,`target_environment`=:target_environment,`target_template_version`=:target_template_version,`intent`=:intent,`observation`=:observation,`actor_kind`=:actor_kind,`actor_id`=:actor_id,`executor_epoch`=:executor_epoch,`fence_version`=:fence_version,`error_code`=:error_code,`started_at`=:started_at,`deadline_at`=:deadline_at,`cancel_requested_at`=:cancel_requested_at,`finished_at`=:finished_at,`updated_at`=:updated_at WHERE id=:id", v)
+	_, e := t.named("UPDATE cloud_computer_operation SET `cloud_computer_id`=:cloud_computer_id,`root_run_id`=:root_run_id,`kind`=:kind,`status`=:status,`operation_token`=:operation_token,`command_receipt_id`=:command_receipt_id,`backend_generation`=:backend_generation,`sandbox_instance_id`=:sandbox_instance_id,`storage_generation`=:storage_generation,`target_environment`=:target_environment,`target_spec_id`=:target_spec_id,`target_spec_version`=:target_spec_version,`intent`=:intent,`observation`=:observation,`actor_kind`=:actor_kind,`actor_id`=:actor_id,`executor_epoch`=:executor_epoch,`fence_version`=:fence_version,`error_code`=:error_code,`started_at`=:started_at,`deadline_at`=:deadline_at,`cancel_requested_at`=:cancel_requested_at,`finished_at`=:finished_at,`updated_at`=:updated_at WHERE id=:id", v)
 	return e
 }

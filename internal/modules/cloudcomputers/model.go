@@ -10,74 +10,64 @@ import (
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
-type Template struct {
-	ID              uint64          `db:"id"`
-	AgentID         *uint64         `db:"agent_id"`
-	Environment     json.RawMessage `db:"environment"`
-	SchemaVersion   uint64          `db:"config_schema_version"`
-	ConfigVersion   uint64          `db:"config_version"`
-	RowVersion      uint64          `db:"row_version"`
-	UpdatedByUserID *uint64         `db:"updated_by_user_id"`
-	CreatedAt       time.Time       `db:"created_at"`
-	UpdatedAt       time.Time       `db:"updated_at"`
-}
-
 type Computer struct {
-	ID                     uint64          `db:"id"`
-	OwnerUserID            uint64          `db:"owner_user_id"`
-	PoolAgentID            *uint64         `db:"pool_agent_id"`
-	State                  string          `db:"state"`
-	BackendGeneration      uint64          `db:"backend_generation"`
-	InstanceID             uint64          `db:"sandbox_instance_id"`
-	StorageGeneration      uint64          `db:"storage_generation"`
-	RuntimeID              *string         `db:"runtime_id"`
-	RuntimeCreationToken   *string         `db:"runtime_creation_token"`
-	RuntimeExpiresAt       *time.Time      `db:"runtime_expires_at"`
-	VolumeID               *string         `db:"volume_id"`
-	VolumeName             *string         `db:"volume_name"`
-	VolumeState            string          `db:"volume_state"`
-	VolumeCleanupState     string          `db:"volume_cleanup_state"`
-	AppliedTemplateVersion *uint64         `db:"applied_template_version"`
-	EffectiveEnvironment   json.RawMessage `db:"effective_environment"`
-	Capabilities           json.RawMessage `db:"verified_capabilities"`
-	IdleSince              time.Time       `db:"idle_since"`
-	LastActivityAt         time.Time       `db:"last_activity_at"`
-	LastObservedAt         *time.Time      `db:"last_observed_at"`
-	ErrorCode              *string         `db:"error_code"`
-	FenceVersion           uint64          `db:"fence_version"`
-	RowVersion             uint64          `db:"row_version"`
-	DeletedAt              *time.Time      `db:"deleted_at"`
-	CreatedAt              time.Time       `db:"created_at"`
-	UpdatedAt              time.Time       `db:"updated_at"`
+	ID                   uint64          `db:"id"`
+	OwnerUserID          uint64          `db:"owner_user_id"`
+	PoolAgentID          *uint64         `db:"pool_agent_id"`
+	State                string          `db:"state"`
+	BackendGeneration    uint64          `db:"backend_generation"`
+	InstanceID           uint64          `db:"sandbox_instance_id"`
+	StorageGeneration    uint64          `db:"storage_generation"`
+	RuntimeID            *string         `db:"runtime_id"`
+	RuntimeCreationToken *string         `db:"runtime_creation_token"`
+	RuntimeExpiresAt     *time.Time      `db:"runtime_expires_at"`
+	VolumeID             *string         `db:"volume_id"`
+	VolumeName           *string         `db:"volume_name"`
+	VolumeState          string          `db:"volume_state"`
+	VolumeCleanupState   string          `db:"volume_cleanup_state"`
+	AppliedSpecID        *uint64         `db:"applied_spec_id"`
+	AppliedSpecVersion   *uint64         `db:"applied_spec_version"`
+	EffectiveEnvironment json.RawMessage `db:"effective_environment"`
+	Capabilities         json.RawMessage `db:"verified_capabilities"`
+	IdleSince            time.Time       `db:"idle_since"`
+	LastActivityAt       time.Time       `db:"last_activity_at"`
+	LastObservedAt       *time.Time      `db:"last_observed_at"`
+	ErrorCode            *string         `db:"error_code"`
+	FenceVersion         uint64          `db:"fence_version"`
+	RowVersion           uint64          `db:"row_version"`
+	DeletedAt            *time.Time      `db:"deleted_at"`
+	CreatedAt            time.Time       `db:"created_at"`
+	UpdatedAt            time.Time       `db:"updated_at"`
 }
 
 type Operation struct {
-	SandboxOperationID    *uint64         `db:"sandbox_operation_id"`
-	ID                    uint64          `db:"id"`
-	ComputerID            uint64          `db:"cloud_computer_id"`
-	RootRunID             *uint64         `db:"root_run_id"`
-	Kind                  string          `db:"kind"`
-	Status                string          `db:"status"`
-	OperationToken        string          `db:"operation_token"`
-	CommandReceiptID      *uint64         `db:"command_receipt_id"`
-	BackendGeneration     uint64          `db:"backend_generation"`
-	InstanceID            uint64          `db:"sandbox_instance_id"`
-	StorageGeneration     uint64          `db:"storage_generation"`
-	TargetEnvironment     json.RawMessage `db:"target_environment"`
-	TargetTemplateVersion *uint64         `db:"target_template_version"`
-	Intent                json.RawMessage `db:"intent"`
-	Observation           json.RawMessage `db:"observation"`
-	ActorKind             string          `db:"actor_kind"`
-	ActorID               string          `db:"actor_id"`
-	ExecutorEpoch         string          `db:"executor_epoch"`
-	FenceVersion          uint64          `db:"fence_version"`
-	ErrorCode             *string         `db:"error_code"`
-	CreatedAt             time.Time       `db:"created_at"`
-	StartedAt             *time.Time      `db:"started_at"`
-	DeadlineAt            time.Time       `db:"deadline_at"`
-	CancelRequestedAt     *time.Time      `db:"cancel_requested_at"`
-	FinishedAt            *time.Time      `db:"finished_at"`
-	UpdatedAt             time.Time       `db:"updated_at"`
+	SandboxOperationID *uint64         `db:"sandbox_operation_id"`
+	ID                 uint64          `db:"id"`
+	ComputerID         uint64          `db:"cloud_computer_id"`
+	RootRunID          *uint64         `db:"root_run_id"`
+	Kind               string          `db:"kind"`
+	Status             string          `db:"status"`
+	OperationToken     string          `db:"operation_token"`
+	CommandReceiptID   *uint64         `db:"command_receipt_id"`
+	BackendGeneration  uint64          `db:"backend_generation"`
+	InstanceID         uint64          `db:"sandbox_instance_id"`
+	StorageGeneration  uint64          `db:"storage_generation"`
+	TargetEnvironment  json.RawMessage `db:"target_environment"`
+	TargetSpecID       *uint64         `db:"target_spec_id"`
+	TargetSpecVersion  *uint64         `db:"target_spec_version"`
+	Intent             json.RawMessage `db:"intent"`
+	Observation        json.RawMessage `db:"observation"`
+	ActorKind          string          `db:"actor_kind"`
+	ActorID            string          `db:"actor_id"`
+	ExecutorEpoch      string          `db:"executor_epoch"`
+	FenceVersion       uint64          `db:"fence_version"`
+	ErrorCode          *string         `db:"error_code"`
+	CreatedAt          time.Time       `db:"created_at"`
+	StartedAt          *time.Time      `db:"started_at"`
+	DeadlineAt         time.Time       `db:"deadline_at"`
+	CancelRequestedAt  *time.Time      `db:"cancel_requested_at"`
+	FinishedAt         *time.Time      `db:"finished_at"`
+	UpdatedAt          time.Time       `db:"updated_at"`
 }
 
 type Activity struct {
@@ -121,10 +111,10 @@ type OperationIntent struct {
 	Phase           string                   `json:"phase"`
 }
 type Environment struct {
-	Image   string                    `json:"image"`
-	CPU     int                       `json:"cpu_millicores"`
-	Memory  int                       `json:"memory_mib"`
-	Network sandboxcore.NetworkPolicy `json:"network"`
+	Image   string                            `json:"image"`
+	CPU     int                               `json:"cpu_millicores"`
+	Memory  int                               `json:"memory_mib"`
+	Network sandboxcore.NetworkPolicySnapshot `json:"network"`
 }
 type Access struct {
 	Provider                                                     sandboxcore.Provider
@@ -135,7 +125,7 @@ type Access struct {
 }
 type Repository interface {
 	Connection(bool) (*sandboxes.Connection, error)
-	SaveConnection(*sandboxes.Connection) error
+	BumpConnectionTopology() error
 	Computer(uint64, bool) (*Computer, error)
 	SaveComputer(*Computer) error
 	CloudOperation(uint64, bool) (*Operation, error)

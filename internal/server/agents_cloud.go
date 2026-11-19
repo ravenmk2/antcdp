@@ -6,9 +6,9 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-func registerAgentSandboxes(user, admin *gin.RouterGroup, o Options) {
+func registerAgentSandboxes(user, admin, infra *gin.RouterGroup, o Options) {
 	u, a := user.Group(""), admin.Group("")
-	for _, group := range []*gin.RouterGroup{u, a} {
+	for _, group := range []*gin.RouterGroup{u, a, infra} {
 		group.Use(func(c *gin.Context) {
 			if o.Sandboxes == nil {
 				httpx.Write(c, httpx.E(503, "INSTANCE_NOT_READY", "云电脑服务尚未就绪"))
@@ -29,7 +29,7 @@ func registerAgentSandboxes(user, admin *gin.RouterGroup, o Options) {
 		}))
 	}
 	registerSandboxFiles(u, o)
-	a.GET("/sandbox-network-presets", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+	infra.GET("/network-presets", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
 		if !modelNoQuery(c) {
 			return nil, nil
 		}
@@ -42,40 +42,51 @@ func registerAgentSandboxes(user, admin *gin.RouterGroup, o Options) {
 		}
 		return s.GetContentComputer(c.Request.Context(), rawSession(c), id)
 	}))
-	a.GET("/sandbox-connection", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+	infra.GET("/connection", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
 		if !modelNoQuery(c) {
 			return nil, nil
 		}
 		return s.GetConnection(c.Request.Context(), rawSession(c))
 	}))
-	a.POST("/sandbox-connection/preview", agentJSON[agents.ConnectionWrite](o, 64<<10, func(c *gin.Context, w agents.ConnectionWrite) (*agents.Result, error) {
+	infra.POST("/connection/preview", agentJSON[agents.ConnectionWrite](o, 64<<10, func(c *gin.Context, w agents.ConnectionWrite) (*agents.Result, error) {
 		return s.PreviewConnection(c.Request.Context(), rawSession(c), w)
 	}))
-	a.PUT("/sandbox-connection", agentJSON[agents.ConnectionWrite](o, 64<<10, func(c *gin.Context, w agents.ConnectionWrite) (*agents.Result, error) {
+	infra.PUT("/connection", agentJSON[agents.ConnectionWrite](o, 64<<10, func(c *gin.Context, w agents.ConnectionWrite) (*agents.Result, error) {
 		return s.SaveConnection(c.Request.Context(), rawSession(c), c.GetHeader("If-Match"), c.GetHeader("Idempotency-Key"), w)
 	}))
-	a.GET("/cloud-computer-template", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+	registerSandboxSpecs(infra, o)
+	infra.POST("/connection/health-check", agentJSON[struct{}](o, 1024, func(c *gin.Context, _ struct{}) (*agents.Result, error) {
+		return s.CheckConnection(c.Request.Context(), rawSession(c))
+	}))
+	infra.GET("/command-receipts/:key", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+		values, ok := modelQuery(c, "scope", "command")
+		if !ok {
+			return nil, nil
+		}
+		return s.GetSandboxReceipt(c.Request.Context(), rawSession(c), c.Param("key"), values.Get("command"), values.Get("scope"))
+	}))
+	a.GET("/cloud-computer-spec", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
 		if !modelNoQuery(c) {
 			return nil, nil
 		}
-		return s.GetCloudTemplate(c.Request.Context(), rawSession(c), nil)
+		return s.GetBinding(c.Request.Context(), rawSession(c), nil)
 	}))
-	a.PUT("/cloud-computer-template", agentJSON[agents.CloudEnvironment](o, 64<<10, func(c *gin.Context, w agents.CloudEnvironment) (*agents.Result, error) {
-		return s.SaveCloudTemplate(c.Request.Context(), rawSession(c), c.GetHeader("If-Match"), c.GetHeader("Idempotency-Key"), nil, w)
+	a.PUT("/cloud-computer-spec", agentJSON[agents.BindingWrite](o, 64<<10, func(c *gin.Context, w agents.BindingWrite) (*agents.Result, error) {
+		return s.SaveBinding(c.Request.Context(), rawSession(c), c.GetHeader("If-Match"), c.GetHeader("Idempotency-Key"), nil, w)
 	}))
-	a.GET("/definitions/:id/cloud-computer-template", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+	a.GET("/definitions/:id/cloud-computer-spec", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
 		id, ok := agentID(c, "id")
 		if !ok || !modelNoQuery(c) {
 			return nil, nil
 		}
-		return s.GetCloudTemplate(c.Request.Context(), rawSession(c), &id)
+		return s.GetBinding(c.Request.Context(), rawSession(c), &id)
 	}))
-	a.PUT("/definitions/:id/cloud-computer-template", agentJSON[agents.CloudEnvironment](o, 64<<10, func(c *gin.Context, w agents.CloudEnvironment) (*agents.Result, error) {
+	a.PUT("/definitions/:id/cloud-computer-spec", agentJSON[agents.BindingWrite](o, 64<<10, func(c *gin.Context, w agents.BindingWrite) (*agents.Result, error) {
 		id, ok := agentID(c, "id")
 		if !ok {
 			return nil, nil
 		}
-		return s.SaveCloudTemplate(c.Request.Context(), rawSession(c), c.GetHeader("If-Match"), c.GetHeader("Idempotency-Key"), &id, w)
+		return s.SaveBinding(c.Request.Context(), rawSession(c), c.GetHeader("If-Match"), c.GetHeader("Idempotency-Key"), &id, w)
 	}))
 	a.GET("/cloud-computers", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
 		q, ok := cloudComputerQuery(c)
@@ -127,4 +138,47 @@ func cloudComputerQuery(c *gin.Context) (agents.CloudQuery, bool) {
 		return agents.CloudQuery{}, false
 	}
 	return agents.CloudQuery{Page: page, PageSize: size, OwnerUserID: owner, PoolAgentID: pool, State: q.Get("state")}, true
+}
+
+func registerSandboxSpecs(g *gin.RouterGroup, o Options) {
+	s := o.Sandboxes
+	g.GET("/specs", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+		if !modelNoQuery(c) {
+			return nil, nil
+		}
+		return s.ListSpecs(c.Request.Context(), rawSession(c))
+	}))
+	for _, path := range []string{"/specs/:id", "/specs/:id/references"} {
+		g.GET(path, agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+			id, ok := agentID(c, "id")
+			if !ok || !modelNoQuery(c) {
+				return nil, nil
+			}
+			return s.GetSpec(c.Request.Context(), rawSession(c), id, path == "/specs/:id/references")
+		}))
+	}
+	for _, method := range []string{"POST", "PUT"} {
+		path := "/specs"
+		if method == "PUT" {
+			path += "/:id"
+		}
+		g.Handle(method, path, agentJSON[agents.SpecWrite](o, 64<<10, func(c *gin.Context, w agents.SpecWrite) (*agents.Result, error) {
+			var id uint64
+			if method == "PUT" {
+				var ok bool
+				id, ok = agentID(c, "id")
+				if !ok {
+					return nil, nil
+				}
+			}
+			return s.SaveSpec(c.Request.Context(), rawSession(c), c.GetHeader("If-Match"), c.GetHeader("Idempotency-Key"), id, w)
+		}))
+	}
+	g.DELETE("/specs/:id", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+		id, ok := agentID(c, "id")
+		if !ok || !modelNoQuery(c) {
+			return nil, nil
+		}
+		return s.DeleteSpec(c.Request.Context(), rawSession(c), c.GetHeader("If-Match"), c.GetHeader("Idempotency-Key"), id)
+	}))
 }

@@ -32,9 +32,7 @@ func newComputer(cr CloudRepository, connection *SandboxConnectionRow, owner uin
 	if e := cr.InsertComputer(v); e != nil {
 		return nil, e
 	}
-	connection.TopologyVersion++
-	connection.UpdatedAt = now
-	if e := cr.SaveConnection(connection); e != nil {
+	if e := cr.BumpConnectionTopology(); e != nil {
 		return nil, e
 	}
 	return v, nil
@@ -325,22 +323,26 @@ func (s *CloudService) queueCloudOperation(cr CloudRepository, connection *Sandb
 	op := &CloudOperationRow{ComputerID: v.ID, Kind: kind, Status: "queued", OperationToken: cryptox.ID(), CommandReceiptID: receipt, BackendGeneration: v.BackendGeneration, InstanceID: v.InstanceID, StorageGeneration: v.StorageGeneration, Intent: json.RawMessage(`{}`), Observation: json.RawMessage(`{}`), ActorKind: actorKind, ActorID: actorID, ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, UpdatedAt: now, DeadlineAt: now.Add(5 * time.Minute)}
 	switch kind {
 	case "create", "rebuild":
-		template, e := cr.CloudTemplate(v.PoolAgentID, false)
+		spec, e := cr.BoundSandboxSpec(v.PoolAgentID)
 		if e != nil {
 			return nil, e
 		}
-		env, e := cloudTemplateEnvironment(template)
+		if spec == nil {
+			return nil, httpx.E(409, "CLOUD_SPEC_NOT_CONFIGURED", "尚未选择云电脑沙箱规格，请联系管理员")
+		}
+		frozen, e := spec.snapshot()
 		if e != nil {
 			return nil, e
 		}
-		if e = normalizeCloudEnvironment(&env, false); e != nil {
-			return nil, e
-		}
-		op.TargetEnvironment, e = json.Marshal(env)
+		op.TargetEnvironment, e = json.Marshal(frozen)
 		if e != nil {
 			return nil, e
 		}
-		op.TargetTemplateVersion = &template.ConfigVersion
+		v.EffectiveEnvironment, e = json.Marshal(CloudEnvironment{Image: frozen.Image, CPU: frozen.CPU, Memory: frozen.Memory, Network: NetworkPolicy(frozen.Network.NetworkPolicy)})
+		if e != nil {
+			return nil, e
+		}
+		op.TargetSpecID, op.TargetSpecVersion = &spec.ID, &spec.ConfigVersion
 		if kind == "rebuild" && v.VolumeID == nil {
 			return nil, httpx.E(409, "CLOUD_VOLUME_MISSING", "原数据卷身份缺失，不能自动建立空卷")
 		}
@@ -358,10 +360,10 @@ func (s *CloudService) queueCloudOperation(cr CloudRepository, connection *Sandb
 			v.VolumeState = "creating"
 			intent.VolumeNew = true
 		} else {
-			intent.VolumeNew = kind == "create" && v.AppliedTemplateVersion == nil && v.VolumeState != "ready"
+			intent.VolumeNew = kind == "create" && v.AppliedSpecVersion == nil && v.VolumeState != "ready"
 		}
 		token := cryptox.ID()
-		instance := &sandboxes.Instance{ConnectionID: 1, BackendGeneration: v.BackendGeneration, CreationToken: token, State: "reserved", EffectiveConfig: op.TargetEnvironment, Capabilities: json.RawMessage(`{}`), ExecutorEpoch: s.Epoch, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
+		instance := &sandboxes.Instance{ConnectionID: 1, BackendGeneration: v.BackendGeneration, CreationToken: token, State: "reserved", EffectiveConfig: v.EffectiveEnvironment, Capabilities: json.RawMessage(`{}`), ExecutorEpoch: s.Epoch, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
 		if e = cr.Sandbox().InsertInstance(instance); e != nil {
 			return nil, e
 		}

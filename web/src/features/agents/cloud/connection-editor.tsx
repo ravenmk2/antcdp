@@ -11,13 +11,13 @@ import type {
   CloudConnectionWrite,
   ConnectionPreview,
 } from "@/types/cloud-computer";
-import { agentAdminRoot } from "../data/agent-api";
+import { sandboxAdminRoot } from "../data/agent-api";
 import { useCloudSave } from "./use-cloud-save";
 import { ConfigActions } from "../resources/admin-shared";
 
 export function ConnectionEditor() {
-  const path = `${agentAdminRoot}/sandbox-connection`;
-  const query = useApiQuery<SandboxConnection>(["cloud-connection"], path);
+  const path = `${sandboxAdminRoot}/connection`;
+  const query = useApiQuery<SandboxConnection>(["sandbox-connection"], path);
   return (
     <AsyncBoundary
       loading={query.isPending}
@@ -61,11 +61,15 @@ function ConnectionForm({
     } | null>(null),
     [checking, setChecking] = useState(false),
     [error, setError] = useState<unknown>();
+  const [editing, setEditing] = useState(!initial.data.requires_confirmation),
+    [confirmation, setConfirmation] = useState(""),
+    [probing, setProbing] = useState(false);
   const dirty =
     JSON.stringify(draft) !== JSON.stringify(baseline) || Boolean(secret);
   const save = useCloudSave({
     initial,
     path,
+    domain: sandboxAdminRoot,
     commandName: "sandbox_connection.update",
     scope: "sandbox_connection",
     dirty,
@@ -75,11 +79,12 @@ function ConnectionForm({
       setBaseline(next);
       setSecret("");
       setHasSecret(value.authentication.has_secret);
+      setEditing(false);
       setPreview(null);
     },
     onSaved,
   });
-  const locked = save.pending || save.blocked || checking;
+  const locked = save.pending || save.blocked || checking || probing;
   async function prepare() {
     const body: CloudConnectionWrite = {
       ...draft,
@@ -95,7 +100,8 @@ function ConnectionForm({
     };
     setError(undefined);
     // A token binds the exact proposed settings and affected logical computers.
-    if (baseline.endpoint && baseline.endpoint !== body.endpoint) {
+    if (initial.data.requires_confirmation) {
+      setConfirmation("");
       setChecking(true);
       try {
         const result = await request<ConnectionPreview>(`${path}/preview`, {
@@ -110,6 +116,37 @@ function ConnectionForm({
       }
     } else await save.save(body);
   }
+  const clearBlocked =
+    !!preview &&
+    !preview.body.endpoint &&
+    preview.result.affected_computers > 0;
+  const diagnostic = initial.data.last_diagnostic;
+  async function checkHealth() {
+    setProbing(true);
+    setError(undefined);
+    try {
+      await request(path + "/health-check", { method: "POST", body: {} });
+      await onSaved();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setProbing(false);
+    }
+  }
+  const changes = [
+    ["服务地址", baseline.endpoint, draft.endpoint],
+    ["数据访问方式", baseline.access_mode, draft.access_mode],
+    [
+      "连接超时（秒）",
+      baseline.connect_timeout_seconds,
+      draft.connect_timeout_seconds,
+    ],
+    [
+      "操作超时（秒）",
+      baseline.operation_timeout_seconds,
+      draft.operation_timeout_seconds,
+    ],
+  ].filter(([, before, after]) => before !== after);
   return (
     <Panel bodyClassName="p-6">
       <form
@@ -122,12 +159,33 @@ function ConnectionForm({
         <div>
           <h2 className="font-semibold">平台唯一沙箱连接</h2>
           <p className="mt-1 text-sm text-muted">
-            所有个人云电脑和机器人云电脑共用。镜像、CPU、内存与网络规则在各自的创建配置中维护。
+            所有个人云电脑和助手池共用此连接。
           </p>
         </div>
         {save.recovery}
         <ErrorNotice error={error} />
-        <fieldset disabled={locked} className="space-y-5">
+        <div className="space-y-2">
+          <p>
+            {diagnostic
+              ? diagnostic.config_version !== initial.data.config_version
+                ? "上次检查已过期"
+                : diagnostic.healthy
+                  ? "控制面连接正常"
+                  : "控制面连接失败"
+              : "尚未检查"}
+            {diagnostic &&
+              ` · ${diagnostic.elapsed_ms} ms · ${new Date(initial.data.last_diagnostic_at!).toLocaleString()} ${diagnostic.error_code || ""}`}
+          </p>
+          <Button
+            variant="outline"
+            pending={probing}
+            disabled={!initial.data.endpoint || locked || editing}
+            onClick={() => void checkHealth()}
+          >
+            手动健康检查
+          </Button>
+        </div>
+        <fieldset disabled={locked || !editing} className="space-y-5">
           <Field
             label="服务地址"
             hint="更换地址需再次确认，已有云电脑将在新后端使用空卷重新创建。清空地址仅允许在没有运行资源时进行。"
@@ -145,7 +203,7 @@ function ConnectionForm({
             label={hasSecret ? "替换 API Key" : "API Key"}
             hint={
               hasSecret
-                ? "已配置。留空保留当前秘密，保存后无法读回。"
+                ? "已配置。同一服务留空可保留，切换目标主机须重新输入。"
                 : "首次使用需要配置认证。"
             }
           >
@@ -204,52 +262,89 @@ function ConnectionForm({
             </Field>
           </div>
         </fieldset>
-        <ConfigActions
-          dirty={dirty}
-          pending={save.pending || checking}
-          blocked={save.blocked}
-        >
-          <Button
-            type="submit"
-            pending={checking || save.pending}
-            disabled={!dirty || save.blocked}
+        {editing ? (
+          <ConfigActions
+            dirty={dirty}
+            pending={save.pending || checking}
+            blocked={save.blocked}
           >
-            {baseline.endpoint && baseline.endpoint !== draft.endpoint
-              ? "检查更换影响"
-              : "保存连接"}
-          </Button>
+            <Button
+              type="submit"
+              pending={checking || save.pending}
+              disabled={!dirty || save.blocked}
+            >
+              {initial.data.requires_confirmation ? "预览连接变更" : "保存连接"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={locked}
+              onClick={() => {
+                setEditing(!initial.data.requires_confirmation);
+                setDraft(baseline);
+                setSecret("");
+              }}
+            >
+              取消修改
+            </Button>
+          </ConfigActions>
+        ) : (
           <Button
-            variant="outline"
+            variant="danger"
             disabled={locked}
-            onClick={() => {
-              setDraft(baseline);
-              setSecret("");
-            }}
+            onClick={() => setEditing(true)}
           >
-            取消修改
+            修改连接（极度危险）
           </Button>
-        </ConfigActions>
+        )}
         {preview && (
           <ConfirmDialog
             open
             danger
-            title="确认更换沙箱服务地址？"
-            description={`影响 ${preview.result.affected_computers} 台云电脑。逻辑电脑与会话绑定保留，下次使用创建新的空数据卷。原文件不迁移，旧后端资源由管理员自行处理。平台历史、附件和正式成果保留。`}
-            confirmLabel="承担后果并更换地址"
-            pending={
-              save.pending || save.blocked || preview.result.busy_activities > 0
+            title="确认修改沙箱连接？"
+            description={
+              preview.result.resets_storage
+                ? `影响 ${preview.result.affected_computers} 台云电脑。切换会取消排队输入和未决交互。电脑身份和会话绑定保留，下次使用会创建空卷。旧文件不迁移，旧资源须另行处理。`
+                : "请核对以下变更。"
+            }
+            confirmLabel="确认提交"
+            pending={save.pending}
+            confirmDisabled={
+              save.blocked ||
+              clearBlocked ||
+              preview.result.busy_activities > 0 ||
+              confirmation !== "确认修改沙箱连接"
             }
             onClose={() => setPreview(null)}
             onConfirm={() =>
               void save.save({
                 ...preview.body,
+                confirmation_text: confirmation,
                 confirmation_token: preview.result.confirmation_token,
               })
             }
           >
-            <p className="break-all text-sm">
-              目标地址：{preview.body.endpoint || "清空连接"}
-            </p>
+            <ul>
+              {changes.map(([label, old, value]) => (
+                <li key={label}>
+                  {label}：{old || "空"} → {value || "清空"}
+                </li>
+              ))}
+              {(secret || (!preview.body.endpoint && hasSecret)) && (
+                <li>API Key：{preview.body.endpoint ? "已替换" : "将清除"}</li>
+              )}
+            </ul>
+            <Field label="输入「确认修改沙箱连接」">
+              <Input
+                value={confirmation}
+                onChange={(e) => setConfirmation(e.target.value)}
+              />
+            </Field>
+            {clearBlocked && (
+              <Notice tone="warning">
+                仍有 {preview.result.affected_computers}{" "}
+                台云电脑，清空连接前需要先解除这些资源。
+              </Notice>
+            )}
             {preview.result.busy_activities > 0 && (
               <Notice tone="warning">
                 仍有 {preview.result.busy_activities}{" "}
@@ -257,7 +352,7 @@ function ConnectionForm({
               </Notice>
             )}
             <p className="mt-3 text-sm text-muted">
-              切换会取消排队输入和未决交互。确认有效至{" "}
+              确认有效至{" "}
               {new Date(preview.result.expires_at).toLocaleTimeString()}
               ，提交时会重新核对。
             </p>

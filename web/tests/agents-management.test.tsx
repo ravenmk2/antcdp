@@ -537,12 +537,17 @@ it("reads service identity permissions without exposing grant controls", async (
 });
 it("reads service cloud capacity and network rules without editable fields", async () => {
   override = async (path) => {
-    if (path.endsWith("/cloud-computer-template"))
+    if (path.endsWith("/cloud-computer-spec"))
       return response({
         agent_id: "4",
         version: "1",
         config_version: "1",
-        environment: {
+        spec_id: "1",
+        spec: {
+          id: "1",
+          name: "测试规格",
+          config_version: "1",
+          version: "1",
           image: "registry.example.com/runtime:1.0.0",
           cpu_millicores: 2000,
           memory_mib: 4096,

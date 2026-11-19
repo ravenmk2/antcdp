@@ -1,9 +1,11 @@
 package agents
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ravenmk2/antcdp/internal/modules/models"
 )
@@ -30,11 +32,11 @@ func TestPolicyIdentityAndNetwork(t *testing.T) {
 		t.Fatal("obsolete agent type accepted")
 	}
 	env := CloudEnvironment{Image: "runtime:fixed", CPU: 2000, Memory: 4096, Network: NetworkPolicy{DefaultAction: "allow"}}
-	if normalizeCloudEnvironment(&env, false) != nil {
+	if normalizeCloudEnvironment(&env) != nil {
 		t.Fatal("valid independent template rejected")
 	}
 	env.Image = "runtime:latest"
-	if normalizeCloudEnvironment(&env, false) == nil {
+	if normalizeCloudEnvironment(&env) == nil {
 		t.Fatal("mutable image tag accepted")
 	}
 	for _, value := range []string{"10.1.2.3", "10.1.2.0/24", "fc00::/7", "*.Docs.Example.COM.", "xn--bcher-kva.example"} {
@@ -77,5 +79,52 @@ func TestModelSelectionHashUsesEffectiveRoute(t *testing.T) {
 	w.SystemPrompt += "b"
 	if validateDefinition(&w) == nil {
 		t.Fatal("prompt limit ignored")
+	}
+}
+
+func TestConnectionConfirmationScopeAndExpiry(t *testing.T) {
+	s := &CloudService{Host: &Service{ETag: func(value string) string { return "test-signature/" + value }}}
+	expected := connectionConfirmation{Actor: 1, Config: 4, Backend: 2, Topology: 12, Count: 3, Target: "normalized-draft", Expires: time.Now().Add(time.Minute).Unix()}
+	signed := func(c connectionConfirmation) ConnectionWrite {
+		raw, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := base64.RawURLEncoding.EncodeToString(raw)
+		return ConnectionWrite{ConfirmationText: confirmConnectionText, ConfirmationToken: body + "." + base64.RawURLEncoding.EncodeToString([]byte(s.Host.ETag("sandbox-confirm/"+body)))}
+	}
+	if err := s.verifyConnectionConfirmation(signed(expected), expected); err != nil {
+		t.Fatal(err)
+	}
+	for name, change := range map[string]func(*connectionConfirmation){
+		"administrator": func(c *connectionConfirmation) { c.Actor++ },
+		"expiry":        func(c *connectionConfirmation) { c.Expires = time.Now().Add(-time.Second).Unix() },
+		"config":        func(c *connectionConfirmation) { c.Config++ },
+		"topology":      func(c *connectionConfirmation) { c.Topology++ },
+		"generation":    func(c *connectionConfirmation) { c.Backend++ },
+		"count":         func(c *connectionConfirmation) { c.Count++ },
+		"draft":         func(c *connectionConfirmation) { c.Target += "changed" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			other := expected
+			change(&other)
+			if err := s.verifyConnectionConfirmation(signed(other), expected); err == nil {
+				t.Fatal("accepted mismatched confirmation")
+			}
+		})
+	}
+}
+
+func TestConnectionAddressIdentity(t *testing.T) {
+	row := &SandboxConnectionRow{Endpoint: new("https://Cloud.Example:443/Api/")}
+	draft := ConnectionWrite{Endpoint: "https://cloud.example/Api"}
+	if err := normalizeConnection(&draft); err != nil || endpointOf(row) != draft.Endpoint {
+		t.Fatal("equivalent address would reset resources", err)
+	}
+	for input, want := range map[string]string{"http://Example:8080/Api/": "http://example:8080/Api", "http://[::1]:80/": "http://[::1]", "https://EXAMPLE:443/a%2Fb": "https://example/a%2Fb"} {
+		got, err := normalizeSandboxEndpoint(input)
+		if err != nil || got != want {
+			t.Errorf("%q normalized to %q, want %q: %v", input, got, want, err)
+		}
 	}
 }

@@ -596,8 +596,8 @@ function Completion({ summary }: { summary: InstallationSummary }) {
             <a
               href={
                 summary.authenticated
-                  ? "/admin/cloud-computers/settings"
-                  : "/login?return_to=%2Fadmin%2Fcloud-computers%2Fsettings"
+                  ? "/admin/sandboxes"
+                  : "/login?return_to=%2Fadmin%2Fsandboxes"
               }
             >
               配置沙箱连接（可稍后）

@@ -126,7 +126,8 @@ func (s *Service) createSpec(c *cloudClaim) (sandboxcore.CreateSpec, error) {
 	if json.Unmarshal(c.Operation.TargetEnvironment, &env) != nil {
 		return sandboxcore.CreateSpec{}, integrity()
 	}
-	policy, e := sandboxcore.SnapshotPolicy(env.Network)
+	policy := env.Network
+	e := sandboxcore.ValidateSnapshot(policy)
 	if e != nil {
 		return sandboxcore.CreateSpec{}, e
 	}
@@ -355,8 +356,7 @@ func (s *Service) finishCloudOperation(ctx context.Context, c *cloudClaim, cause
 			case "create", "rebuild":
 				v.State = "ready"
 				v.VolumeState = "ready"
-				v.AppliedTemplateVersion = op.TargetTemplateVersion
-				v.EffectiveEnvironment = op.TargetEnvironment
+				v.AppliedSpecID, v.AppliedSpecVersion = op.TargetSpecID, op.TargetSpecVersion
 				v.Capabilities = c.Computer.Capabilities
 			case "pause":
 				v.State = "paused"
@@ -369,9 +369,7 @@ func (s *Service) finishCloudOperation(ctx context.Context, c *cloudClaim, cause
 				v.RuntimeCreationToken = nil
 				v.VolumeState = "deleted"
 				v.VolumeCleanupState = "completed"
-				connection.TopologyVersion++
-				connection.UpdatedAt = now
-				if e = cr.SaveConnection(connection); e != nil {
+				if e = cr.BumpConnectionTopology(); e != nil {
 					return e
 				}
 			}

@@ -4,11 +4,12 @@ import { Button } from "@/components/button";
 import { ErrorNotice, Notice } from "@/components/feedback";
 import { useUnsaved } from "@/hooks/use-unsaved";
 import type { Versioned } from "@/types/agents";
-import { agentAdminRoot } from "../data/agent-api";
+import { agentAdminRoot, type AgentApiDomain } from "../data/agent-api";
 import { useAgentCommand, useCommandResult } from "../data/agent-runtime";
 
 export function useCloudSave<T extends Versioned>({
   path,
+  domain = agentAdminRoot,
   commandName,
   scope,
   initial,
@@ -17,6 +18,7 @@ export function useCloudSave<T extends Versioned>({
   onSaved,
 }: {
   path: string;
+  domain?: AgentApiDomain;
   commandName: string;
   scope: string;
   initial: ApiResponse<T>;
@@ -33,7 +35,10 @@ export function useCloudSave<T extends Versioned>({
   const blocked = action.uncertain || conflict || !etag;
   const release = useUnsaved(dirty, action.pending || blocked);
   useCommandResult(action.state, (value) => {
-    setEtag(action.state.response?.etag ?? "");
+    setEtag(
+      action.state.response?.etag ||
+        (value.version ? `"${value.version}"` : ""),
+    );
     adopt(value);
     setLatest(undefined);
     release();
@@ -46,8 +51,8 @@ export function useCloudSave<T extends Versioned>({
     etag,
     save: (body: unknown) =>
       action.command.run({
-        domain: agentAdminRoot,
-        path: path.slice(agentAdminRoot.length),
+        domain,
+        path: path.slice(domain.length),
         command: commandName,
         scope,
         options: { method: "PUT", etag, body },

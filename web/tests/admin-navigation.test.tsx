@@ -77,7 +77,11 @@ it("restores only safe group preferences and reveals implemented routes", async 
     within(screen.getByRole("navigation", { name: "主导航" })).getAllByRole(
       "link",
     ),
-  ).toHaveLength(19);
+  ).toHaveLength(20);
+  expect(screen.getByRole("link", { name: "沙箱配置" })).toHaveAttribute(
+    "href",
+    "/admin/sandboxes",
+  );
   expect(screen.getByRole("link", { name: "云电脑" })).toHaveAttribute(
     "href",
     "/admin/cloud-computers",

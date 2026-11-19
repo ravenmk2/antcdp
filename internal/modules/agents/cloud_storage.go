@@ -11,8 +11,6 @@ import (
 
 type SandboxConnectionRow = sandboxes.Connection
 
-type CloudTemplateRow = cloudcomputers.Template
-
 // A computer keeps one current runtime and volume; replacement never creates a
 // second logical computer or changes a session's binding.
 type CloudComputerRow = cloudcomputers.Computer
@@ -89,9 +87,19 @@ type CloudRepository interface {
 	Sandbox() sandboxes.Repository
 	Connection(bool) (*SandboxConnectionRow, error)
 	SaveConnection(*SandboxConnectionRow) error
-	CloudTemplate(*uint64, bool) (*CloudTemplateRow, error)
-	InsertCloudTemplate(*CloudTemplateRow) error
-	SaveCloudTemplate(*CloudTemplateRow) error
+	BumpConnectionTopology() error
+	SaveConnectionDiagnostic(uint64, time.Time, json.RawMessage) error
+	SandboxSpecs() ([]SandboxSpec, error)
+	SandboxSpec(uint64, bool) (*SandboxSpec, error)
+	InsertSandboxSpec(*SandboxSpec, uint64) error
+	UpdateSandboxSpec(*SandboxSpec, uint64) error
+	DeleteSandboxSpec(uint64) error
+	SpecReferences(uint64) ([]SpecReference, error)
+	BoundSandboxSpec(*uint64) (*SandboxSpec, error)
+	SpecBinding(*uint64, bool) (*SpecBinding, error)
+	InsertSpecBinding(*uint64, *uint64, uint64) error
+	UpdateSpecBinding(*SpecBinding, uint64) error
+	DeleteSpecBinding(uint64) error
 	Computer(uint64, bool) (*CloudComputerRow, error)
 	PersonalComputer(uint64, bool) (*CloudComputerRow, error)
 	PoolComputers(uint64, bool) ([]CloudComputerRow, error)
