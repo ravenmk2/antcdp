@@ -212,7 +212,7 @@ function frame(subscriptionId: string, sessionId = "10"): SnapshotFrame {
       configuration: {
         id: sessionId,
         agent_id: "1",
-        agent_type: "interactive",
+        agent_type: "chat",
         title: "会话",
         model_selection: {
           model_binding_id: "1",

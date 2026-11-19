@@ -122,7 +122,7 @@ func fileRefSource(st StateRepository, x executionRows, source agentcore.FileRef
 	if file == nil || file.ContentSessionID == nil || *file.ContentSessionID != x.RootSession.ID || file.ContentDomain != x.RootSession.ExecutionMode || file.State != "bound" || file.IntegrityState != "verified" || file.SizeBytes == nil || *file.SizeBytes > 100<<20 || len(file.SHA256) != 32 {
 		return nil, httpx.E(409, "FILE_UNAVAILABLE", "来源文件当前不可用")
 	}
-	if file.ContentDomain == "interactive" && (file.OwnerUserID == nil || x.RootSession.personalOwnerID() == nil || *file.OwnerUserID != *x.RootSession.personalOwnerID()) || file.ContentDomain == "service" && (file.AgentID == nil || *file.AgentID != x.RootSession.AgentID) {
+	if file.ContentDomain == "chat" && (file.OwnerUserID == nil || x.RootSession.personalOwnerID() == nil || *file.OwnerUserID != *x.RootSession.personalOwnerID()) || file.ContentDomain == "service" && (file.AgentID == nil || *file.AgentID != x.RootSession.AgentID) {
 		return nil, missing()
 	}
 	return file, nil

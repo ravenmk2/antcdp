@@ -31,7 +31,7 @@ func contentAccess(v *SessionRow, a *identity.Auth) error {
 	if v.ExecutorUserID == 0 {
 		return integrity()
 	}
-	if v.ExecutionMode == "interactive" {
+	if v.ExecutionMode == "chat" {
 		if v.ExecutorUserID != a.User.ID {
 			return missing()
 		}
@@ -256,7 +256,7 @@ func activeSessionRun(st StateRepository, session *SessionRow) (*RunRow, error) 
 
 func sessionPermissions(tx identity.Tx, r Repository, v *SessionRow, agent *Definition, selection EffectiveSelection, user *identity.User) (Permissions, bool, error) {
 	executor := user
-	if v.ExecutionMode != "interactive" || v.ExecutorUserID != user.ID {
+	if v.ExecutionMode != "chat" || v.ExecutorUserID != user.ID {
 		var err error
 		executor, err = executionAccount(tx, v, false)
 		if err != nil {
@@ -273,7 +273,7 @@ func sessionPermissions(tx identity.Tx, r Repository, v *SessionRow, agent *Defi
 		permissions.Control = v.ArchivedAt == nil
 		permissions.Submit = permissions.Control && agent.Enabled && selection.Availability.Available && allowed
 		permissions.Answer = permissions.Submit
-		permissions.Approve = permissions.Submit && v.ExecutionMode == "interactive"
+		permissions.Approve = permissions.Submit && v.ExecutionMode == "chat"
 	}
 	return permissions, allowed, nil
 }
@@ -382,8 +382,9 @@ func (s *Service) ListSessions(ctx context.Context, raw string, q SessionQuery) 
 		q.Page = base.Page
 		q.PageSize = base.PageSize
 		q.Q = base.Q
+		q.Mode = base.Mode
 		if q.Mode == "" {
-			q.Mode = "interactive"
+			q.Mode = "chat"
 		}
 		if q.Mode == "service" && a.User.Role != "admin" {
 			return httpx.E(403, "FORBIDDEN", "需要管理员权限")
@@ -688,7 +689,7 @@ func (s *Service) createSessionTx(ctx context.Context, tx identity.Tx, r Reposit
 		return missing()
 	}
 	if !agent.Enabled || agent.DefaultModelBindingID == nil {
-		return httpx.E(409, "AGENT_UNAVAILABLE", "智能体当前不可用")
+		return httpx.E(409, "AGENT_UNAVAILABLE", "助手当前不可用")
 	}
 	v.SelectedModelBindingID = *agent.DefaultModelBindingID
 	bindings, e := r.ModelBindings(id, false)
@@ -716,7 +717,7 @@ func (s *Service) createSessionTx(ctx context.Context, tx identity.Tx, r Reposit
 		return e
 	}
 	if current == nil || current.RowVersion != agent.RowVersion || !current.Enabled {
-		return httpx.E(409, "AGENT_UNAVAILABLE", "智能体配置已变化，请重新加载")
+		return httpx.E(409, "AGENT_UNAVAILABLE", "助手配置已变化，请重新加载")
 	}
 	if !selection.Availability.Available {
 		return httpx.E(409, "MODEL_UNAVAILABLE", "所选模型当前不可用")

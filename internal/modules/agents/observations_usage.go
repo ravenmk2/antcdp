@@ -78,7 +78,7 @@ func validateUsage(q *UsageQuery, report bool) error {
 	if e := validateQuery(&base); e != nil {
 		return e
 	}
-	q.Page, q.PageSize = base.Page, base.PageSize
+	q.Page, q.PageSize, q.Mode = base.Page, base.PageSize, base.Mode
 	if report && (q.From == nil || q.To == nil) {
 		return httpx.Invalid("from", "required")
 	}

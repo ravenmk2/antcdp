@@ -152,7 +152,7 @@ it("keeps the workbench as a decorative vector canvas without fetching business 
 it("opens an agent from the catalog table and changes favorites without navigating or creating sessions", async () => {
   const user = userEvent.setup();
   const router = mount();
-  const table = await screen.findByRole("table", { name: "智能体" });
+  const table = await screen.findByRole("table", { name: "助手" });
   expect(within(table).getByRole("link", { name: agent.name })).toHaveAttribute(
     "href",
     "/chats?agent=1",
@@ -204,11 +204,11 @@ it("shows five favorites and ten filtered sessions, with independent expansion",
     screen.queryByRole("link", { name: "收藏助手1" }),
   ).not.toBeInTheDocument();
   await user.click(
-    await screen.findByRole("button", { name: "选择智能体：收藏助手1" }),
+    await screen.findByRole("button", { name: "选择助手：收藏助手1" }),
   );
   await screen.findByRole("link", { name: "收藏助手1" });
   expect(
-    screen.queryByRole("link", { name: "全部智能体" }),
+    screen.queryByRole("link", { name: "全部助手" }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("combobox", { name: "会话关注状态" }),
@@ -238,7 +238,7 @@ it("shows five favorites and ten filtered sessions, with independent expansion",
   await user.click(screen.getByRole("button", { name: "搜索会话" }));
   const dialog = await screen.findByRole("dialog", { name: "搜索个人会话" });
   await user.click(
-    within(dialog).getByRole("button", { name: "搜索全部智能体的会话" }),
+    within(dialog).getByRole("button", { name: "搜索全部助手的会话" }),
   );
   await waitFor(() =>
     expect(
@@ -318,11 +318,11 @@ it("shows an empty favorite hint and removes favorites through the item menu", a
   const user = userEvent.setup();
   const router = mount("/chats?agent=1", true);
   await user.click(
-    await screen.findByRole("button", { name: "选择智能体：收藏助手1" }),
+    await screen.findByRole("button", { name: "选择助手：收藏助手1" }),
   );
   await screen.findByRole("link", { name: "收藏助手1" });
   expect(
-    screen.queryByRole("heading", { name: "收藏的智能体" }),
+    screen.queryByRole("heading", { name: "收藏的助手" }),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: /取消收藏/ }),
@@ -345,7 +345,7 @@ it("closes the agent selector on selection without resetting the current convers
   const user = userEvent.setup();
   const router = mount("/chats/31", true);
   const trigger = await screen.findByRole("button", {
-    name: "选择智能体：收藏助手1",
+    name: "选择助手：收藏助手1",
   });
   await user.click(trigger);
   await user.click(await screen.findByRole("link", { name: "收藏助手1" }));

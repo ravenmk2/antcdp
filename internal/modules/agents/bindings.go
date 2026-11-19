@@ -244,7 +244,7 @@ func (s *Service) PutModelBindings(ctx context.Context, raw string, id uint64, t
 					return httpx.E(409, "MODEL_UNAVAILABLE", "绑定模型当前不可用")
 				}
 				if views[row.ModelID].Capabilities.Text != "supported" || needsTools && views[row.ModelID].Capabilities.Tools != "supported" {
-					return httpx.E(422, "MODEL_CAPABILITY_UNSUPPORTED", "绑定模型缺少智能体需要的能力")
+					return httpx.E(422, "MODEL_CAPABILITY_UNSUPPORTED", "绑定模型缺少助手需要的能力")
 				}
 			}
 		}
@@ -351,7 +351,7 @@ func (s *Service) PutToolBindings(ctx context.Context, raw string, id uint64, ta
 			}
 			for _, view := range views {
 				if view.Capabilities.Text != "supported" || view.Capabilities.Tools != "supported" {
-					return httpx.E(422, "MODEL_CAPABILITY_UNSUPPORTED", "绑定模型缺少智能体需要的能力")
+					return httpx.E(422, "MODEL_CAPABILITY_UNSUPPORTED", "绑定模型缺少助手需要的能力")
 				}
 			}
 		}
@@ -399,7 +399,7 @@ func (s *Service) PutToolBindings(ctx context.Context, raw string, id uint64, ta
 		rows := []ToolBinding{}
 		for i, item := range w.Items {
 			if v.Mode == "service" && item.Policy == "confirm" {
-				return httpx.E(422, "SERVICE_APPROVAL_UNSUPPORTED", "服务型智能体只允许预授权工具")
+				return httpx.E(422, "SERVICE_APPROVAL_UNSUPPORTED", "服务型助手只允许预授权工具")
 			}
 			spec := specs[item.ToolKey]
 			constraints, e := objectJSON(item.Constraints, "items.parameter_constraints")
@@ -490,7 +490,7 @@ func (s *Service) validateEnabled(ctx context.Context, tx identity.Tx, r Reposit
 			needsTools = true
 		}
 		if v.Mode == "service" && b.Policy == "confirm" {
-			return httpx.E(422, "SERVICE_APPROVAL_UNSUPPORTED", "服务型智能体不支持审批")
+			return httpx.E(422, "SERVICE_APPROVAL_UNSUPPORTED", "服务型助手不支持审批")
 		}
 	}
 	for _, b := range bindings {
@@ -499,7 +499,7 @@ func (s *Service) validateEnabled(ctx context.Context, tx identity.Tx, r Reposit
 			return httpx.E(409, "MODEL_UNAVAILABLE", "绑定模型当前不可用")
 		}
 		if view.Capabilities.Text != "supported" || needsTools && view.Capabilities.Tools != "supported" {
-			return httpx.E(422, "MODEL_CAPABILITY_UNSUPPORTED", "绑定模型缺少智能体需要的能力")
+			return httpx.E(422, "MODEL_CAPABILITY_UNSUPPORTED", "绑定模型缺少助手需要的能力")
 		}
 		if _, e = s.validateModelBinding(view, modelWrites([]ModelBinding{b})[0]); e != nil {
 			return e

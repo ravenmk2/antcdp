@@ -169,7 +169,7 @@ it("keeps a fixed icon rail with six menus and no conversation sidebar on the wo
     "data-compact",
     "true",
   );
-  for (const name of ["工作台", "对话", "智能体", "项目", "团队", "云电脑"])
+  for (const name of ["工作台", "对话", "助手", "项目", "团队", "云电脑"])
     expect(mainLink("link", { name })).toBeVisible();
   expect(
     screen.queryByRole("button", { name: /展开侧栏|收起侧栏/ }),
@@ -304,7 +304,7 @@ it("uses the independent agent summary and session title in conversation breadcr
 
 it("keeps the agent catalog independent from the conversation sidebar", () => {
   mount("/agents/catalog");
-  expect(mainLink("link", { name: "智能体" })).toHaveAttribute(
+  expect(mainLink("link", { name: "助手" })).toHaveAttribute(
     "aria-current",
     "page",
   );

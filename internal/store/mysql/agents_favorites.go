@@ -28,7 +28,7 @@ func (t *agentsTx) FavoriteAgents(user uint64, ids []uint64) (map[uint64]bool, e
 }
 
 func (t *agentsTx) FavoriteDefinitions(user uint64, admin bool, q a.Query) ([]a.Definition, int, error) {
-	where := []string{"agent.deleted_at IS NULL", "agent.agent_type='interactive'", "f.user_id=?"}
+	where := []string{"agent.deleted_at IS NULL", "agent.agent_type='chat'", "f.user_id=?"}
 	args := []any{user}
 	if !admin {
 		where = append(where, agentUsagePredicate)
@@ -63,6 +63,6 @@ func (t *agentsTx) SaveFavorite(user, agent uint64, favorite bool, now time.Time
 func (t *agentsTx) CanReadAgentHistory(agent, user uint64, admin bool) (bool, error) {
 	// Match root-session contentAccess: personal history stays private even to admins.
 	var allowed bool
-	err := t.tx.GetContext(t.ctx, &allowed, "SELECT EXISTS(SELECT 1 FROM agent_session WHERE agent_id=? AND session_kind='root' AND ((agent_type='interactive' AND executor_user_id=?) OR (agent_type='service' AND ?)))", agent, user, admin)
+	err := t.tx.GetContext(t.ctx, &allowed, "SELECT EXISTS(SELECT 1 FROM agent_session WHERE agent_id=? AND session_kind='root' AND ((agent_type='chat' AND executor_user_id=?) OR (agent_type='service' AND ?)))", agent, user, admin)
 	return allowed, err
 }

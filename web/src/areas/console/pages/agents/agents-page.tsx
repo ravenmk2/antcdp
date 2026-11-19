@@ -101,8 +101,9 @@ import { AgentOverview, AgentActivation } from "./agent-overview";
 
 export function AgentsPage() {
   const { params, page, size, change } = useListParams();
+  const requestedType = params.get("agent_type");
   const q = params.get("q") ?? "",
-    mode = params.get("agent_type") ?? "all",
+    mode = requestedType === "interactive" ? "chat" : (requestedType ?? "all"),
     scope = params.get("scope_kind") ?? "all",
     enabled = params.get("enabled") ?? "all";
   const search = useDebouncedSearch(q, (value) =>
@@ -123,8 +124,8 @@ export function AgentsPage() {
   return (
     <div className="page">
       <PageHeader
-        title="智能体管理"
-        description="配置智能体归属和能力。交互型使用对话用户身份，服务型使用专属机器人身份。"
+        title="助手管理"
+        description="配置助手归属和能力。对话型使用对话用户身份，服务型使用专属机器人身份。"
       />
       <Panel>
         <TableToolbar
@@ -144,7 +145,7 @@ export function AgentsPage() {
               render={
                 <Link to="/admin/agents/new">
                   <Plus className="size-4" />
-                  新建智能体
+                  新建助手
                 </Link>
               }
               nativeButton={false}
@@ -153,7 +154,7 @@ export function AgentsPage() {
           }
         >
           <StandaloneInput
-            aria-label="搜索智能体"
+            aria-label="搜索助手"
             placeholder="搜索名称或说明"
             value={search.value}
             onChange={(event) => search.setValue(event.target.value)}
@@ -165,7 +166,7 @@ export function AgentsPage() {
             onValueChange={(value) => change({ agent_type: value, page: "1" })}
           >
             <option value="all">全部类型</option>
-            <option value="interactive">交互型</option>
+            <option value="chat">对话型</option>
             <option value="service">服务型</option>
           </StandaloneSelect>
           <StandaloneSelect
@@ -195,9 +196,9 @@ export function AgentsPage() {
         >
           {agents.data?.data.length ? (
             <SimpleTable
-              label="智能体列表"
+              label="助手列表"
               headers={[
-                "智能体",
+                "助手",
                 "类型",
                 "归属",
                 "模型 / 工具",
@@ -275,7 +276,7 @@ export function AgentsPage() {
             </SimpleTable>
           ) : (
             <EmptyState
-              title="暂无匹配的智能体"
+              title="暂无匹配的助手"
               description="创建后配置模型与权限，再开放使用。"
             />
           )}
@@ -306,7 +307,7 @@ export function AgentCreatePage() {
     robot_user_id: null as string | null,
     name: "",
     description: "",
-    agent_type: "interactive" as AgentType,
+    agent_type: "chat" as AgentType,
     scope_kind: "platform" as AgentScope,
     scope_id: null as string | null,
   });
@@ -318,7 +319,7 @@ export function AgentCreatePage() {
     draft.code ||
     draft.name ||
     draft.description ||
-    draft.agent_type !== "interactive" ||
+    draft.agent_type !== "chat" ||
     draft.scope_kind !== "platform",
   );
   const release = useUnsaved(dirty, pending || uncertain);
@@ -337,9 +338,9 @@ export function AgentCreatePage() {
           : "请输入 1–64 位小写字母、数字、_ 或 - 的编码",
         robot_user_id:
           draft.agent_type === "service" && !draft.robot_user_id
-            ? "请选择未绑定智能体的机器人"
+            ? "请选择未绑定助手的机器人"
             : "",
-        name: draft.name.trim() ? "" : "请输入智能体名称",
+        name: draft.name.trim() ? "" : "请输入助手名称",
         scope_id:
           draft.scope_kind !== "platform" && !draft.scope_id
             ? "请选择归属"
@@ -377,7 +378,7 @@ export function AgentCreatePage() {
       <AgentsPage />
       <Drawer
         open
-        title="新建智能体"
+        title="新建助手"
         description="类型和归属创建后固定。完成模型与能力配置后再启用。"
         dirty={dirty}
         pending={pending || uncertain}
@@ -416,7 +417,7 @@ export function AgentCreatePage() {
                 onChange={(e) => setDraft({ ...draft, code: e.target.value })}
               />
             </Field>
-            <Field label="智能体名称" required error={errors.fields.name}>
+            <Field label="助手名称" required error={errors.fields.name}>
               <Input
                 name="name"
                 value={draft.name}
@@ -433,12 +434,12 @@ export function AgentCreatePage() {
                   setDraft({ ...draft, agent_type: value as AgentType })
                 }
               >
-                <option value="interactive">交互型</option>
+                <option value="chat">对话型</option>
                 <option value="service">服务型</option>
               </Select>
             </Field>
             <Notice>
-              {draft.agent_type === "interactive"
+              {draft.agent_type === "chat"
                 ? "使用对话用户的身份和个人云电脑，历史内容仅本人可见。"
                 : "选择独立机器人作为执行账号，绑定后不可更换。机器人资料、权限和凭据在机器人账号页管理。"}
             </Notice>
@@ -506,7 +507,7 @@ export function AgentCreatePage() {
               </Field>
             )}
             <p className="text-sm text-muted">
-              平台智能体向所有登录用户开放；团队、项目智能体按成员关系获得使用资格。资源访问范围由执行账号的权限决定。
+              平台助手向所有登录用户开放；团队、项目助手按成员关系获得使用资格。资源访问范围由执行账号的权限决定。
             </p>
             <Field label="说明" error={errors.fields.description}>
               <Textarea
@@ -580,10 +581,10 @@ export function AgentDetailPage() {
   return (
     <div className="page">
       <PageHeader
-        title={agent.data?.data.name ?? "智能体配置"}
+        title={agent.data?.data.name ?? "助手配置"}
         description={
           <ResourceDescription
-            name={agent.data?.data.name ?? "智能体"}
+            name={agent.data?.data.name ?? "助手"}
             description={agent.data?.data.description}
           />
         }
@@ -646,7 +647,7 @@ export function AgentDetailPage() {
                 role="link"
                 variant={agent.data.data.enabled ? "outline" : "default"}
               >
-                {agent.data.data.enabled ? "停用智能体" : "检查并启用"}
+                {agent.data.data.enabled ? "停用助手" : "检查并启用"}
               </Button>
             )}
             {agent.data && (
@@ -655,7 +656,7 @@ export function AgentDetailPage() {
                   render={
                     <Button
                       variant="outline"
-                      aria-label="智能体更多操作"
+                      aria-label="助手更多操作"
                       disabled={deletion.pending || deletion.uncertain}
                     >
                       <MoreHorizontal className="size-4" />
@@ -668,7 +669,7 @@ export function AgentDetailPage() {
                     onClick={() => setDeleting(true)}
                   >
                     <Trash2 />
-                    删除智能体
+                    删除助手
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -697,10 +698,10 @@ export function AgentDetailPage() {
               </span>
             </div>
             <div className="agent-settings-layout">
-              <nav aria-label="智能体配置分区" className="agent-settings-nav">
+              <nav aria-label="助手配置分区" className="agent-settings-nav">
                 {[
                   {
-                    label: "智能体",
+                    label: "助手",
                     items: [
                       {
                         value: "overview",
@@ -869,7 +870,7 @@ export function AgentDetailPage() {
                 {(tab === "resources" || tab === "computer") &&
                   agent.data.data.agent_type !== "service" && (
                     <Notice>
-                      此配置仅适用于服务型智能体。交互型智能体使用对话用户的身份与个人云电脑。
+                      此配置仅适用于服务型助手。对话型助手使用对话用户的身份与个人云电脑。
                     </Notice>
                   )}
               </div>
@@ -890,7 +891,7 @@ export function AgentDetailPage() {
             {deletion.recovery}
             <ConfirmDialog
               open={deleting}
-              title="删除智能体？"
+              title="删除助手？"
               description="删除后不再接受新轮次，历史记录保留。绑定的机器人独立保留，已有云电脑需单独维护。"
               danger
               pending={deletion.pending}
@@ -920,7 +921,7 @@ function AgentBasicRead({ agent }: { agent: AgentDefinition }) {
       <ResourceSection title="基本信息">
         <dl className="agent-read-facts">
           <div>
-            <dt>智能体名称</dt>
+            <dt>助手名称</dt>
             <dd>{agent.name}</dd>
           </div>
           <div>
@@ -936,7 +937,7 @@ function AgentBasicRead({ agent }: { agent: AgentDefinition }) {
             </dd>
           </div>
           <div>
-            <dt>智能体标识</dt>
+            <dt>助手标识</dt>
             <dd className="font-mono text-xs">{agent.code}</dd>
           </div>
         </dl>
@@ -951,7 +952,7 @@ function AgentPromptRead({ agent }: { agent: AgentDefinition }) {
         <div>
           <h2 className="font-semibold">系统提示词</h2>
           <p className="mt-1 text-sm text-muted">
-            定义智能体的角色、工作方式和行为边界。
+            定义助手的角色、工作方式和行为边界。
           </p>
         </div>
         <Button
@@ -1013,7 +1014,7 @@ function AgentBasicEditor({
       <fieldset disabled={save.pending || save.blocked} className="max-w-3xl">
         <Panel bodyClassName="p-6">
           <ResourceSection title="基本信息">
-            <Field label="智能体名称" required error={errors.fields.name}>
+            <Field label="助手名称" required error={errors.fields.name}>
               <Input
                 name="name"
                 value={draft.name}

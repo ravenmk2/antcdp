@@ -47,7 +47,7 @@ func (s *Service) compactionExecution(tx identity.Tx, r Repository, st StateRepo
 			return x, nil, e
 		}
 		if agent == nil || !agent.Enabled {
-			return x, nil, httpx.E(409, "AGENT_UNAVAILABLE", "智能体不可用")
+			return x, nil, httpx.E(409, "AGENT_UNAVAILABLE", "助手不可用")
 		}
 		v, e := st.Session(initial.ID, true)
 		if e != nil {

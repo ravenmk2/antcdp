@@ -111,7 +111,7 @@ func runtimeTestAgent(t *testing.T, f *agentIntegrationFixture) *a.Definition {
 
 func runtimeTestAgentModel(t *testing.T, f *agentIntegrationFixture, modelID uint64) *a.Definition {
 	t.Helper()
-	created, e := f.Agents.CreateDefinition(f.Context, f.AdminToken, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: "运行事务测试", Mode: "interactive", ScopeKind: "platform"})
+	created, e := f.Agents.CreateDefinition(f.Context, f.AdminToken, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: "运行事务测试", Mode: "chat", ScopeKind: "platform"})
 	if e != nil {
 		t.Fatal(e)
 	}

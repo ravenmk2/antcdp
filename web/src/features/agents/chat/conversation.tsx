@@ -125,7 +125,7 @@ export function Conversation({
   const config = snapshot?.configuration;
   const shown =
     config &&
-    config.agent_type === (service ? "service" : "interactive") &&
+    config.agent_type === (service ? "service" : "chat") &&
     (!expectedAgentId || expectedAgentId === config.agent_id);
   const refreshDetails = useMemo(() => {
     const baseline = BigInt(state.baselineSeq);
@@ -572,7 +572,7 @@ export function Conversation({
       </div>
     );
   if (config && expectedAgentId && config.agent_id !== expectedAgentId)
-    return <Notice tone="warning">此会话不属于当前智能体。</Notice>;
+    return <Notice tone="warning">此会话不属于当前助手。</Notice>;
   if (config && service !== (config.agent_type === "service"))
     return (
       <Navigate
@@ -1024,7 +1024,7 @@ export function Conversation({
                                 role="status"
                                 className="text-xs text-muted"
                               >
-                                当前已无此智能体的使用权限。
+                                当前已无此助手的使用权限。
                               </span>
                             )
                           }

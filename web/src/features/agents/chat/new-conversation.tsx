@@ -38,7 +38,7 @@ export function NewConversation({
   const routeAgent = agentId || params.get("agent") || "";
   const id = service
     ? `new:service:${agentId}`
-    : `new:interactive:${routeAgent || "default"}`;
+    : `new:chat:${routeAgent || "default"}`;
   const { state: draft, draft: editor } = useConversationDraft(id),
     send = useConversationSend(id);
   const [picking, setPicking] = useState(false);
@@ -146,7 +146,7 @@ export function NewConversation({
             onRetry={() => agent.refetch()}
           >
             {value && !available && (
-              <Notice tone="warning">当前智能体暂不可开始会话。</Notice>
+              <Notice tone="warning">当前助手暂不可开始会话。</Notice>
             )}
             <ChatComposer
               id={id}
@@ -168,7 +168,7 @@ export function NewConversation({
         </span>
         <div>
           {service ? (
-            <h1>调试服务型智能体</h1>
+            <h1>调试服务型助手</h1>
           ) : (
             <h1>{value?.name ?? "新对话"}</h1>
           )}
@@ -205,12 +205,12 @@ export function NewConversation({
               <div className="agent-start-options">
                 {(!agentId || service) && (
                   <div className="agent-start-field">
-                    <p>智能体</p>
+                    <p>助手</p>
                     <Button
                       className="agent-start-selector"
                       contentClassName="w-full min-w-0 justify-between"
                       variant="outline"
-                      aria-label={`选择智能体，${value?.name ?? "尚未选择"}`}
+                      aria-label={`选择助手，${value?.name ?? "尚未选择"}`}
                       title={value?.name}
                       disabled={locked || Boolean(agentId)}
                       onClick={() => setPicking(true)}
@@ -218,7 +218,7 @@ export function NewConversation({
                       <span className="flex min-w-0 items-center gap-2">
                         <Bot className="size-4 shrink-0" />
                         <span className="truncate">
-                          {value?.name ?? "选择智能体"}
+                          {value?.name ?? "选择助手"}
                         </span>
                       </span>
                       <ChevronDown className="size-4" />
@@ -230,7 +230,7 @@ export function NewConversation({
             <ErrorNotice error={agent.error || options.error} />
             {value && !available && (
               <Notice tone="warning">
-                当前智能体暂不可开始会话。请重新选择，或联系管理员核对模型及授权配置。
+                当前助手暂不可开始会话。请重新选择，或联系管理员核对模型及授权配置。
               </Notice>
             )}
           </>
@@ -238,14 +238,14 @@ export function NewConversation({
           <EmptyState
             compact
             icon={Bot}
-            title="尚无可用智能体"
-            description="管理员配置并启用交互型智能体后，即可从这里开始对话。"
+            title="尚无可用助手"
+            description="管理员配置并启用对话型助手后，即可从这里开始对话。"
           />
         )}
       </AsyncBoundary>
       {picking && (
         <ResourcePicker<CatalogAgent | AgentSummary>
-          title="选择智能体"
+          title="选择助手"
           path={
             service
               ? `${agentAdminRoot}/definitions?agent_type=service&enabled=true`

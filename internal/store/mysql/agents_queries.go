@@ -50,7 +50,7 @@ func (t *agentsTx) ReplaceInputFiles(id uint64, rows []a.InputFileRow) error {
 func (t *agentsTx) Sessions(user uint64, q a.SessionQuery) ([]a.SessionSummary, int, error) {
 	where := []string{"s.session_kind='root'", "s.agent_type=?"}
 	args := []any{user, q.Mode}
-	if q.Mode == "interactive" {
+	if q.Mode == "chat" {
 		where = append(where, "s.executor_user_id=?")
 		args = append(args, user)
 	}

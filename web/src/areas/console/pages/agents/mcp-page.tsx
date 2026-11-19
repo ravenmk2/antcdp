@@ -86,7 +86,7 @@ export function MCPServersPage() {
     <>
       <MCPServerList
         title="MCP 服务"
-        description="连接远端 MCP 端点，测试连接并单独调试工具。智能体按整个服务绑定权限。"
+        description="连接远端 MCP 端点，测试连接并单独调试工具。助手按整个服务绑定权限。"
         path={agentAdminRoot + "/mcp-servers"}
         route="/admin/mcp-servers"
         preview={(server) => (
@@ -108,7 +108,7 @@ export function MCPServersPage() {
               "协议：" +
                 (server.config.requested_protocol_versions.join("、") ||
                   "自动协商"),
-              "关联智能体：" + server.agent_count,
+              "关联助手：" + server.agent_count,
               "更新时间：" + new Date(server.updated_at).toLocaleString(),
             ].join("\n")}
           />
@@ -164,7 +164,7 @@ export function MCPServersPage() {
               ),
           },
           {
-            title: "关联智能体",
+            title: "关联助手",
             render: (server) => (
               <Link
                 className="text-primary hover:underline"
@@ -557,7 +557,7 @@ function MCPManagementDrawer({
     <Drawer
       open
       wide
-      title={mode === "agents" ? "关联智能体" : "编辑 MCP 服务"}
+      title={mode === "agents" ? "关联助手" : "编辑 MCP 服务"}
       description={query.data?.data.name}
       onClose={onClose}
       footer={<OverlayCancelButton>关闭</OverlayCancelButton>}

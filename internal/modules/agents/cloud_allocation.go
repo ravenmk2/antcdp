@@ -53,10 +53,10 @@ func (s *CloudService) allocateSession(cr CloudRepository, st StateRepository, c
 		if computer == nil || computer.DeletedAt != nil || computer.State == "deleting" {
 			return nil, httpx.E(409, "CLOUD_COMPUTER_DELETED", "原云电脑已删除或正在删除，不能继续此会话")
 		}
-		if computer.OwnerUserID != session.ExecutorUserID || (agent.Mode == "service" && (computer.PoolAgentID == nil || *computer.PoolAgentID != agent.ID)) || (agent.Mode == "interactive" && computer.PoolAgentID != nil) {
+		if computer.OwnerUserID != session.ExecutorUserID || (agent.Mode == "service" && (computer.PoolAgentID == nil || *computer.PoolAgentID != agent.ID)) || (agent.Mode == "chat" && computer.PoolAgentID != nil) {
 			return nil, integrity()
 		}
-	} else if agent.Mode == "interactive" {
+	} else if agent.Mode == "chat" {
 		computer, e = cr.PersonalComputer(session.ExecutorUserID, true)
 		if e != nil {
 			return nil, e

@@ -108,8 +108,8 @@ export function CloudComputersPage() {
             }
           />
           <StandaloneInput
-            aria-label="服务型智能体 ID"
-            placeholder="服务型智能体 ID"
+            aria-label="服务型助手 ID"
+            placeholder="服务型助手 ID"
             value={pool}
             onChange={(e) =>
               change({
@@ -155,7 +155,7 @@ export function CloudComputersPage() {
                       className="text-primary"
                       to={`/admin/agents/${v.pool_agent_id}?tab=computer`}
                     >
-                      智能体 {v.pool_agent_id}
+                      助手 {v.pool_agent_id}
                     </Link>
                   ) : (
                     "个人电脑"
@@ -192,7 +192,7 @@ export function CloudSettingsPage() {
     <div className="page space-y-5">
       <PageHeader
         title="云电脑配置"
-        description="平台维护一份服务连接，个人电脑与各服务型智能体分别配置运行环境。"
+        description="平台维护一份服务连接，个人电脑与各服务型助手分别配置运行环境。"
         actions={
           <Button
             render={<Link to="/admin/cloud-computers">返回云电脑</Link>}

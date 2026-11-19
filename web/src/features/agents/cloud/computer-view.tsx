@@ -56,7 +56,7 @@ export function ComputerFacts({
                       className="text-primary"
                       to={`/admin/agents/${computer.pool_agent_id}?tab=computer`}
                     >
-                      服务型智能体 {computer.pool_agent_id}
+                      服务型助手 {computer.pool_agent_id}
                     </Link>
                   ) : (
                     `真人用户 ${computer.owner_user_id}`

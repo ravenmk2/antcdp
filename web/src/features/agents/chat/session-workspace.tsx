@@ -293,7 +293,7 @@ function SessionProgress({
         <section>
           <h3 className="agent-workspace-section-title">任务计划</h3>
           <p className="mb-4 text-xs leading-5 text-muted">
-            智能体最近提交的计划，不代表所有步骤均已执行。
+            助手最近提交的计划，不代表所有步骤均已执行。
           </p>
           <ol className="agent-workspace-plan">
             {plan.plan.map((step, index) => (

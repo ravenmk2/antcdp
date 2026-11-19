@@ -142,6 +142,13 @@ func projectEvent(v EventRow) (DurableRecord, error) {
 	if e != nil {
 		return DurableRecord{}, e
 	}
+	switch v.EventType {
+	case "session/configured", "session/title", "context/authorization":
+		facts.Public, e = projectEventAgentType(facts.Public, v.EventType != "context/authorization")
+		if e != nil {
+			return DurableRecord{}, e
+		}
+	}
 	if v.EventType == "tool/call" && facts.ExactToolArguments != "" {
 		if !json.Valid([]byte(facts.ExactToolArguments)) {
 			return DurableRecord{}, integrity()
@@ -190,6 +197,33 @@ func projectEvent(v EventRow) (DurableRecord, error) {
 	}
 	return DurableRecord{Seq: agentcore.Seq(v.Seq), Type: v.EventType, SchemaVersion: 1, OccurredAt: v.OccurredAt, RunID: v.RunID, Data: facts.Public}, nil
 }
+
+// Normalize the public view while preserving the stored event and model context.
+func projectEventAgentType(data json.RawMessage, nested bool) (json.RawMessage, error) {
+	var public map[string]json.RawMessage
+	if json.Unmarshal(data, &public) != nil {
+		return nil, integrity()
+	}
+	fields := public
+	if nested {
+		fields = nil
+		if json.Unmarshal(public["configuration"], &fields) != nil {
+			return nil, integrity()
+		}
+	}
+	if string(fields["agent_type"]) != `"`+legacyChatType+`"` {
+		return data, nil
+	}
+	fields["agent_type"] = json.RawMessage(`"chat"`)
+	if nested {
+		var err error
+		public["configuration"], err = json.Marshal(fields)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(public)
+}
 func coreError(err error) error {
 	var v *agentcore.Error
 	if !errors.As(err, &v) {
@@ -212,7 +246,7 @@ func coreError(err error) error {
 	case "VIEW_POSITION_INVALID", "MODEL_CAPABILITY_UNSUPPORTED", "SERVICE_APPROVAL_UNSUPPORTED", "TOOL_POLICY_UNSUPPORTED":
 		status = 422
 	}
-	return httpx.E(status, code, fmt.Sprintf("智能体操作未完成（%s）", code))
+	return httpx.E(status, code, fmt.Sprintf("助手操作未完成（%s）", code))
 }
 func coreSession(v *SessionRow) (agentcore.Session, error) {
 	out := agentcore.Session{ID: agentcore.ID(v.ID), AgentID: agentcore.ID(v.AgentID), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.ExecutorUserID)}, ExecutionMode: v.ExecutionMode, Title: v.Title, ModelLockedAt: v.ModelLockedAt, ArchivedAt: v.ArchivedAt, QueuePaused: v.QueuePaused, NextInputOrder: v.NextInputOrder, LastSeq: agentcore.Seq(v.LastSeq), SurfaceRevision: agentcore.Version(v.SurfaceRevision), Version: agentcore.Version(v.RowVersion)}

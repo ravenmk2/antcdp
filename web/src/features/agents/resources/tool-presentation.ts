@@ -1,10 +1,10 @@
 // Console summaries only. Model-facing descriptions and tool schemas stay unchanged.
 export const toolSummaries: Record<string, string> = {
-  papi_list: "列出智能体已获授权的平台 API。",
+  papi_list: "列出助手已获授权的平台 API。",
   papi_desc: "查看指定平台 API 的参数定义和示例。",
   papi_call: "使用结构化参数调用已授权的平台 API。",
   web_search: "检索公开网页，返回带来源链接的搜索结果。",
-  web_fetch: "读取指定网页的正文，供智能体分析和引用。",
+  web_fetch: "读取指定网页的正文，供助手分析和引用。",
   ask_user_question: "向参与者提问；有限等待后可继续，支持稍后回答。",
   skill: "按需读取已绑定技能的说明与配套材料。",
   update_plan: "展示任务计划和当前进度，便于跟踪执行过程。",

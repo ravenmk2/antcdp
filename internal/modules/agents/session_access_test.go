@@ -22,7 +22,7 @@ func (r projectRepository) CanUseAgent(_ uint64, userID uint64, admin bool) (boo
 func TestSessionAgentAdmissionChecksUsageRights(t *testing.T) {
 	owner := &identity.User{ID: 7, AccountType: "human"}
 	repo := projectRepository{allowed: map[uint64]bool{7: true}}
-	agent := &Definition{ID: 9, Mode: "interactive", ScopeKind: "project", ScopeID: new(uint64(23))}
+	agent := &Definition{ID: 9, Mode: "chat", ScopeKind: "project", ScopeID: new(uint64(23))}
 	if err := requireSessionAgent(repo, agent, owner); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestServiceUsesRobotResourceRights(t *testing.T) {
 
 func TestToolProjectUsesActualTargetAndPrincipal(t *testing.T) {
 	repo := projectRepository{allowed: map[uint64]bool{7: true}}
-	run := executionRows{Agent: &Definition{Mode: "interactive", ScopeKind: "project", ScopeID: new(uint64(41))}, Execution: agentcore.ExecutionContext{Principal: agentcore.PrincipalRef{Kind: "user", ID: 7}, Authorization: agentcore.Authorization{AccountID: 7, Grants: []agentcore.ResourceGrant{{Kind: "project", ID: 99, Role: "member"}}}}}
+	run := executionRows{Agent: &Definition{Mode: "chat", ScopeKind: "project", ScopeID: new(uint64(41))}, Execution: agentcore.ExecutionContext{Principal: agentcore.PrincipalRef{Kind: "user", ID: 7}, Authorization: agentcore.Authorization{AccountID: 7, Grants: []agentcore.ResourceGrant{{Kind: "project", ID: 99, Role: "member"}}}}}
 	project := uint64(41)
 	tool := &ToolDescriptor{ProjectTarget: func(_ context.Context, _ identity.Tx, authorization agentcore.Authorization, _ json.RawMessage) (uint64, error) {
 		if authorization.AccountID != run.Execution.Principal.ID {

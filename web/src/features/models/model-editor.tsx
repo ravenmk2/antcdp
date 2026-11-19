@@ -751,7 +751,7 @@ function ModelForm({
           >
             <Section
               title="支持的思考档位"
-              description="勾选这个模型实际支持的档位，供智能体和会话选择。档位越高通常思考越充分，也可能更慢。"
+              description="勾选这个模型实际支持的档位，供助手和会话选择。档位越高通常思考越充分，也可能更慢。"
             >
               <Field label="可用档位" error={errors.fields.thinking_levels}>
                 <div className="model-thinking-levels" id="thinking-levels">

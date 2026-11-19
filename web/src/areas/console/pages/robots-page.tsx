@@ -32,7 +32,7 @@ export function RobotsPage() {
     <div className="page">
       <PageHeader
         title="机器人账号"
-        description="独立管理执行身份、项目权限和账号凭据。机器人不能登录，可被订阅使用；服务型智能体绑定后不可换绑。"
+        description="独立管理执行身份、项目权限和账号凭据。机器人不能登录，可被订阅使用；服务型助手绑定后不可换绑。"
         actions={<Button onClick={() => setEdit("new")}>创建机器人</Button>}
       />
       <Panel bodyClassName="space-y-5 p-5">
@@ -61,7 +61,7 @@ export function RobotsPage() {
         >
           <SimpleTable
             label="机器人账号"
-            headers={["机器人", "状态", "绑定智能体", "操作"]}
+            headers={["机器人", "状态", "绑定助手", "操作"]}
           >
             {query.data?.data.map((user) => (
               <tr key={user.id}>
@@ -82,7 +82,7 @@ export function RobotsPage() {
                       className="text-primary"
                       to={`/admin/agents/${user.managed_agent_id}?tab=resources`}
                     >
-                      管理所属智能体
+                      管理所属助手
                     </Link>
                   ) : (
                     "—"

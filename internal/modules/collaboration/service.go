@@ -429,7 +429,7 @@ func (s *Service) Member(ctx context.Context, raw string, k Kind, id, uid uint64
 			return err
 		}
 		if u := users[uid]; u != nil && u.AccountType == "robot" {
-			return httpx.E(403, "ROBOT_MANAGED_BY_AGENT", "请在服务型智能体中配置机器人权限")
+			return httpx.E(403, "ROBOT_MANAGED_BY_AGENT", "请在服务型助手中配置机器人权限")
 		}
 		members, err := r.Members(k, id)
 		if err != nil {

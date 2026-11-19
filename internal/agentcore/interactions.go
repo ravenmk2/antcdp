@@ -197,7 +197,7 @@ func PlanAnswer(session Session, interaction Interaction, expected Version, acto
 }
 
 func PlanDecision(session Session, interaction Interaction, expected Version, actor ActorRef, approve bool, now time.Time) (InteractionPlan, error) {
-	if session.ExecutionMode != "interactive" {
+	if session.ExecutionMode != "chat" {
 		return InteractionPlan{}, reject("APPROVAL_NOT_ALLOWED")
 	}
 	if session.ArchivedAt != nil {

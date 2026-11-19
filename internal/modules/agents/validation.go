@@ -18,9 +18,9 @@ var keyPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{16,128}$`)
 var tagPattern = regexp.MustCompile(`^"[a-f0-9]{64}"$`)
 var domainLabel = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$`)
 
-func missing() error     { return httpx.E(404, "NOT_FOUND", "智能体资源不存在") }
-func integrity() error   { return httpx.E(500, "DATA_INTEGRITY_ERROR", "智能体数据完整性异常") }
-func unavailable() error { return httpx.E(503, "SERVICE_UNAVAILABLE", "智能体服务暂不可用") }
+func missing() error     { return httpx.E(404, "NOT_FOUND", "助手资源不存在") }
+func integrity() error   { return httpx.E(500, "DATA_INTEGRITY_ERROR", "助手数据完整性异常") }
+func unavailable() error { return httpx.E(503, "SERVICE_UNAVAILABLE", "助手服务暂不可用") }
 func inUse() error {
 	return httpx.E(409, "RESOURCE_IN_USE", "资源仍被引用，请先停用或解除引用")
 }
@@ -55,6 +55,16 @@ func checkTag(got, want string) error {
 func (s *Service) tag(kind string, id, revision uint64) string {
 	return `"` + s.ETag(fmt.Sprintf("agents/%s/%d/%d", kind, id, revision)) + `"`
 }
+
+const legacyChatType = "interactive"
+
+func normalizeAgentType(mode string) string {
+	if mode == legacyChatType {
+		return "chat"
+	}
+	return mode
+}
+
 func validateQuery(q *Query) error {
 	if q.Page == 0 {
 		q.Page = 1
@@ -69,7 +79,8 @@ func validateQuery(q *Query) error {
 	if utf8.RuneCountInString(q.Q) > 64 {
 		return httpx.Invalid("q", "invalid_length")
 	}
-	if q.Mode != "" && q.Mode != "interactive" && q.Mode != "service" {
+	q.Mode = normalizeAgentType(q.Mode)
+	if q.Mode != "" && q.Mode != "chat" && q.Mode != "service" {
 		return httpx.Invalid("agent_type", "unsupported")
 	}
 	if q.ScopeKind != "" && q.ScopeKind != "team" && q.ScopeKind != "project" && q.ScopeKind != "platform" {
@@ -159,7 +170,7 @@ func validateDefinition(v *Definition) error {
 	if len(v.SystemPrompt) > 128*1024 {
 		return httpx.Invalid("system_prompt", "invalid_length")
 	}
-	if v.Mode != "interactive" && v.Mode != "service" {
+	if v.Mode != "chat" && v.Mode != "service" {
 		return httpx.Invalid("agent_type", "unsupported")
 	}
 	if v.ScopeKind != "platform" && v.ScopeKind != "team" && v.ScopeKind != "project" {
@@ -168,7 +179,7 @@ func validateDefinition(v *Definition) error {
 	if (v.ScopeKind == "platform") != (v.ScopeID == nil) || v.ScopeID != nil && *v.ScopeID == 0 {
 		return httpx.Invalid("scope_id", "invalid_scope")
 	}
-	if v.Mode == "interactive" && (v.RobotUserID != nil || v.PoolCapacity != nil) {
+	if v.Mode == "chat" && (v.RobotUserID != nil || v.PoolCapacity != nil) {
 		return httpx.Invalid("pool_capacity", "service_agent_required")
 	}
 	if v.Mode == "service" && (v.PoolCapacity == nil || *v.PoolCapacity < 1 || *v.PoolCapacity > 100) {

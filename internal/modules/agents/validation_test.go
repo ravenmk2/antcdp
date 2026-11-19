@@ -9,7 +9,7 @@ import (
 )
 
 func TestPolicyIdentityAndNetwork(t *testing.T) {
-	for _, mode := range []string{"interactive", "service"} {
+	for _, mode := range []string{"chat", "service"} {
 		v := Definition{Name: "测试", Mode: mode, ScopeKind: "platform", RuntimePolicy: defaultRuntimePolicy()}
 		if mode == "service" {
 			v.PoolCapacity = new(1)
@@ -20,6 +20,10 @@ func TestPolicyIdentityAndNetwork(t *testing.T) {
 		if e := validateQuery(&Query{Mode: mode}); e != nil {
 			t.Fatal(e)
 		}
+	}
+	query := Query{Mode: legacyChatType}
+	if err := validateQuery(&query); err != nil || query.Mode != "chat" {
+		t.Fatalf("legacy filter was not normalized: mode=%q, err=%v", query.Mode, err)
 	}
 	legacy := Definition{Name: "旧类型", Mode: "task", ScopeKind: "platform", PoolCapacity: new(1), RuntimePolicy: defaultRuntimePolicy()}
 	if validateDefinition(&legacy) == nil || validateQuery(&Query{Mode: legacy.Mode}) == nil {
@@ -66,7 +70,7 @@ func TestModelSelectionHashUsesEffectiveRoute(t *testing.T) {
 	if e != nil || first.SelectionHash == third.SelectionHash {
 		t.Fatal("effective parameter change not detected", e)
 	}
-	w := Definition{Name: strings.Repeat("名", 100), Mode: "interactive", ScopeKind: "platform", RuntimePolicy: defaultRuntimePolicy(), SystemPrompt: strings.Repeat("a", 128*1024)}
+	w := Definition{Name: strings.Repeat("名", 100), Mode: "chat", ScopeKind: "platform", RuntimePolicy: defaultRuntimePolicy(), SystemPrompt: strings.Repeat("a", 128*1024)}
 	if e = validateDefinition(&w); e != nil {
 		t.Fatal(e)
 	}

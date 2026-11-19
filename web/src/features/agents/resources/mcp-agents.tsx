@@ -29,8 +29,8 @@ export function MCPAgents({ serverId }: { serverId: string }) {
     >
       {query.data?.data.length ? (
         <SimpleTable
-          headers={["智能体", "服务绑定", "智能体状态"]}
-          label="使用此 MCP 服务的智能体"
+          headers={["助手", "服务绑定", "助手状态"]}
+          label="使用此 MCP 服务的助手"
         >
           {query.data.data.map((agent) => (
             <tr key={agent.id}>
@@ -53,8 +53,8 @@ export function MCPAgents({ serverId }: { serverId: string }) {
         </SimpleTable>
       ) : (
         <EmptyState
-          title="暂无智能体绑定此服务"
-          description="在智能体的工具配置中添加整个 MCP 服务。"
+          title="暂无助手绑定此服务"
+          description="在助手的工具配置中添加整个 MCP 服务。"
         />
       )}
       <Pagination

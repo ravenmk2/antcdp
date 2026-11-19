@@ -11,7 +11,7 @@ import {
 const workspaceItems = [
   { to: "/home", label: "工作台", icon: Home },
   { to: "/chats", label: "对话", icon: MessagesSquare },
-  { to: "/agents/catalog", label: "智能体", icon: Bot },
+  { to: "/agents/catalog", label: "助手", icon: Bot },
   { to: "/projects", label: "项目", icon: Folder },
   { to: "/teams", label: "团队", icon: Users },
   { to: "/computer", label: "云电脑", icon: Monitor },

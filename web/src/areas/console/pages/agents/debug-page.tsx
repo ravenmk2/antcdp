@@ -25,7 +25,7 @@ export function AgentDebugPage() {
           title={
             query.data?.data.name
               ? `调试 · ${query.data.data.name}`
-              : "智能体调试"
+              : "助手调试"
           }
           actions={
             <Button
@@ -55,7 +55,7 @@ export function AgentDebugPage() {
             <NewConversation service agentId={agentId} />
           )
         ) : query.data ? (
-          <Notice>交互型智能体请从工作台使用本人身份开始对话。</Notice>
+          <Notice>对话型助手请从工作台使用本人身份开始对话。</Notice>
         ) : null}
       </AsyncBoundary>
     </div>

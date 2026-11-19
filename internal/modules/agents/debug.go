@@ -68,7 +68,7 @@ func (s *Service) DebugRun(ctx context.Context, raw string, id uint64, tag, key 
 						bindingID = &value
 					}
 					if bindingID == nil {
-						return httpx.E(409, "AGENT_UNAVAILABLE", "智能体缺少默认模型")
+						return httpx.E(409, "AGENT_UNAVAILABLE", "助手缺少默认模型")
 					}
 					bindings, e := r.ModelBindings(id, false)
 					if e != nil {

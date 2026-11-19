@@ -1,7 +1,7 @@
 import type { DiagnosticDetail } from "./agent-events";
 import type { JsonObject, ModelProtocol } from "./models";
 
-export type AgentType = "interactive" | "service";
+export type AgentType = "chat" | "service";
 export type AgentScope = "platform" | "team" | "project";
 export type ActorRef =
   { kind: "user"; id: string } | { kind: "system"; id: null };

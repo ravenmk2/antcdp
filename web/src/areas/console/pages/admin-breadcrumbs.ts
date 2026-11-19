@@ -10,7 +10,7 @@ const names: Record<string, string> = {
   "/admin/integrations": "服务集成",
   "/admin/remote-hosts": "远程主机",
   "/admin/models": "模型管理",
-  "/admin/agents": "智能体管理",
+  "/admin/agents": "助手管理",
   "/admin/agent-usage": "运行与用量",
   "/admin/web-access": "网络检索",
   "/admin/mcp-servers": "MCP 服务",
@@ -50,7 +50,7 @@ export function adminBreadcrumbs(
   if (debug)
     return [
       { label: "控制台", to: "/admin" },
-      { label: "智能体", to: `/admin/agents/${debug[1]}` },
+      { label: "助手", to: `/admin/agents/${debug[1]}` },
       { label: "调试" },
     ];
   const agentResource = path.match(

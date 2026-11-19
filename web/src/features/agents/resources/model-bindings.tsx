@@ -205,7 +205,7 @@ function ModelBindingsForm({
         {save.recovery}
         <ErrorNotice error={error} />
         {!draft.items.length && (
-          <Notice>尚未绑定模型。智能体启用前需要一个有效的默认模型。</Notice>
+          <Notice>尚未绑定模型。助手启用前需要一个有效的默认模型。</Notice>
         )}
         <div className="agent-config-scroll">
           <fieldset

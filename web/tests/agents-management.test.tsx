@@ -240,7 +240,7 @@ function mount(entry: string) {
   );
   return { router, cache, user: userEvent.setup() };
 }
-it.each(["interactive", "service"] as const)(
+it.each(["chat", "service"] as const)(
   "retains the %s create payload and original key after an unknown result",
   async (agentType) => {
     let first: RequestOptions | undefined;
@@ -266,7 +266,7 @@ it.each(["interactive", "service"] as const)(
     const { user, router } = mount("/admin/agents/new");
     await user.type(screen.getByRole("textbox", { name: "编码" }), "reviewer");
     if (agentType === "service") {
-      const drawer = screen.getByRole("dialog", { name: "新建智能体" });
+      const drawer = screen.getByRole("dialog", { name: "新建助手" });
       await user.click(within(drawer).getByRole("combobox", { name: "类型" }));
       await user.click(await screen.findByRole("option", { name: "服务型" }));
       await user.click(screen.getByRole("combobox", { name: "执行机器人" }));
@@ -275,12 +275,12 @@ it.each(["interactive", "service"] as const)(
       );
     }
     await user.type(
-      screen.getByRole("textbox", { name: "智能体名称" }),
+      screen.getByRole("textbox", { name: "助手名称" }),
       "核查助手",
     );
     await user.click(screen.getByRole("button", { name: "创建并配置" }));
     expect(await screen.findByText("提交结果尚未确认")).toBeVisible();
-    expect(screen.getByRole("textbox", { name: "智能体名称" })).toHaveValue(
+    expect(screen.getByRole("textbox", { name: "助手名称" })).toHaveValue(
       "核查助手",
     );
     await user.click(screen.getByRole("button", { name: "重试原请求" }));
@@ -300,7 +300,7 @@ it.each(["interactive", "service"] as const)(
 it("closes the create drawer after one discard confirmation without a second navigation prompt", async () => {
   const { user, router } = mount("/admin/agents/new");
   await user.type(
-    screen.getByRole("textbox", { name: "智能体名称" }),
+    screen.getByRole("textbox", { name: "助手名称" }),
     "未保存助手",
   );
   await user.click(screen.getByRole("button", { name: /^取消$/ }));
@@ -330,10 +330,10 @@ it("keeps editing after saving and protects subsequent unsaved changes", async (
   const { user, router } = mount("/admin/agents/4?tab=basic");
   await screen.findByRole("heading", { name: "基本信息" });
   expect(
-    screen.queryByRole("textbox", { name: "智能体名称" }),
+    screen.queryByRole("textbox", { name: "助手名称" }),
   ).not.toBeInTheDocument();
   await user.click(screen.getByRole("link", { name: "编辑配置" }));
-  const name = await screen.findByRole("textbox", { name: "智能体名称" });
+  const name = await screen.findByRole("textbox", { name: "助手名称" });
   await user.clear(name);
   await user.type(name, "已更新的助手");
   await user.click(screen.getByRole("button", { name: "保存修改" }));
@@ -354,7 +354,7 @@ it("keeps editing after saving and protects subsequent unsaved changes", async (
   await user.click(screen.getByRole("link", { name: "完成编辑" }));
   await waitFor(() => expect(router.state.location.search).toBe("?tab=basic"));
   expect(
-    screen.queryByRole("textbox", { name: "智能体名称" }),
+    screen.queryByRole("textbox", { name: "助手名称" }),
   ).not.toBeInTheDocument();
 });
 
@@ -569,7 +569,7 @@ it("protects a dirty configuration when switching tabs and preserves drafts on a
       throw new ApiError("ETAG_MISMATCH", "配置已修改", 412);
   };
   const { user } = mount("/admin/agents/4?view=edit");
-  const name = await screen.findByRole("textbox", { name: "智能体名称" });
+  const name = await screen.findByRole("textbox", { name: "助手名称" });
   await user.clear(name);
   await user.type(name, "保留我的草稿");
   await user.click(screen.getByRole("link", { name: "内置工具" }));
@@ -584,7 +584,7 @@ it("protects a dirty configuration when switching tabs and preserves drafts on a
 });
 it("retains a dirty draft and original edit version when background data refreshes", async () => {
   const { user, cache } = mount("/admin/agents/4?view=edit");
-  const name = await screen.findByRole("textbox", { name: "智能体名称" });
+  const name = await screen.findByRole("textbox", { name: "助手名称" });
   await user.clear(name);
   await user.type(name, "正在编辑的草稿");
   act(() =>
@@ -593,7 +593,7 @@ it("retains a dirty draft and original edit version when background data refresh
       response({ ...agent, name: "另一管理员的新名称", version: "v2" }, '"v2"'),
     ),
   );
-  expect(screen.getByRole("textbox", { name: "智能体名称" })).toHaveValue(
+  expect(screen.getByRole("textbox", { name: "助手名称" })).toHaveValue(
     "正在编辑的草稿",
   );
   await user.click(screen.getByRole("button", { name: "保存修改" }));
@@ -609,14 +609,14 @@ it("retains a dirty draft and original edit version when background data refresh
 });
 it("adopts a refreshed version in a pristine editor before the next save", async () => {
   const { user, cache } = mount("/admin/agents/4?view=edit");
-  await screen.findByRole("textbox", { name: "智能体名称" });
+  await screen.findByRole("textbox", { name: "助手名称" });
   act(() =>
     cache.setQueryData(
       ["agents", "definition", "4"],
       response({ ...agent, name: "最新名称", version: "v2" }, '"v2"'),
     ),
   );
-  const name = screen.getByRole("textbox", { name: "智能体名称" });
+  const name = screen.getByRole("textbox", { name: "助手名称" });
   await waitFor(() => expect(name).toHaveValue("最新名称"));
   await user.type(name, "更新");
   await user.click(screen.getByRole("button", { name: "保存修改" }));

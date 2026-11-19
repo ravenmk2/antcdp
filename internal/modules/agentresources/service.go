@@ -200,9 +200,9 @@ var keyPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{16,128}$`)
 var codePattern = resourcecode.Pattern
 var tagPattern = regexp.MustCompile(`^"[a-f0-9]{64}"$`)
 
-func missing() error     { return httpx.E(404, "NOT_FOUND", "智能体资源不存在") }
-func integrity() error   { return httpx.E(500, "DATA_INTEGRITY_ERROR", "智能体资源完整性异常") }
-func unavailable() error { return httpx.E(503, "SERVICE_UNAVAILABLE", "智能体资源暂不可用") }
+func missing() error     { return httpx.E(404, "NOT_FOUND", "助手资源不存在") }
+func integrity() error   { return httpx.E(500, "DATA_INTEGRITY_ERROR", "助手资源完整性异常") }
+func unavailable() error { return httpx.E(503, "SERVICE_UNAVAILABLE", "助手资源暂不可用") }
 func inUse() error       { return httpx.E(409, "RESOURCE_IN_USE", "资源仍有活动引用") }
 func (s *Service) tag(kind string, id, version uint64) string {
 	return `"` + s.ETag(fmt.Sprintf("agentresources/%s/%d/%d", kind, id, version)) + `"`

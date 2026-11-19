@@ -18,7 +18,7 @@ import type {
 } from "@/types/agents";
 
 export const identityNames: Record<AgentType, string> = {
-  interactive: "交互型",
+  chat: "对话型",
   service: "服务型",
 };
 export function scopeLabel(scope: AgentScope) {

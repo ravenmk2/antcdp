@@ -93,7 +93,7 @@ function MCPBindingsForm({
             </h2>
             <p className="mt-1 text-sm text-muted">
               启用后授权整个 MCP
-              服务，包括后续新增的工具和资源。授权对象是此智能体，服务使用自身配置的凭据。
+              服务，包括后续新增的工具和资源。授权对象是此助手，服务使用自身配置的凭据。
             </p>
           </div>
           {!readOnly && (

@@ -44,7 +44,7 @@ func runtimeOwner(tx identity.Tx, v *SessionRow) (*identity.User, error) {
 }
 
 func executionAccount(tx identity.Tx, v *SessionRow, active bool) (*identity.User, error) {
-	if v.ExecutorUserID == 0 || v.ExecutionMode != "interactive" && v.ExecutionMode != "service" {
+	if v.ExecutorUserID == 0 || v.ExecutionMode != "chat" && v.ExecutionMode != "service" {
 		return nil, integrity()
 	}
 	users, err := tx.LockUsers([]uint64{v.ExecutorUserID})

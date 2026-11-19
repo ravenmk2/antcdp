@@ -106,7 +106,7 @@ export function workspaceBreadcrumbs(
     return items;
   }
   const names: Record<string, string> = {
-    "/agents/catalog": "智能体",
+    "/agents/catalog": "助手",
     "/projects": "我的项目",
     "/teams": "我的团队",
   };

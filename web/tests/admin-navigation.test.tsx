@@ -72,7 +72,7 @@ it("restores only safe group preferences and reveals implemented routes", async 
   );
   await user.click(screen.getByRole("button", { name: "连接与资源" }));
   await user.click(screen.getByRole("button", { name: "系统维护" }));
-  await user.click(screen.getByRole("button", { name: "智能体" }));
+  await user.click(screen.getByRole("button", { name: "助手" }));
   expect(
     within(screen.getByRole("navigation", { name: "主导航" })).getAllByRole(
       "link",

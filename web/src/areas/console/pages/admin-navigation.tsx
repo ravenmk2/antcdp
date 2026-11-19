@@ -55,10 +55,10 @@ const consoleGroups = [
   },
   {
     id: "agents",
-    label: "智能体",
+    label: "助手",
     icon: Bot,
     items: [
-      { to: "/admin/agents", label: "智能体管理", icon: Bot },
+      { to: "/admin/agents", label: "助手管理", icon: Bot },
       { to: "/admin/mcp-servers", label: "MCP 服务", icon: Cable },
       { to: "/admin/skills", label: "技能库", icon: BookOpen },
       { to: "/admin/cloud-computers", label: "云电脑", icon: Box },

@@ -77,7 +77,7 @@ func (s *Service) executionTarget(ctx context.Context, tx identity.Tx, r Reposit
 		return nil, nil, model, selection, httpx.E(409, "SESSION_ARCHIVED", "会话已归档")
 	}
 	if !agent.Enabled {
-		return nil, nil, model, selection, httpx.E(409, "AGENT_UNAVAILABLE", "智能体当前不可用")
+		return nil, nil, model, selection, httpx.E(409, "AGENT_UNAVAILABLE", "助手当前不可用")
 	}
 	if !selection.Availability.Available {
 		return nil, nil, model, selection, httpx.E(409, "MODEL_UNAVAILABLE", "所选模型当前不可用")

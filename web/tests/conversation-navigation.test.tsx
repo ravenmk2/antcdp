@@ -100,7 +100,7 @@ it("preserves sidebar DOM and scroll while another session opens", () => {
   const sidebar = screen.getByRole("complementary", { name: "对话导航" });
   sidebar.scrollTop = 120;
   fireEvent.click(previous);
-  expect(screen.queryByText("正在读取会话所属智能体…")).toBeNull();
+  expect(screen.queryByText("正在读取会话所属助手…")).toBeNull();
   expect(screen.getByRole("link", { name: "Session 32" })).toBe(previous);
   expect(previous).toHaveAttribute("aria-current", "page");
   expect(sidebar.scrollTop).toBe(120);
@@ -112,17 +112,17 @@ it("preserves sidebar DOM and scroll while another session opens", () => {
 
 it("uses cached search results for a different agent, then trusts the conversation snapshot", async () => {
   const { cache, showSnapshot } = mount();
-  cache.setQueryData(["agent-sessions", "interactive", "search"], {
+  cache.setQueryData(["agent-sessions", "chat", "search"], {
     data: [row("99", "10")],
   });
   fireEvent.click(screen.getByRole("link", { name: "Other session" }));
   expect(
-    screen.getByRole("button", { name: "选择智能体：Agent 10" }),
+    screen.getByRole("button", { name: "选择助手：Agent 10" }),
   ).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Session 31" })).toBeNull();
   showSnapshot("99");
   expect(
-    await screen.findByRole("button", { name: "选择智能体：Agent 9" }),
+    await screen.findByRole("button", { name: "选择助手：Agent 9" }),
   ).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Session 31" })).toBeInTheDocument();
 });
@@ -130,6 +130,6 @@ it("uses cached search results for a different agent, then trusts the conversati
 it("does not assign an unknown session to the previous agent", () => {
   mount();
   fireEvent.click(screen.getByRole("link", { name: "Other session" }));
-  expect(screen.getByText("正在读取会话所属智能体…")).toBeInTheDocument();
+  expect(screen.getByText("正在读取会话所属助手…")).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Session 31" })).toBeNull();
 });

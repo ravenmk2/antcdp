@@ -25,7 +25,7 @@ func (s *Service) GetAgentSummary(ctx context.Context, raw string, id uint64) (*
 		if err != nil {
 			return err
 		}
-		if v == nil || (v.Mode != "interactive" && (v.Mode != "service" || a.User.Role != "admin")) {
+		if v == nil || (v.Mode != "chat" && (v.Mode != "service" || a.User.Role != "admin")) {
 			return missing()
 		}
 		allowed, err := r.CanUseAgent(id, a.User.ID, a.User.Role == "admin")
@@ -82,7 +82,7 @@ func (s *Service) SetFavorite(ctx context.Context, raw string, id uint64, favori
 			if err != nil {
 				return err
 			}
-			if v == nil || v.Mode != "interactive" || v.DeletedAt != nil {
+			if v == nil || v.Mode != "chat" || v.DeletedAt != nil {
 				return missing()
 			}
 			allowed, err := r.CanUseAgent(id, a.User.ID, a.User.Role == "admin")

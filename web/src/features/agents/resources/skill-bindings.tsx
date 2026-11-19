@@ -94,7 +94,7 @@ function SkillBindingsForm({
               <span className="text-muted">{draft.length} / 32</span>
             </h2>
             <p className="mt-1 text-sm text-muted">
-              选择明确版本后供智能体使用。新版发布不会自动替换，版本切换会等待旧轮次释放对应目录。
+              选择明确版本后供助手使用。新版发布不会自动替换，版本切换会等待旧轮次释放对应目录。
             </p>
           </div>
           {!readOnly && (

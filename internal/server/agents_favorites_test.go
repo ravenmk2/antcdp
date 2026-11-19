@@ -69,7 +69,7 @@ func TestAgentFavoriteAndSummaryHTTP(t *testing.T) {
 			user:    identity.User{ID: 3, Role: "user", Status: "active", AuthVersion: 1},
 			session: identity.Session{ID: 1, UserID: 3, AuthVersion: 1, ExpiresAt: now.Add(time.Hour)},
 		},
-		repo: favoriteHTTPRepo{agent: &a.Definition{ID: 7, Name: "Navigation agent", Mode: "interactive", SystemPrompt: "PRIVATE_PROMPT"}, access: true},
+		repo: favoriteHTTPRepo{agent: &a.Definition{ID: 7, Name: "Navigation agent", Mode: "chat", SystemPrompt: "PRIVATE_PROMPT"}, access: true},
 	}
 	ident := identity.New(func() (identity.Store, error) { return store, nil })
 	engine := gin.New()

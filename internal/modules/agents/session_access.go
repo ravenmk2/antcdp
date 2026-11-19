@@ -12,7 +12,7 @@ func (s *Service) definitionResult(_ Repository, out *Result, v *Definition) err
 }
 
 func (v *SessionRow) personalOwnerID() *uint64 {
-	if v.ExecutionMode == "interactive" {
+	if v.ExecutionMode == "chat" {
 		return &v.ExecutorUserID
 	}
 	return nil
@@ -35,7 +35,7 @@ func requireSessionAgent(r Repository, agent *Definition, user *identity.User) e
 		return err
 	}
 	if !allowed {
-		return httpx.E(409, "AGENT_ACCESS_REVOKED", "当前已无此智能体的使用权限")
+		return httpx.E(409, "AGENT_ACCESS_REVOKED", "当前已无此助手的使用权限")
 	}
 	return nil
 }

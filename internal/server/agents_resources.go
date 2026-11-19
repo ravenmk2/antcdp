@@ -40,7 +40,7 @@ func registerAgentResources(admin *gin.RouterGroup, o Options) {
 	a := admin.Group("")
 	a.Use(func(c *gin.Context) {
 		if o.AgentResources == nil {
-			httpx.Write(c, httpx.E(503, "INSTANCE_NOT_READY", "智能体资源服务尚未就绪"))
+			httpx.Write(c, httpx.E(503, "INSTANCE_NOT_READY", "助手资源服务尚未就绪"))
 			return
 		}
 		c.Request = c.Request.WithContext(r.WithMetadata(c.Request.Context(), metadata(c)))

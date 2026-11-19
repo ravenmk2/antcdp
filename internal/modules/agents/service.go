@@ -138,7 +138,7 @@ func (s *Service) command(ctx context.Context, raw, key, command, scope string, 
 			return e
 		}
 		if old != nil {
-			if !hmac.Equal(old.Hash, digest[:]) {
+			if !hmac.Equal(old.Hash, digest[:]) && !matchesLegacyDefinitionRequest(input, old.Hash) {
 				return httpx.E(409, "IDEMPOTENCY_CONFLICT", "幂等键已用于其他请求")
 			}
 			var v savedResult
@@ -247,9 +247,24 @@ func (s *Service) CheckActivation(ctx context.Context, raw string, id uint64) (*
 	})
 }
 
+func matchesLegacyDefinitionRequest(input any, hash []byte) bool {
+	definition, ok := input.(DefinitionCreate)
+	if !ok || definition.Mode != "chat" {
+		return false
+	}
+	definition.Mode = legacyChatType
+	body, err := agentcore.CanonicalJSON(definition)
+	if err != nil {
+		return false
+	}
+	digest := sha256.Sum256(body)
+	return hmac.Equal(hash, digest[:])
+}
+
 type robotBindingKey struct{}
 
 func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w DefinitionCreate) (*Result, error) {
+	w.Mode = normalizeAgentType(w.Mode)
 	if !resourcecode.Valid(w.Code) {
 		return nil, httpx.Invalid("code", "invalid_format")
 	}

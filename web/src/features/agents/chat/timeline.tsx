@@ -612,7 +612,7 @@ const AssistantMessage = memo(function AssistantMessage({
     <article
       className="agent-message-assistant min-w-0"
       data-latest={latest || Boolean(attempt)}
-      aria-label={attempt ? "正在生成的回复" : "智能体回复"}
+      aria-label={attempt ? "正在生成的回复" : "助手回复"}
       data-message-anchor={
         anchor ?? `attempt:${record?.data.attempt_id ?? attempt?.attempt_id}`
       }

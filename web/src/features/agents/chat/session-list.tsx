@@ -26,7 +26,7 @@ export function SessionSearch({
       open
       wide
       title="搜索个人会话"
-      description="查看和搜索本人的交互型会话。"
+      description="查看和搜索本人的对话型会话。"
       onClose={onClose}
       footer={<OverlayCancelButton>关闭</OverlayCancelButton>}
     >
@@ -37,7 +37,7 @@ export function SessionSearch({
           aria-pressed={all}
           onClick={() => setAll(!all)}
         >
-          {all ? "仅搜索当前智能体" : "搜索全部智能体的会话"}
+          {all ? "仅搜索当前助手" : "搜索全部助手的会话"}
         </Button>
       )}
       <SessionList
@@ -66,7 +66,7 @@ export function SessionList({
   });
   const params = agentQuery({
     agent_id: agentId,
-    agent_type: "interactive",
+    agent_type: "chat",
     page,
     page_size: size,
     q,
@@ -74,7 +74,7 @@ export function SessionList({
     attention,
   });
   const query = useApiQuery<SessionSummary[]>(
-    ["agent-sessions", "interactive", params],
+    ["agent-sessions", "chat", params],
     `${agentRoot}/sessions?${params}`,
   );
   return (

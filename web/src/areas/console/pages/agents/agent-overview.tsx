@@ -45,7 +45,7 @@ function activationIssue(error: ApiError) {
     return {
       tab: "tools",
       message:
-        "工具绑定或执行策略不可用，请检查内置工具。服务型智能体不能使用需审批的策略。",
+        "工具绑定或执行策略不可用，请检查内置工具。服务型助手不能使用需审批的策略。",
     };
   if (
     error.code === "VALIDATION_FAILED" &&
@@ -164,7 +164,7 @@ export function AgentOverview({ agent }: { agent: AgentDefinition }) {
               <p className="mt-1 text-sm text-muted">
                 {agent.system_prompt.trim()
                   ? "已配置角色、工作方式与行为说明"
-                  : "补充智能体的角色与工作方式，空白不会阻止启用"}
+                  : "补充助手的角色与工作方式，空白不会阻止启用"}
               </p>
             </div>
             <Link className="text-sm text-primary" to="?tab=prompt&view=edit">
@@ -304,7 +304,7 @@ export function AgentActivation({
   return (
     <Drawer
       open
-      title={enable ? "启用前检查" : "停用智能体"}
+      title={enable ? "启用前检查" : "停用助手"}
       onClose={onClose}
       footer={<OverlayCancelButton>关闭</OverlayCancelButton>}
     >
@@ -356,7 +356,7 @@ function ActivationConfirmation({
   return (
     <Drawer
       open
-      title={enable ? "启用前检查" : "停用智能体"}
+      title={enable ? "启用前检查" : "停用助手"}
       pending={save.pending || save.blocked}
       onClose={onClose}
       footer={
@@ -385,7 +385,7 @@ function ActivationConfirmation({
               与技能按需配置，未添加的可选能力不会阻止启用。
             </p>
             <p className="text-sm">
-              确认后，归属范围内的用户可使用此智能体。启用时会再次校验最新配置。
+              确认后，归属范围内的用户可使用此助手。启用时会再次校验最新配置。
             </p>
           </>
         ) : (

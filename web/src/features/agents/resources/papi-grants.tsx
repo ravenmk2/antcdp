@@ -118,7 +118,7 @@ export function AgentPapiGrants({
   return (
     <ResourceSection
       title="平台 API 授权"
-      description="为当前智能体逐项授权。工具开关在「内置工具」中配置，授权变更在下一轮执行时生效。"
+      description="为当前助手逐项授权。工具开关在「内置工具」中配置，授权变更在下一轮执行时生效。"
     >
       <div className="flex flex-wrap gap-2">
         <StandaloneInput

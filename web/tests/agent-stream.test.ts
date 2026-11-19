@@ -62,7 +62,7 @@ function snapshot(overrides: Partial<SnapshotFrame> = {}): SnapshotFrame {
       configuration: {
         id: "10",
         agent_id: "1",
-        agent_type: "interactive",
+        agent_type: "chat",
         title: "诊断",
         model_selection: {
           model_binding_id: "1",

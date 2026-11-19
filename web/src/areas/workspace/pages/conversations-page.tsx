@@ -97,7 +97,7 @@ export function AgentDirectory() {
   return (
     <div className="page workspace-directory-page">
       <PageHeader
-        title="智能体"
+        title="助手"
         className="mb-0 border-b border-border pb-5"
         titleClassName="mb-0"
       />
@@ -125,8 +125,8 @@ export function AgentDirectory() {
           />
           <StandaloneInput
             className="pl-9"
-            aria-label="搜索智能体"
-            placeholder="搜索智能体"
+            aria-label="搜索助手"
+            placeholder="搜索助手"
             value={search.value}
             onChange={(e) => search.setValue(e.target.value)}
             onCompositionStart={() => {
@@ -142,16 +142,16 @@ export function AgentDirectory() {
         error={catalog.error}
         onRetry={() => catalog.refetch()}
         empty={!catalog.data?.data.length}
-        emptyTitle="暂无匹配的智能体"
+        emptyTitle="暂无匹配的助手"
         emptyDescription={
-          q ? "试试其他关键词。" : "管理员启用并授权智能体后，会显示在这里。"
+          q ? "试试其他关键词。" : "管理员启用并授权助手后，会显示在这里。"
         }
         emptyIcon={Bot}
       >
         <SimpleTable
-          label="智能体"
+          label="助手"
           className="workspace-resource-table"
-          headers={["智能体名称", "描述", "归属", "状态", "收藏"]}
+          headers={["助手名称", "描述", "归属", "状态", "收藏"]}
         >
           {catalog.data?.data.map((agent) => {
             const available = agent.availability.available;
@@ -192,7 +192,7 @@ export function AgentDirectory() {
                       <DescriptionPreview
                         name={agent.name}
                         description={agent.description}
-                        label="智能体描述"
+                        label="助手描述"
                       />
                     </div>
                   ) : (

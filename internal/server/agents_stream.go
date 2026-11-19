@@ -166,7 +166,7 @@ func registerAgentStream(group *gin.RouterGroup, o Options) {
 			return
 		}
 		if o.AgentHub == nil || o.Agents == nil || o.Identity == nil {
-			httpx.Write(c, httpx.E(503, "INSTANCE_NOT_READY", "智能体观察服务尚未就绪"))
+			httpx.Write(c, httpx.E(503, "INSTANCE_NOT_READY", "助手观察服务尚未就绪"))
 			return
 		}
 		if c.GetHeader("Origin") == "" || !sameOrigin(c.Request, o.Runtime.Origin()) {
@@ -255,7 +255,7 @@ func (w *agentWS) close(code int) {
 	_ = w.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, ""), time.Now().Add(time.Second))
 }
 func (w *agentWS) problem(id, code string) error {
-	frame := map[string]any{"type": "error", "code": code, "message": "智能体观察请求未完成", "request_id": w.requestID}
+	frame := map[string]any{"type": "error", "code": code, "message": "助手观察请求未完成", "request_id": w.requestID}
 	if id != "" {
 		frame["subscription_id"] = id
 	}

@@ -96,7 +96,7 @@ export function Shell() {
               {
                 label:
                   summary.data?.data.name ??
-                  (summary.isError ? "智能体不可用" : "加载智能体…"),
+                  (summary.isError ? "助手不可用" : "加载助手…"),
                 ...(sessionId ? { to: `/chats?agent=${agentId}` } : {}),
               },
             ]

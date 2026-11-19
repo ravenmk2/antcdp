@@ -118,13 +118,13 @@ export function AgentUsagePage() {
               }
             >
               <option value="all">全部身份</option>
-              <option value="interactive">交互型</option>
+              <option value="chat">对话型</option>
               <option value="service">服务型</option>
             </Select>
           </Field>
           {(
             [
-              ["agent_id", "智能体 ID"],
+              ["agent_id", "助手 ID"],
               ["owner_user_id", "用户 ID"],
               ["model_definition_id", "模型 ID"],
               ["provider_id", "提供商 ID"],
@@ -178,7 +178,7 @@ export function AgentUsagePage() {
               }
             >
               <option value="day">按日期</option>
-              <option value="agent">按智能体</option>
+              <option value="agent">按助手</option>
               <option value="model">按模型</option>
               <option value="provider">按提供商</option>
               <option value="agent_type">按运行模式</option>
@@ -225,7 +225,7 @@ export function AgentUsagePage() {
       </Panel>
       {tab === "calls" && (
         <p className="mt-3 text-xs text-muted">
-          模型调用支持日期、模型和提供商筛选；身份、智能体与用户筛选用于用量及运行记录。
+          模型调用支持日期、模型和提供商筛选；身份、助手与用户筛选用于用量及运行记录。
         </p>
       )}
     </div>
@@ -315,7 +315,7 @@ function RunMetadataView({
         <SimpleTable
           label="运行元数据"
           headers={[
-            "运行 / 智能体",
+            "运行 / 助手",
             "身份 / 用户",
             "状态",
             "模型 / 工具调用",
@@ -328,7 +328,7 @@ function RunMetadataView({
             <tr key={run.id}>
               <td>
                 <span className="font-mono text-xs">{run.id}</span>
-                <p className="mt-1 text-xs text-muted">智能体 {run.agent_id}</p>
+                <p className="mt-1 text-xs text-muted">助手 {run.agent_id}</p>
               </td>
               <td>
                 {identityNames[run.agent_type]}

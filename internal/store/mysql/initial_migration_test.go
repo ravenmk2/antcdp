@@ -109,8 +109,52 @@ func TestInitialMigration(t *testing.T) {
 	}) {
 		return
 	}
+	if _, err = p.UpTo(ctx, baselineMigrations); err != nil {
+		t.Fatal("applying the baseline before the chat type migration", err)
+	}
+	for _, query := range []string{
+		`INSERT INTO agent (code,name,agent_type,scope_kind,system_prompt,runtime_policy,created_by_user_id,created_at,updated_at)
+		  VALUES ('old_chat','Chat','interactive','platform','',JSON_OBJECT(),1,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3)),
+		         ('service','Service','service','platform','',JSON_OBJECT(),1,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`,
+		`INSERT INTO agent_session (agent_id,agent_type,session_kind,executor_user_id,title,selected_model_binding_id,selected_thinking_option_key,created_by_actor_kind,created_by_actor_id,created_at,updated_at,last_activity_at)
+		  SELECT id,agent_type,'root',1,name,1,'fixed','user','1',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),UTC_TIMESTAMP(3) FROM agent`,
+		`INSERT INTO agent_file (purpose,content_domain,storage_key,writer_token,state,integrity_state,media_type,created_at,updated_at)
+		  VALUES ('user_attachment','interactive','test-file','test-writer','bound','verified','text/plain',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`,
+		`INSERT INTO agent_operation (command_receipt_id,kind,subject_kind,content_domain,status,config_snapshot,actor_user_id,created_at,deadline_at,updated_at)
+		  VALUES (1,'session_compaction','session','interactive','completed',JSON_OBJECT(),1,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`,
+		`INSERT INTO agent_command_receipt (actor_kind,actor_id,scope_kind,scope_id,command_kind,idempotency_key,request_hash,status,result,created_at)
+		  VALUES ('user','1','session','1','session.configure','configuration',UNHEX(REPEAT('ab',32)),'completed','{"data":{"agent_type":"interactive","title":"interactive"}}',UTC_TIMESTAMP(3)),
+		         ('user','1','sessions','','session.create','create',UNHEX(REPEAT('cd',32)),'completed','{"data":{"configuration":{"agent_type":"interactive"}}}',UTC_TIMESTAMP(3))`,
+	} {
+		if _, err = s.db.ExecContext(ctx, query); err != nil {
+			t.Fatal("seeding legacy chat data", err)
+		}
+	}
 	if err = s.Migrate(ctx); err != nil {
 		t.Fatal(err)
+	}
+	for _, query := range []string{
+		"SELECT GROUP_CONCAT(agent_type ORDER BY id) FROM agent",
+		"SELECT GROUP_CONCAT(agent_type ORDER BY id) FROM agent_session",
+		"SELECT content_domain FROM agent_file",
+		"SELECT content_domain FROM agent_operation",
+		"SELECT CONCAT(result->>'$.data.agent_type', ',', result->>'$.data.title', ',', HEX(request_hash)) FROM agent_command_receipt WHERE idempotency_key='configuration'",
+		"SELECT result->>'$.data.configuration.agent_type' FROM agent_command_receipt WHERE idempotency_key='create'",
+	} {
+		var got string
+		if err = s.db.GetContext(ctx, &got, query); err != nil {
+			t.Fatal("reading migrated chat data", err)
+		}
+		want := "chat"
+		switch {
+		case strings.Contains(query, "GROUP_CONCAT"):
+			want = "chat,service"
+		case strings.Contains(query, "request_hash"):
+			want = "chat,interactive," + strings.Repeat("AB", 32)
+		}
+		if got != want {
+			t.Fatalf("%s: got %q, want %q", query, got, want)
+		}
 	}
 	expectedVersions := make([]int64, len(sources))
 	for i, source := range sources {

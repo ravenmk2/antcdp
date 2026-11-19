@@ -17,7 +17,7 @@ func agentFinish(c *gin.Context, o Options, result *agents.Result, err error) {
 		return
 	}
 	if result == nil {
-		httpx.Write(c, httpx.E(500, "INTERNAL_ERROR", "智能体结果不可用"))
+		httpx.Write(c, httpx.E(500, "INTERNAL_ERROR", "助手结果不可用"))
 		return
 	}
 	setSession(c, o, rawSession(c), result.Auth)
@@ -137,7 +137,7 @@ func registerAgents(api *gin.RouterGroup, o Options) {
 	for _, group := range []*gin.RouterGroup{u, a} {
 		group.Use(func(c *gin.Context) {
 			if o.Agents == nil {
-				httpx.Write(c, httpx.E(503, "INSTANCE_NOT_READY", "智能体服务尚未就绪"))
+				httpx.Write(c, httpx.E(503, "INSTANCE_NOT_READY", "助手服务尚未就绪"))
 				return
 			}
 			c.Request = c.Request.WithContext(agents.WithMetadata(c.Request.Context(), metadata(c)))

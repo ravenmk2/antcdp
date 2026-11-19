@@ -110,7 +110,7 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 			return nil
 		}
 		if !agent.Enabled || agent.DefaultModelBindingID == nil {
-			return httpx.E(409, "AGENT_UNAVAILABLE", "智能体当前不可用")
+			return httpx.E(409, "AGENT_UNAVAILABLE", "助手当前不可用")
 		}
 		v := &SessionRow{AgentID: agent.ID, ExecutionMode: "service", SessionKind: "root", ExecutorUserID: *agent.RobotUserID, Title: title, NextInputOrder: 1, RowVersion: 1, CreatedByActorKind: "user", CreatedByActorID: strconv.FormatUint(w.ActorID, 10), LockedModelConfig: json.RawMessage(`null`), SelectedModelBindingID: *agent.DefaultModelBindingID}
 		executor, err := executionAccount(tx, v, true)
@@ -135,7 +135,7 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 			return err
 		}
 		if current == nil || current.DeletedAt != nil || current.RowVersion != agent.RowVersion || !current.Enabled {
-			return httpx.E(409, "AGENT_UNAVAILABLE", "智能体配置已变化")
+			return httpx.E(409, "AGENT_UNAVAILABLE", "助手配置已变化")
 		}
 		if !selection.Availability.Available {
 			return httpx.E(409, "MODEL_UNAVAILABLE", "所选模型当前不可用")

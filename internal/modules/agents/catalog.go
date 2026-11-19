@@ -170,7 +170,7 @@ func (s *Service) ListCatalog(ctx context.Context, raw string, q Query) (*Result
 			return e
 		}
 		enabled := true
-		q.Mode = "interactive"
+		q.Mode = "chat"
 		q.Enabled = &enabled
 		q.CatalogUserID = a.User.ID
 		q.CatalogAdmin = a.User.Role == "admin"
@@ -206,7 +206,7 @@ func (s *Service) GetCatalog(ctx context.Context, raw string, id uint64) (*Resul
 		if e != nil {
 			return e
 		}
-		if v == nil || v.Mode != "interactive" || !v.Enabled {
+		if v == nil || v.Mode != "chat" || !v.Enabled {
 			return missing()
 		}
 		allowed, e := r.CanUseAgent(v.ID, a.User.ID, a.User.Role == "admin")

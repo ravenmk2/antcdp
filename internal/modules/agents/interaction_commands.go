@@ -231,8 +231,8 @@ func (s *Service) DecideInteraction(ctx context.Context, raw string, id uint64, 
 		if e != nil {
 			return e
 		}
-		if session.ExecutionMode != "interactive" {
-			return httpx.E(403, "APPROVAL_NOT_ALLOWED", "服务型智能体不接受一次性批准")
+		if session.ExecutionMode != "chat" {
+			return httpx.E(403, "APPROVAL_NOT_ALLOWED", "服务型助手不接受一次性批准")
 		}
 		if w.Decision != "approve_once" && w.Decision != "reject" {
 			return httpx.Invalid("decision", "unsupported")

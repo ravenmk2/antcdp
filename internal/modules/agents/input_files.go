@@ -59,7 +59,7 @@ func bindInputFiles(st StateRepository, session *SessionRow, input, user uint64,
 		if v == nil || v.ContentSessionID == nil || *v.ContentSessionID != session.ID || v.ContentDomain != session.ExecutionMode || v.State != "staged" && v.State != "bound" || v.IntegrityState != "verified" || v.SizeBytes == nil || len(v.SHA256) != 32 {
 			return httpx.E(409, "FILE_UNAVAILABLE", "文件当前不可用")
 		}
-		if v.ContentDomain == "interactive" && (v.OwnerUserID == nil || session.personalOwnerID() == nil || *v.OwnerUserID != *session.personalOwnerID()) || v.ContentDomain == "service" && (v.AgentID == nil || *v.AgentID != session.AgentID) {
+		if v.ContentDomain == "chat" && (v.OwnerUserID == nil || session.personalOwnerID() == nil || *v.OwnerUserID != *session.personalOwnerID()) || v.ContentDomain == "service" && (v.AgentID == nil || *v.AgentID != session.AgentID) {
 			return missing()
 		}
 		if isImage(v.MediaType) && model.Capabilities.ImageInput != modelcore.Supported {

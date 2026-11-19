@@ -62,17 +62,17 @@ export function ConversationSidebar({
         <Popover open={selecting} onOpenChange={setSelecting}>
           <PopoverTrigger
             className="workspace-sidebar-switcher"
-            aria-label={`选择智能体${selectedName ? `：${selectedName}` : ""}`}
+            aria-label={`选择助手${selectedName ? `：${selectedName}` : ""}`}
           >
             <span className="conversation-agent-mark">
               <Bot aria-hidden strokeWidth={1.7} />
             </span>
             <span className="min-w-0 flex-1">
               <strong className="block truncate text-sm">
-                {selectedName ?? (agentId ? "智能体" : "选择智能体")}
+                {selectedName ?? (agentId ? "助手" : "选择助手")}
               </strong>
               <small className="mt-0.5 block truncate text-[11px] text-muted">
-                {agentId ? "智能体 #" + agentId : "从收藏中选择"}
+                {agentId ? "助手 #" + agentId : "从收藏中选择"}
               </small>
             </span>
             <ChevronDown className="size-4 shrink-0 text-muted" aria-hidden />
@@ -81,7 +81,7 @@ export function ConversationSidebar({
             align="start"
             sideOffset={4}
             className="conversation-agent-menu w-80 p-1"
-            aria-label="选择智能体"
+            aria-label="选择助手"
           >
             {favorites.isPending && (
               <p className="conversation-sidebar-note" role="status">
@@ -169,7 +169,7 @@ export function ConversationSidebar({
                 disabled={favorites.isFetchingNextPage}
                 onClick={() => void favorites.fetchNextPage()}
               >
-                加载更多智能体
+                加载更多助手
               </Button>
             )}
           </PopoverContent>
@@ -209,7 +209,7 @@ export function ConversationSidebar({
             <ConversationHistory key={agentId} agentId={agentId} />
           ) : null
         ) : (
-          <p className="conversation-sidebar-note">正在读取会话所属智能体…</p>
+          <p className="conversation-sidebar-note">正在读取会话所属助手…</p>
         )}
       </div>
       {search && (
@@ -228,7 +228,7 @@ function ConversationHistory({ agentId }: { agentId?: string }) {
     initialPageParam: 1,
     queryFn: ({ pageParam, signal }) =>
       request<SessionSummary[]>(
-        `/agents/sessions?${agentQuery({ agent_type: "interactive", agent_id: agentId, archived: false, page: pageParam, page_size: 10 })}`,
+        `/agents/sessions?${agentQuery({ agent_type: "chat", agent_id: agentId, archived: false, page: pageParam, page_size: 10 })}`,
         { signal },
       ),
     getNextPageParam: (last, pages) =>

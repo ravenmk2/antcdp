@@ -193,7 +193,7 @@ function SessionSettingsForm({
         )}
         {!archived && !session.state.agent_access_available && (
           <Notice tone="warning">
-            当前已无此智能体的使用权限，仍可查看会话历史。
+            当前已无此助手的使用权限，仍可查看会话历史。
           </Notice>
         )}
       </fieldset>

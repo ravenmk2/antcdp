@@ -63,7 +63,7 @@ export function ProjectSet({
         projects.length > 0 &&
         projects.every((query) => query.data?.data.status === "archived") && (
           <Notice tone="warning">
-            关联项目均已归档，用户当前无法启动该智能体。
+            关联项目均已归档，用户当前无法启动该助手。
           </Notice>
         )}
       {picking && (

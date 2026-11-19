@@ -37,6 +37,32 @@ func (m *conversationMemory) SurfaceEvents(id, after, through uint64, limit int)
 	return m.Events(id, after, through, limit, false)
 }
 
+func TestLegacyEventExposesChatType(t *testing.T) {
+	for _, test := range []struct{ kind, stored, projected string }{
+		{"session/title", `{"configuration":{"agent_type":"interactive","title":"interactive"}}`, `{"configuration":{"agent_type":"chat","title":"interactive"}}`},
+		{"context/authorization", `{"agent_type":"interactive","reason":"root_admission"}`, `{"agent_type":"chat","reason":"root_admission"}`},
+	} {
+		t.Run(test.kind, func(t *testing.T) {
+			m := &conversationMemory{}
+			v := &SessionRow{ID: 1}
+			if _, err := appendEvent(m, v, nil, test.kind, "", json.RawMessage(test.stored), nil, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+			event, err := projectEvent(m.rows[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, err := agentcore.CanonicalJSON(event.Data); err != nil || string(got) != test.projected {
+				t.Fatalf("projected event = %s, %v", got, err)
+			}
+			stored, err := decodeEvent(m.rows[0])
+			if err != nil || string(stored.Public) != test.stored {
+				t.Fatalf("stored event = %s, %v", stored.Public, err)
+			}
+		})
+	}
+}
+
 func TestConversationCheckpointReplayRecoveryAndImmutableState(t *testing.T) {
 	m := &conversationMemory{}
 	v := &SessionRow{ID: 1}

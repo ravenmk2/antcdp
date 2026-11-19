@@ -11,7 +11,7 @@ import (
 )
 
 func TestSessionTitleNormalizationAndInvalidOutput(t *testing.T) {
-	if got := fallbackTitle("\x1b[31m 智能体\u200b\n对话优化 \x1b[0m"); got != "智能体 对话优化" {
+	if got := fallbackTitle("\x1b[31m 助手\u200b\n对话优化 \x1b[0m"); got != "助手 对话优化" {
 		t.Fatal(got)
 	}
 	if got := fallbackTitle(strings.Repeat("中文", 100)); len(got) > 96 || !utf8.ValidString(got) {

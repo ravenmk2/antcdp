@@ -1,6 +1,7 @@
 import type {
   ActorRef,
   AgentInput,
+  AgentType,
   ApprovalStatus,
   Artifact,
   ContentBlock,
@@ -294,7 +295,7 @@ export interface EventPayloads {
   };
   "context/authorization": {
     agent_configuration_revision: string;
-    agent_type?: "interactive" | "service";
+    agent_type?: AgentType;
     scope_kind?: "project" | "team" | "platform";
     resource_scope_kind?: string;
     project_ids?: string[];
