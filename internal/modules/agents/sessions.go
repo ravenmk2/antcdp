@@ -279,10 +279,11 @@ func sessionPermissions(tx identity.Tx, r Repository, v *SessionRow, agent *Defi
 }
 
 func (s *Service) detail(ctx context.Context, tx identity.Tx, r Repository, st StateRepository, v *SessionRow, a *identity.Auth) (SessionDetail, error) {
-	_, selection, e := s.selection(tx, r, v)
+	model, selection, e := s.selection(tx, r, v)
 	if e != nil {
 		return SessionDetail{}, e
 	}
+	selection.ImageInput = model.Capabilities.ImageInput
 	agent, e := r.Definition(v.AgentID, false)
 	if e != nil {
 		return SessionDetail{}, e

@@ -464,10 +464,11 @@ func (s *Service) Snapshot(ctx context.Context, raw string, id uint64, limit int
 			return e
 		}
 		// Acquire model and agent locks before the Session lock, as writers do.
-		_, selection, e := s.selection(tx, r, initial)
+		model, selection, e := s.selection(tx, r, initial)
 		if e != nil {
 			return e
 		}
+		selection.ImageInput = model.Capabilities.ImageInput
 		v, e := lockSessionContent(st, id, a)
 		if e != nil {
 			return e

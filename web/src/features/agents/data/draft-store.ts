@@ -1,7 +1,14 @@
 import type { FileRef } from "@/types/agents";
+
+export interface WorkspaceDraftFile {
+  file: File;
+  savedName?: string;
+}
+
 export interface ConversationDraft {
   text: string;
-  files: File[];
+  images: File[];
+  workspaceFiles: WorkspaceDraftFile[];
   file_refs: FileRef[];
   agentId: string;
   modelId: string;
@@ -10,7 +17,8 @@ export interface ConversationDraft {
 export class ConversationDraftEntry {
   private value: ConversationDraft = {
     text: "",
-    files: [],
+    images: [],
+    workspaceFiles: [],
     file_refs: [],
     agentId: "",
     modelId: "",
@@ -29,12 +37,13 @@ export class ConversationDraftEntry {
     this.listeners.forEach((listener) => listener());
   }
   clearContent() {
-    this.patch({ text: "", files: [], file_refs: [] });
+    this.patch({ text: "", images: [], workspaceFiles: [], file_refs: [] });
   }
   dispose() {
     this.value = {
       text: "",
-      files: [],
+      images: [],
+      workspaceFiles: [],
       file_refs: [],
       agentId: "",
       modelId: "",

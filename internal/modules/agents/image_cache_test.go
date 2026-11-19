@@ -267,3 +267,17 @@ func TestImageVariantDeterministicAndLosslessSmallImage(t *testing.T) {
 		}
 	}
 }
+
+func TestImageVariantAcceptsAttachmentPixelLimit(t *testing.T) {
+	const dimension = attachmentImageMaxDimension
+	var buffer bytes.Buffer
+	if err := png.Encode(&buffer, image.NewGray(image.Rect(0, 0, dimension, dimension))); err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256(buffer.Bytes())
+	source := modelcore.ImagePart{MIME: "image/png", ContentSHA256: hex.EncodeToString(hash[:])}
+	part, data, err := requestImageVariant(buffer.Bytes(), source)
+	if err != nil || part.Width != 2048 || part.Height != 2048 || len(data) > imageVariantLimit {
+		t.Fatalf("could not prepare an image at the attachment pixel limit: %+v (%v)", part, err)
+	}
+}

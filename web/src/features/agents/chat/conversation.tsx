@@ -215,7 +215,8 @@ export function Conversation({
     !handingOff &&
     !submissions.visible.length &&
     !draftState.text.trim() &&
-    !draftState.files.length &&
+    !draftState.images.length &&
+    !draftState.workspaceFiles.length &&
     !draftState.file_refs.length,
   );
   const queuedInputs =
@@ -988,7 +989,11 @@ export function Conversation({
                           target={{
                             id: sessionId,
                             selection_hash: selection.model_selection_hash,
+                            workspaceReady:
+                              currentDetail?.state.workspace?.availability ===
+                              "available",
                           }}
+                          imageInput={selection.image_input}
                           disabled={
                             selectionPending ||
                             !permissions.submit ||

@@ -142,6 +142,7 @@ export interface ModelOption {
   display_name: string;
   provider_label: string;
   protocol: ModelProtocol;
+  image_input?: "supported" | "unsupported" | "unknown";
   thinking_options: {
     key: string;
     label: string;
@@ -182,6 +183,7 @@ export interface CapabilityCatalog {
     | "input_file_refs"
     | "attachment_file_bytes"
     | "attachment_multipart_bytes"
+    | "workspace_file_bytes"
     | "skill_zip_bytes"
     | "skill_multipart_bytes"
     | "skill_expanded_bytes"
@@ -226,6 +228,7 @@ export interface EffectiveSelection extends ModelSelection {
   model_name: string;
   model_id: string;
   protocol: ModelProtocol;
+  image_input?: ModelOption["image_input"];
   thinking_label: string;
   effective_parameters: JsonObject;
   model_selection_hash: string;

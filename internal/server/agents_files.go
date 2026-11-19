@@ -81,7 +81,16 @@ func registerAgentFiles(u *gin.RouterGroup, o Options) {
 	s := o.Agents
 	u.POST("/sessions/:id/attachments", func(c *gin.Context) {
 		id, ok := agentID(c, "id")
-		if !ok || !modelNoQuery(c) {
+		if !ok {
+			return
+		}
+		q, ok := modelQuery(c, "kind")
+		if !ok {
+			return
+		}
+		kind := q.Get("kind")
+		if q.Has("kind") && kind != "image" {
+			httpx.Write(c, httpx.Invalid("kind", "unsupported"))
 			return
 		}
 		reader, name, e := agentAttachmentSource(c)
@@ -91,7 +100,11 @@ func registerAgentFiles(u *gin.RouterGroup, o Options) {
 		}
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 120*time.Second)
 		defer cancel()
-		out, e := s.UploadAttachment(ctx, rawSession(c), id, c.GetHeader("Idempotency-Key"), name, reader)
+		upload := s.UploadAttachment
+		if kind == "image" {
+			upload = s.UploadImageAttachment
+		}
+		out, e := upload(ctx, rawSession(c), id, c.GetHeader("Idempotency-Key"), name, reader)
 		agentFinish(c, o, out, e)
 	})
 	u.GET("/sessions/:id/attachments", agentRead(o, func(c *gin.Context) (*agents.Result, error) {

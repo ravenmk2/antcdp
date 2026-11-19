@@ -20,7 +20,11 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
-const attachmentLimit = 32 << 20
+const (
+	attachmentLimit             = 32 << 20
+	attachmentImageMaxDimension = 4096
+	attachmentImageMaxPixels    = attachmentImageMaxDimension * attachmentImageMaxDimension
+)
 
 func safeFilename(name string) bool {
 	if name == "" || name == "." || name == ".." || len(name) > 255 || !utf8.ValidString(name) || strings.ContainsAny(name, "/\\") {
@@ -67,6 +71,14 @@ func (s *Service) orphanAttachment(ctx context.Context, id uint64) {
 }
 
 func (s *Service) UploadAttachment(ctx context.Context, raw string, session uint64, key, filename string, source io.Reader) (*Result, error) {
+	return s.uploadAttachment(ctx, raw, session, key, filename, source, false)
+}
+
+func (s *Service) UploadImageAttachment(ctx context.Context, raw string, session uint64, key, filename string, source io.Reader) (*Result, error) {
+	return s.uploadAttachment(ctx, raw, session, key, filename, source, true)
+}
+
+func (s *Service) uploadAttachment(ctx context.Context, raw string, session uint64, key, filename string, source io.Reader, imageOnly bool) (*Result, error) {
 	if s.Files == nil || source == nil || s.Epoch == "" {
 		return nil, unavailable()
 	}
@@ -126,13 +138,17 @@ func (s *Service) UploadAttachment(ctx context.Context, raw string, session uint
 		return nil, readErr
 	}
 	media := http.DetectContentType(head[:n])
+	if imageOnly && !isImage(media) {
+		_ = reader.Close()
+		return nil, httpx.Invalid("file", "invalid_image")
+	}
 	if isImage(media) {
 		if _, e = reader.Seek(0, io.SeekStart); e != nil {
 			_ = reader.Close()
 			return nil, e
 		}
 		config, _, e := image.DecodeConfig(reader)
-		if e != nil || config.Width <= 0 || config.Height <= 0 || config.Width > 4096 || config.Height > 4096 || int64(config.Width)*int64(config.Height) > 16777216 {
+		if e != nil || !validAttachmentImageSize(config.Width, config.Height) {
 			_ = reader.Close()
 			return nil, httpx.Invalid("file", "invalid_image")
 		}
@@ -144,7 +160,8 @@ func (s *Service) UploadAttachment(ctx context.Context, raw string, session uint
 		Filename string `json:"filename"`
 		Size     uint64 `json:"size_bytes,string"`
 		SHA256   string `json:"sha256"`
-	}{filename, facts.Size, hexHash(facts.SHA256)}
+		Image    bool   `json:"image,omitempty"`
+	}{filename, facts.Size, hexHash(facts.SHA256), imageOnly}
 	out, e := s.access(ctx, raw, false, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
 		st, e := StateFor(tx)
 		if e != nil {
@@ -201,6 +218,10 @@ func (s *Service) UploadAttachment(ctx context.Context, raw string, session uint
 		published = true
 	}
 	return out, e
+}
+
+func validAttachmentImageSize(width, height int) bool {
+	return width > 0 && height > 0 && width <= attachmentImageMaxDimension && height <= attachmentImageMaxDimension && int64(width)*int64(height) <= attachmentImageMaxPixels
 }
 
 func (s *Service) attachmentView(st StateRepository, row *AttachmentRow) (AttachmentView, error) {

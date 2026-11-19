@@ -34,6 +34,7 @@ const agent: CatalogAgent = {
       display_name: "测试模型",
       provider_label: "测试",
       protocol: "chat_completions",
+      image_input: "supported",
       thinking_options: [
         { key: "default", label: "标准" },
         { key: "high", label: "高" },
@@ -75,7 +76,16 @@ function setup(fixed: boolean) {
     if (url === "/agents/catalog/4") return response(agent);
     if (url.startsWith("/agents/catalog?")) return response([agent]);
     if (url === "/agents/capabilities")
-      return response({ limits: { input_text_bytes: 65536 } });
+      return response({
+        limits: { input_text_bytes: 65536, workspace_file_bytes: 32 << 20 },
+      });
+    if (url === "/agents/sessions/10/workspace/prepare")
+      return response({ status: "ready" });
+    if (url === "/agents/sessions/10/workspace/file-uploads")
+      return response({
+        status: "succeeded",
+        result: { path: "sessions/10/notes (2).txt" },
+      });
     throw new Error(`Unexpected request: ${url}`);
   });
   const cache = new QueryClient({
@@ -183,4 +193,41 @@ it("still protects navigation while a new conversation submission has failed", a
   ).toBeVisible();
   expect(router.state.location.pathname).toBe("/new");
   expect(screen.getByLabelText("消息内容")).toHaveValue("检查发送跳转");
+});
+
+it("requires a message and shows the actual workspace filename before submitting", async () => {
+  const { user, input } = setup(true);
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "图片" })).toBeEnabled(),
+  );
+  expect(screen.getByRole("button", { name: "附件" })).toBeEnabled();
+  await user.upload(
+    screen.getByLabelText("选择附件"),
+    new File(["content"], "notes.txt"),
+  );
+  const send = screen.getByRole("button", { name: "发送" });
+  expect(send).toBeDisabled();
+  expect(mock.mock.calls.map(([url]) => url)).not.toContain("/agents/sessions");
+  const textbox = screen.getByRole("textbox");
+  await user.type(textbox, "读取 notes.txt");
+  await user.click(send);
+  const confirm = await screen.findByRole("button", { name: "确认发送" });
+  expect(screen.getByText("附件已按可用文件名保存")).toBeVisible();
+  expect(mock.mock.calls.map(([url]) => url)).not.toContain(
+    "/agents/sessions/10/inputs",
+  );
+  await user.clear(textbox);
+  await user.type(textbox, "读取 notes (2).txt");
+  await user.click(confirm);
+  expect(mock).toHaveBeenCalledWith(
+    "/agents/sessions/10/inputs",
+    expect.objectContaining({
+      body: expect.objectContaining({
+        content: [{ type: "text", text: "读取 notes (2).txt" }],
+        file_refs: [],
+      }),
+    }),
+  );
+  await act(async () => input.resolve(response({ input_id: "11" })));
+  expect(await screen.findByText("已打开会话")).toBeVisible();
 });

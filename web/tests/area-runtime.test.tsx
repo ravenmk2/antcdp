@@ -81,7 +81,7 @@ it("preserves drafts and uncertain command identity while region roots unmount",
   const draft = original.drafts.get("session:7");
   draft.patch({
     text: "保留草稿",
-    files: [new File(["content"], "draft.txt")],
+    workspaceFiles: [{ file: new File(["content"], "draft.txt") }],
   });
   const command = original.commands.get("session:7:control");
   await act(() =>
@@ -102,7 +102,7 @@ it("preserves drafts and uncertain command identity while region roots unmount",
   expect(sockets).toHaveLength(1);
   expect(sockets[0].close).not.toHaveBeenCalled();
   expect(draft.getSnapshot().text).toBe("保留草稿");
-  expect(draft.getSnapshot().files[0].name).toBe("draft.txt");
+  expect(draft.getSnapshot().workspaceFiles[0].file.name).toBe("draft.txt");
   expect(runtime!.commands.get("session:7:control").getSnapshot()).toBe(
     pending,
   );

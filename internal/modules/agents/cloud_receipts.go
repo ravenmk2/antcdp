@@ -14,12 +14,23 @@ func cloudCommandKind(command string) bool {
 }
 
 func (s *CloudService) getReceipt(ctx context.Context, raw, key, command, scope string, admin bool) (*Result, error) {
-	return s.cloudAccess(ctx, raw, admin, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository, a *identity.Auth, out *Result) error {
+	return s.cloudAccess(ctx, raw, admin, func(_ identity.Tx, _ Repository, st StateRepository, repo CloudRepository, a *identity.Auth, out *Result) error {
 		if !keyPattern.MatchString(key) || len(command) < 1 || len(command) > 64 || len(scope) < 1 || len(scope) > 128 {
 			return httpx.Invalid("command", "invalid_format")
 		}
 		kind, id := splitScope(scope)
-		if !admin {
+		if command == sessionWorkspaceUploadCommand {
+			if kind != "session" {
+				return missing()
+			}
+			sessionID, err := idValue(id, "scope")
+			if err != nil {
+				return err
+			}
+			if _, err = s.Host.sessionAccess(st, sessionID, a, true, false); err != nil {
+				return err
+			}
+		} else if !admin {
 			if kind != "workspace" {
 				return missing()
 			}
@@ -68,7 +79,7 @@ func (s *CloudService) getReceipt(ctx context.Context, raw, key, command, scope 
 }
 
 func isWorkspaceMutationReceipt(receipt *Receipt) bool {
-	return receipt.OperationID != nil && (receipt.Command == "workspace.mkdir" || receipt.Command == "workspace.remove" || receipt.Command == "workspace.ensure_home")
+	return receipt.OperationID != nil && (receipt.Command == "workspace.mkdir" || receipt.Command == "workspace.remove" || receipt.Command == "workspace.ensure_home" || receipt.Command == sessionWorkspaceUploadCommand)
 }
 
 func workspaceReceiptOperation(repo CloudRepository, receipt *Receipt) (*CloudOperationRow, error) {

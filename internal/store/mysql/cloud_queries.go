@@ -131,6 +131,19 @@ func (t *agentsTx) CloudActivity(id uint64) (a.CloudActivity, error) {
  (SELECT COUNT(*) FROM cloud_computer_operation WHERE cloud_computer_id=? AND finished_at IS NULL) AS operations`, id, id, id, id, id)
 	return v, e
 }
+
+// The computer row is locked by the caller. Ordinary runs and tool operations
+// may coexist with a session upload, but competing user mutations cannot.
+func (t *agentsTx) SessionUploadBlocked(computerID, sessionID uint64) (bool, error) {
+	var blocked bool
+	err := t.tx.GetContext(t.ctx, &blocked, `SELECT
+ EXISTS(SELECT 1 FROM cloud_computer_operation WHERE cloud_computer_id=? AND finished_at IS NULL AND (kind IN ('create','rebuild','pause','resume','delete','workspace_remove','workspace_upload') OR status='outcome_unknown'))
+ OR EXISTS(SELECT 1 FROM agent_resource_reference WHERE resource_kind='cloud_computer' AND resource_id=? AND state='unknown' AND released_at IS NULL)
+ OR EXISTS(SELECT 1 FROM agent_file_operation WHERE cloud_computer_id=? AND status='outcome_unknown' AND finished_at IS NULL)
+ OR EXISTS(SELECT 1 FROM agent_cloud_computer_lease l JOIN agent_sandbox_execution a ON a.root_run_id=l.root_run_id JOIN sandbox_execution e ON e.id=a.sandbox_execution_id WHERE l.cloud_computer_id=? AND l.released_at IS NULL AND e.status='outcome_unknown' AND e.finished_at IS NULL)
+ OR EXISTS(SELECT 1 FROM agent_cloud_computer_lease l JOIN agent_run r ON r.id=l.root_run_id WHERE l.cloud_computer_id=? AND l.released_at IS NULL AND l.mode='exclusive' AND r.session_id<>?)`, computerID, computerID, computerID, computerID, computerID, sessionID)
+	return blocked, err
+}
 func (t *agentsTx) CloudTopology() (int, int, error) {
 	var v struct {
 		Count int `db:"count"`

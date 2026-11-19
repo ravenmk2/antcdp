@@ -50,6 +50,8 @@ func TestCloudBackendResetAndVerifiedDeletion(t *testing.T) {
 	host.Epoch = "cloud-reset-test"
 	host.Catalog = a.ResourceCatalog{Tool: func(_ context.Context, _ identity.Tx, key string) (*a.ToolDescriptor, error) {
 		return &a.ToolDescriptor{Key: key, Name: key, Source: a.ToolSource{Kind: "builtin"}, ExecutionClass: "backend", SupportedPolicies: []string{"allow", "deny", "confirm"}, Availability: a.Availability{Available: true}, Definition: modelcore.Tool{Name: key, InputSchema: json.RawMessage(`{"type":"object"}`)}}, nil
+	}, AuthorizeTool: func(context.Context, identity.Tx, core.ExecutionContext, a.ToolDescriptor, json.RawMessage, json.RawMessage) (json.RawMessage, error) {
+		return json.RawMessage(`{"authorized":true}`), nil
 	}}
 	remote := &volumeMemoryProvider{sandboxMemoryProvider: &sandboxMemoryProvider{resources: map[string]sb.Observation{}}, volumes: map[string]bool{}}
 	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Cipher: f.Models.Cipher, InstallationID: func() (string, error) { return f.Installation, nil }, Factory: volumeMemoryFactory{remote}, EndpointTargets: func(string) ([]string, error) { return []string{"192.0.2.30"}, nil }, PrepareWorkspace: func(context.Context, *a.SandboxAccess, uint64) error { return nil }, VerifyEnvironment: func(context.Context, *a.SandboxAccess) (a.SandboxCapabilities, []a.DiagnosticCheck, error) {
@@ -57,6 +59,9 @@ func TestCloudBackendResetAndVerifiedDeletion(t *testing.T) {
 	}}
 	host.Sandboxes = svc
 	configureTestCloud(t, f, svc)
+	t.Run("session_workspace_upload", func(t *testing.T) {
+		testSessionWorkspaceUpload(t, f, svc, remote.sandboxMemoryProvider)
+	})
 	if _, err := svc.ActivatePersonal(ctx, f.AdminToken); err != nil {
 		t.Fatal(err)
 	}

@@ -30,7 +30,7 @@ func variantKey(hash string) string {
 
 func requestImageVariant(data []byte, source modelcore.ImagePart) (modelcore.ImagePart, []byte, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || cfg.Width < 1 || cfg.Height < 1 || cfg.Width > 4096 || cfg.Height > 4096 || int64(cfg.Width)*int64(cfg.Height) > 16_000_000 {
+	if err != nil || !validAttachmentImageSize(cfg.Width, cfg.Height) {
 		return source, nil, integrity()
 	}
 	part := modelcore.ImagePart{MIME: source.MIME, SourceSHA256: source.ContentSHA256, Variant: variantKey(source.ContentSHA256), Width: cfg.Width, Height: cfg.Height}

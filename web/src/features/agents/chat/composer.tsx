@@ -5,7 +5,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ArrowUp, FileText, Paperclip, X, LoaderCircle } from "lucide-react";
+import {
+  ArrowUp,
+  FileText,
+  Image as ImageIcon,
+  Paperclip,
+  X,
+  LoaderCircle,
+} from "lucide-react";
 import { ApiError, request } from "@/api/client";
 import { Button, IconButton } from "@/components/button";
 import { ErrorNotice, Notice } from "@/components/feedback";
@@ -14,6 +21,7 @@ import { useApiQuery } from "@/hooks/use-api";
 import type {
   CapabilityCatalog,
   InputAccepted,
+  ModelOption,
   SessionDetail,
 } from "@/types/agents";
 import { agentRoot } from "../data/agent-api";
@@ -27,6 +35,7 @@ import type { SendPlan } from "../data/send-flow";
 export function ChatComposer({
   id,
   target,
+  imageInput,
   disabled,
   placeholder = "描述你希望完成的任务…",
   children,
@@ -43,6 +52,7 @@ export function ChatComposer({
 }: {
   id: string;
   target: SendPlan["session"] | null;
+  imageInput?: ModelOption["image_input"];
   disabled?: boolean;
   placeholder?: string;
   children?: ReactNode;
@@ -65,7 +75,8 @@ export function ChatComposer({
     [current, setCurrent] = useState<SessionDetail | null>(null),
     [reading, setReading] = useState(false);
   const handled = useRef<string | null>(null),
-    fileInput = useRef<HTMLInputElement>(null);
+    imagePicker = useRef<HTMLInputElement>(null),
+    attachmentPicker = useRef<HTMLInputElement>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const [dragging, setDragging] = useState(false);
   const caps = useApiQuery<CapabilityCatalog>(
@@ -74,14 +85,37 @@ export function ChatComposer({
   );
   const locked = state.phase !== "idle",
     pending = state.phase === "sending",
-    uncertain = state.phase === "uncertain";
+    uncertain = state.phase === "uncertain",
+    confirmingRename = state.phase === "confirm-rename";
   const value = locked ? (state.plan?.text ?? draft.text) : draft.text;
-  const sendingLabel =
-    state.stage === "session"
-      ? "正在建立会话"
-      : state.stage === "upload"
-        ? `正在上传附件 ${state.uploadIndex + 1} / ${state.plan?.files.length ?? 0}`
-        : "正在发送消息";
+  const workspaceFiles = state.plan?.workspaceFiles ?? draft.workspaceFiles;
+  const renamedFiles = workspaceFiles.filter(
+    (item) => item.savedName && item.savedName !== item.file.name,
+  );
+  const sendingLabel = {
+    session: "正在建立会话",
+    image: `正在上传图片 ${state.uploadIndex + 1} / ${state.plan?.images.length ?? 0}`,
+    prepare: "正在准备会话云电脑",
+    workspace: `正在上传附件 ${state.workspaceIndex + 1} / ${workspaceFiles.length}`,
+    input: "正在发送消息",
+  }[state.stage];
+  const textBytes = new TextEncoder().encode(value).byteLength;
+  const textLimit = caps.data?.data.limits.input_text_bytes ?? 65536;
+  const canUseImages = imageInput === "supported";
+  const hasMessage = Boolean(
+    value.trim() || draft.images.length || draft.file_refs.length,
+  );
+  const hasDraft = hasMessage || Boolean(workspaceFiles.length);
+  const sendDisabled =
+    disabled ||
+    !target ||
+    (locked && !confirmingRename) ||
+    textBytes > textLimit ||
+    !hasMessage ||
+    (!!draft.images.length && !canUseImages);
+  const workspaceFailed =
+    state.phase === "failed" &&
+    (state.stage === "workspace" || state.stage === "prepare");
   useLayoutEffect(() => {
     const node = textarea.current;
     if (!node) return;
@@ -108,44 +142,68 @@ export function ChatComposer({
     state.error instanceof ApiError &&
     state.error.code === "MODEL_SELECTION_CHANGED";
   const send = () => {
-    if (
-      !target ||
-      disabled ||
-      locked ||
-      textBytes > textLimit ||
-      (!draft.text.trim() && !draft.files.length && !draft.file_refs.length)
-    )
-      return;
+    if (!target || sendDisabled) return;
     setError(undefined);
+    if (confirmingRename) {
+      void flow.confirmRenames();
+      return;
+    }
     void flow.start({
       placement:
         running || queuePaused || hasQueuedInputs ? "queued" : "transcript",
       session: target,
       text: draft.text,
-      files: draft.files,
+      images: draft.images,
+      workspaceFiles: draft.workspaceFiles,
       file_refs: draft.file_refs,
     });
   };
-  const textBytes = new TextEncoder().encode(draft.text).byteLength,
-    textLimit = caps.data?.data.limits.input_text_bytes ?? 65536;
-  function addFiles(files: FileList | null) {
+  function addFiles(
+    files: FileList | null,
+    source: "image" | "workspace" | "mixed",
+  ) {
     if (!files || !caps.data || disabled || locked) return;
-    const added = Array.from(files),
-      limits = caps.data.data.limits;
+    const added = Array.from(files);
+    if (source === "image" && added.some((file) => !isImage(file))) {
+      setError("请选择 PNG、JPEG 或 WebP 图片。");
+      return;
+    }
+    const images = source === "workspace" ? [] : added.filter(isImage);
+    const workspace =
+      source === "image"
+        ? []
+        : added.filter((file) => source === "workspace" || !isImage(file));
+    const limits = caps.data.data.limits;
+    if (images.length && !canUseImages) {
+      setError("当前模型不支持图片输入。工作文件可通过「附件」添加。");
+      return;
+    }
     if (
-      draft.files.length + draft.file_refs.length + added.length >
+      draft.images.length + draft.file_refs.length + images.length >
       limits.input_file_refs
     ) {
       setError(`每次最多 ${limits.input_file_refs} 个文件引用。`);
       return;
     }
-    if (added.some((file) => file.size > limits.attachment_file_bytes)) {
+    if (images.some((file) => file.size > limits.attachment_file_bytes)) {
       setError(
-        `单个附件不能超过 ${limits.attachment_file_bytes.toLocaleString()} 字节。`,
+        `单张图片不能超过 ${limits.attachment_file_bytes.toLocaleString()} 字节。`,
       );
       return;
     }
-    editor.patch({ files: [...draft.files, ...added] });
+    const workspaceLimit =
+      limits.workspace_file_bytes ?? limits.attachment_file_bytes;
+    if (workspace.some((file) => file.size > workspaceLimit)) {
+      setError(`单个附件不能超过 ${workspaceLimit.toLocaleString()} 字节。`);
+      return;
+    }
+    editor.patch({
+      images: [...draft.images, ...images],
+      workspaceFiles: [
+        ...draft.workspaceFiles,
+        ...workspace.map((file) => ({ file })),
+      ],
+    });
     setError(undefined);
   }
   return (
@@ -154,6 +212,11 @@ export function ChatComposer({
         <div className="agent-composer-feedback space-y-3">
           <ErrorNotice error={error} />
           <ErrorNotice error={state.receiptMissing ? undefined : state.error} />
+          {!canUseImages && draft.images.length > 0 && (
+            <Notice tone="warning">
+              当前模型不支持草稿中的图片，请切换模型或移除图片。
+            </Notice>
+          )}
           {uncertain && (
             <Notice tone="warning" title="发送结果尚未确认">
               {state.receiptMissing
@@ -166,12 +229,14 @@ export function ChatComposer({
                 >
                   查询原步骤结果
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => void flow.recover("retry")}
-                >
-                  重试原步骤
-                </Button>
+                {(state.stage !== "workspace" || state.receiptMissing) && (
+                  <Button
+                    variant="outline"
+                    onClick={() => void flow.recover("retry")}
+                  >
+                    重试原步骤
+                  </Button>
+                )}
               </div>
             </Notice>
           )}
@@ -206,6 +271,16 @@ export function ChatComposer({
                     继续发送
                   </Button>
                 )}
+                {workspaceFailed && (
+                  <Button
+                    variant="outline"
+                    onClick={() => void flow.removeFailedWorkspaceFiles()}
+                  >
+                    {state.stage === "prepare"
+                      ? "移除未保存的附件并继续"
+                      : "移除失败附件并继续"}
+                  </Button>
+                )}
                 <Button variant="ghost" onClick={() => setDiscard(true)}>
                   结束本次提交
                 </Button>
@@ -229,6 +304,42 @@ export function ChatComposer({
                   </Button>
                 </div>
               )}
+            </Notice>
+          )}
+          {confirmingRename && (
+            <Notice tone="warning" title="附件已按可用文件名保存">
+              <p>请核对实际文件名和正文，再确认发送。</p>
+              <ul className="mt-2 space-y-1">
+                {renamedFiles.map(({ file, savedName }) => (
+                  <li
+                    className="flex flex-wrap items-center gap-2 break-all"
+                    key={savedName}
+                  >
+                    <span>
+                      {file.name} → <strong>{savedName}</strong>
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (savedName)
+                          void navigator.clipboard
+                            .writeText(savedName)
+                            .catch(setError);
+                      }}
+                    >
+                      复制文件名
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+              <Button
+                variant="ghost"
+                className="mt-2"
+                onClick={() => setDiscard(true)}
+              >
+                结束本次提交
+              </Button>
             </Notice>
           )}
           {queuePaused && (
@@ -257,21 +368,23 @@ export function ChatComposer({
           onDrop={(event) => {
             event.preventDefault();
             setDragging(false);
-            addFiles(event.dataTransfer.files);
+            addFiles(event.dataTransfer.files, "mixed");
           }}
         >
           {children && <div className="agent-composer-config">{children}</div>}
-          {(draft.files.length > 0 || draft.file_refs.length > 0) && (
+          {(draft.images.length > 0 ||
+            workspaceFiles.length > 0 ||
+            draft.file_refs.length > 0) && (
             <div className="agent-composer-attachments" aria-label="待发送文件">
-              {draft.files.map((file, index) => (
+              {draft.images.map((file, index) => (
                 <div
                   key={`${file.name}:${index}`}
-                  className={`agent-composer-attachment ${isImage(file) ? "is-image" : ""}`}
+                  className="agent-composer-attachment is-image"
                   title={file.name}
                 >
-                  <AttachmentPreview file={file} />
+                  <ImagePreview file={file} />
                   {pending &&
-                    state.stage === "upload" &&
+                    state.stage === "image" &&
                     index === state.uploadIndex && (
                       <span
                         className="agent-attachment-uploading"
@@ -290,16 +403,58 @@ export function ChatComposer({
                   <button
                     type="button"
                     className="agent-attachment-remove"
-                    aria-label={`移除附件 ${file.name}`}
+                    aria-label={`移除图片 ${file.name}`}
                     disabled={disabled || locked}
                     onClick={() =>
                       editor.patch({
-                        files: draft.files.filter((_, i) => i !== index),
+                        images: draft.images.filter((_, i) => i !== index),
                       })
                     }
                   >
                     <X />
                   </button>
+                </div>
+              ))}
+              {workspaceFiles.map(({ file, savedName }, index) => (
+                <div
+                  className="agent-composer-attachment"
+                  key={`workspace:${file.name}:${index}`}
+                >
+                  <FileText className="size-5 shrink-0 text-muted" />
+                  <span
+                    className="min-w-0 truncate text-xs"
+                    title={savedName ?? file.name}
+                  >
+                    {savedName ?? file.name}
+                  </span>
+                  {pending &&
+                    state.stage === "workspace" &&
+                    index === state.workspaceIndex && (
+                      <span
+                        className="agent-attachment-uploading"
+                        role="status"
+                        aria-label={`正在上传附件 ${file.name}`}
+                      >
+                        <LoaderCircle aria-hidden="true" />
+                      </span>
+                    )}
+                  {savedName && (
+                    <span className="shrink-0 text-xs text-muted">已保存</span>
+                  )}
+                  <IconButton
+                    size="iconSm"
+                    label={`移除附件 ${file.name}`}
+                    disabled={disabled || locked}
+                    onClick={() =>
+                      editor.patch({
+                        workspaceFiles: draft.workspaceFiles.filter(
+                          (_, i) => i !== index,
+                        ),
+                      })
+                    }
+                  >
+                    <X />
+                  </IconButton>
                 </div>
               ))}
               {draft.file_refs.map((ref) => (
@@ -335,12 +490,15 @@ export function ChatComposer({
             className="agent-composer-input resize-none border-0 bg-transparent shadow-none focus-visible:ring-0"
             placeholder={placeholder}
             value={value}
-            disabled={disabled || locked}
-            onChange={(event) => editor.patch({ text: event.target.value })}
+            disabled={disabled || (locked && !confirmingRename)}
+            onChange={(event) => {
+              if (confirmingRename) flow.editRenameText(event.target.value);
+              else editor.patch({ text: event.target.value });
+            }}
             onPaste={(event) => {
               if (event.clipboardData.files.length) {
                 event.preventDefault();
-                addFiles(event.clipboardData.files);
+                addFiles(event.clipboardData.files, "mixed");
               }
             }}
             onKeyDown={(event) => {
@@ -358,29 +516,47 @@ export function ChatComposer({
           <div className="agent-composer-footer">
             <div className="agent-composer-tools">
               <input
-                ref={fileInput}
+                ref={imagePicker}
                 type="file"
                 multiple
                 className="hidden"
-                aria-label="上传附件"
+                accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"
+                aria-label="选择图片"
                 onChange={(event) => {
-                  addFiles(event.target.files);
+                  addFiles(event.target.files, "image");
                   event.target.value = "";
                 }}
               />
               <button
                 type="button"
-                className="agent-composer-tool-button"
-                aria-label="添加附件"
-                title="添加附件"
-                disabled={disabled || locked || !caps.data}
-                onClick={() => fileInput.current?.click()}
+                className="agent-composer-tool-button agent-composer-picker"
+                title={canUseImages ? "添加消息图片" : "当前模型不支持图片输入"}
+                disabled={disabled || locked || !caps.data || !canUseImages}
+                onClick={() => imagePicker.current?.click()}
               >
-                <Paperclip />
+                <ImageIcon aria-hidden="true" /> 图片
               </button>
-              {(draft.text ||
-                draft.files.length > 0 ||
-                draft.file_refs.length > 0) && (
+              <input
+                ref={attachmentPicker}
+                type="file"
+                multiple
+                className="hidden"
+                aria-label="选择附件"
+                onChange={(event) => {
+                  addFiles(event.target.files, "workspace");
+                  event.target.value = "";
+                }}
+              />
+              <button
+                type="button"
+                className="agent-composer-tool-button agent-composer-picker"
+                title="发送时保存到会话工作目录"
+                disabled={disabled || locked || !caps.data}
+                onClick={() => attachmentPicker.current?.click()}
+              >
+                <Paperclip aria-hidden="true" /> 附件
+              </button>
+              {hasDraft && (
                 <button
                   type="button"
                   className="agent-composer-tool-button"
@@ -405,21 +581,25 @@ export function ChatComposer({
                 type="button"
                 className="agent-send-button"
                 aria-label={
-                  pending ? sendingLabel : running ? "发送到下一轮" : sendLabel
+                  pending
+                    ? sendingLabel
+                    : confirmingRename
+                      ? "确认发送"
+                      : running
+                        ? "发送到下一轮"
+                        : sendLabel
                 }
                 title={
-                  pending ? sendingLabel : running ? "发送到下一轮" : sendLabel
+                  pending
+                    ? sendingLabel
+                    : confirmingRename
+                      ? "确认发送"
+                      : running
+                        ? "发送到下一轮"
+                        : sendLabel
                 }
                 aria-busy={pending}
-                disabled={
-                  disabled ||
-                  locked ||
-                  !target ||
-                  textBytes > textLimit ||
-                  (!draft.text.trim() &&
-                    !draft.files.length &&
-                    !draft.file_refs.length)
-                }
+                disabled={sendDisabled}
                 onClick={send}
               >
                 {pending ? (
@@ -441,7 +621,7 @@ export function ChatComposer({
           title={locked ? "结束本次提交？" : "清空当前草稿？"}
           description={
             locked
-              ? "保留正文和文件。若已经创建会话，将进入该会话继续编辑；已确认上传的附件继续使用原引用。"
+              ? "保留正文和文件。若已经创建会话，将进入该会话继续编辑。已保存的附件留在云电脑。"
               : "将移除当前尚未发送的正文与文件选择。"
           }
           danger
@@ -472,21 +652,19 @@ export function ChatComposer({
 }
 
 function isImage(file: File) {
-  return /^image\/(png|jpeg|webp|gif)$/.test(file.type);
+  return (
+    /^image\/(png|jpeg|webp)$/.test(file.type) ||
+    (!file.type && /\.(png|jpe?g|webp)$/i.test(file.name))
+  );
 }
 
-function AttachmentPreview({ file }: { file: File }) {
+function ImagePreview({ file }: { file: File }) {
   const image = useRef<HTMLImageElement>(null);
-  const previewable = isImage(file);
   useEffect(() => {
-    if (!previewable || !image.current) return;
+    if (!image.current) return;
     const url = URL.createObjectURL(file);
     image.current.src = url;
     return () => URL.revokeObjectURL(url);
-  }, [file, previewable]);
-  return previewable ? (
-    <img ref={image} alt={file.name} className="agent-attachment-image" />
-  ) : (
-    <FileText className="size-5 shrink-0 text-muted" />
-  );
+  }, [file]);
+  return <img ref={image} alt={file.name} className="agent-attachment-image" />;
 }

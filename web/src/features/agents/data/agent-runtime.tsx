@@ -53,7 +53,8 @@ export function useConversationSend(id: string) {
   const release = useNavigationGuard(
     state.phase === "sending" ||
       state.phase === "uncertain" ||
-      state.phase === "failed",
+      state.phase === "failed" ||
+      state.phase === "confirm-rename",
   );
   useEffect(() => {
     if (state.phase === "idle" || state.phase === "accepted") {
@@ -71,7 +72,13 @@ export function useConversationDraft(id: string) {
   const draft = useMemo(() => drafts.get(id), [drafts, id]);
   const state = useSyncExternalStore(draft.subscribe, draft.getSnapshot);
   useEffect(() => {
-    if (!state.text && !state.files.length && !state.file_refs.length) return;
+    if (
+      !state.text &&
+      !state.images.length &&
+      !state.workspaceFiles.length &&
+      !state.file_refs.length
+    )
+      return;
     const beforeUnload = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", beforeUnload);
     return () => window.removeEventListener("beforeunload", beforeUnload);

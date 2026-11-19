@@ -18,12 +18,13 @@ type ThinkingOption struct {
 	Hash  string `json:"model_selection_hash,omitempty"`
 }
 type ModelOption struct {
-	BindingID     uint64           `json:"binding_id,string"`
-	ModelID       uint64           `json:"model_id,string"`
-	Name          string           `json:"display_name"`
-	ProviderLabel string           `json:"provider_label"`
-	Protocol      string           `json:"protocol"`
-	Thinking      []ThinkingOption `json:"thinking_options"`
+	BindingID     uint64            `json:"binding_id,string"`
+	ModelID       uint64            `json:"model_id,string"`
+	Name          string            `json:"display_name"`
+	ProviderLabel string            `json:"provider_label"`
+	Protocol      string            `json:"protocol"`
+	ImageInput    modelcore.Support `json:"image_input"`
+	Thinking      []ThinkingOption  `json:"thinking_options"`
 }
 type CatalogAgent struct {
 	Favorited       bool          `json:"favorited"`
@@ -45,18 +46,19 @@ type StartOptions struct {
 	ScopeKind       string        `json:"scope_kind"`
 }
 type EffectiveSelection struct {
-	BindingID     uint64          `json:"model_binding_id,string"`
-	ModelID       uint64          `json:"model_definition_id,string"`
-	ProviderLabel string          `json:"provider_label"`
-	Name          string          `json:"model_name"`
-	RemoteModelID string          `json:"model_id"`
-	Protocol      string          `json:"protocol"`
-	Thinking      string          `json:"thinking_option_key"`
-	ThinkingLabel string          `json:"thinking_label"`
-	Parameters    json.RawMessage `json:"effective_parameters"`
-	Hash          string          `json:"model_selection_hash"`
-	Locked        bool            `json:"locked"`
-	Availability  Availability    `json:"availability"`
+	BindingID     uint64            `json:"model_binding_id,string"`
+	ModelID       uint64            `json:"model_definition_id,string"`
+	ProviderLabel string            `json:"provider_label"`
+	Name          string            `json:"model_name"`
+	RemoteModelID string            `json:"model_id"`
+	Protocol      string            `json:"protocol"`
+	ImageInput    modelcore.Support `json:"image_input,omitempty"`
+	Thinking      string            `json:"thinking_option_key"`
+	ThinkingLabel string            `json:"thinking_label"`
+	Parameters    json.RawMessage   `json:"effective_parameters"`
+	Hash          string            `json:"model_selection_hash"`
+	Locked        bool              `json:"locked"`
+	Availability  Availability      `json:"availability"`
 }
 
 func (s *Service) resolveModel(view *models.RuntimeModel, b ModelBinding, thinking string) (agentcore.LockedModel, EffectiveSelection, error) {
@@ -139,7 +141,7 @@ func (s *Service) catalogAgent(tx identity.Tx, r Repository, v *Definition, hash
 		if !view.Available {
 			continue
 		}
-		option := ModelOption{BindingID: b.ID, ModelID: b.ModelID, Name: view.Name, ProviderLabel: view.ProviderName, Protocol: view.Protocol, Thinking: []ThinkingOption{}}
+		option := ModelOption{BindingID: b.ID, ModelID: b.ModelID, Name: view.Name, ProviderLabel: view.ProviderName, Protocol: view.Protocol, ImageInput: modelcore.Support(view.Capabilities.Image), Thinking: []ThinkingOption{}}
 		for _, key := range b.ThinkingOptions {
 			_, selection, e := s.resolveModel(view, b, key)
 			if e != nil {

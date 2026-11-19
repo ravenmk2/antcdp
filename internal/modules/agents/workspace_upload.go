@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
@@ -33,7 +34,7 @@ func (s *CloudService) UploadWorkspaceFile(ctx context.Context, raw string, id u
 	if err != nil {
 		return nil, err
 	}
-	if _, err = workspace.PublicPath(filename, false); err != nil || path.Base(filename) != filename {
+	if !validWorkspaceUploadName(filename) {
 		return nil, httpx.Invalid("file", "invalid_filename")
 	}
 	target, err := workspacePath(path.Join(directory, filename), false)
@@ -71,22 +72,36 @@ func (s *CloudService) UploadWorkspaceFile(ctx context.Context, raw string, id u
 		return out, err
 	}
 
-	bounded, cancel := context.WithDeadline(ctx, op.DeadlineAt)
-	defer cancel()
-	result, cause := s.writeWorkspaceUpload(bounded, op, access, connection, target, source)
-	settled := s.finishWorkspaceOperation(ctx, op.ID, access, result, cause)
-	if cause != nil {
-		return out, cause
-	}
-	if settled != nil {
-		return out, httpx.E(409, "WORKSPACE_IO_OUTCOME_UNKNOWN", "上传结果尚未核实，请检查目录")
+	result, err := s.executeWorkspaceUpload(ctx, &workspaceClaim{op: op, access: access, connection: connection, intent: workspaceFileIntent{Path: target}}, source, false)
+	if err != nil {
+		return out, err
 	}
 	out.Status, out.Data = http.StatusCreated, result
 	return out, nil
 }
 
-func (s *CloudService) writeWorkspaceUpload(ctx context.Context, op *CloudOperationRow, access *SandboxAccess, connection CloudConnection, target string, source io.Reader) (*workspaceUploadResult, error) {
-	provider, err := s.openProvider(ctx, connection)
+func validWorkspaceUploadName(name string) bool {
+	_, err := workspace.PublicPath(name, false)
+	return err == nil && path.Base(name) == name
+}
+
+func (s *CloudService) executeWorkspaceUpload(ctx context.Context, claim *workspaceClaim, source io.Reader, sessionUpload bool) (*workspaceUploadResult, error) {
+	bounded, cancel := context.WithDeadline(ctx, claim.op.DeadlineAt)
+	defer cancel()
+	result, cause := s.writeWorkspaceUpload(bounded, claim, source, sessionUpload)
+	settled := s.finishWorkspaceOperation(ctx, claim.op.ID, claim.access, result, cause)
+	if cause != nil {
+		return nil, cause
+	}
+	if settled != nil {
+		return nil, httpx.E(409, "WORKSPACE_IO_OUTCOME_UNKNOWN", "上传结果尚未核实，请检查目录")
+	}
+	return result, nil
+}
+
+func (s *CloudService) writeWorkspaceUpload(ctx context.Context, claim *workspaceClaim, source io.Reader, sessionUpload bool) (*workspaceUploadResult, error) {
+	access := claim.access
+	provider, err := s.openProvider(ctx, claim.connection)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +120,7 @@ func (s *CloudService) writeWorkspaceUpload(ctx context.Context, op *CloudOperat
 	if err != nil {
 		return nil, workspaceUploadRemoteError(err)
 	}
-	staging := stagingDir + "/upload-" + op.OperationToken
+	staging := stagingDir + "/upload-" + claim.op.OperationToken
 	published := false
 	defer func() {
 		if !published {
@@ -127,11 +142,12 @@ func (s *CloudService) writeWorkspaceUpload(ctx context.Context, op *CloudOperat
 	if read == nil {
 		return nil, httpx.E(502, "WORKSPACE_UPLOAD_INCOMPLETE", "云电脑未接收完整文件")
 	}
-	if err = checkWorkspaceUploadTarget(ctx, files, access.Resource, target); err != nil {
+	target, err := s.workspaceUploadTarget(ctx, files, claim, sessionUpload)
+	if err != nil {
 		return nil, err
 	}
 	result := &workspaceUploadResult{Path: target, Size: strconv.FormatInt(read.size, 10)}
-	_, err = s.recordNativeRequest(ctx, access, op.ID, workspace.Request{Operation: "upload", Path: target}, func() (workspace.Response, error) {
+	_, err = s.recordNativeRequest(ctx, access, claim.op.ID, workspace.Request{Operation: "upload", Path: target}, func() (workspace.Response, error) {
 		if e := files.MoveFile(ctx, access.Resource, staging, "/data/"+target); e != nil {
 			return workspace.Response{}, e
 		}
@@ -146,27 +162,74 @@ func (s *CloudService) writeWorkspaceUpload(ctx context.Context, op *CloudOperat
 	return result, nil
 }
 
-func checkWorkspaceUploadTarget(ctx context.Context, files sandboxcore.Filesystem, ref sandboxcore.ResourceRef, target string) error {
+func (s *CloudService) workspaceUploadTarget(ctx context.Context, files sandboxcore.Filesystem, claim *workspaceClaim, sessionUpload bool) (string, error) {
+	target, ref := claim.intent.Path, claim.access.Resource
 	segments := strings.Split(target, "/")
 	directory := "/data"
 	for _, segment := range segments[:len(segments)-1] {
 		directory += "/" + segment
 		item, err := files.StatFile(ctx, ref, directory)
+		if nativeMissing(err) && sessionUpload {
+			// The target is the server-derived CWD. Native mkdir creates any
+			// missing parents, so the successful call replaces their probes.
+			_, err = s.workspaceRequest(ctx, claim.access, claim.op.ID, workspace.Request{Operation: "mkdir", Path: path.Dir(target)})
+			if err != nil {
+				return "", workspaceUploadRemoteError(err)
+			}
+			break
+		}
 		if nativeMissing(err) || err == nil && item.Kind != "directory" {
-			return httpx.E(409, "WORKSPACE_UPLOAD_DIRECTORY_UNAVAILABLE", "目标目录已变化，请刷新后重试")
+			return "", httpx.E(409, "WORKSPACE_UPLOAD_DIRECTORY_UNAVAILABLE", "目标目录已变化，请刷新后重试")
 		}
 		if err != nil {
-			return workspaceUploadRemoteError(err)
+			return "", workspaceUploadRemoteError(err)
 		}
 	}
 	_, err := files.StatFile(ctx, ref, "/data/"+target)
-	if err == nil {
-		return httpx.E(409, "WORKSPACE_PATH_EXISTS", "当前目录已有同名文件或目录")
-	}
 	if nativeMissing(err) {
-		return nil
+		return target, nil
 	}
-	return workspaceUploadRemoteError(err)
+	if err != nil {
+		return "", workspaceUploadRemoteError(err)
+	}
+	if !sessionUpload {
+		return "", httpx.E(409, "WORKSPACE_PATH_EXISTS", "当前目录已有同名文件或目录")
+	}
+	parent := "/data/" + path.Dir(target)
+	entries, err := files.ListFiles(ctx, ref, parent)
+	if err != nil {
+		return "", workspaceUploadRemoteError(err)
+	}
+	names := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		if path.Dir(entry.Path) == parent {
+			names[path.Base(entry.Path)] = true
+		}
+	}
+	return path.Join(path.Dir(target), availableUploadName(path.Base(target), names)), nil
+}
+
+func availableUploadName(original string, names map[string]bool) string {
+	extension := path.Ext(original)
+	if len(extension) == len(original) {
+		extension = ""
+	}
+	for index := 2; ; index++ {
+		suffix := " (" + strconv.Itoa(index) + ")"
+		ext := extension
+		if len(ext)+len(suffix) >= 255 {
+			ext = ""
+		}
+		stem := strings.TrimSuffix(original, ext)
+		end := min(len(stem), 255-len(suffix)-len(ext))
+		for end < len(stem) && !utf8.RuneStart(stem[end]) {
+			end--
+		}
+		name := stem[:end] + suffix + ext
+		if !names[name] {
+			return name
+		}
+	}
 }
 
 func workspaceUploadRemoteError(err error) error {

@@ -15,6 +15,7 @@ import (
 
 func registerSandboxFiles(u *gin.RouterGroup, o Options) {
 	s := o.Sandboxes
+	registerSessionWorkspaceFiles(u, o)
 	u.POST("/cloud-computers/:id/home", agentJSON[struct{}](o, 64<<10, func(c *gin.Context, _ struct{}) (*agents.Result, error) {
 		id, ok := agentID(c, "id")
 		if !ok {
@@ -89,17 +90,8 @@ func registerSandboxFiles(u *gin.RouterGroup, o Options) {
 		if !ok {
 			return
 		}
-		const bodyLimit = agents.WorkspaceUploadMaxBytes + 1<<20
-		if c.Request.ContentLength > bodyLimit {
-			httpx.Write(c, agents.WorkspaceUploadTooLarge())
-			return
-		}
-		source, name, err := agentSingleFileSource(c, bodyLimit)
+		source, name, err := workspaceUploadSource(c)
 		if err != nil {
-			var limit *http.MaxBytesError
-			if errors.As(err, &limit) {
-				err = agents.WorkspaceUploadTooLarge()
-			}
 			httpx.Write(c, err)
 			return
 		}
@@ -113,6 +105,54 @@ func registerSandboxFiles(u *gin.RouterGroup, o Options) {
 		}
 		return s.RemoveWorkspaceFiles(c.Request.Context(), rawSession(c), id, c.GetHeader("If-Match"), c.GetHeader("Idempotency-Key"), w)
 	}))
+}
+
+func registerSessionWorkspaceFiles(u *gin.RouterGroup, o Options) {
+	s := o.Sandboxes
+	u.POST("/sessions/:id/workspace/prepare", agentJSON[struct{}](o, 1024, func(c *gin.Context, _ struct{}) (*agents.Result, error) {
+		id, ok := agentID(c, "id")
+		if !ok || !modelNoQuery(c) {
+			return nil, nil
+		}
+		return s.PrepareSessionWorkspace(c.Request.Context(), rawSession(c), id)
+	}))
+	u.GET("/sessions/:id/workspace/operations/:operation_id", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+		id, ok := agentID(c, "id")
+		if !ok || !modelNoQuery(c) {
+			return nil, nil
+		}
+		operationID, ok := agentID(c, "operation_id")
+		if !ok {
+			return nil, nil
+		}
+		return s.GetSessionWorkspaceOperation(c.Request.Context(), rawSession(c), id, operationID)
+	}))
+	u.POST("/sessions/:id/workspace/file-uploads", func(c *gin.Context) {
+		id, ok := agentID(c, "id")
+		if !ok || !modelNoQuery(c) {
+			return
+		}
+		source, name, err := workspaceUploadSource(c)
+		if err != nil {
+			httpx.Write(c, err)
+			return
+		}
+		out, err := s.UploadSessionWorkspaceFile(c.Request.Context(), rawSession(c), id, c.GetHeader("Idempotency-Key"), name, source)
+		agentFinish(c, o, out, err)
+	})
+}
+
+func workspaceUploadSource(c *gin.Context) (*finalMultipartReader, string, error) {
+	const bodyLimit = agents.WorkspaceUploadMaxBytes + 1<<20
+	if c.Request.ContentLength > bodyLimit {
+		return nil, "", agents.WorkspaceUploadTooLarge()
+	}
+	source, name, err := agentSingleFileSource(c, bodyLimit)
+	var limit *http.MaxBytesError
+	if errors.As(err, &limit) {
+		err = agents.WorkspaceUploadTooLarge()
+	}
+	return source, name, err
 }
 
 func serveWorkspaceStream(c *gin.Context, content *agents.WorkspaceFileContent) {

@@ -83,12 +83,14 @@ func runtimeImageFiles(t *testing.T, f *agentIntegrationFixture) {
 	if err = png.Encode(&picture, image.NewNRGBA(image.Rect(0, 0, 2, 2))); err != nil {
 		t.Fatal(err)
 	}
+	_, err = f.Agents.UploadImageAttachment(f.Context, f.AdminToken, session.Configuration.ID, cryptox.ID(), "fixture.png", strings.NewReader("ordinary file"))
+	modelsExpectCode(t, err, "VALIDATION_FAILED")
 	var firstPayload string
 	run := func(images int) {
 		t.Helper()
 		var refs []core.FileRef
 		for range images {
-			uploaded, e := f.Agents.UploadAttachment(f.Context, f.AdminToken, session.Configuration.ID, cryptox.ID(), "fixture.png", bytes.NewReader(picture.Bytes()))
+			uploaded, e := f.Agents.UploadImageAttachment(f.Context, f.AdminToken, session.Configuration.ID, cryptox.ID(), "fixture.png", bytes.NewReader(picture.Bytes()))
 			if e != nil {
 				t.Fatal(e)
 			}

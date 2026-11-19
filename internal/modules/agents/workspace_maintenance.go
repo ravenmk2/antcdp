@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path"
 	"strconv"
 	"time"
 
@@ -304,7 +305,18 @@ func (s *CloudService) recoverWorkspaceOperation(ctx context.Context, c *workspa
 	return nil
 }
 
-func recoveredWorkspaceResult(op *CloudOperationRow, observation workspaceOperationObservation) (map[string]any, error) {
+func recoveredWorkspaceResult(op *CloudOperationRow, observation workspaceOperationObservation) (any, error) {
+	if op.Kind == "workspace_upload" && op.CommandReceiptID != nil && len(observation.Executions) > 0 {
+		last := observation.Executions[len(observation.Executions)-1]
+		if last.Request.Operation == "upload" && last.State == "completed" && last.Response != nil && last.Response.OK && last.Response.Changed {
+			var intent workspaceFileIntent
+			var result workspaceUploadResult
+			if json.Unmarshal(op.Intent, &intent) != nil || json.Unmarshal(last.Response.Result, &result) != nil || result.Path != last.Request.Path || path.Dir(result.Path) != path.Dir(intent.Path) {
+				return nil, integrity()
+			}
+			return result, nil
+		}
+	}
 	affected := []string{}
 	var cause error
 	for _, execution := range observation.Executions {

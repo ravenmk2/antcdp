@@ -151,6 +151,7 @@ export function NewConversation({
             <ChatComposer
               id={id}
               target={target}
+              imageInput={selected?.image_input}
               disabled={!available || !selected || !thinking}
               onAccepted={openSession}
               onOpenSession={openSession}
@@ -198,6 +199,7 @@ export function NewConversation({
               }
               id={id}
               target={target}
+              imageInput={selected?.image_input}
               disabled={!available || !selected || !thinking}
               onAccepted={(sessionId) => openSession(sessionId)}
               onOpenSession={openSession}

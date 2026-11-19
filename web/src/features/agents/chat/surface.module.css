@@ -1540,6 +1540,14 @@
   height: 16px;
   stroke-width: 1.8;
 }
+.root :global(.agent-composer-tool-button.agent-composer-picker) {
+  flex-shrink: 0;
+  width: auto;
+  gap: 4px;
+  padding-inline: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
 .root :global(.agent-send-button) {
   display: flex;
   align-items: center;

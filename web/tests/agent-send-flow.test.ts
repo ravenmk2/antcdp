@@ -38,7 +38,8 @@ const plan = (): SendPlan => ({
     },
   },
   text: "原始问题",
-  files: [new File(["log"], "server.log")],
+  images: [new File(["image"], "screen.png", { type: "image/png" })],
+  workspaceFiles: [],
   file_refs: [],
 });
 beforeEach(() => {
@@ -81,7 +82,8 @@ it("publishes an accepted transcript echo with uploaded references and retains i
   await flow.start({
     session: { id: "10", selection_hash: "original" },
     text: "排队内容",
-    files: [],
+    images: [],
+    workspaceFiles: [],
     file_refs: [],
     placement: "queued",
   });
@@ -103,7 +105,7 @@ it("resumes an uncertain upload with its original key without recreating the ses
   await flow.start(plan());
   expect(flow.getSnapshot()).toMatchObject({
     phase: "uncertain",
-    stage: "upload",
+    stage: "image",
     sessionId: "10",
     uploadIndex: 0,
   });
@@ -114,8 +116,8 @@ it("resumes an uncertain upload with its original key without recreating the ses
   await flow.recover("retry");
   expect(mock.mock.calls.map(([url]) => url)).toEqual([
     "/agents/sessions",
-    "/agents/sessions/10/attachments",
-    "/agents/sessions/10/attachments",
+    "/agents/sessions/10/attachments?kind=image",
+    "/agents/sessions/10/attachments?kind=image",
     "/agents/sessions/10/inputs",
   ]);
   expect(mock.mock.calls[2][1]).toEqual(original);
@@ -143,7 +145,8 @@ it("holds acknowledged attachments and needs explicit acceptance of a changed mo
   await flow.start(plan());
   expect(flow.remainingDraft()).toEqual({
     text: "原始问题",
-    files: [],
+    images: [],
+    workspaceFiles: [],
     file_refs: [{ kind: "attachment", id: "90" }],
   });
   const oldKey = mock.mock.calls[2][1]?.idempotencyKey;
@@ -171,6 +174,114 @@ it("does not treat an absent receipt as nonexecution or allow replacing the draf
     receiptMissing: true,
     plan: { text: "原始问题" },
   });
+  flow.dispose();
+  store.dispose();
+});
+
+it("prepares the first workspace, confirms renamed files, and submits only text and image refs", async () => {
+  const { flow, store } = setup();
+  vi.useFakeTimers();
+  try {
+    mock
+      .mockResolvedValueOnce(
+        ok({
+          configuration: { id: "10" },
+          selection: { model_selection_hash: "locked" },
+        }),
+      )
+      .mockResolvedValueOnce(ok({ id: "90" }))
+      .mockResolvedValueOnce(ok({ status: "preparing", operation_id: "21" }))
+      .mockResolvedValueOnce(ok({ status: "succeeded" }))
+      .mockResolvedValueOnce(
+        ok({
+          status: "succeeded",
+          result: { path: "sessions/10/sales (2).csv" },
+        }),
+      );
+    const sending = flow.start({
+      ...plan(),
+      workspaceFiles: [{ file: new File(["a,b"], "sales.csv") }],
+    });
+    await vi.advanceTimersByTimeAsync(2_000);
+    await sending;
+    expect(mock.mock.calls.map(([url]) => url)).toEqual([
+      "/agents/sessions",
+      "/agents/sessions/10/attachments?kind=image",
+      "/agents/sessions/10/workspace/prepare",
+      "/agents/sessions/10/workspace/operations/21",
+      "/agents/sessions/10/workspace/file-uploads",
+    ]);
+    expect(flow.getSnapshot()).toMatchObject({
+      phase: "confirm-rename",
+      plan: { workspaceFiles: [{ savedName: "sales (2).csv" }] },
+    });
+    flow.editRenameText("分析 sales (2).csv");
+    mock.mockResolvedValueOnce(ok({ input_id: "11" }));
+    await flow.confirmRenames();
+    expect(mock).toHaveBeenLastCalledWith(
+      "/agents/sessions/10/inputs",
+      expect.objectContaining({
+        body: {
+          content: [{ type: "text", text: "分析 sales (2).csv" }],
+          file_refs: [{ kind: "attachment", id: "90" }],
+          expected_model_selection_hash: "locked",
+        },
+      }),
+    );
+    expect(mock).toHaveBeenCalledTimes(6);
+    expect(flow.getSnapshot().phase).toBe("accepted");
+  } finally {
+    vi.useRealTimers();
+    flow.dispose();
+    store.dispose();
+  }
+});
+
+it("recovers a lost workspace receipt and skips a failed file without uploading the saved file again", async () => {
+  const { flow, store } = setup();
+  mock.mockRejectedValueOnce(unknown);
+  await flow.start({
+    ...plan(),
+    session: { id: "10", selection_hash: "locked", workspaceReady: true },
+    images: [],
+    workspaceFiles: ["saved.txt", "failed.txt"].map((name) => ({
+      file: new File([name], name),
+    })),
+  });
+  expect(flow.getSnapshot()).toMatchObject({
+    phase: "uncertain",
+    stage: "workspace",
+  });
+  const key = mock.mock.calls[0][1]?.idempotencyKey;
+  await flow.recover("retry");
+  expect(mock).toHaveBeenCalledTimes(1);
+  mock
+    .mockResolvedValueOnce(
+      ok({
+        response_data: {
+          status: "succeeded",
+          result: { path: "sessions/10/saved.txt" },
+        },
+      }),
+    )
+    .mockRejectedValueOnce(new ApiError("UPLOAD_TOO_LARGE", "附件太大", 413));
+  await flow.recover("receipt");
+  expect(mock.mock.calls[1][0]).toBe(
+    `/agents/command-receipts/${key}?command=workspace.session_upload&scope=session%3A10`,
+  );
+  expect(flow.getSnapshot()).toMatchObject({
+    phase: "failed",
+    stage: "workspace",
+    workspaceIndex: 1,
+  });
+  mock.mockResolvedValueOnce(ok({ input_id: "11" }));
+  await flow.removeFailedWorkspaceFiles();
+  expect(flow.getSnapshot().phase).toBe("accepted");
+  expect(mock.mock.calls.map(([url]) => url).slice(2)).toEqual([
+    "/agents/sessions/10/workspace/file-uploads",
+    "/agents/sessions/10/inputs",
+  ]);
+  expect(mock.mock.calls[3][1]?.body).toMatchObject({ file_refs: [] });
   flow.dispose();
   store.dispose();
 });

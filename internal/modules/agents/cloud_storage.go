@@ -112,6 +112,7 @@ type CloudRepository interface {
 	InsertLease(*CloudLeaseRow) error
 	SaveLease(*CloudLeaseRow) error
 	CloudActivity(uint64) (CloudActivity, error)
+	SessionUploadBlocked(computerID, sessionID uint64) (bool, error)
 	ResetCloudResources(uint64, time.Time) error
 	CloudTopology() (int, int, error)
 	CloudResetSessions() ([]SessionRow, error)
