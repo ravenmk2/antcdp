@@ -116,11 +116,12 @@ type ProviderPatch struct {
 	Config      Field[Config] `json:"config"`
 }
 type Capabilities struct {
-	Text      string `json:"text_input"`
-	Image     string `json:"image_input"`
-	Tools     string `json:"tool_calling"`
-	Streaming string `json:"streaming"`
-	Thinking  string `json:"thinking"`
+	Text             string `json:"text_input"`
+	Image            string `json:"image_input"`
+	Tools            string `json:"tool_calling"`
+	StructuredOutput string `json:"structured_output"`
+	Streaming        string `json:"streaming"`
+	Thinking         string `json:"thinking"`
 }
 type ThinkingOption = modelcore.ThinkingOption
 type Definition struct {

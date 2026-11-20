@@ -364,6 +364,10 @@ function ModelBindingsForm({
                     draft={item.generation}
                     readOnly={readOnly}
                     modelLimit={model?.max_output_tokens}
+                    structuredOutput={
+                      model?.declared_capabilities.structured_output ===
+                      "supported"
+                    }
                     onChange={(generation) => update(index, { generation })}
                   />
                 </section>

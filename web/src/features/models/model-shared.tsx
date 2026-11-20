@@ -20,6 +20,7 @@ export const capabilityNames = {
   text_input: "文本输入",
   image_input: "图像输入",
   tool_calling: "工具调用",
+  structured_output: "结构化输出",
   streaming: "流式输出",
   thinking: "思考",
 };

@@ -69,7 +69,18 @@ func encodeBoundRequest(provider modelcore.ProviderType, input modelcore.Request
 	if json.Unmarshal(raw, &body) != nil {
 		return nil, "", modelcore.ErrInvalidRequest
 	}
-	head, err := json.Marshal(map[string]json.RawMessage{"system": body["system"], "tools": body["tools"]})
+	headFields := map[string]json.RawMessage{"system": body["system"], "tools": body["tools"]}
+	if input.Parameters["response_format"] != nil {
+		// Messages adds a system instruction for the wire format, including its schema.
+		var output struct {
+			Format json.RawMessage `json:"format"`
+		}
+		if json.Unmarshal(body["output_config"], &output) != nil || output.Format == nil {
+			return nil, "", modelcore.ErrInvalidRequest
+		}
+		headFields["format"] = output.Format
+	}
+	head, err := json.Marshal(headFields)
 	if err != nil {
 		return nil, "", err
 	}

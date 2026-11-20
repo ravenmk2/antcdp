@@ -108,7 +108,7 @@ func TestThinkingPrefixTracksPruningCompactionAndNewReplies(t *testing.T) {
 }
 
 func TestThinkingPrefixInvalidationBoundaries(t *testing.T) {
-	for _, change := range []string{"system", "tools", "history", "missing", "unknown_version", "parameters", "display_projection", "object_order"} {
+	for _, change := range []string{"system", "tools", "history", "missing", "unknown_version", "parameters", "response_format", "display_projection", "object_order"} {
 		t.Run(change, func(t *testing.T) {
 			request := prefixRequest()
 			request.Tools[0].InputSchema = json.RawMessage(`{"type":"object","properties":{}}`)
@@ -129,6 +129,8 @@ func TestThinkingPrefixInvalidationBoundaries(t *testing.T) {
 			case "parameters":
 				request.Parameters["max_output_tokens"] = json.RawMessage(`512`)
 				keep = true
+			case "response_format":
+				request.Parameters["response_format"] = json.RawMessage(schemaMode)
 			case "display_projection":
 				request.Messages[2].Content = "different display text"
 				request.Messages[2].Reasoning = "different display reasoning"

@@ -83,7 +83,7 @@ func stringID(v *uint64) any {
 	}
 	return strconv.FormatUint(*v, 10)
 }
-func (s *Service) validateModelBinding(v *models.RuntimeModel, w ModelBindingWrite) (json.RawMessage, error) {
+func (s *Service) validateModelBinding(v *models.RuntimeModel, w ModelBindingWrite) (map[string]json.RawMessage, error) {
 	if len(w.ThinkingOptions) > len(v.Thinking) {
 		return nil, httpx.Invalid("items.thinking_options", "invalid_length")
 	}
@@ -130,7 +130,11 @@ func (s *Service) validateModelBinding(v *models.RuntimeModel, w ModelBindingWri
 	if _, e = modelcore.EffectiveOutputTokens(params, v.MaxOutput); e != nil {
 		return nil, httpx.Invalid("items.generation_parameters.max_output_tokens", "invalid_range")
 	}
-	return raw, nil
+	return params, nil
+}
+
+func supportsReplyFormat(v *models.RuntimeModel, params map[string]json.RawMessage) bool {
+	return params["response_format"] == nil || v.Capabilities.StructuredOutput == "supported"
 }
 func (s *Service) PutModelBindings(ctx context.Context, raw string, id uint64, tag string, w ModelBindingsWrite) (*Result, error) {
 	return s.access(ctx, raw, true, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
@@ -162,7 +166,15 @@ func (s *Service) PutModelBindings(ctx context.Context, raw string, id uint64, t
 		}
 		rows := []ModelBinding{}
 		for i, item := range w.Items {
-			parameters, e := s.validateModelBinding(views[ids[i]], item)
+			view := views[ids[i]]
+			params, e := s.validateModelBinding(view, item)
+			if e != nil {
+				return e
+			}
+			if !supportsReplyFormat(view, params) {
+				return httpx.Invalid("items.generation_parameters.response_format", "structured_output_required")
+			}
+			parameters, e := json.Marshal(params)
 			if e != nil {
 				return e
 			}
@@ -477,8 +489,12 @@ func (s *Service) validateEnabled(ctx context.Context, tx identity.Tx, r Reposit
 		if view.Capabilities.Text != "supported" || needsTools && view.Capabilities.Tools != "supported" {
 			return httpx.E(422, "MODEL_CAPABILITY_UNSUPPORTED", "绑定模型缺少助手需要的能力")
 		}
-		if _, e = s.validateModelBinding(view, modelWrites([]ModelBinding{b})[0]); e != nil {
+		params, e := s.validateModelBinding(view, modelWrites([]ModelBinding{b})[0])
+		if e != nil {
 			return e
+		}
+		if !supportsReplyFormat(view, params) {
+			return httpx.Invalid("items.generation_parameters.response_format", "structured_output_required")
 		}
 		found = found || b.ID == *v.DefaultModelBindingID
 	}

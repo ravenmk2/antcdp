@@ -132,7 +132,7 @@ func TestModelsLifecycle(t *testing.T) {
 		t.Fatal("model icon")
 	}
 	var calls atomic.Int32
-	success := json.RawMessage(`{"diagnostic":{"status":"succeeded","checks":[{"name":"generation","status":"succeeded"}],"capabilities":{"text_input":"supported","image_input":"unknown","tool_calling":"unknown","streaming":"unknown","thinking":"unknown"}}}`)
+	success := json.RawMessage(`{"diagnostic":{"status":"succeeded","checks":[{"name":"generation","status":"succeeded"}],"capabilities":{"text_input":"supported","image_input":"unknown","tool_calling":"unknown","structured_output":"unknown","streaming":"unknown","thinking":"unknown"}}}`)
 	svc.Probe = func(c context.Context, request m.ProbeRequest) (json.RawMessage, error) {
 		calls.Add(1)
 		if request.Secret != secret {

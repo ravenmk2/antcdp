@@ -77,6 +77,7 @@ func (s *Service) definition(v *Definition) error {
 	if v.SchemaVersion != 1 || json.Unmarshal(v.CapabilitiesJSON, &v.Capabilities) != nil || json.Unmarshal(v.LevelsJSON, &v.ThinkingLevels) != nil || json.Unmarshal(v.MappingJSON, &v.ThinkingMapping) != nil {
 		return integrity()
 	}
+	v.Capabilities.defaultStructuredOutput()
 	var err error
 	v.Thinking, err = s.resolveThinking(v.ProviderType, v.Protocol, v.ThinkingLevels, v.ThinkingMapping)
 	if err != nil {

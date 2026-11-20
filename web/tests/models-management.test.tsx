@@ -108,6 +108,7 @@ const model: ModelDefinition = {
     text_input: "supported",
     image_input: "unsupported",
     tool_calling: "supported",
+    structured_output: "unsupported",
     streaming: "unsupported",
     thinking: "unsupported",
   },
@@ -239,7 +240,7 @@ it("does not infer capabilities or zero usage from a diagnostic without observat
     />,
   );
   await user.click(screen.getByText("能力与用量详情"));
-  expect(screen.getAllByText("未验证")).toHaveLength(5);
+  expect(screen.getAllByText("未验证")).toHaveLength(6);
   expect(screen.getAllByText("未提供")).toHaveLength(4);
   expect(screen.queryByText("已验证支持")).not.toBeInTheDocument();
 });
@@ -376,6 +377,7 @@ it("saves explicit icons and two-state capabilities without changing other decla
   expect(screen.getByRole("switch", { name: "文本输入" })).toBeChecked();
   expect(screen.getByRole("switch", { name: "图像输入" })).not.toBeChecked();
   await user.click(screen.getByRole("switch", { name: "图像输入" }));
+  await user.click(screen.getByRole("switch", { name: "结构化输出" }));
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   await waitFor(() =>
     expect(saved).toMatchObject({
@@ -384,6 +386,7 @@ it("saves explicit icons and two-state capabilities without changing other decla
         text_input: "supported",
         image_input: "supported",
         tool_calling: "supported",
+        structured_output: "supported",
         streaming: "unsupported",
         thinking: "unsupported",
       },

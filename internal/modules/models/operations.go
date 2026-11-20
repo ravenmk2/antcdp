@@ -200,7 +200,7 @@ func sanitizeTestResult(kind string, b json.RawMessage, started, finished time.T
 	d.StartedAt = started
 	d.FinishedAt = finished
 	if c := d.Capabilities; c != nil {
-		for _, v := range []string{c.Text, c.Image, c.Tools, c.Streaming, c.Thinking} {
+		for _, v := range []string{c.Text, c.Image, c.Tools, c.StructuredOutput, c.Streaming, c.Thinking} {
 			if v != "supported" && v != "unsupported" && v != "unknown" {
 				return nil, fmt.Errorf("invalid capability")
 			}

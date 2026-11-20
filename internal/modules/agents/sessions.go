@@ -147,7 +147,7 @@ func (s *Service) selection(tx identity.Tx, r Repository, v *SessionRow) (agentc
 				return agentcore.LockedModel{}, EffectiveSelection{}, e
 			}
 		}
-		current := view.Available && binding.RemovedAt == nil
+		current := view.Available && binding.RemovedAt == nil && supportsReplyFormat(view, frozen.Parameters)
 		current = current && thinkingAllowed(binding.ThinkingOptions, frozen.ThinkingKey)
 		current = current && view.Capabilities.Text == "supported"
 		if frozen.Capabilities.ToolCalling == "supported" && view.Capabilities.Tools != "supported" {

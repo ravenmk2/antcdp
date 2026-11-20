@@ -7,6 +7,7 @@ import {
   Type,
   Image,
   Wrench,
+  Braces,
   Radio,
 } from "lucide-react";
 import { Button } from "@/components/button";
@@ -77,6 +78,7 @@ function modelDraft(
         text_input: "unsupported",
         image_input: "unsupported",
         tool_calling: "unsupported",
+        structured_output: "unsupported",
         streaming: "unsupported",
         thinking: "unsupported",
       } as ModelCapabilities),
@@ -533,6 +535,7 @@ function ModelForm({
                     text_input: Type,
                     image_input: Image,
                     tool_calling: Wrench,
+                    structured_output: Braces,
                     streaming: Radio,
                     thinking: Brain,
                   }[key as keyof ModelCapabilities];
@@ -540,6 +543,7 @@ function ModelForm({
                     text_input: "接收文本并生成回复",
                     image_input: "接收和理解图片",
                     tool_calling: "请求调用工具或函数",
+                    structured_output: "按 JSON 对象或 JSON Schema 返回回复",
                     streaming: "逐步返回生成内容",
                     thinking: "使用模型的思考参数",
                   }[key as keyof ModelCapabilities];

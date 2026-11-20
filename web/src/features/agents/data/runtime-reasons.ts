@@ -61,9 +61,11 @@ export const reasonNames: Record<string, string> = {
   MODEL_TOOL_CALL_INVALID: "模型返回的工具调用基本字段不正确",
   MODEL_TOOL_ARGUMENTS_TOO_LARGE: "模型返回的工具参数超过长度限制",
   MODEL_TOOL_ARGUMENTS_NOT_OBJECT: "模型返回的工具参数不是有效的 JSON 对象",
-  MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH: "模型返回的工具参数不符合工具定义，未执行该调用",
+  MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH:
+    "模型返回的工具参数不符合工具定义，未执行该调用",
   MODEL_TOOL_SCHEMA_INVALID: "本轮工具定义无法校验，请检查工具配置",
   MODEL_RESPONSE_EMPTY: "模型返回了空响应",
+  MODEL_STRUCTURED_OUTPUT_INVALID: "模型回复不符合请求的 JSON 输出格式",
   MODEL_GENERATION_LIMIT: "模型生成达到上限，未执行其中的工具调用",
   MODEL_STREAM_DELIVERY_FAILED: "模型输出同步失败，本次尝试已停止",
   MODEL_STREAM_INCOMPLETE: "模型响应流未完整结束，未执行其中的工具调用",

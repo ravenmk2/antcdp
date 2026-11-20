@@ -48,7 +48,12 @@ export interface ModelProviderSummary extends Omit<
 }
 export type CapabilityState = "supported" | "unsupported" | "unknown";
 export type ModelCapabilities = Record<
-  "text_input" | "image_input" | "tool_calling" | "streaming" | "thinking",
+  | "text_input"
+  | "image_input"
+  | "tool_calling"
+  | "structured_output"
+  | "streaming"
+  | "thinking",
   CapabilityState
 >;
 export interface ThinkingOption {

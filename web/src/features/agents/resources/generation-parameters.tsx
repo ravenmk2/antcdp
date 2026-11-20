@@ -1,5 +1,6 @@
 import { Button } from "@/components/button";
-import { Field, Input, Textarea } from "@/components/fields";
+import { Field, Input, Select, Textarea } from "@/components/fields";
+import { parseParameterObject } from "@/features/models/model-parameters";
 import type { JsonObject } from "@/types/models";
 
 const numericFields = [
@@ -9,11 +10,14 @@ const numericFields = [
 ] as const;
 
 export function generationDraft(values: JsonObject) {
+  const format = values.response_format as JsonObject | undefined;
   return {
     temperature: String(values.temperature ?? ""),
     top_p: String(values.top_p ?? ""),
     max_output_tokens: String(values.max_output_tokens ?? ""),
     stop: (values.stop ?? []) as string[],
+    format: String(format?.type ?? "text"),
+    schema: format?.schema ? JSON.stringify(format.schema, null, 2) : "",
   };
 }
 
@@ -24,6 +28,18 @@ export function generationParameters(
   modelLimit?: number,
 ) {
   const parameters: JsonObject = {};
+  if (draft.format === "json_schema") {
+    try {
+      parameters.response_format = {
+        type: "json_schema",
+        schema: parseParameterObject(draft.schema),
+      };
+    } catch {
+      throw new Error("请在 JSON Schema 中输入有效的 JSON 对象");
+    }
+  } else if (draft.format === "json_object") {
+    parameters.response_format = { type: "json_object" };
+  }
   for (const [key, label, min, max] of numericFields) {
     const raw = draft[key].trim();
     if (!raw) continue;
@@ -65,11 +81,13 @@ export function generationParameters(
 export function GenerationFields({
   draft,
   modelLimit,
+  structuredOutput,
   readOnly,
   onChange,
 }: {
   draft: GenerationDraft;
   modelLimit?: number;
+  structuredOutput: boolean;
   readOnly: boolean;
   onChange: (value: GenerationDraft) => void;
 }) {
@@ -93,6 +111,36 @@ export function GenerationFields({
           </Field>
         ))}
       </div>
+      {(structuredOutput || draft.format !== "text") && (
+        <Field label="回复格式">
+          <Select
+            value={draft.format}
+            disabled={readOnly}
+            onValueChange={(format) => onChange({ ...draft, format })}
+          >
+            <option value="text">文本</option>
+            <option value="json_object" disabled={!structuredOutput}>
+              JSON 对象
+            </option>
+            <option value="json_schema" disabled={!structuredOutput}>
+              JSON Schema
+            </option>
+          </Select>
+        </Field>
+      )}
+      {draft.format === "json_schema" && (
+        <Field label="JSON Schema" required>
+          <Textarea
+            rows={6}
+            className="font-mono"
+            value={draft.schema}
+            readOnly={readOnly || !structuredOutput}
+            onChange={(event) =>
+              onChange({ ...draft, schema: event.target.value })
+            }
+          />
+        </Field>
+      )}
       {draft.stop.map((value, index) => (
         <div className="flex items-end gap-3" key={index}>
           <Field label={"停止词 " + (index + 1)} className="flex-1">

@@ -48,11 +48,12 @@ var (
 )
 
 type Capabilities struct {
-	TextInput   Support `json:"text_input"`
-	ImageInput  Support `json:"image_input"`
-	ToolCalling Support `json:"tool_calling"`
-	Streaming   Support `json:"streaming"`
-	Thinking    Support `json:"thinking"`
+	TextInput        Support `json:"text_input"`
+	ImageInput       Support `json:"image_input"`
+	ToolCalling      Support `json:"tool_calling"`
+	StructuredOutput Support `json:"structured_output,omitempty"`
+	Streaming        Support `json:"streaming"`
+	Thinking         Support `json:"thinking"`
 }
 
 type ProtocolSpec struct {

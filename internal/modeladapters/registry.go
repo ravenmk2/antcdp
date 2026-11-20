@@ -101,7 +101,8 @@ func objectRule(name string, child parameterRule) parameterRule {
 
 func parameterRules(protocol modelcore.Protocol) map[string]parameterRule {
 	rules := map[string]parameterRule{
-		"temperature": numericRule(0, 2, false), "top_p": numericRule(0, 1, false), "max_output_tokens": numericRule(1, 2000000, true),
+		"response_format": responseFormatRule(),
+		"temperature":     numericRule(0, 2, false), "top_p": numericRule(0, 1, false), "max_output_tokens": numericRule(1, 2000000, true),
 		"stop": {schema: map[string]any{"type": "array", "minItems": 1, "maxItems": 4, "items": map[string]any{"type": "string", "minLength": 1, "maxLength": 128, "x-max-utf8-bytes": 128}}, valid: func(raw json.RawMessage) bool {
 			var values []string
 			if json.Unmarshal(raw, &values) != nil || len(values) == 0 || len(values) > 4 {

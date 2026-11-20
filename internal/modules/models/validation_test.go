@@ -84,7 +84,7 @@ func TestETag(t *testing.T) {
 
 func TestDefinitionParameterAndThinkingValidation(t *testing.T) {
 	s := thinkingTestService()
-	d := Definition{Name: "模型", RemoteModelID: "Model/CaseSensitive", Protocol: "chat_completions", ContextWindow: 8192, MaxOutput: 1024, Capabilities: Capabilities{"supported", "unsupported", "unsupported", "unsupported", "unsupported"}}
+	d := Definition{Name: "模型", RemoteModelID: "Model/CaseSensitive", Protocol: "chat_completions", ContextWindow: 8192, MaxOutput: 1024, Capabilities: Capabilities{Text: "supported", Image: "unsupported", Tools: "unsupported", Streaming: "unsupported", Thinking: "unsupported"}}
 	if err := s.validateDefinition(&Provider{Type: "custom"}, &d); err != nil {
 		t.Fatal(err)
 	}

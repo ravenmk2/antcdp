@@ -50,7 +50,7 @@ func Probe(ctx context.Context, config Config, input ProbeRequest) (ProbeResult,
 	if input.Kind != "provider_probe" && input.Kind != "model_probe" {
 		return ProbeResult{}, modelcore.ErrInvalidRequest
 	}
-	d := &Diagnostic{Kind: input.Kind, Status: "succeeded", StartedAt: time.Now().UTC(), Checks: []Check{}, Capabilities: modelcore.Capabilities{TextInput: modelcore.Unknown, ImageInput: modelcore.Unknown, ToolCalling: modelcore.Unknown, Streaming: modelcore.Unknown, Thinking: modelcore.Unknown}}
+	d := &Diagnostic{Kind: input.Kind, Status: "succeeded", StartedAt: time.Now().UTC(), Checks: []Check{}, Capabilities: modelcore.Capabilities{TextInput: modelcore.Unknown, ImageInput: modelcore.Unknown, ToolCalling: modelcore.Unknown, StructuredOutput: modelcore.Unknown, Streaming: modelcore.Unknown, Thinking: modelcore.Unknown}}
 	finish := func() (ProbeResult, error) { d.FinishedAt = time.Now().UTC(); return ProbeResult{Diagnostic: d}, nil }
 	check := func(name, status, reason string) {
 		var p *string

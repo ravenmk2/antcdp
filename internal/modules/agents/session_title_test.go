@@ -27,9 +27,10 @@ func TestSessionTitleNormalizationAndInvalidOutput(t *testing.T) {
 func TestSessionTitleUsesAllowedThinkingWithoutMutatingMainRoute(t *testing.T) {
 	locked := agentcore.LockedModel{RemoteModelID: "test", Protocol: modelcore.ChatCompletions, ThinkingKey: "high", MaxOutputTokens: 1000, Parameters: map[string]json.RawMessage{"reasoning_effort": json.RawMessage(`"high"`), "max_output_tokens": json.RawMessage(`8000`)}}
 	options := []modelcore.ThinkingOption{{Key: "none", Parameters: json.RawMessage(`{"reasoning_effort":"none"}`)}, {Key: "low", Parameters: json.RawMessage(`{"reasoning_effort":"low"}`)}}
+	locked.Parameters["response_format"] = json.RawMessage(`{"type":"json_object"}`)
 	aux := titleModel(locked, []string{"low", "high"}, options)
 	request, err := titleRequest(aux, "a prompt with instructions is JSON data")
-	if err != nil || aux.ThinkingKey != "low" || len(request.Tools) != 0 || len(request.Messages) != 2 || string(request.Parameters["max_output_tokens"]) != "1000" {
+	if err != nil || request.Parameters["response_format"] != nil || locked.Parameters["response_format"] == nil || aux.ThinkingKey != "low" || len(request.Tools) != 0 || len(request.Messages) != 2 || string(request.Parameters["max_output_tokens"]) != "1000" {
 		t.Fatal("bad title request", err)
 	}
 	if locked.ThinkingKey != "high" || string(locked.Parameters["reasoning_effort"]) != `"high"` || string(locked.Parameters["max_output_tokens"]) != "8000" {

@@ -244,12 +244,17 @@ func (c *Client) Generate(ctx context.Context, input modelcore.Request, emit mod
 	if emit == nil {
 		emit = func(modelcore.Delta) error { return nil }
 	}
+	var response modelcore.Response
 	if input.Protocol == modelcore.ChatCompletions {
-		return decodeChat(ctx, resp.Body, emit)
+		response, err = decodeChat(ctx, resp.Body, emit)
+	} else {
+		response, err = decodeMessages(ctx, resp.Body, emit)
+		if err == nil {
+			response.Message.PrefixDigest = prefix
+		}
 	}
-	response, err := decodeMessages(ctx, resp.Body, emit)
 	if err == nil {
-		response.Message.PrefixDigest = prefix
+		err = validateStructuredReply(input.Parameters["response_format"], response.Message)
 	}
 	return response, err
 }

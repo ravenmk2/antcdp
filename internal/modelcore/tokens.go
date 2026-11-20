@@ -54,6 +54,13 @@ func valueTokens(value any) uint64 {
 // request settings and duplicate orchestration projections are not input text.
 func EstimateRequestTokens(request Request) (uint64, error) {
 	var count uint64
+	if format := request.Parameters["response_format"]; format != nil {
+		n, err := jsonTokens(format)
+		if err != nil {
+			return 0, err
+		}
+		count += n
+	}
 	for _, message := range request.Messages {
 		count += 4
 		if len(message.Native) > 0 {

@@ -13,6 +13,7 @@ import {
   Type,
   Image,
   Wrench,
+  Braces,
   Radio,
   Brain,
   ScanSearch,
@@ -857,6 +858,7 @@ function ModelsTable({
                         ["text_input", "文本输入", Type],
                         ["image_input", "图像输入", Image],
                         ["tool_calling", "工具调用", Wrench],
+                        ["structured_output", "结构化输出", Braces],
                         ["streaming", "流式输出", Radio],
                         ["thinking", "思考", Brain],
                       ] as const

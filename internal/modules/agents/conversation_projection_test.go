@@ -221,7 +221,11 @@ func TestSummaryRequestPreservesSystemToolsAndNativePrefix(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(step.Request, reordered.Request) {
 		t.Fatal("tool discovery order changed prefix", err)
 	}
+	step.Request.Parameters["response_format"] = json.RawMessage(`{"type":"json_object"}`)
 	summary, err := summaryRequest(step.Request, m, facts, 0, 1)
+	if summary.Parameters["response_format"] != nil || step.Request.Parameters["response_format"] == nil {
+		t.Fatal("compaction inherited or removed the main reply format")
+	}
 	if err != nil || !reflect.DeepEqual(summary.Messages[:3], step.Request.Messages) || !reflect.DeepEqual(summary.Tools, step.Request.Tools) {
 		t.Fatal("summary lost original prefix", err)
 	}

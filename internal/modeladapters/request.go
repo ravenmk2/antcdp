@@ -27,6 +27,8 @@ func encodeUnboundRequest(provider modelcore.ProviderType, input modelcore.Reque
 	body := map[string]any{"model": input.Model, "stream": true}
 	for key, value := range input.Parameters {
 		switch key {
+		case "response_format":
+			continue
 		case "max_output_tokens":
 			key = "max_tokens"
 		case "stop":
@@ -35,6 +37,9 @@ func encodeUnboundRequest(provider modelcore.ProviderType, input modelcore.Reque
 			}
 		}
 		body[key] = value
+	}
+	if err := applyResponseFormat(body, &input); err != nil {
+		return nil, err
 	}
 	if input.Protocol == modelcore.AnthropicMessages {
 		if _, ok := body["max_tokens"]; !ok {

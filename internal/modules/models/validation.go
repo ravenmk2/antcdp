@@ -162,6 +162,12 @@ func codeValue(f Field[string]) (string, error) {
 	}
 	return v, nil
 }
+func (c *Capabilities) defaultStructuredOutput() {
+	if c.StructuredOutput == "" {
+		c.StructuredOutput = "unsupported"
+	}
+}
+
 func (s *Service) validateDefinition(p *Provider, d *Definition) error {
 	if e := validateIcon(d.IconKey); e != nil {
 		return e
@@ -178,7 +184,8 @@ func (s *Service) validateDefinition(p *Provider, d *Definition) error {
 	if d.ContextWindow < 1 || d.ContextWindow > 2000000 || d.MaxOutput < 1 || d.MaxOutput > d.ContextWindow {
 		return httpx.Invalid("context_window", "invalid_range")
 	}
-	for _, v := range []string{d.Capabilities.Text, d.Capabilities.Image, d.Capabilities.Tools, d.Capabilities.Streaming, d.Capabilities.Thinking} {
+	d.Capabilities.defaultStructuredOutput()
+	for _, v := range []string{d.Capabilities.Text, d.Capabilities.Image, d.Capabilities.Tools, d.Capabilities.StructuredOutput, d.Capabilities.Streaming, d.Capabilities.Thinking} {
 		if v != "supported" && v != "unsupported" {
 			return httpx.Invalid("declared_capabilities", "invalid_status")
 		}

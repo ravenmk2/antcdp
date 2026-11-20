@@ -6,6 +6,10 @@ import {
 
 it("preserves zero sampling values and multi-line stop sequences on a binding", () => {
   const values = {
+    response_format: {
+      type: "json_schema",
+      schema: { type: "object", required: ["answer"] },
+    },
     temperature: 0,
     top_p: 0,
     max_output_tokens: 2048,

@@ -74,10 +74,7 @@ func (s *Service) resolveModel(view *models.RuntimeModel, b ModelBinding, thinki
 	if !thinkingAllowed(b.ThinkingOptions, thinking) {
 		return agentcore.LockedModel{}, EffectiveSelection{}, httpx.Invalid("thinking_option_key", "not_allowed")
 	}
-	if _, e := s.validateModelBinding(view, modelWrites([]ModelBinding{b})[0]); e != nil {
-		return agentcore.LockedModel{}, EffectiveSelection{}, e
-	}
-	parameters, e := objectJSON(b.GenerationParameters, "generation_parameters")
+	parameters, e := s.validateModelBinding(view, modelWrites([]ModelBinding{b})[0])
 	if e != nil {
 		return agentcore.LockedModel{}, EffectiveSelection{}, e
 	}
@@ -98,7 +95,7 @@ func (s *Service) resolveModel(view *models.RuntimeModel, b ModelBinding, thinki
 	if e != nil {
 		return agentcore.LockedModel{}, EffectiveSelection{}, e
 	}
-	m := agentcore.LockedModel{SchemaVersion: 1, ProviderID: agentcore.ID(view.ProviderID), DefinitionID: agentcore.ID(view.DefinitionID), BindingID: agentcore.ID(b.ID), ProviderType: modelcore.ProviderType(view.ProviderType), Protocol: modelcore.Protocol(view.Protocol), RemoteModelID: view.RemoteModelID, ThinkingKey: thinking, Parameters: parameters, Connection: connection, Capabilities: modelcore.Capabilities{TextInput: modelcore.Support(view.Capabilities.Text), ImageInput: modelcore.Support(view.Capabilities.Image), ToolCalling: modelcore.Support(view.Capabilities.Tools), Streaming: modelcore.Support(view.Capabilities.Streaming), Thinking: modelcore.Support(view.Capabilities.Thinking)}, ContextWindow: view.ContextWindow, MaxOutputTokens: view.MaxOutput}
+	m := agentcore.LockedModel{SchemaVersion: 1, ProviderID: agentcore.ID(view.ProviderID), DefinitionID: agentcore.ID(view.DefinitionID), BindingID: agentcore.ID(b.ID), ProviderType: modelcore.ProviderType(view.ProviderType), Protocol: modelcore.Protocol(view.Protocol), RemoteModelID: view.RemoteModelID, ThinkingKey: thinking, Parameters: parameters, Connection: connection, Capabilities: modelcore.Capabilities{TextInput: modelcore.Support(view.Capabilities.Text), ImageInput: modelcore.Support(view.Capabilities.Image), ToolCalling: modelcore.Support(view.Capabilities.Tools), StructuredOutput: modelcore.Support(view.Capabilities.StructuredOutput), Streaming: modelcore.Support(view.Capabilities.Streaming), Thinking: modelcore.Support(view.Capabilities.Thinking)}, ContextWindow: view.ContextWindow, MaxOutputTokens: view.MaxOutput}
 	hash, e := agentcore.ContentHash(m)
 	if e != nil {
 		return m, EffectiveSelection{}, e
@@ -108,8 +105,8 @@ func (s *Service) resolveModel(view *models.RuntimeModel, b ModelBinding, thinki
 	if e != nil {
 		return m, EffectiveSelection{}, e
 	}
-	selection := EffectiveSelection{BindingID: b.ID, ModelID: b.ModelID, ProviderLabel: view.ProviderName, Name: view.Name, RemoteModelID: view.RemoteModelID, Protocol: view.Protocol, Thinking: thinking, ThinkingLabel: label, Parameters: raw, Hash: hash, Availability: Availability{Available: view.Available}}
-	if !view.Available {
+	selection := EffectiveSelection{BindingID: b.ID, ModelID: b.ModelID, ProviderLabel: view.ProviderName, Name: view.Name, RemoteModelID: view.RemoteModelID, Protocol: view.Protocol, Thinking: thinking, ThinkingLabel: label, Parameters: raw, Hash: hash, Availability: Availability{Available: view.Available && supportsReplyFormat(view, parameters)}}
+	if !selection.Availability.Available {
 		reason := "MODEL_UNAVAILABLE"
 		selection.Availability.Reason = &reason
 	}
@@ -138,25 +135,24 @@ func (s *Service) catalogAgent(tx identity.Tx, r Repository, v *Definition, hash
 		return CatalogAgent{}, e
 	}
 	out := CatalogAgent{ID: v.ID, Name: v.Name, Description: v.Description, Models: []ModelOption{}, DefaultModelID: v.DefaultModelBindingID, ScopeKind: v.ScopeKind}
+bindings:
 	for _, b := range rows {
 		view := views[b.ModelID]
 		if !view.Available {
 			continue
 		}
 		option := ModelOption{DefaultThinking: b.DefaultThinking, BindingID: b.ID, ModelID: b.ModelID, Name: view.Name, ProviderLabel: view.ProviderName, Protocol: view.Protocol, ImageInput: modelcore.Support(view.Capabilities.Image), Thinking: []ThinkingOption{}}
-		if len(b.ThinkingOptions) == 0 {
-			_, selection, e := s.resolveModel(view, b, "")
-			if e != nil {
-				return out, e
-			}
-			if hashes {
-				option.Hash = selection.Hash
-			}
+		levels := b.ThinkingOptions
+		if len(levels) == 0 {
+			levels = []string{""}
 		}
-		for _, key := range b.ThinkingOptions {
+		for _, key := range levels {
 			_, selection, e := s.resolveModel(view, b, key)
 			if e != nil {
 				return out, e
+			}
+			if !selection.Availability.Available {
+				continue bindings
 			}
 			thinking := ThinkingOption{Key: key, Label: selection.ThinkingLabel}
 			if hashes {
@@ -165,7 +161,9 @@ func (s *Service) catalogAgent(tx identity.Tx, r Repository, v *Definition, hash
 					option.Hash = selection.Hash
 				}
 			}
-			option.Thinking = append(option.Thinking, thinking)
+			if key != "" {
+				option.Thinking = append(option.Thinking, thinking)
+			}
 		}
 		out.Models = append(out.Models, option)
 		if v.DefaultModelBindingID != nil && b.ID == *v.DefaultModelBindingID {

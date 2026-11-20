@@ -161,6 +161,9 @@ func titleRequest(model agentcore.LockedModel, text string) (modelcore.Request, 
 	}
 	parameters := map[string]json.RawMessage{}
 	for k, value := range model.Parameters {
+		if k == "response_format" {
+			continue
+		}
 		parameters[k] = append(json.RawMessage(nil), value...)
 	}
 	limit := uint64(2048)

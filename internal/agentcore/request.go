@@ -22,6 +22,9 @@ func BuildPreparedStep(ref ExecutionRef, step uint32, locked LockedModel, prompt
 	if step == 0 || locked.RemoteModelID == "" || locked.Protocol != modelcore.ChatCompletions && locked.Protocol != modelcore.AnthropicMessages || parallel < 1 || parallel > 16 {
 		return PreparedStep{}, invalid("prepared_step")
 	}
+	if locked.Parameters["response_format"] != nil && locked.Capabilities.StructuredOutput != modelcore.Supported {
+		return PreparedStep{}, reject("MODEL_CAPABILITY_UNSUPPORTED")
+	}
 	request := modelcore.Request{Model: locked.RemoteModelID, Protocol: locked.Protocol, Parameters: map[string]json.RawMessage{}, Messages: []modelcore.Message{}, Tools: []modelcore.Tool{}}
 	for k, v := range locked.Parameters {
 		request.Parameters[k] = append(json.RawMessage(nil), v...)
