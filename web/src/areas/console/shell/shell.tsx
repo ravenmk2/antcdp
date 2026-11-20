@@ -1,6 +1,6 @@
-import { useAuth } from "@/app/auth";
-import { LogoutDialog, useLogout } from "@/app/session-actions";
-import { Button } from "@/components/button";
+import { useAuth, useSession } from "@/app/auth";
+import { LogoutDialog, ShellActions, useLogout } from "@/app/session-actions";
+import { Button, IconButton } from "@/components/button";
 import { LoadingState } from "@/components/feedback";
 import { Drawer } from "@/components/overlays";
 import { UserMenu } from "@/components/platform/user-menu";
@@ -9,7 +9,7 @@ import { useSidebarPreference } from "@/hooks/use-sidebar-preference";
 import { resolveSiteName } from "@/lib/site-name";
 import type { Resource } from "@/types/collaboration";
 import type { MCPServer } from "@/types/agent-resources";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Bell } from "lucide-react";
 import { Suspense, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router";
 import { adminBreadcrumbs } from "../pages/admin-breadcrumbs";
@@ -23,6 +23,7 @@ export function Shell() {
   const closeNavigation = () => setMobile(false);
   const logout = useLogout();
   const { settings } = useAuth();
+  const { user } = useSession();
   const brand = resolveSiteName(settings.site_name);
   const teamId = location.pathname.match(
     /^\/admin\/teams\/([1-9]\d*)(?:\/|$)/,
@@ -80,13 +81,28 @@ export function Shell() {
       onOpenNavigation={() => setMobile(true)}
       actions={
         <>
-          <AdminMenuSearch onNavigate={closeNavigation} />
+          <AdminMenuSearch userId={user.id} onNavigate={closeNavigation} />
+          <div
+            className="mx-2 h-5 border-l border-border max-[620px]:mx-0.5"
+            aria-hidden
+          />
+          <IconButton
+            label="消息通知（预留）"
+            size="iconSm"
+            disabled
+            focusableWhenDisabled
+            className="opacity-65"
+          >
+            <Bell aria-hidden />
+          </IconButton>
+          <ShellActions />
           <Button
             variant="ghost"
             size="sm"
             className="text-text-soft max-[620px]:px-2"
             render={<Link to="/home" />}
             nativeButton={false}
+            role="link"
             aria-label="返回工作区"
             title="返回工作区"
           >

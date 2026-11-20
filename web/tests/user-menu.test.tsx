@@ -1,4 +1,5 @@
 import { ThemeProvider } from "@/app/theme";
+import { ConsoleThemeProvider } from "@/areas/console/shell/theme";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -10,7 +11,7 @@ const identity = vi.hoisted(() => ({ role: "admin", is_founder: true }));
 vi.mock("@/app/auth", () => ({
   useSession: () => ({
     user: {
-      id: 1,
+      id: "1",
       username: "reviewer",
       display_name: "测试用户",
       ...identity,
@@ -32,6 +33,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 function LocationProbe() {
@@ -43,15 +45,25 @@ function LocationProbe() {
   );
 }
 
+function ThemedShell() {
+  const { pathname } = useLocation();
+  const Theme = pathname.startsWith("/admin")
+    ? ConsoleThemeProvider
+    : ThemeProvider;
+  return (
+    <Theme>
+      <AppShell />
+    </Theme>
+  );
+}
+
 function renderMenu(path: string) {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <ThemeProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <AppShell />
-          <LocationProbe />
-        </MemoryRouter>
-      </ThemeProvider>
+      <MemoryRouter initialEntries={[path]}>
+        <ThemedShell />
+        <LocationProbe />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -137,17 +149,9 @@ it.each([
 );
 
 it("selects all three appearance segments without closing the menu and restores focus on escape", async () => {
-  localStorage.setItem("antcdp.appearance", "system");
+  localStorage.setItem("antcdp.console.appearance", "system");
   const user = userEvent.setup();
-  render(
-    <QueryClientProvider client={new QueryClient()}>
-      <ThemeProvider>
-        <MemoryRouter initialEntries={["/admin"]}>
-          <AppShell />
-        </MemoryRouter>
-      </ThemeProvider>
-    </QueryClientProvider>,
-  );
+  renderMenu("/admin");
   const trigger = screen.getByRole("button", { name: "用户菜单，测试用户" });
   trigger.focus();
   await user.keyboard("{Enter}");
@@ -157,7 +161,7 @@ it("selects all three appearance segments without closing the menu and restores 
   ).toHaveAttribute("aria-checked", "true");
   await user.keyboard("{Home}{ArrowDown}{ArrowDown}{Enter}");
   await waitFor(() =>
-    expect(localStorage.getItem("antcdp.appearance")).toBe("dark"),
+    expect(localStorage.getItem("antcdp.console.appearance")).toBe("dark"),
   );
   expect(await screen.findByRole("menu")).toBeVisible();
   expect(
@@ -165,10 +169,10 @@ it("selects all three appearance segments without closing the menu and restores 
   ).toHaveAttribute("aria-checked", "true");
   expect(document.documentElement).toHaveClass("dark");
   await user.click(screen.getByRole("menuitemradio", { name: "浅色" }));
-  expect(localStorage.getItem("antcdp.appearance")).toBe("light");
+  expect(localStorage.getItem("antcdp.console.appearance")).toBe("light");
   expect(document.documentElement).not.toHaveClass("dark");
   await user.click(screen.getByRole("menuitemradio", { name: "跟随" }));
-  expect(localStorage.getItem("antcdp.appearance")).toBe("system");
+  expect(localStorage.getItem("antcdp.console.appearance")).toBe("system");
   expect(screen.getByRole("menu")).toBeVisible();
   await user.keyboard("{Escape}");
   await waitFor(() => expect(trigger).toHaveFocus());
@@ -179,16 +183,20 @@ it("selects all three appearance segments without closing the menu and restores 
 });
 
 it.each([false, true])(
-  "toggles the header between light and dark from system preference (dark=%s)",
+  "toggles the console header without changing the workspace theme (system dark=%s)",
   async (systemDark) => {
     vi.stubGlobal("matchMedia", () => ({
       matches: systemDark,
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
     }));
-    localStorage.setItem("antcdp.appearance", "system");
+    const workspaceTheme = systemDark ? "dark" : "light";
+    localStorage.setItem("antcdp.appearance", workspaceTheme);
     renderMenu("/admin");
     const user = userEvent.setup();
+    expect(
+      screen.getByRole("button", { name: "消息通知（预留）" }),
+    ).toHaveAttribute("aria-disabled", "true");
     expect(
       screen.queryByRole("button", { name: "快速创建" }),
     ).not.toBeInTheDocument();
@@ -197,13 +205,13 @@ it.each([false, true])(
     await user.click(
       screen.getByRole("button", { name: `切换为${nextLabel}主题` }),
     );
-    expect(localStorage.getItem("antcdp.appearance")).toBe(
+    expect(localStorage.getItem("antcdp.console.appearance")).toBe(
       systemDark ? "light" : "dark",
     );
     await user.click(
       screen.getByRole("button", { name: `切换为${previousLabel}主题` }),
     );
-    expect(localStorage.getItem("antcdp.appearance")).toBe(
+    expect(localStorage.getItem("antcdp.console.appearance")).toBe(
       systemDark ? "dark" : "light",
     );
     await user.click(
@@ -213,9 +221,20 @@ it.each([false, true])(
       await screen.findByRole("menuitemradio", { name: previousLabel }),
     ).toHaveAttribute("aria-checked", "true");
     await user.click(screen.getByRole("menuitemradio", { name: "跟随" }));
-    expect(localStorage.getItem("antcdp.appearance")).toBe("system");
+    expect(localStorage.getItem("antcdp.console.appearance")).toBe("system");
     expect(document.documentElement.classList.contains("dark")).toBe(
       systemDark,
+    );
+    await user.keyboard("{Escape}");
+    await user.click(
+      screen.getByRole("button", { name: `切换为${nextLabel}主题` }),
+    );
+    await user.click(screen.getByRole("link", { name: "返回工作区" }));
+    expect(screen.getByLabelText("当前位置测试")).toHaveTextContent("/home");
+    expect(document.documentElement.dataset.appearance).toBe(workspaceTheme);
+    expect(localStorage.getItem("antcdp.appearance")).toBe(workspaceTheme);
+    expect(localStorage.getItem("antcdp.console.appearance")).toBe(
+      systemDark ? "light" : "dark",
     );
   },
 );

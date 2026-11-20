@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router";
 import { Menu as DropdownMenu } from "@base-ui/react/menu";
 import {
   Bot,
+  Building2,
   Cable,
   BrainCircuit,
   ChevronDown,
@@ -33,40 +34,41 @@ const overview = { to: "/admin", label: "系统概览", icon: LayoutDashboard };
 const consoleGroups = [
   {
     id: "platform",
-    label: "平台管理",
-    icon: LayoutDashboard,
+    label: "账号与组织",
+    icon: Building2,
     items: [
-      { to: "/admin/users", label: "真人用户", icon: UserRound },
+      { to: "/admin/users", label: "用户管理", icon: UserRound },
       { to: "/admin/robots", label: "机器人账号", icon: Bot },
-      { to: "/admin/projects", label: "项目管理", icon: Folder },
       { to: "/admin/teams", label: "团队管理", icon: Users },
-    ],
-  },
-  {
-    id: "resources",
-    label: "连接与资源",
-    icon: Cable,
-    items: [
-      { to: "/admin/integrations", label: "服务集成", icon: Cable },
-      { to: "/admin/remote-hosts", label: "远程主机", icon: Server },
-      { to: "/admin/models", label: "模型管理", icon: BrainCircuit },
-      { to: "/admin/web-access", label: "网络检索", icon: Globe },
+      { to: "/admin/projects", label: "项目管理", icon: Folder },
     ],
   },
   {
     id: "agents",
-    label: "助手",
+    label: "助手与模型",
     icon: Bot,
     items: [
       { to: "/admin/agents", label: "助手管理", icon: Bot },
-      { to: "/admin/mcp-servers", label: "MCP 服务", icon: Cable },
-      { to: "/admin/skills", label: "技能库", icon: BookOpen },
-      { to: "/admin/cloud-computers", label: "云电脑", icon: Box },
       {
         to: "/admin/agent-usage",
         label: "运行与用量",
         icon: ChartNoAxesCombined,
       },
+      { to: "/admin/models", label: "模型管理", icon: BrainCircuit },
+      { to: "/admin/skills", label: "技能库", icon: BookOpen },
+      { to: "/admin/mcp-servers", label: "MCP 服务", icon: Cable },
+      { to: "/admin/web-access", label: "网络检索", icon: Globe },
+    ],
+  },
+  {
+    id: "resources",
+    label: "连接与环境",
+    icon: Cable,
+    items: [
+      { to: "/admin/integrations", label: "服务集成", icon: Cable },
+      { to: "/admin/remote-hosts", label: "远程主机", icon: Server },
+      { to: "/admin/sandboxes", label: "沙箱配置", icon: Server },
+      { to: "/admin/cloud-computers", label: "云电脑", icon: Box },
     ],
   },
   {
@@ -84,13 +86,38 @@ const consoleGroups = [
     label: "系统维护",
     icon: Settings,
     items: [
-      { to: "/admin/sandboxes", label: "沙箱配置", icon: Server },
       { to: "/admin/audit", label: "审计日志", icon: ScrollText },
       { to: "/admin/settings", label: "系统设置", icon: Settings },
     ],
   },
 ];
 const preferenceKey = "antcdp.admin-navigation-groups";
+const menuItems = [
+  { ...overview, group: "" },
+  ...consoleGroups.flatMap((group) =>
+    group.items.map((item) => ({ ...item, group: group.label })),
+  ),
+];
+const searchKeywords: Record<string, string> = {
+  "/admin/users": "真人用户",
+  "/admin/remote-hosts": "ssh host",
+  "/admin/models": "model provider llm",
+  "/admin/web-access": "search fetch web",
+  "/admin/mcp-servers": "mcp http",
+  "/admin/skills": "skill skills zip",
+  "/admin/agents": "agent",
+  "/admin/agent-usage": "usage tokens",
+};
+
+function recentMenus(key: string): string[] {
+  try {
+    const saved: unknown = JSON.parse(sessionStorage.getItem(key) ?? "[]");
+    if (Array.isArray(saved))
+      return saved.filter((to) => menuItems.some((item) => item.to === to));
+  } catch {}
+  return [];
+}
+
 function initialExpanded(activeGroup: string | undefined) {
   let stored: Record<string, unknown> = {};
   try {
@@ -245,7 +272,22 @@ export function AdminNavigation({
   );
 }
 
-export function AdminMenuSearch({ onNavigate }: { onNavigate?: () => void }) {
+export function AdminMenuSearch({
+  userId,
+  onNavigate,
+}: {
+  userId: string;
+  onNavigate?: () => void;
+}) {
+  const { pathname } = useLocation();
+  const currentMenu =
+    menuItems.find(
+      (item) =>
+        item.to === pathname ||
+        (item.to !== overview.to && pathname.startsWith(`${item.to}/`)),
+    )?.to ?? (pathname === "/admin/" ? overview.to : undefined);
+  const recentKey = `antcdp.console.recent-menus.${userId}`;
+  const [recent, setRecent] = useState<string[]>([]);
   const [dialog, setDialog] = useState<{
     returnFocus: HTMLElement | null;
   } | null>(null);
@@ -254,6 +296,25 @@ export function AdminMenuSearch({ onNavigate }: { onNavigate?: () => void }) {
     [active, setActive] = useState(0);
   const navigate = useNavigate(),
     listId = useId();
+  useEffect(() => {
+    if (!currentMenu) return;
+    try {
+      const paths = recentMenus(recentKey).filter((to) => to !== currentMenu);
+      sessionStorage.setItem(
+        recentKey,
+        JSON.stringify([currentMenu, ...paths].slice(0, 6)),
+      );
+    } catch {}
+  }, [currentMenu, recentKey]);
+  const openSearch = useCallback(
+    (returnFocus: HTMLElement | null) => {
+      setSearch("");
+      setActive(0);
+      setRecent(recentMenus(recentKey).filter((to) => to !== currentMenu));
+      setDialog({ returnFocus });
+    },
+    [currentMenu, recentKey],
+  );
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (
@@ -270,38 +331,25 @@ export function AdminMenuSearch({ onNavigate }: { onNavigate?: () => void }) {
       )
         return;
       event.preventDefault();
-      setSearch("");
-      setActive(0);
       const focused = document.activeElement;
-      setDialog({
-        returnFocus:
-          focused instanceof HTMLElement && focused !== document.body
-            ? focused
-            : searchButton.current,
-      });
+      openSearch(
+        focused instanceof HTMLElement && focused !== document.body
+          ? focused
+          : searchButton.current,
+      );
     };
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, []);
-  const keywords: Record<string, string> = {
-    "/admin/remote-hosts": "ssh host",
-    "/admin/models": "model provider llm",
-    "/admin/web-access": "search fetch web",
-    "/admin/mcp-servers": "mcp http",
-    "/admin/skills": "skill skills zip",
-    "/admin/agents": "agent",
-    "/admin/agent-usage": "usage tokens",
-  };
-  const options = [
-    { ...overview, group: "" },
-    ...consoleGroups.flatMap((group) =>
-      group.items.map((item) => ({ ...item, group: group.label })),
-    ),
-  ].filter((item) =>
-    `${item.label} ${item.group} ${keywords[item.to] ?? ""}`
-      .toLowerCase()
-      .includes(search.trim().toLowerCase()),
-  );
+  }, [openSearch]);
+  const query = search.trim().toLowerCase();
+  const showRecent = !query && recent.length > 0;
+  const options = showRecent
+    ? recent.flatMap((to) => menuItems.filter((item) => item.to === to))
+    : menuItems.filter((item) =>
+        `${item.label} ${item.group} ${searchKeywords[item.to] ?? ""}`
+          .toLowerCase()
+          .includes(query),
+      );
   function choose(to: string) {
     setDialog(null);
     onNavigate?.();
@@ -313,19 +361,15 @@ export function AdminMenuSearch({ onNavigate }: { onNavigate?: () => void }) {
         ref={searchButton}
         variant="ghost"
         size="sm"
-        className="md:border-border max-[620px]:px-2"
+        className="border-border bg-surface-subtle max-[620px]:px-2 min-[1200px]:min-w-52"
         aria-label="搜索控制台菜单"
         aria-keyshortcuts="Control+K Meta+K"
         title="搜索菜单（Ctrl K / Cmd K）"
-        onClick={(event) => {
-          setSearch("");
-          setActive(0);
-          setDialog({ returnFocus: event.currentTarget });
-        }}
+        onClick={(event) => openSearch(event.currentTarget)}
       >
         <Search aria-hidden />
         <span className="max-[620px]:hidden">搜索菜单</span>
-        <kbd className="rounded bg-canvas px-1 text-[11px] max-[1000px]:hidden">
+        <kbd className="rounded border border-border bg-surface px-1.5 font-sans text-[11px] max-[1000px]:hidden min-[1200px]:ms-11">
           Ctrl K
         </kbd>
       </Button>
@@ -353,15 +397,19 @@ export function AdminMenuSearch({ onNavigate }: { onNavigate?: () => void }) {
               setActive(0);
             }}
             onKeyDown={(event) => {
-              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              if (event.nativeEvent.isComposing) return;
+              if (
+                options.length &&
+                (event.key === "ArrowDown" || event.key === "ArrowUp")
+              ) {
                 event.preventDefault();
-                setActive((old) =>
-                  options.length
-                    ? (old +
-                        (event.key === "ArrowDown" ? 1 : options.length - 1)) %
-                      options.length
-                    : 0,
-                );
+                const offset = event.key === "ArrowDown" ? 1 : -1;
+                const next =
+                  (active + offset + options.length) % options.length;
+                setActive(next);
+                document
+                  .getElementById(`${listId}-${next}`)
+                  ?.scrollIntoView?.({ block: "nearest" });
               }
               if (event.key === "Enter" && options[active]) {
                 event.preventDefault();
@@ -369,11 +417,14 @@ export function AdminMenuSearch({ onNavigate }: { onNavigate?: () => void }) {
               }
             }}
           />
+          {showRecent && (
+            <div className="mt-4 px-3 text-xs text-muted">最近访问</div>
+          )}
           <div
             id={listId}
             role="listbox"
-            aria-label="匹配菜单"
-            className="mt-4 max-h-[50vh] overflow-y-auto"
+            aria-label={showRecent ? "最近访问" : "匹配菜单"}
+            className="mt-2 max-h-[50vh] overflow-y-auto"
           >
             {options.map((item, index) => (
               <button

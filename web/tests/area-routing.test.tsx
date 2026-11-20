@@ -14,8 +14,8 @@ vi.mock("@/areas/console/root", () => {
   state.consoleLoaded();
   return { default: () => <p>控制台模块已加载</p> };
 });
-vi.mock("@/app/theme", () => ({
-  appearanceLabels: { light: "浅色", dark: "深色", system: "跟随系统" },
+vi.mock("@/app/theme", async (original) => ({
+  ...(await original<typeof import("@/app/theme")>()),
   useTheme: () => ({
     appearance: "light",
     resolved: "light",
@@ -71,8 +71,16 @@ beforeEach(() => {
   state.role = "user";
   state.paths = [];
   localStorage.clear();
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
 });
-afterEach(() => localStorage.clear());
+afterEach(() => {
+  localStorage.clear();
+  vi.unstubAllGlobals();
+});
 
 function mount(path: string) {
   const router = createMemoryRouter(appRoutes, { initialEntries: [path] });

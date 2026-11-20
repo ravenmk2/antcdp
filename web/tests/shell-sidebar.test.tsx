@@ -50,7 +50,7 @@ it.each(["/admin"])(
       screen.queryByRole("button", { name: "管理关注项目" }),
     ).not.toBeInTheDocument();
     const labels = container.querySelectorAll(".sidebar-navigation .nav-label");
-    expect(screen.getByRole("button", { name: "平台管理" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "账号与组织" })).toBeVisible();
     expect(screen.getByRole("link", { name: "系统概览" })).toHaveAttribute(
       "aria-current",
       "page",

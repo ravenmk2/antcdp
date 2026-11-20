@@ -4,11 +4,10 @@ import { Link } from "react-router";
 import {
   Activity,
   ArrowRight,
+  ChevronRight,
   Folder,
   Plus,
   Settings,
-  Shield,
-  Users,
 } from "lucide-react";
 import { useAuth } from "@/app/auth";
 import { AsyncBoundary } from "@/components/feedback";
@@ -38,21 +37,18 @@ export function OverviewPage() {
   const [selected, setSelected] = useState("");
   const stats = query.data
     ? [
-        { label: "用户总数", value: query.data.data.users_total, icon: Users },
+        { label: "用户总数", value: query.data.data.users_total },
         {
           label: "正常账号",
           value: query.data.data.users_active,
-          icon: Activity,
         },
         {
           label: "已禁用",
           value: query.data.data.users_disabled,
-          icon: Shield,
         },
         {
           label: "系统管理员",
           value: query.data.data.admins_total,
-          icon: Settings,
         },
       ]
     : [];
@@ -62,11 +58,8 @@ export function OverviewPage() {
     { to: "/admin/settings?tab=access", label: "注册与会话", icon: Settings },
   ];
   return (
-    <div className="page console-overview">
-      <PageHeader
-        title="系统概览"
-        description="账号状态、最近操作与平台访问策略。"
-      />
+    <div className="page page-wide console-overview">
+      <PageHeader title="系统概览" />
       <AsyncBoundary
         loading={query.isPending}
         error={query.error}
@@ -74,14 +67,7 @@ export function OverviewPage() {
       >
         {query.data && (
           <div className="grid gap-5">
-            <SummaryStrip
-              label="账号统计"
-              items={stats.map(({ label, value, icon: Icon }) => ({
-                label,
-                value,
-                icon: <Icon aria-hidden />,
-              }))}
-            />
+            <SummaryStrip label="账号统计" items={stats} />
             <div className="console-overview-grid">
               <Panel
                 title="最近操作"
@@ -92,45 +78,60 @@ export function OverviewPage() {
                 }
                 bodyClassName="p-0"
               >
-                <ul className="divide-y divide-border-subtle">
-                  {query.data.data.recent_events.map((event) => (
-                    <li key={event.id}>
-                      <button
-                        className="console-activity-row"
-                        onClick={() => setSelected(event.id)}
-                      >
-                        <Activity className="size-4 shrink-0 text-primary" />
-                        <span className="min-w-0 flex-1">
-                          <strong className="block text-sm wrap-anywhere">
-                            {auditActionLabels[event.action] ?? event.action}
-                          </strong>
-                          <small className="block text-xs text-muted wrap-anywhere">
-                            {event.actor.display_name}
-                            {event.target.label && ` · ${event.target.label}`}
-                          </small>
-                        </span>
-                        <time className="console-activity-time">
-                          {formatDate(
-                            event.occurred_at,
-                            auth.settings.timezone,
-                          )}
-                        </time>
-                      </button>
-                    </li>
-                  ))}
-                  {!query.data.data.recent_events.length && (
-                    <p className="p-6 text-sm text-muted">暂无操作记录。</p>
-                  )}
-                </ul>
+                {query.data.data.recent_events.length ? (
+                  <ul className="divide-y divide-border-subtle">
+                    {query.data.data.recent_events.map((event) => (
+                      <li key={event.id}>
+                        <button
+                          type="button"
+                          className="console-activity-row"
+                          aria-haspopup="dialog"
+                          onClick={() => setSelected(event.id)}
+                        >
+                          <span className="console-activity-icon">
+                            <Activity className="size-4" aria-hidden />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <strong className="block text-sm wrap-anywhere">
+                              {auditActionLabels[event.action] ?? event.action}
+                            </strong>
+                            <small className="mt-0.5 block text-xs text-muted wrap-anywhere">
+                              {event.actor.display_name}
+                              {event.target.label && ` · ${event.target.label}`}
+                            </small>
+                          </span>
+                          <time
+                            dateTime={event.occurred_at}
+                            className="console-activity-time"
+                          >
+                            {formatDate(
+                              event.occurred_at,
+                              auth.settings.timezone,
+                            )}
+                          </time>
+                          <ChevronRight
+                            className="size-4 shrink-0 text-faint"
+                            aria-hidden
+                          />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="p-6 text-sm text-muted">暂无操作记录。</p>
+                )}
               </Panel>
               <div className="grid gap-5">
-                <Panel title="快捷入口" bodyClassName="p-0">
-                  <nav className="divide-y divide-border-subtle">
+                <Panel title="常用入口" bodyClassName="p-0">
+                  <nav
+                    aria-label="常用入口"
+                    className="divide-y divide-border-subtle"
+                  >
                     {shortcuts.map(({ to, label, icon: Icon }) => (
                       <Link
                         key={to}
                         to={to}
-                        className="flex items-center gap-3 px-5 py-4 text-sm hover:bg-table-row-hover"
+                        className="flex items-center gap-3 px-5 py-3 text-sm hover:bg-table-row-hover focus-visible:-outline-offset-2"
                       >
                         <Icon className="size-4 text-primary" />
                         {label}
@@ -141,6 +142,7 @@ export function OverviewPage() {
                 </Panel>
                 <Panel title="访问策略">
                   <DescriptionList
+                    className="console-policy"
                     items={[
                       {
                         label: "自主注册",

@@ -15,7 +15,7 @@ interface ThemeValue {
   cycle: () => void;
 }
 
-const ThemeContext = createContext<ThemeValue | null>(null);
+export const ThemeContext = createContext<ThemeValue | null>(null);
 const storageKey = "antcdp.appearance";
 
 function preference(): Appearance {

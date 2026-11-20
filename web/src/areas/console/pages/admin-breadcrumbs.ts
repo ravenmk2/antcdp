@@ -3,7 +3,7 @@ import type { Resource } from "@/types/collaboration";
 
 const names: Record<string, string> = {
   "/admin": "系统概览",
-  "/admin/users": "真人用户",
+  "/admin/users": "用户管理",
   "/admin/robots": "机器人账号",
   "/admin/projects": "项目管理",
   "/admin/teams": "团队管理",

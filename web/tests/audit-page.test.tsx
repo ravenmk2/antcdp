@@ -24,13 +24,22 @@ let requests: URL[];
 beforeEach(() => {
   // Shiki decompresses its embedded WASM with Blob.stream(), absent in jsdom.
   vi.stubGlobal("Blob", NodeBlob);
+  vi.stubGlobal("matchMedia", (media: string) => ({
+    media,
+    matches: false,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
   localStorage.clear();
   requests = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = new URL(String(input), "http://localhost");
     requests.push(url);
-    if (url.pathname.endsWith("/27"))
-      return new Response(JSON.stringify({ data: events[0] }));
+    const id = url.pathname.match(/\/audit-events\/(\d+)$/)?.[1];
+    if (id)
+      return new Response(
+        JSON.stringify({ data: events.find((event) => event.id === id) }),
+      );
     const page = Number(url.searchParams.get("page"));
     const size = Number(url.searchParams.get("page_size"));
     const rows = url.searchParams.get("q") ? events.slice(0, 2) : events;
@@ -62,6 +71,29 @@ function mount(entry = "/admin/audit") {
   return router;
 }
 describe("audit numbered pagination", () => {
+  it("switches records in the desktop preview without changing the active filter", async () => {
+    vi.stubGlobal("matchMedia", (media: string) => ({
+      media,
+      matches: media === "(min-width: 1440px)",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }));
+    const user = userEvent.setup();
+    const router = mount("/admin/audit?q=tester");
+    const first = await screen.findByText("对象 27");
+    const second = screen.getByText("对象 26").closest("tr")!;
+    const preview = screen.getByRole("region", { name: "审计事件详情" });
+    await user.click(first);
+    expect(await within(preview).findByText("user · 对象 27")).toBeVisible();
+    second.focus();
+    await user.keyboard("{Enter}");
+    expect(await within(preview).findByText("user · 对象 26")).toBeVisible();
+    expect(second).toHaveAttribute("data-active", "true");
+    expect(router.state.location.search).toBe("?q=tester");
+    await user.click(within(preview).getByRole("button", { name: "关闭详情" }));
+    expect(second).toHaveFocus();
+    expect(within(preview).getByText("选择一条审计记录查看详情")).toBeVisible();
+  });
   it("opens details from a row click or keyboard and restores focus", async () => {
     const user = userEvent.setup();
     mount();

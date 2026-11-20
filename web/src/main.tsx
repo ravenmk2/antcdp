@@ -3,7 +3,6 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
 import { appRoutes } from "./app/router";
-import { ThemeProvider } from "./app/theme";
 import { ToastProvider } from "./components/toast";
 import "./styles/app.css";
 const router = createBrowserRouter(appRoutes);
@@ -18,11 +17,9 @@ if (!root) throw new Error("Missing application root");
 createRoot(root).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <ToastProvider host={false}>
-          <RouterProvider router={router} />
-        </ToastProvider>
-      </ThemeProvider>
+      <ToastProvider host={false}>
+        <RouterProvider router={router} />
+      </ToastProvider>
     </QueryClientProvider>
   </StrictMode>,
 );

@@ -9,6 +9,7 @@ import { AgentRuntimeProvider } from "@/features/agents/data/runtime-context";
 import publicStyles from "@/styles/public.module.css";
 import { Link, Outlet, useMatches } from "react-router";
 import { AppRoot, RequireAdmin, RequireAuth } from "./auth";
+import { ThemeProvider } from "./theme";
 function ConnectionErrorPage() {
   return (
     <main className="auth-page">
@@ -39,9 +40,11 @@ function Root() {
   return business ? (
     <AppRoot />
   ) : (
-    <Surface area="public" className={publicStyles.scope}>
-      <AppRoot />
-    </Surface>
+    <ThemeProvider>
+      <Surface area="public" className={publicStyles.scope}>
+        <AppRoot />
+      </Surface>
+    </ThemeProvider>
   );
 }
 function BusinessServices() {
@@ -78,7 +81,14 @@ export const appRoutes = [
                 element: <RequireAdmin />,
                 children: consoleRoutes,
               },
-              ...workspaceRoutes,
+              {
+                element: (
+                  <ThemeProvider>
+                    <Outlet />
+                  </ThemeProvider>
+                ),
+                children: workspaceRoutes,
+              },
             ],
           },
         ],
