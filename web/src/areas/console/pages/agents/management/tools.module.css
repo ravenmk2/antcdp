@@ -1,0 +1,170 @@
+.scope {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--surface);
+}
+.scope .header,
+.scope .heading,
+.scope .filters,
+.scope .search {
+  display: flex;
+  align-items: center;
+}
+.scope .header {
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 24px 12px;
+}
+.scope .heading {
+  gap: 9px;
+  font-size: 19px;
+  font-weight: 600;
+}
+.scope .heading svg {
+  width: 19px;
+  color: var(--accent);
+}
+.scope .search {
+  position: relative;
+  width: 310px;
+}
+.scope .search svg {
+  position: absolute;
+  left: 12px;
+  z-index: 1;
+  color: var(--muted);
+  pointer-events: none;
+}
+.scope .search input {
+  width: 100%;
+  padding-left: 38px;
+}
+.scope .filters {
+  gap: 22px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border);
+}
+.scope .filters button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 1px 10px;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+  color: var(--muted);
+}
+.scope .filters button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.scope .filters button span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.scope .scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+.scope table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.scope .categoryCol {
+  width: 14%;
+}
+.scope .policyCol {
+  width: 170px;
+}
+.scope .switchCol {
+  width: 92px;
+}
+.scope th,
+.scope td {
+  text-align: left;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.scope th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.scope :is(td, th):first-child {
+  padding-left: 24px;
+}
+.scope :is(td, th):last-child {
+  text-align: center;
+}
+.scope td {
+  height: 62px;
+  font-size: 14px;
+}
+.scope .toolName {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  font-weight: 600;
+}
+.scope .toolName svg {
+  flex: none;
+  color: var(--muted);
+  rotate: -90deg;
+}
+.scope .toolName[aria-expanded="true"] svg {
+  rotate: 0deg;
+}
+.scope .summary {
+  padding-left: 21px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scope .issue {
+  color: var(--warning);
+}
+.scope .summary,
+.scope .muted,
+.scope .empty {
+  font-size: 13px;
+  color: var(--muted);
+}
+.scope .details td {
+  background: var(--surface-subtle);
+  text-align: left;
+  padding: 16px 32px 20px 45px;
+}
+.scope .rules {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.scope .rules pre {
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+.scope .empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 36px;
+}
+.scope > :global(.agent-config-actions) {
+  margin: 0;
+  padding: 12px 24px;
+  flex-shrink: 0;
+}

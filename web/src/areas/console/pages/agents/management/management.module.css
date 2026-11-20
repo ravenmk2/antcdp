@@ -1,0 +1,171 @@
+.scope.detail:global(.page.page-wide) {
+  display: flex;
+  height: calc(100dvh - var(--console-topbar-height));
+  flex-direction: column;
+  padding-bottom: 24px;
+}
+.scope.detail > :global(.page-header) {
+  margin-bottom: 0;
+  padding: 16px 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px 12px 0 0;
+  background: var(--surface);
+}
+.scope.detail :global(.page-title) {
+  font-size: 26px;
+}
+.scope .metadata {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
+}
+.scope.detail :global(.agent-settings-nav) {
+  align-content: start;
+  overflow-y: auto;
+  position: static;
+  padding: 16px 12px;
+  gap: 12px;
+  background: var(--surface-subtle);
+}
+.scope.detail :global(.agent-settings-nav a) {
+  padding: 8px 12px;
+}
+.scope.detail :global(.agent-settings-layout) {
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: var(--surface);
+}
+.scope.detail :global(.agent-settings-content) {
+  min-height: 0;
+  overflow-y: auto;
+  scroll-padding-bottom: 76px;
+}
+.scope.detail :global(.agent-settings-content .panel) {
+  overflow: visible;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+}
+.scope.detail :global(.agent-overview) {
+  gap: 0;
+}
+.scope.detail :global(.agent-overview > :nth-child(2)) {
+  border-left: 1px solid var(--border-subtle);
+}
+.scope.detail :global(.agent-overview > :last-child) {
+  border-top: 1px solid var(--border-subtle);
+}
+.scope.detail :global(.agent-settings-content) > form {
+  padding: 20px 24px;
+}
+.scope.detail :global(.agent-config-actions) {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.scope .sectionTools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 16px;
+  font-weight: 600;
+}
+.scope .cardHeading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 17px;
+  font-weight: 600;
+}
+.scope .cardHeading svg {
+  width: 20px;
+  height: 20px;
+  color: var(--accent);
+}
+.scope .fieldPair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.scope .identity legend {
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.scope .identityOption {
+  display: flex;
+  position: relative;
+  align-items: center;
+  gap: 10px;
+  padding: 15px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+  background: var(--surface);
+}
+.scope .identityOption svg {
+  width: 20px;
+  height: 20px;
+  color: var(--muted);
+}
+.scope .identityOption input {
+  accent-color: var(--accent);
+}
+.scope .identityOption:has(:checked) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.scope .identityOption:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.scope .identityOption:has(:checked) svg {
+  color: var(--accent);
+}
+.scope .identityOption strong,
+.scope .identityOption small {
+  display: block;
+}
+.scope .identityOption small,
+.scope .hint {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.scope .hint {
+  margin-top: 7px;
+}
+.scope .pickerBody {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.scope .pickerBody > div:not([hidden]) {
+  min-height: 0;
+}
+.scope .picker {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.scope .pickerScroll {
+  overflow: auto;
+  overscroll-behavior: contain;
+  max-height: min(530px, 55dvh);
+  scrollbar-gutter: stable;
+  min-height: 0;
+}

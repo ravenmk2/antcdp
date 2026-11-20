@@ -1,0 +1,84 @@
+@layer components {
+  .scope:global(.page.page-wide) {
+    --console-list-inset: 24px;
+    display: flex;
+    min-height: calc(100dvh - var(--console-topbar-height));
+    flex-direction: column;
+    padding-block: 24px;
+  }
+  .scope .panel {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
+    overflow: clip;
+    border-radius: 16px;
+  }
+  .scope .panel > :global(.page-header) {
+    align-items: center;
+    margin: 0;
+    padding: 22px var(--console-list-inset) 18px;
+    border-bottom: 1px solid var(--border-subtle);
+    scroll-margin-top: calc(var(--console-topbar-height) + 24px);
+    outline: none;
+  }
+  .scope .panel > :global(.page-header .page-title) {
+    margin-bottom: 4px;
+    font-size: 26px;
+  }
+  .scope .panel :global(.table-toolbar > .toolbar) {
+    align-items: center;
+    padding: 14px var(--console-list-inset);
+  }
+  .scope .panel :global(.table-scroll .data-table :is(th, td)) {
+    padding-inline: var(--console-list-inset);
+  }
+  .scope .panel :global(.table-scroll .data-table td) {
+    height: 52px;
+    padding-block: 9px;
+  }
+  .scope .panel :global(.data-table) {
+    table-layout: fixed;
+  }
+  .scope .panel :global(.data-table th:first-child) {
+    width: 34%;
+  }
+  .scope .panel :global(.data-table th:nth-child(3)) {
+    width: 18%;
+  }
+  .scope
+    .panel
+    :global(.data-table :is(td, th):nth-child(n + 4):nth-child(-n + 6)) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .scope .panel :global(.data-table td:last-child),
+  .scope .panel :global(.data-table th:last-child) {
+    text-align: center;
+  }
+  .scope .panel :global(.data-table td p) {
+    max-width: 100%;
+  }
+  .scope .panel :global(.empty-state) {
+    flex: 1;
+    align-content: center;
+  }
+  .scope .panel :global(nav[aria-label="分页导航"]) {
+    margin-top: auto;
+  }
+  @container (width >= 1400px) {
+    .scope .panel > :global(.table-scroll) {
+      overflow: visible;
+    }
+    .scope .panel > :global(.table-scroll .data-table th) {
+      position: sticky;
+      z-index: 1;
+      top: var(--console-topbar-height);
+    }
+  }
+}
+
+@layer utilities {
+  .scope .panel :global(nav[aria-label="分页导航"]) {
+    padding-inline: var(--console-list-inset);
+  }
+}

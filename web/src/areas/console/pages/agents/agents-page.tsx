@@ -22,7 +22,7 @@ import {
   MoreHorizontal,
   Trash2,
   Pencil,
-  Eye,
+  UserRound,
   Plug,
   LayoutDashboard,
 } from "lucide-react";
@@ -52,11 +52,13 @@ import { PageHeader, Panel } from "@/components/layout";
 import { Pagination } from "@/components/pagination";
 import { SimpleTable } from "@/components/table";
 import { TableToolbar } from "@/components/table-toolbar";
+import { AgentDialog, AgentDialogCancel } from "./management/dialog";
+import { ConfigActions } from "./management/section-actions";
 import {
-  ConfirmDialog,
-  Drawer,
-  OverlayCancelButton,
-} from "@/components/overlays";
+  useAgentListPosition,
+  useAgentListReturn,
+} from "./management/list-navigation";
+import styles from "./management/management.module.css";
 import { useApiQuery } from "@/hooks/use-api";
 import { useFormErrors } from "@/hooks/use-form";
 import { useUnsaved } from "@/hooks/use-unsaved";
@@ -79,7 +81,6 @@ import {
 } from "@/features/agents/data/agent-runtime";
 import {
   EnabledState,
-  ConfigActions,
   ResourceDescription,
   IdentityBadge,
   ResourceSection,
@@ -87,21 +88,21 @@ import {
   useResourceSave,
   scopeLabel,
 } from "@/features/agents/resources/admin-shared";
-import { AgentModelBindings } from "@/features/agents/resources/model-bindings";
-import { AgentMCPBindings } from "@/features/agents/resources/mcp-bindings";
-import { AgentToolBindings } from "@/features/agents/resources/tool-bindings";
+import { AgentModelBindings } from "./management/model-bindings";
+import { AgentMCPBindings } from "./management/mcp-bindings";
+import { AgentToolBindings } from "./management/tool-bindings";
 import { AgentPapiGrants } from "@/features/agents/resources/papi-grants";
-import { AgentRuntimePolicy } from "@/features/agents/resources/runtime-policy";
-import { ResourcePicker } from "@/features/agents/resources/resource-picker";
+import { AgentRuntimePolicy } from "./management/runtime-policy";
+import { ResourcePicker } from "./management/resource-picker";
 import type { Resource } from "@/types/collaboration";
-import { AgentSkillBindings } from "@/features/agents/resources/skill-bindings";
+import { AgentSkillBindings } from "./management/skill-bindings";
 import { RobotResources } from "@/features/agents/resources/robot-resources";
 import {
   CloudSpecBindingEditor,
   SpecPicker,
-} from "@/features/agents/cloud/spec-binding-editor";
+} from "./management/spec-binding-editor";
 import { AgentOverview, AgentActivation } from "./agent-overview";
-import { ConsoleListPage } from "@/areas/console/components/list-page";
+import { AgentListPage } from "./management/list-page";
 
 export function AgentsPage() {
   const { params, page, size, change } = useListParams();
@@ -125,11 +126,30 @@ export function AgentsPage() {
     [...agentKeys, "definitions", query],
     `${agentAdminRoot}/definitions?${query}`,
   );
+  const rememberList = useAgentListPosition(agents.isSuccess);
   return (
-    <ConsoleListPage>
+    <AgentListPage>
       <PageHeader
         title="助手管理"
-        description="配置助手归属和能力。对话型使用对话用户身份，服务型使用专属机器人身份。"
+        actions={
+          <Button
+            render={
+              <Link
+                to={{
+                  pathname: "/admin/agents/new",
+                  search: params.toString(),
+                }}
+                onClick={rememberList}
+                id="agent-new-trigger"
+              >
+                <Plus className="size-4" />
+                新建助手
+              </Link>
+            }
+            nativeButton={false}
+            role="link"
+          />
+        }
       />
       <TableToolbar
         onRefresh={() => agents.refetch()}
@@ -142,18 +162,6 @@ export function AgentsPage() {
             enabled: "",
             page: "1",
           })
-        }
-        actions={
-          <Button
-            render={
-              <Link to="/admin/agents/new">
-                <Plus className="size-4" />
-                新建助手
-              </Link>
-            }
-            nativeButton={false}
-            role="link"
-          />
         }
       >
         <StandaloneInput
@@ -200,8 +208,15 @@ export function AgentsPage() {
         {agents.data?.data.length ? (
           <SimpleTable
             label="助手列表"
-            headers={["助手", "类型", "归属", "模型 / 工具", "状态", "操作"]}
-            actions
+            headers={[
+              "助手",
+              "类型",
+              "归属",
+              "模型",
+              "内置工具",
+              "MCP 服务",
+              "状态",
+            ]}
           >
             {agents.data.data.map((agent) => (
               <tr key={agent.id}>
@@ -209,6 +224,7 @@ export function AgentsPage() {
                   <div className="flex items-center gap-2">
                     <Link
                       to={`/admin/agents/${agent.id}`}
+                      onClick={rememberList}
                       className="max-w-lg truncate font-medium text-primary"
                       title={agent.name}
                     >
@@ -237,41 +253,27 @@ export function AgentsPage() {
                     {agent.scope_id ? `ID ${agent.scope_id}` : "所有登录用户"}
                   </p>
                 </td>
-                <td>
-                  <span className="inline-flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                    <span>
-                      <strong className="font-medium text-foreground">
-                        {agent.model_binding_count}
-                      </strong>{" "}
-                      个模型
-                    </span>
-                    <span>
-                      <strong className="font-medium text-foreground">
-                        {agent.tool_binding_count} / MCP{" "}
-                        {agent.mcp_binding_count}
-                      </strong>{" "}
-                      项工具
-                    </span>
-                  </span>
-                </td>
+                <td>{agent.model_binding_count}</td>
+                <td>{agent.tool_binding_count}</td>
+                <td>{agent.mcp_binding_count}</td>
                 <td>
                   <EnabledState enabled={agent.enabled} />
-                </td>
-                <td>
-                  <Button
-                    render={<Link to={`/admin/agents/${agent.id}`}>配置</Link>}
-                    nativeButton={false}
-                    role="link"
-                    variant="link"
-                  />
                 </td>
               </tr>
             ))}
           </SimpleTable>
         ) : (
           <EmptyState
-            title="暂无匹配的助手"
-            description="创建后配置模型与权限，再开放使用。"
+            title={
+              q || mode !== "all" || scope !== "all" || enabled !== "all"
+                ? "暂无匹配的助手"
+                : "尚未创建助手"
+            }
+            description={
+              q || mode !== "all" || scope !== "all" || enabled !== "all"
+                ? "调整搜索词或筛选条件后重试。"
+                : "新建助手后即可配置模型与能力。"
+            }
           />
         )}
         <Pagination
@@ -284,11 +286,12 @@ export function AgentsPage() {
           }
         />
       </AsyncBoundary>
-    </ConsoleListPage>
+    </AgentListPage>
   );
 }
 
 export function AgentCreatePage() {
+  const listUrl = useAgentListReturn();
   const navigate = useNavigate(),
     errors = useFormErrors();
   const [specID, setSpecID] = useState("");
@@ -373,19 +376,22 @@ export function AgentCreatePage() {
   return (
     <>
       <AgentsPage />
-      <Drawer
-        open
+      <AgentDialog
+        side="right"
+        icon={<Bot />}
         title="新建助手"
-        description="类型和归属创建后固定。完成模型与能力配置后再启用。"
+        description="创建后将进入配置页，完成模型设置后即可检查并启用。"
         dirty={dirty}
         pending={pending || uncertain}
         onClose={() => {
           release();
-          navigate("/admin/agents");
+          navigate(listUrl, {
+            state: { restoreList: true, focusCreate: true },
+          });
         }}
         footer={
           <>
-            <OverlayCancelButton />
+            <AgentDialogCancel pending={pending || uncertain} />
             <Button
               type="submit"
               form="agent-create"
@@ -407,42 +413,64 @@ export function AgentCreatePage() {
           <ErrorNotice error={errors.error} />
           {recovery}
           <fieldset disabled={pending || uncertain} className="space-y-5">
-            <Field label="编码" required error={errors.fields.code}>
-              <Input
-                value={draft.code}
-                maxLength={64}
-                onChange={(e) => setDraft({ ...draft, code: e.target.value })}
-              />
-            </Field>
-            <Field label="助手名称" required error={errors.fields.name}>
-              <Input
-                name="name"
-                value={draft.name}
-                maxLength={100}
-                autoFocus
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              />
-            </Field>
-            <Field label="类型" required>
-              <Select
-                name="agent_type"
-                value={draft.agent_type}
-                onValueChange={(value) =>
-                  setDraft({ ...draft, agent_type: value as AgentType })
-                }
-              >
-                <option value="chat">对话型</option>
-                <option value="service">服务型</option>
-              </Select>
-            </Field>
-            <Notice>
-              {draft.agent_type === "chat"
-                ? "使用对话用户的身份和个人云电脑，历史内容仅本人可见。"
-                : "选择独立机器人作为执行账号，绑定后不可更换。机器人资料、权限和凭据在机器人账号页管理。"}
-            </Notice>
+            <div className={styles.fieldPair}>
+              {" "}
+              <Field label="助手名称" required error={errors.fields.name}>
+                <Input
+                  name="name"
+                  value={draft.name}
+                  maxLength={100}
+                  autoFocus
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                />
+              </Field>
+              <Field label="编码" required error={errors.fields.code}>
+                <Input
+                  value={draft.code}
+                  maxLength={64}
+                  onChange={(e) => setDraft({ ...draft, code: e.target.value })}
+                />
+              </Field>
+            </div>
+            <fieldset className={styles.identity}>
+              <legend>执行身份</legend>
+              <div className={styles.fieldPair}>
+                {(
+                  [
+                    {
+                      value: "chat",
+                      title: "对话型",
+                      hint: "使用对话用户的身份与个人云电脑",
+                      Icon: UserRound,
+                    },
+                    {
+                      value: "service",
+                      title: "服务型",
+                      hint: "使用专属机器人身份与云电脑池",
+                      Icon: Bot,
+                    },
+                  ] as const
+                ).map(({ value, title, hint, Icon }) => (
+                  <label key={value} className={styles.identityOption}>
+                    <input
+                      type="radio"
+                      name="agent_type"
+                      value={value}
+                      checked={draft.agent_type === value}
+                      onChange={() => setDraft({ ...draft, agent_type: value })}
+                    />
+                    <Icon aria-hidden />
+                    <span>
+                      <strong>{title}</strong>
+                      <small>{hint}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className={styles.hint}>助手类型创建后固定。</p>
+            </fieldset>
             {draft.agent_type === "service" && (
               <>
-                <SpecPicker value={specID} onChange={setSpecID} />
                 <ErrorNotice error={robots.error} />
                 <Field
                   label="执行机器人"
@@ -466,12 +494,18 @@ export function AgentCreatePage() {
                       ))}
                   </Select>
                 </Field>
+                <p className={styles.hint}>执行机器人绑定后不可更换。</p>
+                <SpecPicker value={specID} onChange={setSpecID} />
                 <Link className="text-primary" to="/admin/robots">
                   管理机器人账号
                 </Link>
               </>
             )}
-            <Field label="归属" required>
+            <Field
+              label="归属"
+              required
+              hint="创建后固定。团队和项目助手仅向相应成员开放。"
+            >
               <Select
                 name="scope_kind"
                 value={draft.scope_kind}
@@ -504,9 +538,7 @@ export function AgentCreatePage() {
                 </Button>
               </Field>
             )}
-            <p className="text-sm text-muted">
-              平台助手向所有登录用户开放；团队、项目助手按成员关系获得使用资格。资源访问范围由执行账号的权限决定。
-            </p>
+            <p className="text-sm text-muted">资源访问权限由执行账号决定。</p>
             <Field label="说明" error={errors.fields.description}>
               <Textarea
                 name="description"
@@ -534,12 +566,13 @@ export function AgentCreatePage() {
             onClose={() => setPicking(false)}
           />
         )}
-      </Drawer>
+      </AgentDialog>
     </>
   );
 }
 
 export function AgentDetailPage() {
+  const listUrl = useAgentListReturn();
   const { agentId = "" } = useParams();
   const [params] = useSearchParams();
   const requestedTab =
@@ -571,26 +604,103 @@ export function AgentDetailPage() {
   useCommandResult(deletion.state, () => {
     deletion.command.reset();
     void cache.invalidateQueries({ queryKey: agentKeys });
-    navigate("/admin/agents", { replace: true });
+    navigate(listUrl, { replace: true, state: { restoreList: true } });
   });
   const refresh = async () => {
     await cache.invalidateQueries({ queryKey: agentKeys });
   };
+  const sections = [
+    {
+      label: "助手",
+      items: [
+        {
+          value: "overview",
+          label: "概览",
+          icon: LayoutDashboard,
+        },
+      ],
+    },
+    {
+      label: "基础配置",
+      items: [
+        { value: "basic", label: "基本信息", icon: Bot },
+        { value: "prompt", label: "系统提示词", icon: FileText },
+        {
+          value: "models",
+          label: "模型",
+          icon: SlidersHorizontal,
+        },
+      ],
+    },
+    {
+      label: "能力配置",
+      items: [
+        { value: "tools", label: "内置工具", icon: Wrench },
+        { value: "papi", label: "平台 API 授权", icon: Plug },
+        { value: "mcp", label: "MCP 服务", icon: Plug },
+        { value: "skills", label: "技能", icon: FileText },
+      ],
+    },
+    {
+      label: "运行配置",
+      items: [
+        {
+          value: "runtime",
+          label: "执行预算",
+          icon: ShieldCheck,
+        },
+        ...(agent.data?.data.agent_type === "service"
+          ? [
+              {
+                value: "resources",
+                label: "机器人权限与凭据",
+                icon: Folder,
+              },
+              {
+                value: "computer",
+                label: "云电脑池",
+                icon: SlidersHorizontal,
+              },
+            ]
+          : []),
+      ],
+    },
+  ];
+  const currentSection = sections
+    .flatMap((group) => group.items)
+    .find((item) => item.value === tab);
   return (
-    <div className="page">
+    <div className={`page page-wide ${styles.scope} ${styles.detail}`}>
       <PageHeader
         title={agent.data?.data.name ?? "助手配置"}
         description={
-          <ResourceDescription
-            name={agent.data?.data.name ?? "助手"}
-            description={agent.data?.data.description}
-          />
+          <div>
+            {agent.data && (
+              <div className={styles.metadata}>
+                <IdentityBadge mode={agent.data.data.agent_type} />
+                <span className="text-sm">
+                  {scopeLabel(agent.data.data.scope_kind)}
+                  {agent.data.data.scope_id
+                    ? ` · ${agent.data.data.scope_id}`
+                    : " · 所有登录用户"}
+                </span>
+                <EnabledState enabled={agent.data.data.enabled} />
+                <span className="font-mono text-xs text-muted">
+                  {agent.data.data.code}
+                </span>
+              </div>
+            )}
+            <ResourceDescription
+              name={agent.data?.data.name ?? "助手"}
+              description={agent.data?.data.description}
+            />
+          </div>
         }
         actions={
           <>
             <Button
               render={
-                <Link to="/admin/agents">
+                <Link to={listUrl} state={{ restoreList: true }}>
                   <ArrowLeft className="size-4" />
                   返回列表
                 </Link>
@@ -616,23 +726,6 @@ export function AgentDetailPage() {
                 nativeButton={false}
                 role="link"
               />
-            )}
-            {agent.data && tab !== "overview" && (
-              <Button
-                render={
-                  <Link to={`?tab=${tab}${editing ? "" : "&view=edit"}`} />
-                }
-                nativeButton={false}
-                role="link"
-                variant="outline"
-              >
-                {editing ? (
-                  <Eye className="size-4" />
-                ) : (
-                  <Pencil className="size-4" />
-                )}
-                {editing ? "完成编辑" : "编辑配置"}
-              </Button>
             )}
             {agent.data && (
               <Button
@@ -682,78 +775,9 @@ export function AgentDetailPage() {
       >
         {agent.data && (
           <>
-            <div className="mb-5 flex flex-wrap items-center gap-2">
-              <IdentityBadge mode={agent.data.data.agent_type} />
-              <span className="text-sm">
-                {scopeLabel(agent.data.data.scope_kind)}
-                {agent.data.data.scope_id
-                  ? ` · ${agent.data.data.scope_id}`
-                  : " · 所有登录用户"}
-              </span>
-              <EnabledState enabled={agent.data.data.enabled} />
-              <span className="font-mono text-xs text-muted">
-                {agent.data.data.code}
-              </span>
-            </div>
             <div className="agent-settings-layout">
               <nav aria-label="助手配置分区" className="agent-settings-nav">
-                {[
-                  {
-                    label: "助手",
-                    items: [
-                      {
-                        value: "overview",
-                        label: "概览",
-                        icon: LayoutDashboard,
-                      },
-                    ],
-                  },
-                  {
-                    label: "基础配置",
-                    items: [
-                      { value: "basic", label: "基本信息", icon: Bot },
-                      { value: "prompt", label: "系统提示词", icon: FileText },
-                      {
-                        value: "models",
-                        label: "模型",
-                        icon: SlidersHorizontal,
-                      },
-                    ],
-                  },
-                  {
-                    label: "能力配置",
-                    items: [
-                      { value: "tools", label: "内置工具", icon: Wrench },
-                      { value: "papi", label: "平台 API 授权", icon: Plug },
-                      { value: "mcp", label: "MCP 服务", icon: Plug },
-                      { value: "skills", label: "技能", icon: FileText },
-                    ],
-                  },
-                  {
-                    label: "运行配置",
-                    items: [
-                      {
-                        value: "runtime",
-                        label: "执行预算",
-                        icon: ShieldCheck,
-                      },
-                      ...(agent.data.data.agent_type === "service"
-                        ? [
-                            {
-                              value: "resources",
-                              label: "机器人权限与凭据",
-                              icon: Folder,
-                            },
-                            {
-                              value: "computer",
-                              label: "云电脑池",
-                              icon: SlidersHorizontal,
-                            },
-                          ]
-                        : []),
-                    ],
-                  },
-                ].map((group) => (
+                {sections.map((group) => (
                   <div key={group.label}>
                     <p className="agent-settings-group">{group.label}</p>
                     {group.items.map(({ value, label, icon: Icon }) => (
@@ -769,13 +793,30 @@ export function AgentDetailPage() {
                   </div>
                 ))}
               </nav>
-              <div className="agent-settings-content">
-                {editing && tab !== "overview" && (
-                  <p className="mb-5 text-sm text-muted">
-                    正在编辑 ·
-                    各分区分别保存，保存后可继续配置。完成后点击“完成编辑”。
-                  </p>
-                )}
+              <div key={tab} className="agent-settings-content">
+                {currentSection &&
+                  tab !== "tools" &&
+                  tab !== "overview" &&
+                  (!editing || tab === "resources" || tab === "papi") && (
+                    <div className={styles.sectionTools}>
+                      <h2>{currentSection.label}</h2>
+                      <Button
+                        role="link"
+                        nativeButton={false}
+                        variant="outline"
+                        render={
+                          <Link
+                            to={
+                              editing ? `?tab=${tab}` : `?tab=${tab}&view=edit`
+                            }
+                          />
+                        }
+                      >
+                        <Pencil className="size-4" />
+                        {editing ? "退出编辑" : "编辑配置"}
+                      </Button>
+                    </div>
+                  )}
                 {tab === "overview" && (
                   <AgentOverview agent={agent.data.data} />
                 )}
@@ -834,11 +875,10 @@ export function AgentDetailPage() {
                 )}
                 {tab === "tools" && (
                   <AgentToolBindings
-                    key={String(editing)}
+                    key={agentId}
                     agentId={agentId}
                     mode={agent.data.data.agent_type}
                     onSaved={refresh}
-                    readOnly={!editing}
                   />
                 )}
                 {tab === "papi" && (
@@ -887,26 +927,43 @@ export function AgentDetailPage() {
               />
             )}
             {deletion.recovery}
-            <ConfirmDialog
-              open={deleting}
-              title="删除助手？"
-              description="删除后不再接受新轮次，历史记录保留。绑定的机器人独立保留，已有云电脑需单独维护。"
-              danger
-              pending={deletion.pending}
-              onClose={() => setDeleting(false)}
-              onConfirm={() => {
-                if (!agent.data || deletion.uncertain) return;
-                void deletion.command.run({
-                  domain: agentAdminRoot,
-                  path: `/definitions/${agentId}`,
-                  command: "agent_definition.delete",
-                  scope: `agent_definition:${agentId}`,
-                  options: { method: "DELETE", etag: agent.data.etag },
-                });
-              }}
-            >
-              {deletion.recovery}
-            </ConfirmDialog>
+            {deleting && (
+              <AgentDialog
+                compact
+                tone="danger"
+                title={"删除「" + agent.data.data.name + "」？"}
+                description="删除后不再接受新轮次，历史记录保留。绑定的机器人独立保留，已有云电脑需单独维护。"
+                pending={deletion.pending}
+                onClose={() => setDeleting(false)}
+                footer={
+                  <>
+                    <AgentDialogCancel
+                      initialFocus
+                      pending={deletion.pending}
+                    />
+                    <Button
+                      variant="danger"
+                      pending={deletion.pending}
+                      disabled={deletion.uncertain}
+                      onClick={() => {
+                        if (!agent.data || deletion.uncertain) return;
+                        void deletion.command.run({
+                          domain: agentAdminRoot,
+                          path: `/definitions/${agentId}`,
+                          command: "agent_definition.delete",
+                          scope: `agent_definition:${agentId}`,
+                          options: { method: "DELETE", etag: agent.data.etag },
+                        });
+                      }}
+                    >
+                      删除助手
+                    </Button>
+                  </>
+                }
+              >
+                {deletion.recovery}
+              </AgentDialog>
+            )}
           </>
         )}
       </AsyncBoundary>
@@ -916,53 +973,34 @@ export function AgentDetailPage() {
 function AgentBasicRead({ agent }: { agent: AgentDefinition }) {
   return (
     <Panel bodyClassName="p-6">
-      <ResourceSection title="基本信息">
-        <dl className="agent-read-facts">
-          <div>
-            <dt>助手名称</dt>
-            <dd>{agent.name}</dd>
-          </div>
-          <div>
-            <dt>说明</dt>
-            <dd className="whitespace-pre-wrap">
-              {agent.description || "尚未填写说明"}
-            </dd>
-          </div>
-          <div>
-            <dt>状态</dt>
-            <dd>
-              <EnabledState enabled={agent.enabled} />
-            </dd>
-          </div>
-          <div>
-            <dt>助手标识</dt>
-            <dd className="font-mono text-xs">{agent.code}</dd>
-          </div>
-        </dl>
-      </ResourceSection>
+      <dl className="agent-read-facts grid grid-cols-2 gap-6">
+        <div>
+          <dt>助手名称</dt>
+          <dd>{agent.name}</dd>
+        </div>
+        <div>
+          <dt>说明</dt>
+          <dd className="whitespace-pre-wrap">
+            {agent.description || "尚未填写说明"}
+          </dd>
+        </div>
+        <div>
+          <dt>状态</dt>
+          <dd>
+            <EnabledState enabled={agent.enabled} />
+          </dd>
+        </div>
+        <div>
+          <dt>助手标识</dt>
+          <dd className="font-mono text-xs">{agent.code}</dd>
+        </div>
+      </dl>
     </Panel>
   );
 }
 function AgentPromptRead({ agent }: { agent: AgentDefinition }) {
   return (
     <Panel bodyClassName="p-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-semibold">系统提示词</h2>
-          <p className="mt-1 text-sm text-muted">
-            定义助手的角色、工作方式和行为边界。
-          </p>
-        </div>
-        <Button
-          render={<Link to="?tab=prompt&view=edit" />}
-          nativeButton={false}
-          role="link"
-          variant="outline"
-        >
-          <Pencil className="size-4" />
-          编辑系统提示
-        </Button>
-      </div>
       <pre className="agent-prompt-read" aria-label="系统提示词内容">
         {agent.system_prompt || "尚未配置系统提示词。"}
       </pre>
@@ -1046,7 +1084,7 @@ function AgentBasicEditor({
           pending={save.pending}
           disabled={save.blocked || JSON.stringify(draft) === baseline}
         >
-          保存修改
+          保存本分区
         </Button>
         <Button
           variant="outline"
@@ -1126,7 +1164,7 @@ function PromptEditor({
               new TextEncoder().encode(text).byteLength > 131072
             }
           >
-            保存系统提示
+            保存本分区
           </Button>
           <Button
             variant="outline"

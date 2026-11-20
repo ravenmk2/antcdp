@@ -1,5 +1,11 @@
 import { Link } from "react-router";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  ShieldCheck,
+  Blocks,
+  Terminal,
+} from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { ApiError, request, type ApiResponse } from "@/api/client";
 import { Button } from "@/components/button";
@@ -10,10 +16,14 @@ import {
   StatusBadge,
 } from "@/components/feedback";
 import { Panel } from "@/components/layout";
-import { Drawer, OverlayCancelButton } from "@/components/overlays";
+import { AgentDialog, AgentDialogCancel } from "./management/dialog";
+import styles from "./management/management.module.css";
 import { useApiQuery } from "@/hooks/use-api";
 import { agentAdminRoot, agentKeys } from "@/features/agents/data/agent-api";
-import { useResourceSave } from "@/features/agents/resources/admin-shared";
+import {
+  scopeLabel,
+  useResourceSave,
+} from "@/features/agents/resources/admin-shared";
 import type {
   AgentDefinition,
   BindingCollection,
@@ -75,7 +85,8 @@ function CheckResult({
           className="mt-3 inline-flex items-center gap-1 font-medium text-primary"
           to={`?tab=${issue.tab}&view=edit`}
         >
-          前往配置 <ArrowRight className="size-4" />
+          {issue.tab === "models" ? "去配置模型" : "去配置工具"}{" "}
+          <ArrowRight className="size-4" />
         </Link>
       </Notice>
     );
@@ -117,9 +128,12 @@ export function AgentOverview({ agent }: { agent: AgentDefinition }) {
       <Panel bodyClassName="p-6 space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold">配置检查</h2>
+            <h2 className={styles.cardHeading}>
+              <ShieldCheck aria-hidden />
+              配置检查
+            </h2>
             <p className="mt-1 text-sm text-muted">
-              先完成模型配置，再按用途添加能力。可选项不影响配置完成度。
+              检查已保存的配置是否满足启用条件。
             </p>
           </div>
           <Button
@@ -175,9 +189,12 @@ export function AgentOverview({ agent }: { agent: AgentDefinition }) {
       </Panel>
       <Panel bodyClassName="p-6 space-y-4">
         <div>
-          <h2 className="text-base font-semibold">能力配置</h2>
+          <h2 className={styles.cardHeading}>
+            <Blocks aria-hidden />
+            能力配置
+          </h2>
           <p className="mt-1 text-sm text-muted">
-            以下能力均为可选，按任务需要添加。未绑定不代表配置异常。
+            按任务需要绑定，未绑定的可选能力不影响启用。
           </p>
         </div>
         <div className="divide-y">
@@ -202,7 +219,10 @@ export function AgentOverview({ agent }: { agent: AgentDefinition }) {
         </div>
       </Panel>
       <Panel bodyClassName="p-6 space-y-4">
-        <h2 className="text-base font-semibold">运行与调试</h2>
+        <h2 className={styles.cardHeading}>
+          <Terminal aria-hidden />
+          运行与调试
+        </h2>
         <p className="text-sm text-muted">
           {agent.agent_type === "service"
             ? "使用专属机器人身份、已授权的资源与独立云电脑池。调试使用已保存的配置，也会执行实际工具操作。"
@@ -292,109 +312,91 @@ export function AgentActivation({
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
   });
-  if (query.data && !query.isFetching && !query.error)
-    return (
-      <ActivationConfirmation
-        initial={query.data}
-        enable={enable}
-        onClose={onClose}
-        onSaved={onSaved}
-      />
-    );
-  return (
-    <Drawer
-      open
-      title={enable ? "启用前检查" : "停用助手"}
-      onClose={onClose}
-      footer={<OverlayCancelButton>关闭</OverlayCancelButton>}
-    >
-      {enable ? (
-        <CheckResult
-          pending={query.isFetching || query.isPending}
-          error={query.error}
-        />
-      ) : (
-        <AsyncBoundary
-          loading={query.isPending}
-          error={query.error}
-          onRetry={() => void query.refetch()}
-        >
-          <span />
-        </AsyncBoundary>
-      )}
-      {query.error && (
-        <Button
-          className="mt-4"
-          variant="outline"
-          onClick={() => void query.refetch()}
-        >
-          重新检查
-        </Button>
-      )}
-    </Drawer>
-  );
-}
-
-function ActivationConfirmation({
-  initial,
-  enable,
-  onClose,
-  onSaved,
-}: {
-  initial: ApiResponse<AgentDefinition>;
-  enable: boolean;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
+  const ready = Boolean(query.data && !query.isFetching && !query.error);
+  const checked = query.data ?? initial;
   const save = useResourceSave({
-    path: `${agentAdminRoot}/definitions/${initial.data.id}`,
-    initial,
+    path: `${agentAdminRoot}/definitions/${checked.data.id}`,
+    initial: checked,
+    enabled: ready,
     dirty: false,
     adopt: () => {},
     complete: onSaved,
   });
   return (
-    <Drawer
-      open
+    <AgentDialog
+      compact={!enable}
+      icon={<ShieldCheck />}
+      tone={enable ? undefined : "warning"}
       title={enable ? "启用前检查" : "停用助手"}
-      pending={save.pending || save.blocked}
+      pending={save.pending}
       onClose={onClose}
       footer={
         <>
-          <OverlayCancelButton />
-          <Button
-            pending={save.pending}
-            disabled={save.blocked}
-            onClick={() => void save.save({ enabled: enable })}
-          >
-            {enable ? "确认启用" : "确认停用"}
-          </Button>
+          <AgentDialogCancel initialFocus pending={save.pending}>
+            {ready ? "取消" : "关闭"}
+          </AgentDialogCancel>
+          {ready && (
+            <Button
+              variant={enable ? "default" : "danger"}
+              pending={save.pending}
+              disabled={save.blocked || !checked.etag}
+              onClick={() => void save.save({ enabled: enable })}
+            >
+              {enable ? "确认启用" : "确认停用"}
+            </Button>
+          )}
         </>
       }
     >
       <div className="space-y-5">
-        <h2 className="font-semibold">{initial.data.name}</h2>
-        {enable ? (
+        <div>
+          <h2 className="font-semibold">{checked.data.name}</h2>
+          <p className="mt-1 text-sm text-muted">
+            {scopeLabel(checked.data.scope_kind)} ·{" "}
+            {checked.data.scope_id ?? "所有登录用户"}
+          </p>
+        </div>
+        {!ready && (
           <>
-            <StatusBadge tone="success">
-              <CheckCircle2 className="size-3" />
-              启用检查通过
-            </StatusBadge>
-            <p className="text-sm text-muted">
-              默认模型、模型能力和工具策略满足启用条件。提示词、MCP
-              与技能按需配置，未添加的可选能力不会阻止启用。
-            </p>
-            <p className="text-sm">
-              确认后，归属范围内的用户可使用此助手。启用时会再次校验最新配置。
-            </p>
+            {enable ? (
+              <CheckResult
+                pending={query.isFetching || query.isPending}
+                error={query.error}
+              />
+            ) : (
+              <AsyncBoundary loading={query.isPending} error={query.error}>
+                <span />
+              </AsyncBoundary>
+            )}
+            {query.error && (
+              <Button variant="outline" onClick={() => void query.refetch()}>
+                重新检查
+              </Button>
+            )}
           </>
-        ) : (
-          <Notice tone="warning">
-            停用后不再接受新轮次，保留历史记录；已开始的轮次继续完成。机器人账号的启停独立管理。
-          </Notice>
         )}
+        {ready &&
+          (enable ? (
+            <>
+              <StatusBadge tone="success">
+                <CheckCircle2 className="size-3" />
+                启用检查通过
+              </StatusBadge>
+              <p className="text-sm text-muted">
+                默认模型、模型能力和工具策略满足启用条件。提示词、MCP
+                与技能按需配置，未添加的可选能力不会阻止启用。
+              </p>
+              <p className="text-sm">
+                确认后，归属范围内的用户可使用此助手。启用时会再次校验最新配置。
+              </p>
+            </>
+          ) : (
+            <Notice tone="warning">
+              停用后不再接受新轮次，保留历史记录；已开始的轮次继续完成。机器人账号的启停独立管理。
+            </Notice>
+          ))}
         {save.recovery}
       </div>
-    </Drawer>
+    </AgentDialog>
   );
 }

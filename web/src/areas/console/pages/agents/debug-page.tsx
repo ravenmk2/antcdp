@@ -27,6 +27,11 @@ export function AgentDebugPage() {
               ? `调试 · ${query.data.data.name}`
               : "助手调试"
           }
+          description={
+            query.data?.data.agent_type === "service"
+              ? `执行身份：专属机器人 ${query.data.data.robot_user_id} · 使用已保存的配置，工具调用会实际执行。`
+              : undefined
+          }
           actions={
             <Button
               render={<Link to={`/admin/agents/${agentId}`}>返回配置</Link>}

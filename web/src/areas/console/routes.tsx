@@ -1,3 +1,4 @@
+import { AgentManagementRoutes } from "./pages/agents/management/list-navigation";
 import { RemovedProjectPage } from "@/features/collaboration/removed-project-page";
 import { NotFound } from "@/app/not-found";
 import { RegionError, RegionLoader } from "@/app/region-loader";
@@ -205,7 +206,17 @@ export const consoleRoutes: RouteObject[] = [
     errorElement: <RegionError label="控制台" />,
     children: [
       { index: true, element: <OverviewPage /> },
-      { path: "agents", element: <AgentsPage /> },
+      {
+        path: "agents",
+        element: <AgentManagementRoutes />,
+        children: [
+          { index: true, element: <AgentsPage /> },
+          { path: "new", element: <AgentCreatePage /> },
+          { path: ":agentId", element: <AgentDetailPage /> },
+          { path: ":agentId/prompt", element: <AgentPromptPage /> },
+          { path: ":agentId/debug/:sessionId?", element: <AgentDebugPage /> },
+        ],
+      },
       { path: "agent-usage", element: <AgentUsagePage /> },
       { path: "robots", element: <RobotsPage /> },
       { path: "sandboxes", element: <SandboxesPage /> },
@@ -215,13 +226,6 @@ export const consoleRoutes: RouteObject[] = [
         path: "cloud-computers/:computerId",
         element: <CloudComputerDetailPage />,
       },
-      {
-        path: "agents/:agentId/debug/:sessionId?",
-        element: <AgentDebugPage />,
-      },
-      { path: "agents/new", element: <AgentCreatePage /> },
-      { path: "agents/:agentId", element: <AgentDetailPage /> },
-      { path: "agents/:agentId/prompt", element: <AgentPromptPage /> },
       { path: "web-access", element: <WebAccessPage /> },
       { path: "web-access/new", element: <WebAccessCreatePage /> },
       { path: "web-access/settings", element: <WebAccessSettingsPage /> },

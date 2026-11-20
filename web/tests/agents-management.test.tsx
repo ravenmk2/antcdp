@@ -267,8 +267,7 @@ it.each(["chat", "service"] as const)(
     await user.type(screen.getByRole("textbox", { name: "编码" }), "reviewer");
     if (agentType === "service") {
       const drawer = screen.getByRole("dialog", { name: "新建助手" });
-      await user.click(within(drawer).getByRole("combobox", { name: "类型" }));
-      await user.click(await screen.findByRole("option", { name: "服务型" }));
+      await user.click(within(drawer).getByRole("radio", { name: /服务型/ }));
       await user.click(screen.getByRole("combobox", { name: "执行机器人" }));
       await user.click(
         await screen.findByRole("option", { name: "审查机器人 (review_bot)" }),
@@ -336,22 +335,22 @@ it("keeps editing after saving and protects subsequent unsaved changes", async (
   const name = await screen.findByRole("textbox", { name: "助手名称" });
   await user.clear(name);
   await user.type(name, "已更新的助手");
-  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  await user.click(screen.getByRole("button", { name: "保存本分区" }));
   expect(
     await screen.findByRole("heading", { name: "已更新的助手" }),
   ).toBeVisible();
   expect(router.state.location.search).toBe("?tab=basic&view=edit");
   expect(name).toHaveValue("已更新的助手");
-  expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "保存本分区" })).toBeDisabled();
   await user.type(name, "草稿");
-  await user.click(screen.getByRole("link", { name: "完成编辑" }));
+  await user.click(screen.getByRole("link", { name: "退出编辑" }));
   expect(
     await screen.findByRole("dialog", { name: "离开当前页面？" }),
   ).toBeVisible();
   await user.click(screen.getByRole("button", { name: "取消" }));
   expect(name).toHaveValue("已更新的助手草稿");
   await user.click(screen.getByRole("button", { name: "取消修改" }));
-  await user.click(screen.getByRole("link", { name: "完成编辑" }));
+  await user.click(screen.getByRole("link", { name: "退出编辑" }));
   await waitFor(() => expect(router.state.location.search).toBe("?tab=basic"));
   expect(
     screen.queryByRole("textbox", { name: "助手名称" }),
@@ -369,7 +368,7 @@ it("opens the overview with actionable blockers and optional capabilities", asyn
     "aria-current",
     "page",
   );
-  await user.click(screen.getByRole("link", { name: "前往配置" }));
+  await user.click(screen.getByRole("link", { name: "去配置模型" }));
   await waitFor(() =>
     expect(router.state.location.search).toBe("?tab=models&view=edit"),
   );
@@ -384,9 +383,9 @@ it("keeps prompt editing within the settings navigation", async () => {
   const { user, router } = mount("/admin/agents/4?tab=prompt&view=edit");
   const prompt = await screen.findByRole("textbox", { name: "系统提示" });
   await user.type(prompt, "，使用中文");
-  await user.click(screen.getByRole("button", { name: "保存系统提示" }));
+  await user.click(screen.getByRole("button", { name: "保存本分区" }));
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "保存系统提示" })).toBeDisabled(),
+    expect(screen.getByRole("button", { name: "保存本分区" })).toBeDisabled(),
   );
   expect(prompt).toHaveValue("先核验再行动，使用中文");
   expect(router.state.location.search).toBe("?tab=prompt&view=edit");
@@ -396,6 +395,48 @@ it("keeps prompt editing within the settings navigation", async () => {
   ).toBeVisible();
 });
 
+it("keeps the skill search when returning from version selection and only binds the chosen version", async () => {
+  override = async (path, options) => {
+    if (path.startsWith("/admin/agents/skills?"))
+      return response([{ ...skill, latest_version_id: "91" }]);
+    if (path.startsWith("/admin/agents/skills/8/versions?"))
+      return response([
+        { id: "90", version_label: "v1", change_note: "稳定版本" },
+      ]);
+    if (path.endsWith("/versions/90"))
+      return response({ id: "90", version_label: "v1" });
+    if (path.endsWith("/skill-bindings") && options.method === "PUT")
+      return response({ ...(options.body as object), version: "2" });
+  };
+  const { user } = mount("/admin/agents/4?tab=skills&view=edit");
+  await user.click(await screen.findByRole("button", { name: "添加技能" }));
+  const picker = await screen.findByRole("dialog", { name: "选择技能" });
+  const search = within(picker).getByRole("textbox");
+  await user.type(search, "发布");
+  await user.click(await within(picker).findByRole("button", { name: "选择" }));
+  const versions = await screen.findByRole("dialog", { name: "选择固定版本" });
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  await user.click(
+    within(versions).getByRole("button", { name: "返回技能列表" }),
+  );
+  expect(search).toHaveValue("发布");
+  await user.click(await within(picker).findByRole("button", { name: "选择" }));
+  await user.click(
+    await within(versions).findByRole("button", { name: "选择" }),
+  );
+  await user.click(await screen.findByRole("button", { name: "保存本分区" }));
+  await waitFor(() =>
+    expect(
+      mocked.mock.calls.some(
+        ([path, options]) =>
+          path.endsWith("/skill-bindings") &&
+          options?.method === "PUT" &&
+          (options.body as { items: { skill_version_id: string }[] }).items[0]
+            ?.skill_version_id === "90",
+      ),
+    ).toBe(true),
+  );
+});
 it("does not offer activation while the check fails", async () => {
   const { user } = mount("/admin/agents/4?tab=basic");
   await user.click(await screen.findByRole("link", { name: "检查并启用" }));
@@ -435,35 +476,48 @@ it("activates only on confirmation using the checked version", async () => {
     mocked.mock.calls.filter(([, options]) => options?.method === "PATCH"),
   ).toHaveLength(1);
 });
-it("keeps tool reading filters available and separates MCP bindings from built-in tools", async () => {
-  override = async (path) => {
-    if (path.endsWith("/mcp-bindings"))
-      return response({ items: [], version: "1" });
+it("shows the entire catalog even without bindings and enables a tool from its row", async () => {
+  override = async (path, options) => {
+    if (path.endsWith("/tool-bindings"))
+      return response({
+        items:
+          options.method === "PUT"
+            ? (options.body as { items: unknown[] }).items
+            : [],
+        version: "1",
+      });
   };
   const { user } = mount("/admin/agents/4?tab=tools");
-  expect(
-    await screen.findByRole("heading", { name: "检查工具" }),
-  ).toBeVisible();
-  expect(screen.getByRole("textbox", { name: "搜索已绑定工具" })).toBeVisible();
-  expect(
-    screen.queryByRole("combobox", { name: "检查工具的执行策略" }),
-  ).toBeNull();
-  expect(screen.queryByRole("button", { name: "保存工具绑定" })).toBeNull();
+  const toggle = await screen.findByRole("switch", { name: "启用检查工具" });
+  expect(toggle).not.toBeChecked();
+  expect(screen.queryByRole("button", { name: "添加工具" })).toBeNull();
+  await user.click(toggle);
+  expect(toggle).toBeChecked();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "保存本分区" }));
+  await waitFor(() =>
+    expect(
+      mocked.mock.calls.find(
+        ([path, opts]) =>
+          path.endsWith("/tool-bindings") && opts?.method === "PUT",
+      )?.[1]?.body,
+    ).toEqual({
+      items: [
+        { tool_key: "test_tool", policy: "allow", parameter_constraints: {} },
+      ],
+    }),
+  );
   expect(
     mocked.mock.calls.some(([path]) => path.endsWith("/mcp-bindings")),
   ).toBe(false);
   await user.click(screen.getByRole("link", { name: "MCP 服务" }));
   expect(await screen.findByText("尚未绑定 MCP 服务")).toBeVisible();
-  expect(screen.queryByRole("button", { name: "添加服务" })).toBeNull();
-  await user.click(screen.getByRole("link", { name: "编辑配置" }));
-  expect(await screen.findByRole("button", { name: "添加服务" })).toBeVisible();
-  expect(screen.queryByRole("heading", { name: "内置工具授权" })).toBeNull();
 });
 it("shows runtime values without editable inputs until editing is requested", async () => {
   const { user } = mount("/admin/agents/4?tab=runtime");
   expect(await screen.findByText("最大推理步数")).toBeVisible();
   expect(screen.queryByRole("spinbutton")).toBeNull();
-  expect(screen.queryByRole("button", { name: "保存预算" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "保存本分区" })).toBeNull();
   await user.click(screen.getByRole("link", { name: "编辑配置" }));
   expect(
     await screen.findByRole("spinbutton", { name: "最大推理步数" }),
@@ -583,7 +637,7 @@ it("protects a dirty configuration when switching tabs and preserves drafts on a
   ).toBeVisible();
   await user.click(screen.getByRole("button", { name: "取消" }));
   expect(name).toHaveValue("保留我的草稿");
-  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  await user.click(screen.getByRole("button", { name: "保存本分区" }));
   expect(await screen.findByText("需要核对最新配置")).toBeVisible();
   expect(name).toHaveValue("保留我的草稿");
 });
@@ -601,7 +655,7 @@ it("retains a dirty draft and original edit version when background data refresh
   expect(screen.getByRole("textbox", { name: "助手名称" })).toHaveValue(
     "正在编辑的草稿",
   );
-  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  await user.click(screen.getByRole("button", { name: "保存本分区" }));
   await waitFor(() =>
     expect(
       mocked.mock.calls.some(([, options]) => options?.method === "PATCH"),
@@ -624,7 +678,7 @@ it("adopts a refreshed version in a pristine editor before the next save", async
   const name = screen.getByRole("textbox", { name: "助手名称" });
   await waitFor(() => expect(name).toHaveValue("最新名称"));
   await user.type(name, "更新");
-  await user.click(screen.getByRole("button", { name: "保存修改" }));
+  await user.click(screen.getByRole("button", { name: "保存本分区" }));
   await waitFor(() =>
     expect(
       mocked.mock.calls.find(([, options]) => options?.method === "PATCH")?.[1]
@@ -634,14 +688,49 @@ it("adopts a refreshed version in a pristine editor before the next save", async
 });
 it("does not offer human confirmation for a service identity", async () => {
   const { user } = mount("/admin/agents/4?tab=tools&view=edit");
-  expect(await screen.findByText("检查工具")).toBeVisible();
+  await user.click(await screen.findByRole("switch", { name: "启用检查工具" }));
+  expect(screen.getByText("允许")).toBeVisible();
+  expect(
+    screen.queryByRole("combobox", { name: "检查工具的执行策略" }),
+  ).toBeNull();
+  expect(screen.queryByText("每次确认")).toBeNull();
+});
+it("restores a chat tool's draft policy and constraints when toggled back on", async () => {
+  override = async (path) => {
+    if (path.endsWith("/definitions/4"))
+      return response({ ...agent, agent_type: "chat", robot_user_id: null });
+    if (path.endsWith("/tool-bindings"))
+      return response({
+        items: [
+          {
+            tool_key: "test_tool",
+            policy: "allow",
+            parameter_constraints: { limit: 3 },
+          },
+        ],
+        version: "1",
+      });
+  };
+  const { user } = mount("/admin/agents/4?tab=tools");
+  const toggle = await screen.findByRole("switch", { name: "启用检查工具" });
   await user.click(
     screen.getByRole("combobox", { name: "检查工具的执行策略" }),
   );
+  await user.click(await screen.findByRole("option", { name: "每次确认" }));
+  await user.click(toggle);
+  await user.click(toggle);
   expect(
-    screen.queryByRole("option", { name: /批准|确认/ }),
-  ).not.toBeInTheDocument();
-  expect(await screen.findByRole("option", { name: "允许" })).toBeVisible();
+    screen.getByRole("combobox", { name: "检查工具的执行策略" }),
+  ).toHaveTextContent("每次确认");
+  await user.click(screen.getByRole("button", { name: "检查工具" }));
+  expect(screen.getByRole("textbox", { name: "参数限制（JSON）" })).toHaveValue(
+    JSON.stringify({ limit: 3 }, null, 2),
+  );
+  await user.click(screen.getByRole("button", { name: "取消修改" }));
+  expect(
+    screen.getByRole("combobox", { name: "检查工具的执行策略" }),
+  ).toHaveTextContent("允许");
+  expect(screen.getByRole("button", { name: "保存本分区" })).toBeDisabled();
 });
 it("filters bound tools without dropping hidden bindings or pending edits on save", async () => {
   const items = [
@@ -663,29 +752,18 @@ it("filters bound tools without dropping hidden bindings or pending edits on sav
       });
   };
   const { user } = mount("/admin/agents/4?tab=tools&view=edit");
-  expect(
-    await screen.findByRole("heading", { name: "检查工具" }),
-  ).toBeVisible();
-  const search = screen.getByRole("textbox", { name: "搜索已绑定工具" });
+  const toggle = await screen.findByRole("switch", { name: "启用检查工具" });
+  const search = screen.getByRole("textbox", { name: "搜索工具" });
   await user.type(search, "TEST_TOOL");
-  expect(screen.queryByRole("heading", { name: "legacy_tool" })).toBeNull();
-  expect(screen.getByRole("button", { name: "保存工具绑定" })).toBeDisabled();
-  await user.click(
-    screen.getByRole("combobox", { name: "检查工具的执行策略" }),
-  );
-  await user.click(await screen.findByRole("option", { name: /^允许$/ }));
-  await user.click(screen.getByRole("combobox", { name: "筛选执行策略" }));
-  await user.click(await screen.findByRole("option", { name: /^禁止$/ }));
-  expect(
-    screen.getByText("没有匹配的已绑定工具，请调整搜索或执行策略筛选。"),
-  ).toBeVisible();
+  expect(screen.queryByRole("button", { name: "legacy_tool" })).toBeNull();
+  await user.click(toggle);
+  await user.click(screen.getByRole("button", { name: /^未启用/ }));
+  expect(screen.getByText("没有符合条件的工具")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "清除筛选" }));
-  expect(screen.getByRole("heading", { name: "legacy_tool" })).toBeVisible();
-  expect(
-    screen.getByRole("combobox", { name: "检查工具的执行策略" }),
-  ).toHaveTextContent("允许");
+  expect(screen.getByRole("button", { name: "legacy_tool" })).toBeVisible();
+  expect(screen.getByRole("switch", { name: "启用检查工具" })).toBeChecked();
   await user.type(search, "没有匹配项");
-  await user.click(screen.getByRole("button", { name: "保存工具绑定" }));
+  await user.click(screen.getByRole("button", { name: "保存本分区" }));
   await waitFor(() =>
     expect(
       mocked.mock.calls.some(
