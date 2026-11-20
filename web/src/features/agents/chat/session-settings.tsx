@@ -149,12 +149,15 @@ function SessionSettingsForm({
                     const model = options.data?.data.model_options.find(
                       (item) => item.binding_id === id,
                     );
-                    if (model?.thinking_options[0])
+                    if (model)
                       setDraft({
                         ...draft,
                         model_selection: {
                           model_binding_id: id,
-                          thinking_option_key: model.thinking_options[0].key,
+                          thinking_option_key:
+                            model.default_thinking_option_key ??
+                            model.thinking_options[0]?.key ??
+                            "",
                         },
                       });
                   }}

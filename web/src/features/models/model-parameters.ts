@@ -1,11 +1,5 @@
 import type { JsonObject } from "@/types/models";
 
-export const commonParameters = [
-  "temperature",
-  "top_p",
-  "max_output_tokens",
-  "stop",
-] as const;
 export function parseParameterObject(text: string): JsonObject {
   const parsed: unknown = JSON.parse(text);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))

@@ -66,7 +66,7 @@ func runtimeImageFiles(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition, err := f.Models.CreateDefinition(f.Context, f.AdminToken, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: "vision", Name: "Image model", Protocol: "chat_completions", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "supported", Thinking: "unsupported", Streaming: "supported"}, ContextWindow: 65536, MaxOutput: 4096, Parameters: json.RawMessage(`{"max_output_tokens":4096}`), Thinking: []m.ThinkingOption{{Key: "standard", Label: "Standard", Parameters: json.RawMessage(`{}`)}}})
+	definition, err := f.Models.CreateDefinition(f.Context, f.AdminToken, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: "vision", Name: "Image model", Protocol: "chat_completions", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "supported", Thinking: "unsupported", Streaming: "supported"}, ContextWindow: 65536, MaxOutput: 4096})
 	if err != nil {
 		t.Fatal(err)
 	}

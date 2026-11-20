@@ -137,7 +137,7 @@ func sandboxServiceAgent(t *testing.T, f *agentIntegrationFixture, mode string) 
 		t.Fatal(e)
 	}
 	id := strconv.FormatUint(modelID, 10)
-	_, e = f.Agents.PutModelBindings(f.Context, f.AdminToken, agent.ID, bindings.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: id, ThinkingOptions: []string{"standard"}, DefaultThinking: "standard", GenerationOverrides: json.RawMessage(`{}`)}}, DefaultModelID: id, DefaultThinking: "standard"})
+	_, e = f.Agents.PutModelBindings(f.Context, f.AdminToken, agent.ID, bindings.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: id, GenerationParameters: json.RawMessage(`{}`)}}, DefaultModelID: id})
 	if e != nil {
 		t.Fatal(e)
 	}

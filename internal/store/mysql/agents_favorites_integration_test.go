@@ -59,7 +59,7 @@ func favoriteTestAgent(t *testing.T, f *agentIntegrationFixture) *a.Definition {
 		t.Fatal(err)
 	}
 	id := strconv.FormatUint(modelID, 10)
-	_, err = svc.PutModelBindings(ctx, raw, agent.ID, bindings.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: id, ThinkingOptions: []string{"standard"}, DefaultThinking: "standard", GenerationOverrides: json.RawMessage(`{}`)}}, DefaultModelID: id, DefaultThinking: "standard"})
+	_, err = svc.PutModelBindings(ctx, raw, agent.ID, bindings.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: id, GenerationParameters: json.RawMessage(`{}`)}}, DefaultModelID: id})
 	if err != nil {
 		t.Fatal(err)
 	}

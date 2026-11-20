@@ -97,7 +97,7 @@ export interface ModelBindingWrite {
   model_definition_id: string;
   thinking_options: string[];
   default_thinking: string;
-  generation_overrides: JsonObject;
+  generation_parameters: JsonObject;
 }
 export interface ModelBinding extends ModelBindingWrite {
   id: string;
@@ -137,6 +137,8 @@ export interface ToolCatalogEntry {
   availability: Availability;
 }
 export interface ModelOption {
+  default_thinking_option_key?: string;
+  model_selection_hash?: string;
   binding_id: string;
   model_id: string;
   display_name: string;
@@ -157,7 +159,7 @@ export interface CatalogAgent {
   description: string;
   model_options: ModelOption[];
   default_model_binding_id: string;
-  default_thinking_option_key: string;
+  default_thinking_option_key: string | null;
   sandbox_required: boolean;
   availability: Availability;
 }

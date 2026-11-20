@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { request, type ApiResponse } from "@/api/client";
 import { Button } from "@/components/button";
-import { Field, Select, Textarea } from "@/components/fields";
+import { Field, Select } from "@/components/fields";
 import {
   AsyncBoundary,
   ErrorNotice,
@@ -16,18 +16,26 @@ import type { ModelBindingWrite, ModelBindings } from "@/types/agents";
 import { agentAdminRoot, agentKeys } from "@/features/agents/data/agent-api";
 import {
   ConfigActions,
-  objectJSON,
   useResourceSave,
 } from "@/features/agents/resources/admin-shared";
 import { ResourcePicker } from "@/features/agents/resources/resource-picker";
 
-type DraftBinding = ModelBindingWrite & { parametersText: string };
+import {
+  GenerationFields,
+  generationDraft,
+  generationParameters,
+} from "@/features/agents/resources/generation-parameters";
+type DraftBinding = Omit<ModelBindingWrite, "generation_parameters"> & {
+  generation: ReturnType<typeof generationDraft>;
+};
 function draftFrom(data: ModelBindings) {
   return {
-    items: data.items.map((item): DraftBinding => ({
-      ...item,
-      parametersText: JSON.stringify(item.generation_overrides, null, 2),
-    })),
+    items: data.items.map(
+      ({ generation_parameters, ...item }): DraftBinding => ({
+        ...item,
+        generation: generationDraft(generation_parameters),
+      }),
+    ),
     defaultModelId:
       data.items.find((item) => item.id === data.default_model_binding_id)
         ?.model_definition_id ?? "",
@@ -129,8 +137,6 @@ function ModelBindingsForm({
         `/admin/models/definitions/${model.id}`,
       );
       const options = detail.data.thinking_options.map((option) => option.key);
-      if (!options.length)
-        throw new Error("该模型尚未配置可用思考选项，请先在模型管理中配置。");
       setDraft((current) => ({
         defaultModelId: current.defaultModelId || model.id,
         items: [
@@ -138,9 +144,8 @@ function ModelBindingsForm({
           {
             model_definition_id: model.id,
             thinking_options: options,
-            default_thinking: options[0],
-            generation_overrides: {},
-            parametersText: "{}",
+            default_thinking: options[0] ?? "",
+            generation: generationDraft({}),
           },
         ],
       }));
@@ -154,21 +159,15 @@ function ModelBindingsForm({
   function submit() {
     setError(undefined);
     try {
-      const items = draft.items.map(({ parametersText, ...item }) => {
-        if (
-          !item.thinking_options.length ||
-          !item.thinking_options.includes(item.default_thinking)
-        )
-          throw new Error(
-            "每个模型至少选择一个思考选项，默认项必须在允许列表中。",
-          );
-        return {
-          model_definition_id: item.model_definition_id,
-          thinking_options: item.thinking_options,
-          default_thinking: item.default_thinking,
-          generation_overrides: objectJSON(parametersText),
-        };
-      });
+      const items = draft.items.map(({ generation, ...item }, index) => ({
+        model_definition_id: item.model_definition_id,
+        thinking_options: item.thinking_options,
+        default_thinking: item.default_thinking,
+        generation_parameters: generationParameters(
+          generation,
+          details[index].data?.data.max_output_tokens,
+        ),
+      }));
       const selected = items.find(
         (item) => item.model_definition_id === draft.defaultModelId,
       );
@@ -189,7 +188,7 @@ function ModelBindingsForm({
           <div>
             <h2 className="font-semibold">允许使用的模型</h2>
             <p className="mt-1 text-sm text-muted">
-              会话开始前可在白名单中选择；首次有效输入后锁定模型和思考配置。
+              会话开始前可在白名单中选择；首次有效输入后锁定模型，思考档位可在后续轮次调整。
             </p>
           </div>
           {!readOnly && (
@@ -274,6 +273,7 @@ function ModelBindingsForm({
                     onRetry={() => details[index].refetch()}
                   >
                     {model &&
+                      model.thinking_options.length > 0 &&
                       (readOnly ? (
                         <dl className="agent-read-facts grid gap-5 sm:grid-cols-2">
                           <div>
@@ -286,7 +286,7 @@ function ModelBindingsForm({
                                       (option) => option.key === key,
                                     )?.label ?? key,
                                 )
-                                .join("、")}
+                                .join("、") || "未指定"}
                             </dd>
                           </div>
                           <div>
@@ -295,7 +295,8 @@ function ModelBindingsForm({
                               {model.thinking_options.find(
                                 (option) =>
                                   option.key === item.default_thinking,
-                              )?.label ?? item.default_thinking}
+                              )?.label ??
+                                (item.default_thinking || "未指定")}
                             </dd>
                           </div>
                         </dl>
@@ -337,58 +338,36 @@ function ModelBindingsForm({
                               ))}
                             </div>
                           </div>
-                          <Field label="默认思考选项">
-                            <Select
-                              name={`thinking-${index}`}
-                              value={item.default_thinking}
-                              onValueChange={(value) =>
-                                update(index, { default_thinking: value })
-                              }
-                            >
-                              {model.thinking_options
-                                .filter((option) =>
-                                  item.thinking_options.includes(option.key),
-                                )
-                                .map((option) => (
-                                  <option key={option.key} value={option.key}>
-                                    {option.label}
-                                  </option>
-                                ))}
-                            </Select>
-                          </Field>
+                          {item.thinking_options.length > 0 && (
+                            <Field label="默认思考选项">
+                              <Select
+                                name={`thinking-${index}`}
+                                value={item.default_thinking}
+                                onValueChange={(value) =>
+                                  update(index, { default_thinking: value })
+                                }
+                              >
+                                {model.thinking_options
+                                  .filter((option) =>
+                                    item.thinking_options.includes(option.key),
+                                  )
+                                  .map((option) => (
+                                    <option key={option.key} value={option.key}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                              </Select>
+                            </Field>
+                          )}
                         </div>
                       ))}
                   </AsyncBoundary>
-                  <details>
-                    <summary className="cursor-pointer text-sm text-muted">
-                      模型参数覆盖
-                    </summary>
-                    <div className="mt-3">
-                      {readOnly ? (
-                        <pre className="overflow-auto whitespace-pre-wrap break-all text-xs">
-                          {item.parametersText === "{}"
-                            ? "使用模型默认参数"
-                            : item.parametersText}
-                        </pre>
-                      ) : (
-                        <Field
-                          label="覆盖参数（JSON）"
-                          hint="仅允许模型协议已注册的生成参数。保存时服务端校验，不可传入认证、消息或工具定义。"
-                        >
-                          <Textarea
-                            className="font-mono text-xs"
-                            rows={5}
-                            value={item.parametersText}
-                            onChange={(event) =>
-                              update(index, {
-                                parametersText: event.target.value,
-                              })
-                            }
-                          />
-                        </Field>
-                      )}
-                    </div>
-                  </details>
+                  <GenerationFields
+                    draft={item.generation}
+                    readOnly={readOnly}
+                    modelLimit={model?.max_output_tokens}
+                    onChange={(generation) => update(index, { generation })}
+                  />
                 </section>
               );
             })}

@@ -22,7 +22,7 @@ type modelsTx struct {
 func (t *identityTx) Models() m.Repository { return &modelsTx{t.ctx, t.tx} }
 
 const modelProviderColumns = "p.id,p.icon_key,p.code,p.name,p.description,p.provider_type,p.base_url,p.auth_method,p.identity_config,p.enabled,p.config,p.config_schema_version,p.secret_revision,p.row_version,p.config_version,p.created_by_user_id,p.created_at,p.updated_at,p.secret_ciphertext IS NOT NULL AS has_secret,COALESCE(((p.secret_ciphertext IS NULL AND p.secret_format_version IS NULL AND p.secret_key_version IS NULL) OR (p.secret_ciphertext IS NOT NULL AND p.secret_format_version IN (1,2) AND p.secret_key_version='v1')),FALSE) AS secret_valid,(SELECT COUNT(*) FROM model_definition d WHERE d.provider_id=p.id) AS model_count"
-const modelDefinitionColumns = "id,icon_key,provider_id,model_id,name,description,protocol,enabled,capabilities,capability_schema_version,generation_defaults,thinking_options,context_window_tokens,max_output_tokens,row_version,config_version,created_by_user_id,created_at,updated_at"
+const modelDefinitionColumns = "(SELECT p.provider_type FROM model_provider p WHERE p.id=model_definition.provider_id) AS provider_type,id,icon_key,provider_id,model_id,name,description,protocol,enabled,capabilities,capability_schema_version,thinking_levels,thinking_mapping,context_window_tokens,max_output_tokens,row_version,config_version,created_by_user_id,created_at,updated_at"
 
 func modelsError(err error) error {
 	var e *driver.MySQLError
@@ -183,12 +183,12 @@ func (t *modelsTx) Definition(id uint64, lock bool) (*m.Definition, error) {
 func (t *modelsTx) InsertDefinition(v *m.Definition) error {
 	v.CreatedAt = time.Now().UTC().Truncate(time.Millisecond)
 	v.UpdatedAt = v.CreatedAt
-	r, e := t.named("INSERT INTO model_definition(icon_key,provider_id,model_id,name,description,protocol,enabled,capabilities,capability_schema_version,generation_defaults,thinking_options,context_window_tokens,max_output_tokens,row_version,config_version,created_by_user_id,created_at,updated_at) VALUES(:icon_key,:provider_id,:model_id,:name,:description,:protocol,:enabled,:capabilities,:capability_schema_version,:generation_defaults,:thinking_options,:context_window_tokens,:max_output_tokens,:row_version,:config_version,:created_by_user_id,:created_at,:updated_at)", v)
+	r, e := t.named("INSERT INTO model_definition(icon_key,provider_id,model_id,name,description,protocol,enabled,capabilities,capability_schema_version,thinking_levels,thinking_mapping,context_window_tokens,max_output_tokens,row_version,config_version,created_by_user_id,created_at,updated_at) VALUES(:icon_key,:provider_id,:model_id,:name,:description,:protocol,:enabled,:capabilities,:capability_schema_version,:thinking_levels,:thinking_mapping,:context_window_tokens,:max_output_tokens,:row_version,:config_version,:created_by_user_id,:created_at,:updated_at)", v)
 	return modelID(r, e, &v.ID)
 }
 func (t *modelsTx) SaveDefinition(v *m.Definition) error {
 	v.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
-	_, e := t.named("UPDATE model_definition SET icon_key=:icon_key,name=:name,description=:description,enabled=:enabled,capabilities=:capabilities,generation_defaults=:generation_defaults,thinking_options=:thinking_options,context_window_tokens=:context_window_tokens,max_output_tokens=:max_output_tokens,row_version=:row_version,config_version=:config_version,updated_at=:updated_at WHERE id=:id", v)
+	_, e := t.named("UPDATE model_definition SET icon_key=:icon_key,name=:name,description=:description,enabled=:enabled,capabilities=:capabilities,thinking_levels=:thinking_levels,thinking_mapping=:thinking_mapping,context_window_tokens=:context_window_tokens,max_output_tokens=:max_output_tokens,row_version=:row_version,config_version=:config_version,updated_at=:updated_at WHERE id=:id", v)
 	return e
 }
 func (t *modelsTx) DeleteDefinition(id uint64) error {

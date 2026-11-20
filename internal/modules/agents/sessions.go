@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -149,11 +148,7 @@ func (s *Service) selection(tx identity.Tx, r Repository, v *SessionRow) (agentc
 			}
 		}
 		current := view.Available && binding.RemovedAt == nil
-		found := false
-		for _, key := range binding.ThinkingOptions {
-			found = found || key == frozen.ThinkingKey
-		}
-		current = current && found
+		current = current && thinkingAllowed(binding.ThinkingOptions, frozen.ThinkingKey)
 		current = current && view.Capabilities.Text == "supported"
 		if frozen.Capabilities.ToolCalling == "supported" && view.Capabilities.Tools != "supported" {
 			current = false
@@ -184,8 +179,11 @@ func (s *Service) selection(tx identity.Tx, r Repository, v *SessionRow) (agentc
 // Change only reasoning parameters; provider routes and model identity must
 // remain stable because the conversation may contain provider-owned file IDs.
 func changeFrozenThinking(frozen *frozenModel, key string, allowed []string, options []modelcore.ThinkingOption) error {
-	if !slices.Contains(allowed, key) {
+	if !thinkingAllowed(allowed, key) {
 		return httpx.Invalid("thinking_option_key", "not_allowed")
+	}
+	if key == "" {
+		options = []modelcore.ThinkingOption{{Parameters: json.RawMessage(`{}`)}}
 	}
 	for _, option := range options {
 		if option.Key != key {

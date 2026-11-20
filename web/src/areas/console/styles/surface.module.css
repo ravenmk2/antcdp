@@ -1527,18 +1527,17 @@
   }
   .scope :global(.model-thinking-levels) {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
   }
   .scope :global(.model-thinking-level) {
     display: flex;
     align-items: center;
     gap: 12px;
-    min-height: 72px;
-    padding: 14px;
+    min-height: 52px;
+    padding: 8px 12px;
     border: 1px solid var(--border);
     border-radius: 8px;
-    cursor: pointer;
   }
   .scope :global(.model-thinking-level:hover),
   .scope :global(.model-thinking-level[data-checked="true"]) {
@@ -1548,16 +1547,6 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
-  .scope :global(.model-thinking-mapping) {
-    border: 1px solid var(--border);
-    border-radius: 8px;
-  }
-  .scope :global(.model-thinking-mapping > summary) {
-    padding: 14px 16px;
-    cursor: pointer;
-    font-size: 14px;
-  }
-
   .scope :global(.web-access-workspace) {
     display: grid;
     grid-template-columns: 280px minmax(0, 1fr);

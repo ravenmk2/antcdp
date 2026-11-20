@@ -74,10 +74,14 @@ func (s *Service) definition(v *Definition) error {
 	if v == nil {
 		return missing()
 	}
-	if v.SchemaVersion != 1 || json.Unmarshal(v.CapabilitiesJSON, &v.Capabilities) != nil || json.Unmarshal(v.ThinkingJSON, &v.Thinking) != nil {
+	if v.SchemaVersion != 1 || json.Unmarshal(v.CapabilitiesJSON, &v.Capabilities) != nil || json.Unmarshal(v.LevelsJSON, &v.ThinkingLevels) != nil || json.Unmarshal(v.MappingJSON, &v.ThinkingMapping) != nil {
 		return integrity()
 	}
-	v.ThinkingLevels, v.ThinkingMapping = thinkingConfig(v.Thinking)
+	var err error
+	v.Thinking, err = s.resolveThinking(v.ProviderType, v.Protocol, v.ThinkingLevels, v.ThinkingMapping)
+	if err != nil {
+		return err
+	}
 	v.Version = strings.Trim(s.tag("definition", v.ID, v.RowVersion), `"`)
 	return nil
 }
@@ -474,13 +478,7 @@ func (s *Service) CreateDefinition(ctx context.Context, raw string, w Definition
 		if w.Enabled.Null {
 			return httpx.Invalid("enabled", "invalid_format")
 		}
-		d := &Definition{IconKey: w.IconKey, ProviderID: id, RemoteModelID: w.RemoteModelID, Name: strings.TrimSpace(w.Name), Description: w.Description, Protocol: w.Protocol, Enabled: true, Capabilities: w.Capabilities, ContextWindow: w.ContextWindow, MaxOutput: w.MaxOutput, Parameters: w.Parameters, Thinking: w.Thinking, SchemaVersion: 1, RowVersion: 1, ConfigVersion: 1, Creator: a.User.ID}
-		if d.Thinking == nil {
-			d.Thinking, e = s.resolveThinking(p.Type, d.Protocol, w.ThinkingLevels, w.ThinkingMapping)
-			if e != nil {
-				return e
-			}
-		}
+		d := &Definition{IconKey: w.IconKey, ProviderID: id, RemoteModelID: w.RemoteModelID, Name: strings.TrimSpace(w.Name), Description: w.Description, Protocol: w.Protocol, Enabled: true, Capabilities: w.Capabilities, ContextWindow: w.ContextWindow, MaxOutput: w.MaxOutput, ProviderType: p.Type, ThinkingLevels: w.ThinkingLevels, ThinkingMapping: w.ThinkingMapping, SchemaVersion: 1, RowVersion: 1, ConfigVersion: 1, Creator: a.User.ID}
 		if w.Enabled.Set {
 			d.Enabled = w.Enabled.Value
 		}
@@ -509,7 +507,11 @@ func encodeDefinition(d *Definition) error {
 	if e != nil {
 		return e
 	}
-	d.ThinkingJSON, e = json.Marshal(d.Thinking)
+	d.LevelsJSON, e = json.Marshal(d.ThinkingLevels)
+	if e != nil {
+		return e
+	}
+	d.MappingJSON, e = json.Marshal(d.ThinkingMapping)
 	return e
 }
 func (s *Service) PatchDefinition(ctx context.Context, raw string, id uint64, tag string, w DefinitionPatch) (*Result, error) {
@@ -524,10 +526,10 @@ func (s *Service) PatchDefinition(ctx context.Context, raw string, id uint64, ta
 		if e = checkTag(tag, s.tag("definition", id, d.RowVersion)); e != nil {
 			return e
 		}
-		if !w.IconKey.Set && !w.Name.Set && !w.Description.Set && !w.Enabled.Set && !w.Capabilities.Set && !w.ContextWindow.Set && !w.MaxOutput.Set && !w.Parameters.Set && !w.Thinking.Set && !w.ThinkingLevels.Set && !w.ThinkingMapping.Set {
+		if !w.IconKey.Set && !w.Name.Set && !w.Description.Set && !w.Enabled.Set && !w.Capabilities.Set && !w.ContextWindow.Set && !w.MaxOutput.Set && !w.ThinkingLevels.Set && !w.ThinkingMapping.Set {
 			return httpx.Invalid("body", "empty_patch")
 		}
-		if w.Name.Null || w.Description.Null || w.Enabled.Null || w.Capabilities.Null || w.ContextWindow.Null || w.MaxOutput.Null || w.Parameters.Null || w.Thinking.Null || w.ThinkingLevels.Null || w.ThinkingMapping.Null {
+		if w.Name.Null || w.Description.Null || w.Enabled.Null || w.Capabilities.Null || w.ContextWindow.Null || w.MaxOutput.Null || w.ThinkingLevels.Null || w.ThinkingMapping.Null {
 			return httpx.Invalid("body", "null_not_allowed")
 		}
 		old := *d
@@ -555,34 +557,26 @@ func (s *Service) PatchDefinition(ctx context.Context, raw string, id uint64, ta
 		if w.MaxOutput.Set {
 			d.MaxOutput = w.MaxOutput.Value
 		}
-		if w.Parameters.Set {
-			d.Parameters = w.Parameters.Value
+		if w.ThinkingLevels.Set {
+			d.ThinkingLevels = w.ThinkingLevels.Value
+			if !w.ThinkingMapping.Set {
+				d.ThinkingMapping = map[string]json.RawMessage{}
+				for _, key := range d.ThinkingLevels {
+					if value, ok := old.ThinkingMapping[key]; ok {
+						d.ThinkingMapping[key] = value
+					}
+				}
+			}
 		}
-		if w.Thinking.Set {
-			d.Thinking = w.Thinking.Value
-		}
-		if w.ThinkingLevels.Set || w.ThinkingMapping.Set {
-			levels, mapping := thinkingConfig(d.Thinking)
-			if w.ThinkingLevels.Set {
-				levels = w.ThinkingLevels.Value
-			}
-			if p.Type != "custom" {
-				mapping = nil
-			}
-			if w.ThinkingMapping.Set {
-				mapping = w.ThinkingMapping.Value
-			}
-			d.Thinking, e = s.resolveThinking(p.Type, d.Protocol, levels, mapping)
-			if e != nil {
-				return e
-			}
+		if w.ThinkingMapping.Set {
+			d.ThinkingMapping = w.ThinkingMapping.Value
 		}
 		if e = s.validateDefinition(p, d); e != nil {
 			return e
 		}
 		if !same(old, d) {
 			d.RowVersion++
-			if d.Enabled != old.Enabled || d.ContextWindow != old.ContextWindow || d.MaxOutput != old.MaxOutput || !same(d.Capabilities, old.Capabilities) || !same(d.Parameters, old.Parameters) || !same(d.Thinking, old.Thinking) {
+			if d.Enabled != old.Enabled || d.ContextWindow != old.ContextWindow || d.MaxOutput != old.MaxOutput || !same(d.Capabilities, old.Capabilities) || !same(d.ThinkingMapping, old.ThinkingMapping) || !same(d.Thinking, old.Thinking) {
 				d.ConfigVersion++
 			}
 			if e = encodeDefinition(d); e != nil {

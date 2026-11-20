@@ -17,7 +17,7 @@ func runtimeThinkingSelection(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition, err := f.Models.CreateDefinition(f.Context, f.AdminToken, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: "thinking-selection", Name: "Thinking selection", Protocol: "chat_completions", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "unsupported", Thinking: "supported", Streaming: "supported"}, ContextWindow: 32768, MaxOutput: 4096, Parameters: json.RawMessage(`{"temperature":0.2}`), Thinking: []m.ThinkingOption{{Key: "standard", Label: "标准", Parameters: json.RawMessage(`{}`)}, {Key: "low", Label: "低", Parameters: json.RawMessage(`{"reasoning_effort":"low"}`)}, {Key: "high", Label: "高", Parameters: json.RawMessage(`{"reasoning_effort":"high"}`)}}})
+	definition, err := f.Models.CreateDefinition(f.Context, f.AdminToken, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: "thinking-selection", Name: "Thinking selection", Protocol: "chat_completions", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "unsupported", Thinking: "supported", Streaming: "supported"}, ContextWindow: 32768, MaxOutput: 4096, ThinkingLevels: []string{"low", "high"}, ThinkingMapping: map[string]json.RawMessage{"high": json.RawMessage(`{"reasoning_effort":"vendor-high"}`)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func runtimeThinkingSelection(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(err)
 	}
 	model := strconv.FormatUint(modelID, 10)
-	_, err = f.Agents.PutModelBindings(f.Context, f.AdminToken, agent.ID, bindings.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: model, ThinkingOptions: []string{"low", "high"}, DefaultThinking: "low", GenerationOverrides: json.RawMessage(`{}`)}}, DefaultModelID: model, DefaultThinking: "low"})
+	_, err = f.Agents.PutModelBindings(f.Context, f.AdminToken, agent.ID, bindings.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: model, ThinkingOptions: []string{"low", "high"}, DefaultThinking: "low", GenerationParameters: json.RawMessage(`{"temperature":0.2}`)}}, DefaultModelID: model, DefaultThinking: "low"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +116,7 @@ func runtimeThinkingSelection(t *testing.T, f *agentIntegrationFixture) {
 	}
 	runtimeEnd(t, f, x)
 	next := runtimeClaim(t, f, id, "next turn uses high effort")
-	if next.Model.ThinkingKey != "high" || string(next.Model.Parameters["reasoning_effort"]) != `"high"` || next.Model.RemoteModelID != x.Model.RemoteModelID || string(next.Model.Connection) != string(x.Model.Connection) || string(next.Model.Parameters["temperature"]) != "0.2" {
+	if next.Model.ThinkingKey != "high" || string(next.Model.Parameters["reasoning_effort"]) != `"vendor-high"` || next.Model.RemoteModelID != x.Model.RemoteModelID || string(next.Model.Connection) != string(x.Model.Connection) || string(next.Model.Parameters["temperature"]) != "0.2" {
 		t.Fatal("next run did not preserve model and apply thinking")
 	}
 	runtimeEnd(t, f, next)

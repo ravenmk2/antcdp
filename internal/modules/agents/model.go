@@ -132,10 +132,10 @@ type Query struct {
 	CatalogAdmin       bool
 }
 type ModelBindingWrite struct {
-	ModelID             string          `json:"model_definition_id"`
-	ThinkingOptions     []string        `json:"thinking_options"`
-	DefaultThinking     string          `json:"default_thinking"`
-	GenerationOverrides json.RawMessage `json:"generation_overrides"`
+	ModelID              string          `json:"model_definition_id"`
+	ThinkingOptions      []string        `json:"thinking_options"`
+	DefaultThinking      string          `json:"default_thinking"`
+	GenerationParameters json.RawMessage `json:"generation_parameters"`
 }
 type ModelBindingsWrite struct {
 	Items           []ModelBindingWrite `json:"items"`
@@ -143,17 +143,17 @@ type ModelBindingsWrite struct {
 	DefaultThinking string              `json:"default_thinking_option_key"`
 }
 type ModelBinding struct {
-	ID                  uint64          `db:"id" json:"id,string"`
-	AgentID             uint64          `db:"agent_id" json:"-"`
-	ModelID             uint64          `db:"model_definition_id" json:"model_definition_id,string"`
-	ThinkingOptions     []string        `db:"-" json:"thinking_options"`
-	DefaultThinking     string          `db:"default_thinking" json:"default_thinking"`
-	GenerationOverrides json.RawMessage `db:"generation_overrides" json:"generation_overrides"`
-	ThinkingJSON        json.RawMessage `db:"thinking_options" json:"-"`
-	SortOrder           int             `db:"sort_order" json:"-"`
-	CreatedAt           time.Time       `db:"created_at" json:"-"`
-	UpdatedAt           time.Time       `db:"updated_at" json:"-"`
-	RemovedAt           *time.Time      `db:"removed_at" json:"-"`
+	ID                   uint64          `db:"id" json:"id,string"`
+	AgentID              uint64          `db:"agent_id" json:"-"`
+	ModelID              uint64          `db:"model_definition_id" json:"model_definition_id,string"`
+	ThinkingOptions      []string        `db:"-" json:"thinking_options"`
+	DefaultThinking      string          `db:"default_thinking" json:"default_thinking"`
+	GenerationParameters json.RawMessage `db:"generation_parameters" json:"generation_parameters"`
+	ThinkingJSON         json.RawMessage `db:"thinking_options" json:"-"`
+	SortOrder            int             `db:"sort_order" json:"-"`
+	CreatedAt            time.Time       `db:"created_at" json:"-"`
+	UpdatedAt            time.Time       `db:"updated_at" json:"-"`
+	RemovedAt            *time.Time      `db:"removed_at" json:"-"`
 }
 type ToolBindingWrite struct {
 	ToolKey     string          `json:"tool_key"`

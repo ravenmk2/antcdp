@@ -41,7 +41,7 @@ const limitGroups: {
     description: "分别限制本轮累计输入与输出用量。",
     fields: [
       ["max_input_tokens", "输入 Token 预算", 1, 10000000],
-      ["max_output_tokens", "输出 Token 预算", 1, 10000000],
+      ["max_output_tokens", "运行输出预算（Token）", 1, 10000000],
     ],
   },
 ];

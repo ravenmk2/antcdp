@@ -78,9 +78,13 @@ export function NewConversation({
     selected?.thinking_options.find((option) => option.key === draft.thinking)
       ?.key ??
     selected?.thinking_options.find(
-      (option) => option.key === defaults?.default_thinking_option_key,
+      (option) =>
+        option.key ===
+        (selected.default_thinking_option_key ??
+          defaults?.default_thinking_option_key),
     )?.key ??
-    selected?.thinking_options[0]?.key;
+    selected?.thinking_options[0]?.key ??
+    "";
   const value = agent.data?.data;
   const locked = send.state.phase !== "idle";
   const available =
@@ -90,7 +94,7 @@ export function NewConversation({
         (value as AgentDefinition).agent_type === "service"
       : (value as CatalogAgent).availability.available);
   const target =
-    value && selected && thinking
+    value && selected
       ? {
           create: {
             agent_id: value.id,
@@ -152,7 +156,7 @@ export function NewConversation({
               id={id}
               target={target}
               imageInput={selected?.image_input}
-              disabled={!available || !selected || !thinking}
+              disabled={!available || !selected}
               onAccepted={openSession}
               onOpenSession={openSession}
               settings={selectionControls}
@@ -200,7 +204,7 @@ export function NewConversation({
               id={id}
               target={target}
               imageInput={selected?.image_input}
-              disabled={!available || !selected || !thinking}
+              disabled={!available || !selected}
               onAccepted={(sessionId) => openSession(sessionId)}
               onOpenSession={openSession}
             >

@@ -123,7 +123,7 @@ func TestModelsLifecycle(t *testing.T) {
 	modelsExpectCode(t, err, "VERSION_CONFLICT")
 	_, err = svc.PatchProvider(ctx, raw, provider.ID, patched.Tag, m.ProviderPatch{IconKey: m.Field[string]{Set: true, Value: "invalid"}})
 	modelsExpectCode(t, err, "VALIDATION_FAILED")
-	definition, err := svc.CreateDefinition(ctx, raw, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.ID, 10), RemoteModelID: "remote-model", Name: "Model", Protocol: "chat_completions", IconKey: &icon, Capabilities: m.Capabilities{Text: "supported", Image: "unsupported", Tools: "supported", Streaming: "unsupported", Thinking: "unsupported"}, ContextWindow: 8192, MaxOutput: 1024, Parameters: json.RawMessage(`{}`), Thinking: []m.ThinkingOption{{Key: "standard", Label: "标准", Parameters: json.RawMessage(`{}`)}}})
+	definition, err := svc.CreateDefinition(ctx, raw, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.ID, 10), RemoteModelID: "remote-model", Name: "Model", Protocol: "chat_completions", IconKey: &icon, Capabilities: m.Capabilities{Text: "supported", Image: "unsupported", Tools: "supported", Streaming: "unsupported", Thinking: "unsupported"}, ContextWindow: 8192, MaxOutput: 1024})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func modelsHTTPLifecycle(t *testing.T, ctx context.Context, database config.Data
 			expectCode(t, admin.call(t, "POST", providerPath+"/test", map[string]any{"level": "connectivity"}, 409, map[string]string{"If-Match": tag}), "MODEL_UNAVAILABLE")
 		}
 	}
-	modelBody := map[string]any{"provider_id": providerID, "name": "HTTP model", "model_id": "http-model", "protocol": "chat_completions", "declared_capabilities": m.Capabilities{Text: "supported", Image: "unsupported", Tools: "unsupported", Streaming: "unsupported", Thinking: "unsupported"}, "context_window": 8192, "max_output_tokens": 1024, "default_parameters": map[string]any{}, "thinking_levels": []string{"none", "high"}}
+	modelBody := map[string]any{"provider_id": providerID, "name": "HTTP model", "model_id": "http-model", "protocol": "chat_completions", "declared_capabilities": m.Capabilities{Text: "supported", Image: "unsupported", Tools: "unsupported", Streaming: "unsupported", Thinking: "supported"}, "context_window": 8192, "max_output_tokens": 1024, "thinking_levels": []string{"none", "high"}}
 	model := testData(admin.call(t, "POST", "/admin/models/definitions", modelBody, 201, nil))
 	if model["model_id"] != "http-model" || model["remote_model_id"] != nil {
 		t.Fatal("model ID contract", model)

@@ -14,6 +14,7 @@ import (
 
 	driver "github.com/go-sql-driver/mysql"
 	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/modeladapters"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	a "github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/collaboration"
@@ -106,6 +107,9 @@ func newAgentIntegrationFixtureFor(t *testing.T, variable string) *agentIntegrat
 		}
 		return cryptox.Decrypt(key, installation, purpose, value)
 	}, ValidateParameters: func(string, string, json.RawMessage) error { return nil }}
+	models.ThinkingCatalog = func(kind, protocol string) []m.ThinkingOption {
+		return modeladapters.NewRegistry().ThinkingOptions(modelcore.ProviderType(kind), modelcore.Protocol(protocol))
+	}
 	files, e := a.NewByteStore(t.TempDir())
 	if e != nil {
 		t.Fatal(e)
@@ -130,7 +134,7 @@ func agentManagementLifecycle(t *testing.T, f *agentIntegrationFixture) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	model, e := f.Models.CreateDefinition(ctx, raw, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: "agent-test", Name: "Agent test model", Protocol: "chat_completions", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "unsupported", Thinking: "unsupported", Streaming: "supported"}, ContextWindow: 32768, MaxOutput: 4096, Parameters: json.RawMessage(`{}`), Thinking: []m.ThinkingOption{{Key: "standard", Label: "标准", Parameters: json.RawMessage(`{}`)}}})
+	model, e := f.Models.CreateDefinition(ctx, raw, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: "agent-test", Name: "Agent test model", Protocol: "chat_completions", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "unsupported", Thinking: "unsupported", Streaming: "supported"}, ContextWindow: 32768, MaxOutput: 4096})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -153,7 +157,7 @@ func agentManagementLifecycle(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(e)
 	}
 	modelID := strconv.FormatUint(model.Data.(*m.Definition).ID, 10)
-	bound, e := svc.PutModelBindings(ctx, raw, agent.ID, bindings.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: modelID, ThinkingOptions: []string{"standard"}, DefaultThinking: "standard", GenerationOverrides: json.RawMessage(`{}`)}}, DefaultModelID: modelID, DefaultThinking: "standard"})
+	bound, e := svc.PutModelBindings(ctx, raw, agent.ID, bindings.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: modelID, GenerationParameters: json.RawMessage(`{}`)}}, DefaultModelID: modelID})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -311,7 +315,7 @@ func agentScopeLifecycle(t *testing.T, f *agentIntegrationFixture, sourceAgent u
 		t.Fatal(err)
 	}
 	modelID := strconv.FormatUint(items[0].ModelID, 10)
-	_, err = svc.PutModelBindings(ctx, admin, agentID, binding.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: modelID, ThinkingOptions: items[0].ThinkingOptions, DefaultThinking: items[0].DefaultThinking, GenerationOverrides: items[0].GenerationOverrides}}, DefaultModelID: modelID, DefaultThinking: items[0].DefaultThinking})
+	_, err = svc.PutModelBindings(ctx, admin, agentID, binding.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: modelID, ThinkingOptions: items[0].ThinkingOptions, DefaultThinking: items[0].DefaultThinking, GenerationParameters: items[0].GenerationParameters}}, DefaultModelID: modelID, DefaultThinking: items[0].DefaultThinking})
 	if err != nil {
 		t.Fatal(err)
 	}

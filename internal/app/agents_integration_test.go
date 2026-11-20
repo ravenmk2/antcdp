@@ -117,20 +117,22 @@ func TestAgentApplicationIntegration(t *testing.T) {
 	t.Cleanup(modelServer.Close)
 	providerConfig := m.ProviderCreate{Name: "Application fixture", Type: "ollama", Config: &m.Config{BaseURL: modelServer.URL + "/v1"}, Authentication: &m.AuthenticationWrite{Method: "none", Secret: m.SecretWrite{Operation: "clear"}}}
 	remoteModel := "application-fixture"
-	thinking := json.RawMessage(`{}`)
+	levels := []string{}
+	defaultThinking := ""
 	realModel := os.Getenv("ANTCDP_TEST_DEEPSEEK_API_KEY") != ""
 	if realModel {
 		providerConfig.Type = "deepseek"
 		providerConfig.Config.BaseURL = "https://api.deepseek.com"
 		providerConfig.Authentication = &m.AuthenticationWrite{Method: "api_key", Secret: m.SecretWrite{Operation: "replace", Value: new(os.Getenv("ANTCDP_TEST_DEEPSEEK_API_KEY"))}}
 		remoteModel = "deepseek-flash"
-		thinking = json.RawMessage(`{"thinking":{"type":"enabled"},"reasoning_effort":"high"}`)
+		levels = []string{"high"}
+		defaultThinking = "high"
 	}
 	provider, err := models.CreateProvider(ctx, raw, providerConfig)
 	if err != nil {
 		t.Fatal("model provider:", err)
 	}
-	definition, err := models.CreateDefinition(ctx, raw, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: remoteModel, Name: "Application fixture", Protocol: "chat_completions", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "unsupported", Thinking: "supported", Streaming: "supported"}, ContextWindow: 131072, MaxOutput: 4096, Parameters: json.RawMessage(`{}`), Thinking: []m.ThinkingOption{{Key: "standard", Label: "Standard", Parameters: thinking}}})
+	definition, err := models.CreateDefinition(ctx, raw, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: remoteModel, Name: "Application fixture", Protocol: "chat_completions", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "unsupported", Thinking: "supported", Streaming: "supported"}, ContextWindow: 131072, MaxOutput: 4096, ThinkingLevels: levels})
 	if err != nil {
 		t.Fatal("model:", err)
 	}
@@ -160,7 +162,7 @@ func TestAgentApplicationIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	modelID := strconv.FormatUint(definition.Data.(*m.Definition).ID, 10)
-	_, err = app.Service.PutModelBindings(ctx, raw, agentID, bindings.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: modelID, ThinkingOptions: []string{"standard"}, DefaultThinking: "standard", GenerationOverrides: json.RawMessage(`{}`)}}, DefaultModelID: modelID, DefaultThinking: "standard"})
+	_, err = app.Service.PutModelBindings(ctx, raw, agentID, bindings.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: modelID, ThinkingOptions: levels, DefaultThinking: defaultThinking, GenerationParameters: json.RawMessage(`{}`)}}, DefaultModelID: modelID, DefaultThinking: defaultThinking})
 	if err != nil {
 		t.Fatal("model bindings:", err)
 	}

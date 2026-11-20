@@ -12,14 +12,12 @@ import (
 
 	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
 
-	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
 var codePattern = resourcecode.Pattern
 var tagPattern = regexp.MustCompile(`^"[a-f0-9]{64}"$`)
-var thinkingPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`)
 
 func missing() error { return httpx.E(404, "NOT_FOUND", "模型资源不存在") }
 func inUse() error {
@@ -185,48 +183,22 @@ func (s *Service) validateDefinition(p *Provider, d *Definition) error {
 			return httpx.Invalid("declared_capabilities", "invalid_status")
 		}
 	}
-	if len(d.Thinking) < 1 || len(d.Thinking) > 16 {
-		return httpx.Invalid("thinking_options", "invalid_count")
-	}
-	var defaults map[string]json.RawMessage
-	if json.Unmarshal(d.Parameters, &defaults) != nil {
-		return httpx.Invalid("default_parameters", "invalid_object")
-	}
-	for key := range defaults {
-		if modelcore.IsThinkingParameter(key) {
-			return httpx.Invalid("default_parameters", "use_thinking_levels")
-		}
-	}
-	seen := map[string]bool{}
-	if err := s.parameters(p.Type, d.Protocol, d.Parameters, d.MaxOutput); err != nil {
+	options, err := s.resolveThinking(p.Type, d.Protocol, d.ThinkingLevels, d.ThinkingMapping)
+	if err != nil {
 		return err
 	}
-	for _, v := range d.Thinking {
-		if !thinkingPattern.MatchString(v.Key) || seen[v.Key] || utf8.RuneCountInString(v.Label) < 1 || utf8.RuneCountInString(v.Label) > 40 {
-			return httpx.Invalid("thinking_options", "invalid_option")
+	d.Thinking = options
+	d.ThinkingLevels = make([]string, 0, len(options))
+	for _, option := range options {
+		if option.Key != "none" && d.Capabilities.Thinking != "supported" {
+			return httpx.Invalid("declared_capabilities", "thinking_required")
 		}
-		seen[v.Key] = true
-		if err := s.parameters(p.Type, d.Protocol, v.Parameters, d.MaxOutput); err != nil {
-			return err
-		}
+		d.ThinkingLevels = append(d.ThinkingLevels, option.Key)
+	}
+	if d.ThinkingMapping == nil {
+		d.ThinkingMapping = map[string]json.RawMessage{}
 	}
 	return nil
-}
-func (s *Service) parameters(kind, protocol string, raw json.RawMessage, maxOutput uint64) error {
-	var object map[string]json.RawMessage
-	if json.Unmarshal(raw, &object) != nil || object == nil {
-		return httpx.Invalid("default_parameters", "invalid_object")
-	}
-	if v, ok := object["max_output_tokens"]; ok {
-		var n uint64
-		if json.Unmarshal(v, &n) != nil || n < 1 || n > maxOutput {
-			return httpx.Invalid("max_output_tokens", "invalid_range")
-		}
-	}
-	if s.ValidateParameters == nil {
-		return httpx.E(503, "SERVICE_UNAVAILABLE", "模型适配器未配置")
-	}
-	return s.ValidateParameters(kind, protocol, raw)
 }
 func canonical(v any) ([]byte, error) {
 	b, e := json.Marshal(v)

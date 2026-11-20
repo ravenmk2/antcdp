@@ -2,40 +2,29 @@ package modeladapters
 
 import (
 	"encoding/json"
-	"slices"
 
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 )
 
 // ThinkingOptions describes transport mappings, never inferred model support.
-// Only native levels are advertised; compatibility aliases are not substituted.
+// Each preset is a wire template for an explicitly enabled level.
 func (r *Registry) ThinkingOptions(provider modelcore.ProviderType, protocol modelcore.Protocol) []modelcore.ThinkingOption {
 	options := []modelcore.ThinkingOption{}
 	if !r.Supports(provider, protocol) {
 		return options
 	}
-	levels := []string{"none", "low", "high", "max"}
-	if provider == modelcore.MiniMax {
-		levels = []string{"none", "low", "medium", "high", "xhigh", "max"}
-	}
-	if provider == modelcore.Custom || provider == modelcore.Ollama {
-		levels = []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}
-	}
 	for _, option := range modelcore.ThinkingLevels() {
-		if !slices.Contains(levels, option.Key) {
-			continue
-		}
 		params := map[string]any{}
 		switch {
-		case provider == modelcore.Custom:
-			// Custom routes require an explicit, validated administrator mapping.
-		case provider == modelcore.Ollama:
+		case provider == modelcore.Ollama || provider == modelcore.Custom && protocol == modelcore.ChatCompletions:
 			params["reasoning_effort"] = option.Key
+		case provider == modelcore.Custom && option.Key == "minimal":
+			params["thinking"] = map[string]any{"type": "enabled", "budget_tokens": 1024}
 		case option.Key == "none":
 			params["thinking"] = map[string]string{"type": "disabled"}
 		default:
 			mode := "enabled"
-			if provider == modelcore.MiniMax {
+			if provider == modelcore.MiniMax || provider == modelcore.Custom {
 				mode = "adaptive"
 			}
 			params["thinking"] = map[string]string{"type": mode}

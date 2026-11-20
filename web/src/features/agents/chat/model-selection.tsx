@@ -57,9 +57,16 @@ export function ModelSelectionControls({
             const next =
               model?.thinking_options.find(
                 (item) => item.key === value.thinking_option_key,
-              ) ?? model?.thinking_options[0];
-            if (next)
-              onChange({ model_binding_id: id, thinking_option_key: next.key });
+              ) ??
+              model?.thinking_options.find(
+                (item) => item.key === model.default_thinking_option_key,
+              ) ??
+              model?.thinking_options[0];
+            if (model)
+              onChange({
+                model_binding_id: id,
+                thinking_option_key: next?.key ?? "",
+              });
           }}
           triggerProps={{
             className: "agent-composer-model",

@@ -463,9 +463,9 @@ func TestProviderThinkingParametersAreExplicit(t *testing.T) {
 		if err := registry.ValidateParameters(modelcore.MiniMax, protocol, params); err != nil {
 			t.Fatal(err)
 		}
-		params["thinking"] = json.RawMessage(`{"type":"enabled"}`)
-		if err := registry.ValidateParameters(modelcore.MiniMax, protocol, params); err == nil {
-			t.Fatal("unregistered MiniMax thinking control")
+		params["thinking"] = json.RawMessage(`{"type":"vendor-adaptive"}`)
+		if err := registry.ValidateParameters(modelcore.MiniMax, protocol, params); err != nil {
+			t.Fatal("provider-specific thinking alias rejected", err)
 		}
 	}
 }

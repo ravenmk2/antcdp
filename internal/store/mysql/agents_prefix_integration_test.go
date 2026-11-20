@@ -74,7 +74,7 @@ func runtimeThinkingPrefix(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	definition, err := f.Models.CreateDefinition(f.Context, f.AdminToken, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: "prefix-model", Name: "Prefix model", Protocol: "anthropic_messages", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "unsupported", Thinking: "unsupported", Streaming: "supported"}, ContextWindow: 32768, MaxOutput: 4096, Parameters: json.RawMessage(`{"max_output_tokens":4096}`), Thinking: []m.ThinkingOption{{Key: "standard", Label: "标准", Parameters: json.RawMessage(`{}`)}}})
+	definition, err := f.Models.CreateDefinition(f.Context, f.AdminToken, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: "prefix-model", Name: "Prefix model", Protocol: "anthropic_messages", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "unsupported", Thinking: "unsupported", Streaming: "supported"}, ContextWindow: 32768, MaxOutput: 4096})
 	if err != nil {
 		t.Fatal(err)
 	}

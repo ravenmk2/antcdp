@@ -8,30 +8,14 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-func thinkingConfig(options []ThinkingOption) ([]string, map[string]json.RawMessage) {
-	levels := []string{}
-	mapping := map[string]json.RawMessage{}
-	for _, option := range options {
-		if option.Key == "standard" && same(option.Parameters, json.RawMessage(`{}`)) {
-			continue
-		}
-		levels = append(levels, option.Key)
-		mapping[option.Key] = option.Parameters
-	}
-	return levels, mapping
-}
-
 func (s *Service) resolveThinking(kind, protocol string, levels []string, mapping map[string]json.RawMessage) ([]ThinkingOption, error) {
-	if len(mapping) > 0 && kind != "custom" {
-		return nil, httpx.Invalid("thinking_mapping", "custom_provider_only")
-	}
 	for key := range mapping {
 		if !slices.Contains(levels, key) {
 			return nil, httpx.Invalid("thinking_mapping", "unselected_level")
 		}
 	}
 	if len(levels) == 0 {
-		return []ThinkingOption{{Key: "standard", Label: "默认", Parameters: json.RawMessage(`{}`)}}, nil
+		return []ThinkingOption{}, nil
 	}
 	if s.ThinkingCatalog == nil {
 		return nil, httpx.E(503, "SERVICE_UNAVAILABLE", "思考档位目录未配置")
@@ -49,8 +33,8 @@ func (s *Service) resolveThinking(kind, protocol string, levels []string, mappin
 		if !selected[option.Key] {
 			continue
 		}
-		if kind == "custom" {
-			option.Parameters = mapping[option.Key]
+		if override, ok := mapping[option.Key]; ok {
+			option.Parameters = override
 		}
 		if err := validateThinkingMapping(option); err != nil {
 			return nil, err
@@ -59,7 +43,7 @@ func (s *Service) resolveThinking(kind, protocol string, levels []string, mappin
 			return nil, httpx.E(503, "SERVICE_UNAVAILABLE", "模型适配器未配置")
 		}
 		if err := s.ValidateParameters(kind, protocol, option.Parameters); err != nil {
-			return nil, httpx.Invalid("thinking_mapping", "unsupported_parameters")
+			return nil, httpx.Invalid("thinking_mapping."+option.Key, "unsupported_parameters")
 		}
 		options = append(options, option)
 	}
@@ -67,13 +51,14 @@ func (s *Service) resolveThinking(kind, protocol string, levels []string, mappin
 }
 
 func validateThinkingMapping(option ThinkingOption) error {
+	field := "thinking_mapping." + option.Key
 	var values map[string]json.RawMessage
 	if json.Unmarshal(option.Parameters, &values) != nil || len(values) == 0 {
-		return httpx.Invalid("thinking_mapping", "mapping_required")
+		return httpx.Invalid(field, "mapping_required")
 	}
 	for key := range values {
 		if !modelcore.IsThinkingParameter(key) {
-			return httpx.Invalid("thinking_mapping", "thinking_parameters_only")
+			return httpx.Invalid(field, "thinking_parameters_only")
 		}
 	}
 	var state struct {
@@ -86,12 +71,20 @@ func validateThinkingMapping(option ThinkingOption) error {
 		} `json:"output_config"`
 	}
 	if json.Unmarshal(option.Parameters, &state) != nil {
-		return httpx.Invalid("thinking_mapping", "invalid_object")
+		return httpx.Invalid(field, "invalid_object")
 	}
-	disabled := state.Thinking.Type == "disabled" || state.Effort == "none" || state.Output.Effort == "none"
-	enabled := state.Thinking.Type == "enabled" || state.Thinking.Type == "adaptive" || state.Effort != "" && state.Effort != "none" || state.Output.Effort != "" && state.Output.Effort != "none"
-	if option.Key == "none" && (!disabled || enabled) || option.Key != "none" && (disabled || !enabled) {
-		return httpx.Invalid("thinking_mapping", "inconsistent_level")
+	// Provider-specific aliases are configurable; reject contradictions only for known values.
+	for _, token := range []string{state.Thinking.Type, state.Effort, state.Output.Effort} {
+		switch token {
+		case "none", "disabled", "off":
+			if option.Key != "none" {
+				return httpx.Invalid(field, "inconsistent_level")
+			}
+		case "enabled", "adaptive", "minimal", "low", "medium", "high", "xhigh", "max":
+			if option.Key == "none" {
+				return httpx.Invalid(field, "inconsistent_level")
+			}
+		}
 	}
 	return nil
 }

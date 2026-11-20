@@ -83,19 +83,8 @@ func TestETag(t *testing.T) {
 }
 
 func TestDefinitionParameterAndThinkingValidation(t *testing.T) {
-	s := &Service{ValidateParameters: func(_, _ string, p json.RawMessage) error {
-		var params map[string]json.RawMessage
-		if err := json.Unmarshal(p, &params); err != nil {
-			return err
-		}
-		for k := range params {
-			if k != "max_output_tokens" {
-				return httpx.E(422, "MODEL_PARAMETER_UNSUPPORTED", "unsupported")
-			}
-		}
-		return nil
-	}}
-	d := Definition{Name: "模型", RemoteModelID: "Model/CaseSensitive", Protocol: "chat_completions", ContextWindow: 8192, MaxOutput: 1024, Parameters: json.RawMessage(`{}`), Thinking: []ThinkingOption{{Key: "default", Label: "默认", Parameters: json.RawMessage(`{}`)}}, Capabilities: Capabilities{"supported", "unsupported", "unsupported", "unsupported", "unsupported"}}
+	s := thinkingTestService()
+	d := Definition{Name: "模型", RemoteModelID: "Model/CaseSensitive", Protocol: "chat_completions", ContextWindow: 8192, MaxOutput: 1024, Capabilities: Capabilities{"supported", "unsupported", "unsupported", "unsupported", "unsupported"}}
 	if err := s.validateDefinition(&Provider{Type: "custom"}, &d); err != nil {
 		t.Fatal(err)
 	}
@@ -104,13 +93,7 @@ func TestDefinitionParameterAndThinkingValidation(t *testing.T) {
 		t.Fatal("management configuration accepted an unknown declaration")
 	}
 	d.Capabilities.Image = "unsupported"
-	for _, p := range []string{`null`, `[]`, `{"max_output_tokens":1025}`, `{"max_output_tokens":0}`, `{"max_output_tokens":1.5}`} {
-		if s.parameters("custom", d.Protocol, json.RawMessage(p), 1024) == nil {
-			t.Errorf("accepted %s", p)
-		}
-	}
-	requireCode(t, s.parameters("custom", d.Protocol, json.RawMessage(`{"temperature":1}`), 1024), "MODEL_PARAMETER_UNSUPPORTED")
-	d.Thinking = append(d.Thinking, d.Thinking[0])
+	d.ThinkingLevels = []string{"high", "high"}
 	if s.validateDefinition(&Provider{Type: "custom"}, &d) == nil {
 		t.Fatal("duplicate thinking key")
 	}

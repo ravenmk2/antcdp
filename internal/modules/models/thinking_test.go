@@ -37,7 +37,7 @@ func TestThinkingMappingsAndDefault(t *testing.T) {
 		}
 	}
 	defaults, err := s.resolveThinking("deepseek", "chat_completions", nil, nil)
-	if err != nil || len(defaults) != 1 || defaults[0].Key != "standard" || string(defaults[0].Parameters) != `{}` {
+	if err != nil || len(defaults) != 0 {
 		t.Fatal(defaults, err)
 	}
 	none, err := s.resolveThinking("deepseek", "chat_completions", []string{"none"}, nil)
@@ -48,7 +48,7 @@ func TestThinkingMappingsAndDefault(t *testing.T) {
 	if err != nil || xhigh[0].Label != "极高" {
 		t.Fatal(xhigh, err)
 	}
-	for _, levels := range [][]string{{"high", "high"}, {"xhigh"}, {"invented"}} {
+	for _, levels := range [][]string{{"high", "high"}, {"invented"}} {
 		if _, err := s.resolveThinking("deepseek", "chat_completions", levels, nil); err == nil {
 			t.Fatal("accepted invalid levels", levels)
 		}
@@ -75,14 +75,11 @@ func TestCustomThinkingMappingValidation(t *testing.T) {
 			t.Fatalf("%+v: %v", tc, err)
 		}
 	}
-	if _, err := s.resolveThinking("custom", "chat_completions", []string{"high"}, nil); err == nil {
-		t.Fatal("missing custom mapping accepted")
-	}
-	if _, err := s.resolveThinking("deepseek", "chat_completions", []string{"high"}, map[string]json.RawMessage{"high": json.RawMessage(`{}`)}); err == nil {
-		t.Fatal("builtin override accepted")
-	}
-	d := Definition{Name: "test", RemoteModelID: "test", Protocol: "chat_completions", ContextWindow: 8192, MaxOutput: 1024, Capabilities: Capabilities{"supported", "unsupported", "unsupported", "unsupported", "supported"}, Parameters: json.RawMessage(`{"reasoning_effort":"high"}`), Thinking: []ThinkingOption{{Key: "standard", Label: "默认", Parameters: json.RawMessage(`{}`)}}}
-	if err := s.validateDefinition(&Provider{Type: "custom"}, &d); err == nil {
-		t.Fatal("thinking in generation defaults accepted")
+	for _, kind := range []string{"deepseek", "custom"} {
+		alias := json.RawMessage(`{"reasoning_effort":"vendor-light"}`)
+		got, err := s.resolveThinking(kind, "chat_completions", []string{"low", "minimal"}, map[string]json.RawMessage{"minimal": alias})
+		if err != nil || len(got) != 2 || got[0].Key != "minimal" || !same(got[0].Parameters, alias) || got[1].Key != "low" {
+			t.Fatal(kind, got, err)
+		}
 	}
 }

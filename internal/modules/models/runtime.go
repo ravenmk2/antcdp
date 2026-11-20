@@ -27,7 +27,6 @@ type RuntimeModel struct {
 	AuthMethod     string
 	Capabilities   Capabilities
 	Thinking       []ThinkingOption
-	Parameters     json.RawMessage
 	ContextWindow  uint64
 	MaxOutput      uint64
 	Available      bool
@@ -110,7 +109,7 @@ func (s *Service) ReadRuntimeModels(tx identity.Tx, ids []uint64) (map[uint64]*R
 			return nil, integrity()
 		}
 		p := providers[d.ProviderID]
-		values[id] = &RuntimeModel{ProviderID: p.ID, DefinitionID: d.ID, ProviderType: p.Type, ProviderName: p.Name, Name: d.Name, Protocol: d.Protocol, RemoteModelID: d.RemoteModelID, Config: p.Config, IdentityConfig: p.IdentityConfig, AuthMethod: p.AuthMethod, Capabilities: d.Capabilities, Thinking: d.Thinking, Parameters: d.Parameters, ContextWindow: d.ContextWindow, MaxOutput: d.MaxOutput, Available: p.Enabled && d.Enabled && (p.AuthMethod == "none" || p.HasSecret)}
+		values[id] = &RuntimeModel{ProviderID: p.ID, DefinitionID: d.ID, ProviderType: p.Type, ProviderName: p.Name, Name: d.Name, Protocol: d.Protocol, RemoteModelID: d.RemoteModelID, Config: p.Config, IdentityConfig: p.IdentityConfig, AuthMethod: p.AuthMethod, Capabilities: d.Capabilities, Thinking: d.Thinking, ContextWindow: d.ContextWindow, MaxOutput: d.MaxOutput, Available: p.Enabled && d.Enabled && (p.AuthMethod == "none" || p.HasSecret)}
 	}
 	return values, nil
 }

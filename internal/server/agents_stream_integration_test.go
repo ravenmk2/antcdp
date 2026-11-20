@@ -74,7 +74,7 @@ func (streamAgentRepo) Definition(uint64, bool) (*a.Definition, error) {
 	return &a.Definition{ID: 1, Enabled: true, Mode: "chat", ScopeKind: "platform"}, nil
 }
 func (streamAgentRepo) ModelBindings(uint64, bool) ([]a.ModelBinding, error) {
-	return []a.ModelBinding{{ID: 1, AgentID: 1, ModelID: 1, ThinkingJSON: json.RawMessage(`["fixed"]`), DefaultThinking: "fixed", GenerationOverrides: json.RawMessage(`{}`)}}, nil
+	return []a.ModelBinding{{ID: 1, AgentID: 1, ModelID: 1, ThinkingJSON: json.RawMessage(`[]`), DefaultThinking: "", GenerationParameters: json.RawMessage(`{}`)}}, nil
 }
 
 type streamModelRepo struct{ m.Repository }
@@ -83,7 +83,7 @@ func (streamModelRepo) Provider(uint64) (*m.Provider, error) {
 	return &m.Provider{ID: 1, Type: "ollama", Enabled: true, AuthMethod: "none", SecretValid: true, SchemaVersion: 1, StoredConfig: json.RawMessage(`{"base_url":"http://model.test"}`), BaseURL: "http://model.test", IdentityConfig: json.RawMessage(`{}`)}, nil
 }
 func (streamModelRepo) Definition(uint64, bool) (*m.Definition, error) {
-	return &m.Definition{ID: 1, ProviderID: 1, Enabled: true, Protocol: "chat_completions", SchemaVersion: 1, CapabilitiesJSON: json.RawMessage(`{"text_input":"supported"}`), ThinkingJSON: json.RawMessage(`[{"key":"fixed","label":"固定","parameters":{}}]`), Parameters: json.RawMessage(`{}`)}, nil
+	return &m.Definition{ID: 1, ProviderID: 1, Enabled: true, Protocol: "chat_completions", SchemaVersion: 1, CapabilitiesJSON: json.RawMessage(`{"text_input":"supported"}`), LevelsJSON: json.RawMessage(`[]`), MappingJSON: json.RawMessage(`{}`)}, nil
 }
 
 type streamStateRepo struct {
@@ -150,7 +150,7 @@ func streamEvent(t *testing.T, seq uint64) a.EventRow {
 }
 func TestAgentWebSocketSnapshotCatchupResyncAndRevocation(t *testing.T) {
 	now := time.Now().UTC()
-	store := &streamTestStore{user: identity.User{ID: 1, Role: "admin", Status: "active", AuthVersion: 1}, session: identity.Session{ID: 1, UserID: 1, AuthVersion: 1, ExpiresAt: now.Add(time.Hour)}, chat: a.SessionRow{ID: 1, AgentID: 1, ExecutionMode: "chat", SessionKind: "root", ExecutorUserID: 1, SelectedModelBindingID: 1, SelectedThinkingOptionKey: "fixed", ModelLockedAt: &now, LockedModelConfig: json.RawMessage(`{"schema_version":1,"selection_hash":"locked","thinking_option_key":"fixed","display":{}}`), LastSeq: 1}, events: []a.EventRow{streamEvent(t, 1)}}
+	store := &streamTestStore{user: identity.User{ID: 1, Role: "admin", Status: "active", AuthVersion: 1}, session: identity.Session{ID: 1, UserID: 1, AuthVersion: 1, ExpiresAt: now.Add(time.Hour)}, chat: a.SessionRow{ID: 1, AgentID: 1, ExecutionMode: "chat", SessionKind: "root", ExecutorUserID: 1, SelectedModelBindingID: 1, SelectedThinkingOptionKey: "", ModelLockedAt: &now, LockedModelConfig: json.RawMessage(`{"schema_version":1,"selection_hash":"locked","thinking_option_key":"","display":{}}`), LastSeq: 1}, events: []a.EventRow{streamEvent(t, 1)}}
 	ident := identity.New(func() (identity.Store, error) { return store, nil })
 	models := &m.Service{ETag: func(v string) string { return v }}
 	svc := &a.Service{Identity: ident, ETag: func(v string) string { return v }, Models: models}

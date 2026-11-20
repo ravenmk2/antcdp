@@ -58,7 +58,7 @@ func TestModelProbeBridgeUsesBoundedOutputAndConfiguredThinking(t *testing.T) {
 		_, _ = fmt.Fprint(w, "data: {\"model\":\"test-model\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"check\",\"content\":\"OK\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
 	}))
 	defer remote.Close()
-	result, err := probeModelConnection(t.Context(), models.ProbeRequest{Kind: "model_probe", Levels: []string{"generation", "thinking", "stream"}, Secret: "private-fixture", Provider: models.Provider{Type: "deepseek", Config: models.Config{BaseURL: remote.URL, ConnectTimeout: 1, RequestTimeout: 10}}, Model: &models.Definition{RemoteModelID: "test-model", Protocol: "chat_completions", MaxOutput: 8192, Parameters: json.RawMessage(`{}`), Thinking: []models.ThinkingOption{{Key: "off", Parameters: json.RawMessage(`{"thinking":{"type":"disabled"}}`)}, {Key: "on", Parameters: json.RawMessage(`{"thinking":{"type":"enabled"}}`)}}}})
+	result, err := probeModelConnection(t.Context(), models.ProbeRequest{Kind: "model_probe", Levels: []string{"generation", "thinking", "stream"}, Secret: "private-fixture", Provider: models.Provider{Type: "deepseek", Config: models.Config{BaseURL: remote.URL, ConnectTimeout: 1, RequestTimeout: 10}}, Model: &models.Definition{RemoteModelID: "test-model", Protocol: "chat_completions", MaxOutput: 8192, Thinking: []models.ThinkingOption{{Key: "none", Parameters: json.RawMessage(`{"thinking":{"type":"disabled"}}`)}, {Key: "high", Parameters: json.RawMessage(`{"thinking":{"type":"enabled"}}`)}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,23 +84,5 @@ func TestModelDiscoveryKeepsEmptyArrayAndExplicitTruncation(t *testing.T) {
 	}
 	if string(result) != `{"models":[],"truncated":false}` {
 		t.Fatalf("discovery representation %s", result)
-	}
-}
-
-func TestThinkingDiagnosticsRecognizeProtocolControls(t *testing.T) {
-	for _, tc := range []struct {
-		parameters string
-		enabled    bool
-	}{
-		{`{"thinking":{"type":"adaptive"}}`, true},
-		{`{"reasoning_effort":"high"}`, true},
-		{`{"output_config":{"effort":"max"}}`, true},
-		{`{"output_config":{"effort":"none"}}`, false},
-		{`{"thinking":{"type":"disabled"},"reasoning_effort":"high"}`, false},
-		{`{}`, false},
-	} {
-		if got := diagnosticThinkingEnabled(json.RawMessage(tc.parameters)); got != tc.enabled {
-			t.Errorf("%s: enabled=%v", tc.parameters, got)
-		}
 	}
 }

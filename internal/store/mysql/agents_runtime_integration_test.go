@@ -121,7 +121,7 @@ func runtimeTestAgentModel(t *testing.T, f *agentIntegrationFixture, modelID uin
 		t.Fatal(e)
 	}
 	id := strconv.FormatUint(modelID, 10)
-	_, e = f.Agents.PutModelBindings(f.Context, f.AdminToken, agent.ID, b.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: id, ThinkingOptions: []string{"standard"}, DefaultThinking: "standard", GenerationOverrides: json.RawMessage(`{}`)}}, DefaultModelID: id, DefaultThinking: "standard"})
+	_, e = f.Agents.PutModelBindings(f.Context, f.AdminToken, agent.ID, b.Tag, a.ModelBindingsWrite{Items: []a.ModelBindingWrite{{ModelID: id, GenerationParameters: json.RawMessage(`{}`)}}, DefaultModelID: id})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -746,7 +746,11 @@ func runtimeDebug(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	hash := options.Data.(a.StartOptions).Models[0].Thinking[0].Hash
+	model := options.Data.(a.StartOptions).Models[0]
+	if len(model.Thinking) != 0 || model.Hash == "" {
+		t.Fatal("missing debug selection hash for model without configurable thinking")
+	}
+	hash := model.Hash
 	w := a.DebugStart{Input: a.InputCreate{Content: []core.TextBlock{{Type: "text", Text: "调试一个完整输入"}}, ExpectedHash: hash}}
 	key := cryptox.ID()
 	r, e := f.Agents.DebugRun(f.Context, f.AdminToken, agent, current.Tag, key, w)

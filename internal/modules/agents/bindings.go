@@ -84,11 +84,11 @@ func stringID(v *uint64) any {
 	return strconv.FormatUint(*v, 10)
 }
 func (s *Service) validateModelBinding(v *models.RuntimeModel, w ModelBindingWrite) (json.RawMessage, error) {
-	if len(w.ThinkingOptions) == 0 || len(w.ThinkingOptions) > 32 {
+	if len(w.ThinkingOptions) > len(v.Thinking) {
 		return nil, httpx.Invalid("items.thinking_options", "invalid_length")
 	}
 	seen := map[string]bool{}
-	foundDefault := false
+	foundDefault := len(w.ThinkingOptions) == 0 && w.DefaultThinking == ""
 	for _, key := range w.ThinkingOptions {
 		if seen[key] {
 			return nil, httpx.Invalid("items.thinking_options", "duplicate")
@@ -108,56 +108,29 @@ func (s *Service) validateModelBinding(v *models.RuntimeModel, w ModelBindingWri
 	if !foundDefault {
 		return nil, httpx.Invalid("items.default_thinking", "not_allowed")
 	}
-	overrides, e := objectJSON(w.GenerationOverrides, "items.generation_overrides")
+	params, e := objectJSON(w.GenerationParameters, "items.generation_parameters")
 	if e != nil {
 		return nil, e
 	}
-	base, e := objectJSON(v.Parameters, "model.default_parameters")
-	if e != nil {
-		return nil, e
-	}
-	for k, value := range overrides {
-		if modelcore.IsThinkingParameter(k) {
-			return nil, httpx.Invalid("items.generation_overrides", "use_thinking_options")
+	for key := range params {
+		if modelcore.IsThinkingParameter(key) {
+			return nil, httpx.Invalid("items.generation_parameters", "use_thinking_options")
 		}
-		base[k] = value
 	}
 	if s.Models == nil || s.Models.ValidateParameters == nil {
 		return nil, unavailable()
 	}
-	for _, key := range w.ThinkingOptions {
-		effective := map[string]json.RawMessage{}
-		for k, value := range base {
-			effective[k] = value
-		}
-		for _, opt := range v.Thinking {
-			if opt.Key == key {
-				params, e := objectJSON(opt.Parameters, "thinking.parameters")
-				if e != nil {
-					return nil, e
-				}
-				for k, value := range params {
-					effective[k] = value
-				}
-			}
-		}
-		b, e := json.Marshal(effective)
-		if e != nil {
-			return nil, e
-		}
-		if e = s.Models.ValidateParameters(v.ProviderType, v.Protocol, b); e != nil {
-			return nil, e
-		}
-		for _, field := range []string{"max_tokens", "max_completion_tokens", "max_output_tokens"} {
-			if raw, ok := effective[field]; ok {
-				var n uint64
-				if json.Unmarshal(raw, &n) != nil || n == 0 || n > v.MaxOutput || n > v.ContextWindow {
-					return nil, httpx.Invalid("items.generation_overrides."+field, "invalid_range")
-				}
-			}
-		}
+	raw, e := json.Marshal(params)
+	if e != nil {
+		return nil, e
 	}
-	return json.Marshal(overrides)
+	if e = s.Models.ValidateParameters(v.ProviderType, v.Protocol, raw); e != nil {
+		return nil, e
+	}
+	if _, e = modelcore.EffectiveOutputTokens(params, v.MaxOutput); e != nil {
+		return nil, httpx.Invalid("items.generation_parameters.max_output_tokens", "invalid_range")
+	}
+	return raw, nil
 }
 func (s *Service) PutModelBindings(ctx context.Context, raw string, id uint64, tag string, w ModelBindingsWrite) (*Result, error) {
 	return s.access(ctx, raw, true, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
@@ -193,11 +166,14 @@ func (s *Service) PutModelBindings(ctx context.Context, raw string, id uint64, t
 			if e != nil {
 				return e
 			}
+			if item.ThinkingOptions == nil {
+				item.ThinkingOptions = []string{}
+			}
 			thinking, e := json.Marshal(item.ThinkingOptions)
 			if e != nil {
 				return e
 			}
-			rows = append(rows, ModelBinding{AgentID: id, ModelID: ids[i], ThinkingOptions: item.ThinkingOptions, ThinkingJSON: thinking, DefaultThinking: item.DefaultThinking, GenerationOverrides: parameters, SortOrder: i})
+			rows = append(rows, ModelBinding{AgentID: id, ModelID: ids[i], ThinkingOptions: item.ThinkingOptions, ThinkingJSON: thinking, DefaultThinking: item.DefaultThinking, GenerationParameters: parameters, SortOrder: i})
 		}
 		v, e := s.bindingDefinition(r, id, "model-bindings", tag)
 		if e != nil {
@@ -295,7 +271,7 @@ func (s *Service) PutModelBindings(ctx context.Context, raw string, id uint64, t
 func modelWrites(rows []ModelBinding) []ModelBindingWrite {
 	out := []ModelBindingWrite{}
 	for _, row := range rows {
-		out = append(out, ModelBindingWrite{strconv.FormatUint(row.ModelID, 10), row.ThinkingOptions, row.DefaultThinking, row.GenerationOverrides})
+		out = append(out, ModelBindingWrite{strconv.FormatUint(row.ModelID, 10), row.ThinkingOptions, row.DefaultThinking, row.GenerationParameters})
 	}
 	return out
 }

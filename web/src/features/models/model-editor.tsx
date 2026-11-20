@@ -12,6 +12,9 @@ import {
 import { Button } from "@/components/button";
 import {
   Field,
+  FieldRoot,
+  FieldLabel,
+  FieldDescription,
   Input,
   Textarea,
   Select,
@@ -43,11 +46,7 @@ import {
   useVersionedModelSave,
   restoreModelFocus,
 } from "./model-shared";
-import {
-  commonParameters,
-  parseParameterObject,
-  validateParameters,
-} from "./model-parameters";
+import { parseParameterObject, validateParameters } from "./model-parameters";
 
 interface Seed {
   protocol?: ModelProtocol;
@@ -59,12 +58,6 @@ function modelDraft(
   type: ProviderType,
   seed?: Seed,
 ) {
-  const parameters = model?.default_parameters ?? {};
-  const structuredStop =
-    Array.isArray(parameters.stop) &&
-    parameters.stop.every(
-      (item) => typeof item === "string" && !/[\r\n]/.test(item),
-    );
   return {
     name: model?.name ?? seed?.display_name ?? seed?.model_id ?? "",
     description: model?.description ?? "",
@@ -87,41 +80,23 @@ function modelDraft(
         streaming: "unsupported",
         thinking: "unsupported",
       } as ModelCapabilities),
-    temperature:
-      parameters.temperature === undefined
-        ? ""
-        : String(parameters.temperature),
-    top_p: parameters.top_p === undefined ? "" : String(parameters.top_p),
-    parameterMax:
-      parameters.max_output_tokens === undefined
-        ? ""
-        : String(parameters.max_output_tokens),
-    stop: structuredStop ? (parameters.stop as string[]).join("\n") : "",
-    advanced: JSON.stringify(
-      Object.fromEntries(
-        Object.entries(parameters).filter(
-          ([key]) =>
-            !commonParameters.includes(
-              key as (typeof commonParameters)[number],
-            ) ||
-            (key === "stop" && !structuredStop),
-        ),
-      ),
-      null,
-      2,
-    ),
-    thinking_levels:
-      model?.thinking_levels ??
-      model?.thinking_options
-        .filter((option) => option.key !== "standard")
-        .map((option) => option.key) ??
-      [],
-    thinking_mapping: JSON.stringify(
-      type.provider_type === "custom" ? (model?.thinking_mapping ?? {}) : {},
-      null,
-      2,
+    thinking_levels: model?.thinking_levels ?? [],
+    thinking_mapping: Object.fromEntries(
+      Object.entries(model?.thinking_mapping ?? {}).map(([key, value]) => [
+        key,
+        JSON.stringify(value),
+      ]),
     ),
   };
+}
+
+function draftSignature(draft: ReturnType<typeof modelDraft>) {
+  return JSON.stringify({
+    ...draft,
+    thinking_mapping: draft.thinking_levels.map(
+      (key) => draft.thinking_mapping[key]?.trim() ?? "",
+    ),
+  });
 }
 
 export function ModelEditor({
@@ -230,20 +205,17 @@ function ModelForm({
       field.startsWith("thinking")
         ? "thinking"
         : [
-              "advanced",
-              "temperature",
-              "top_p",
-              "parameterMax",
-              "stop",
-              "default_parameters",
+              "declared_capabilities",
+              "context_window",
+              "max_output_tokens",
             ].includes(field)
-          ? "parameters"
+          ? "capabilities"
           : "basic",
     );
   }
   const errors = useFormErrors();
   const command = useModelWrite<ModelDefinition>(reportError);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
+  const dirty = draftSignature(draft) !== draftSignature(baseline);
   const save = useVersionedModelSave<ModelDefinition>(
     `/definitions/${initial?.data.id}`,
     initial?.etag ?? "",
@@ -262,16 +234,6 @@ function ModelForm({
   );
   const schema = protocol?.parameter_schema ?? {};
   const thinkingOptions = protocol?.thinking_options ?? [];
-  const generationSchema = {
-    ...schema,
-    properties: Object.fromEntries(
-      Object.entries((schema.properties ?? {}) as JsonObject).filter(
-        ([key]) =>
-          !["thinking", "reasoning_effort", "output_config"].includes(key),
-      ),
-    ),
-  };
-  const properties = generationSchema.properties as Record<string, JsonObject>;
   function finish() {
     markSaved();
     onSaved();
@@ -282,16 +244,11 @@ function ModelForm({
     );
     if (error instanceof ApiError)
       revealField(error.details.find((detail) => detail.field)?.field ?? "");
-    errors.show(
-      error,
-      [
-        ...Object.keys(draft),
-        "default_parameters",
-        "thinking_levels",
-        "thinking_mapping",
-      ],
-      { default_parameters: "advanced" },
-    );
+    errors.show(error, [
+      ...Object.keys(draft),
+      "declared_capabilities",
+      ...draft.thinking_levels.map((key) => "thinking_mapping." + key),
+    ]);
   }
   function update<K extends keyof typeof draft>(
     key: K,
@@ -324,77 +281,34 @@ function ModelForm({
         issues[key] = "请输入 1–2,000,000 之间的整数";
     if (Number(draft.max_output_tokens) > Number(draft.context_window))
       issues.max_output_tokens = "最大输出不能超过上下文窗口";
-    let parameters: JsonObject = {};
-    try {
-      parameters = parseParameterObject(draft.advanced);
-    } catch {
-      issues.advanced = "高级参数必须是有效的 JSON 对象";
-    }
-    for (const [key, value] of [
-      ["temperature", draft.temperature],
-      ["top_p", draft.top_p],
-      ["max_output_tokens", draft.parameterMax],
-    ] as const)
-      if (value !== "") {
-        if (key in parameters)
-          issues.advanced = `参数 ${key} 与上方结构化字段重复，请仅保留一处`;
-        parameters[key] = Number(value);
-      }
-    if (draft.stop) {
-      if ("stop" in parameters) issues.advanced = "停止词与高级参数 stop 重复";
-      parameters.stop = draft.stop.split("\n");
-    }
-    const parameterError = validateParameters(parameters, generationSchema);
-    if (parameterError) issues.advanced = parameterError;
+    const mapping: Record<string, JsonObject> = {};
     if (
-      typeof parameters.max_output_tokens === "number" &&
-      parameters.max_output_tokens > Number(draft.max_output_tokens)
-    )
-      issues.advanced = "默认最大输出不能超过模型最大输出限制";
-    let mapping: JsonObject = {};
-    if (
-      draft.thinking_levels.some(
-        (key) => !thinkingOptions.some((option) => option.key === key),
-      )
+      draft.capabilities.thinking !== "supported" &&
+      draft.thinking_levels.some((key) => key !== "none")
     ) {
-      issues.thinking_levels = "所选档位不适用于当前协议，请重新选择";
+      issues.declared_capabilities = "已启用思考档位，请开启思考能力";
     }
-    if (type.provider_type === "custom") {
+    for (const key of draft.thinking_levels) {
+      const raw = draft.thinking_mapping[key]?.trim();
+      if (!raw) continue;
+      const field = "thinking_mapping." + key;
       try {
-        const configured = parseParameterObject(draft.thinking_mapping);
-        mapping = Object.fromEntries(
-          draft.thinking_levels.map((key) => [key, configured[key]]),
-        );
-        for (const key of draft.thinking_levels) {
-          const value = mapping[key];
-          if (
-            !value ||
-            typeof value !== "object" ||
-            Array.isArray(value) ||
-            !Object.keys(value).length
-          ) {
-            issues.thinking_mapping = "请为每个已选档位填写请求参数映射";
-            break;
-          }
-          const invalid = validateParameters(value as JsonObject, schema);
-          if (invalid) {
-            issues.thinking_mapping = invalid;
-            break;
-          }
-          if (
-            Object.keys(value).some(
-              (key) =>
-                !["thinking", "reasoning_effort", "output_config"].includes(
-                  key,
-                ),
-            )
-          ) {
-            issues.thinking_mapping = "映射中只能包含思考参数";
-            break;
-          }
+        const value = parseParameterObject(raw);
+        if (
+          !Object.keys(value).length ||
+          Object.keys(value).some(
+            (k) =>
+              !["thinking", "reasoning_effort", "output_config"].includes(k),
+          )
+        ) {
+          issues[field] = "请填写当前协议的思考参数";
+        } else {
+          const invalid = validateParameters(value, schema);
+          if (invalid) issues[field] = invalid;
+          mapping[key] = value;
         }
       } catch {
-        issues.thinking_mapping = "请输入有效的 JSON 对象";
+        issues[field] = "请输入有效的 JSON 对象";
       }
     }
     if (Object.keys(issues).length) revealField(Object.keys(issues)[0]);
@@ -407,7 +321,6 @@ function ModelForm({
       declared_capabilities: draft.capabilities,
       context_window: Number(draft.context_window),
       max_output_tokens: Number(draft.max_output_tokens),
-      default_parameters: parameters,
       thinking_levels: draft.thinking_levels,
       thinking_mapping: mapping,
     };
@@ -482,11 +395,11 @@ function ModelForm({
               ),
             },
             {
-              value: "parameters",
+              value: "capabilities",
               label: (
                 <>
                   <SlidersHorizontal className="mr-2 size-4" />
-                  生成参数
+                  能力与限制
                 </>
               ),
             },
@@ -552,7 +465,7 @@ function ModelForm({
                         ...current,
                         protocol: value as ModelProtocol,
                         thinking_levels: [],
-                        thinking_mapping: "{}",
+                        thinking_mapping: {},
                       }))
                     }
                   >
@@ -598,6 +511,18 @@ function ModelForm({
               onChange={(value) => update("icon_key", value)}
               fallback={provider.icon_key || type.default_icon_key || "model"}
             />
+          </div>
+          <div
+            role="tabpanel"
+            aria-label="能力与限制"
+            hidden={section !== "capabilities"}
+            className="space-y-6"
+          >
+            {errors.fields.declared_capabilities && (
+              <Notice tone="warning">
+                {errors.fields.declared_capabilities}
+              </Notice>
+            )}
             <Section
               title="模型能力"
               description="开启表示允许使用该能力；关闭表示未配置使用，不代表经过实测。"
@@ -674,111 +599,52 @@ function ModelForm({
           </div>
           <div
             role="tabpanel"
-            aria-label="生成参数"
-            hidden={section !== "parameters"}
-            className="space-y-6"
-          >
-            <Section
-              title="默认生成参数"
-              description="留空使用供应商默认值。默认请求输出量不能超过模型输出上限；可用字段由当前协议决定。"
-            >
-              <div className="grid grid-cols-2 gap-4">
-                {(
-                  [
-                    ["temperature", "Temperature"],
-                    ["top_p", "Top P"],
-                    ["parameterMax", "默认请求输出量"],
-                  ] as const
-                )
-                  .filter(
-                    ([key]) =>
-                      properties[
-                        key === "parameterMax" ? "max_output_tokens" : key
-                      ] || draft[key] !== "",
-                  )
-                  .map(([key, label]) => (
-                    <Field key={key} label={label}>
-                      <Input
-                        name={key}
-                        inputMode="decimal"
-                        value={draft[key]}
-                        onChange={(e) => update(key, e.target.value)}
-                      />
-                    </Field>
-                  ))}
-              </div>
-              {(properties.stop || draft.stop) && (
-                <Field
-                  label="停止词"
-                  hint="每行一个，最多 4 个。含换行的停止词请在高级 JSON 中设置。"
-                >
-                  <Textarea
-                    name="stop"
-                    rows={3}
-                    value={draft.stop}
-                    onChange={(e) => update("stop", e.target.value)}
-                  />
-                </Field>
-              )}
-              <Field
-                label="高级参数（JSON）"
-                error={errors.fields.advanced}
-                hint="保留当前适配器注册的扩展参数，不允许消息、工具、请求头或连接配置"
-              >
-                <Textarea
-                  name="advanced"
-                  rows={5}
-                  className="font-mono text-xs"
-                  value={draft.advanced}
-                  onChange={(e) => update("advanced", e.target.value)}
-                />
-              </Field>
-              <details className="text-xs text-muted">
-                <summary className="cursor-pointer">
-                  查看当前协议的参数规范
-                </summary>
-                <pre className="mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-all rounded border p-3">
-                  {JSON.stringify(generationSchema, null, 2)}
-                </pre>
-              </details>
-            </Section>
-          </div>
-          <div
-            role="tabpanel"
             aria-label="思考档位"
             hidden={section !== "thinking"}
             className="space-y-6"
           >
             <Section
               title="支持的思考档位"
-              description="勾选这个模型实际支持的档位，供助手和会话选择。档位越高通常思考越充分，也可能更慢。"
+              description="启用模型支持的档位。提供商映射留空时使用输入框所示的默认值。"
             >
-              <Field label="可用档位" error={errors.fields.thinking_levels}>
-                <div className="model-thinking-levels" id="thinking-levels">
-                  {thinkingOptions.map((option) => {
-                    const checked = draft.thinking_levels.includes(option.key);
-                    return (
-                      <label
-                        key={option.key}
-                        className="model-thinking-level"
-                        data-checked={checked}
-                      >
+              {(errors.fields.thinking_levels ||
+                errors.fields.thinking_mapping) && (
+                <Notice tone="warning">
+                  {errors.fields.thinking_levels ||
+                    errors.fields.thinking_mapping}
+                </Notice>
+              )}
+              <div className="model-thinking-levels">
+                {thinkingOptions.map((option) => {
+                  const key = option.key;
+                  const checked = draft.thinking_levels.includes(key);
+                  const field = "thinking_mapping." + key;
+                  return (
+                    <div
+                      className="model-thinking-level"
+                      data-checked={checked}
+                      key={key}
+                    >
+                      <label className="flex w-20 shrink-0 items-center gap-3 text-sm font-medium">
                         <input
                           type="checkbox"
                           className="size-4 accent-[var(--accent)]"
-                          name="thinking_levels"
                           checked={checked}
                           onChange={(event) => {
-                            const value = event.target.checked;
+                            const enabled = event.target.checked;
                             setDraft((current) => ({
                               ...current,
-                              thinking_levels: value
-                                ? [...current.thinking_levels, option.key]
-                                : current.thinking_levels.filter(
-                                    (key) => key !== option.key,
-                                  ),
+                              thinking_levels: thinkingOptions
+                                .filter((item) =>
+                                  item.key === key
+                                    ? enabled
+                                    : current.thinking_levels.includes(
+                                        item.key,
+                                      ),
+                                )
+                                .map((item) => item.key),
                               capabilities:
-                                value && option.key !== "none"
+                                enabled && key !== "none"
                                   ? {
                                       ...current.capabilities,
                                       thinking: "supported",
@@ -787,99 +653,33 @@ function ModelForm({
                             }));
                           }}
                         />
-                        <span>
-                          <span className="font-medium">{option.label}</span>
-                          <span className="mt-1 block text-xs text-muted">
-                            {option.key === "none"
-                              ? "明确关闭思考"
-                              : "允许选择此思考强度"}
-                          </span>
-                        </span>
+                        {option.label}
                       </label>
-                    );
-                  })}
-                </div>
-              </Field>
-              <p className="text-sm text-muted">
-                {draft.thinking_levels.length
-                  ? `已选 ${draft.thinking_levels.length} 个档位。${type.provider_type === "custom" ? "请在下方配置对应参数。" : "系统自动适配请求参数，无需填写 JSON。"}`
-                  : "未选择档位时，不发送思考参数，使用模型的默认行为；这不等于关闭思考。"}
-              </p>
-              <p className="text-xs text-muted">
-                可选档位表示协议能够传递的参数，不代表每个模型都支持。无法关闭思考的模型请勿勾选“关闭”。
-              </p>
-              {type.provider_type === "custom" && (
-                <details
-                  className="model-thinking-mapping"
-                  open={errors.fields.thinking_mapping ? true : undefined}
-                >
-                  <summary>高级设置 · 自定义参数映射</summary>
-                  <div className="space-y-3 p-4">
-                    <p className="text-sm text-muted">
-                      按档位键填写请求参数。“关闭”必须显式禁用思考，不能使用空对象。参数会经过当前协议校验。
-                    </p>
-                    <Field
-                      label="档位映射（JSON）"
-                      error={errors.fields.thinking_mapping}
-                    >
-                      <Textarea
-                        name="thinking_mapping"
-                        rows={10}
-                        className="font-mono text-xs"
-                        value={draft.thinking_mapping}
-                        onChange={(e) =>
-                          update("thinking_mapping", e.target.value)
-                        }
-                        placeholder={
-                          '{\n  "none": { "reasoning_effort": "none" },\n  "high": { "reasoning_effort": "high" }\n}'
-                        }
-                      />
-                    </Field>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        let existing: JsonObject;
-                        try {
-                          existing = parseParameterObject(
-                            draft.thinking_mapping,
-                          );
-                        } catch {
-                          return;
-                        }
-                        const entries = draft.thinking_levels.map((key) => [
-                          key,
-                          existing[key] ??
-                            (draft.protocol === "chat_completions"
-                              ? { reasoning_effort: key }
-                              : key === "none"
-                                ? { thinking: { type: "disabled" } }
-                                : key === "minimal"
-                                  ? {
-                                      thinking: {
-                                        type: "enabled",
-                                        budget_tokens: 1024,
-                                      },
-                                    }
-                                  : {
-                                      thinking: { type: "adaptive" },
-                                      output_config: { effort: key },
-                                    }),
-                        ]);
-                        update(
-                          "thinking_mapping",
-                          JSON.stringify(Object.fromEntries(entries), null, 2),
-                        );
-                      }}
-                    >
-                      填入所选档位的协议示例
-                    </Button>
-                    <p className="text-xs text-muted">
-                      示例仅供起步，请按服务商和模型实际支持的参数调整。
-                    </p>
-                  </div>
-                </details>
-              )}
+                      <FieldRoot
+                        className="min-w-0 flex-1"
+                        label={option.label + "的提供商映射"}
+                        error={errors.fields[field]}
+                      >
+                        <FieldLabel className="sr-only" />
+                        <Input
+                          name={field}
+                          className="font-mono text-xs"
+                          disabled={!checked}
+                          value={draft.thinking_mapping[key] ?? ""}
+                          placeholder={JSON.stringify(option.parameters)}
+                          onChange={(e) =>
+                            update("thinking_mapping", {
+                              ...draft.thinking_mapping,
+                              [key]: e.target.value,
+                            })
+                          }
+                        />
+                        <FieldDescription />
+                      </FieldRoot>
+                    </div>
+                  );
+                })}
+              </div>
             </Section>
           </div>
           {!provider.enabled && (

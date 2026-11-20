@@ -55,22 +55,27 @@ func TestPolicyIdentityAndNetwork(t *testing.T) {
 }
 func TestModelSelectionHashUsesEffectiveRoute(t *testing.T) {
 	s := &Service{Models: &models.Service{ValidateParameters: func(string, string, json.RawMessage) error { return nil }}}
-	v := &models.RuntimeModel{ProviderID: 1, DefinitionID: 2, ProviderType: "deepseek", ProviderName: "提供商", Name: "模型", Protocol: "chat_completions", RemoteModelID: "model", Config: models.Config{BaseURL: "https://example.test/v1"}, IdentityConfig: json.RawMessage(`{}`), AuthMethod: "api_key", Parameters: json.RawMessage(`{"temperature":0.1}`), ContextWindow: 8192, MaxOutput: 1024, Available: true, Thinking: []models.ThinkingOption{{Key: "standard", Label: "标准", Parameters: json.RawMessage(`{}`)}}}
-	b := ModelBinding{ID: 3, ModelID: 2, ThinkingOptions: []string{"standard"}, DefaultThinking: "standard", GenerationOverrides: json.RawMessage(`{}`)}
-	first, _, e := s.resolveModel(v, b, "standard")
+	v := &models.RuntimeModel{ProviderID: 1, DefinitionID: 2, ProviderType: "deepseek", ProviderName: "提供商", Name: "模型", Protocol: "chat_completions", RemoteModelID: "model", Config: models.Config{BaseURL: "https://example.test/v1"}, IdentityConfig: json.RawMessage(`{}`), AuthMethod: "api_key", ContextWindow: 8192, MaxOutput: 1024, Available: true}
+	b := ModelBinding{ID: 3, ModelID: 2, GenerationParameters: json.RawMessage(`{"temperature":0.1}`)}
+	first, _, e := s.resolveModel(v, b, "")
 	if e != nil {
 		t.Fatal(e)
 	}
 	v.Name = "改名"
 	v.ProviderName = "改标签"
-	second, _, e := s.resolveModel(v, b, "standard")
+	second, _, e := s.resolveModel(v, b, "")
 	if e != nil || first.SelectionHash != second.SelectionHash {
 		t.Fatal("display labels changed selection", e)
 	}
-	v.Parameters = json.RawMessage(`{"temperature":0.2}`)
-	third, _, e := s.resolveModel(v, b, "standard")
+	b.GenerationParameters = json.RawMessage(`{"temperature":0.2}`)
+	third, _, e := s.resolveModel(v, b, "")
 	if e != nil || first.SelectionHash == third.SelectionHash {
 		t.Fatal("effective parameter change not detected", e)
+	}
+	other := ModelBinding{ID: 4, AgentID: 7, ModelID: b.ModelID, GenerationParameters: json.RawMessage(`{"max_output_tokens":128}`)}
+	independent, _, err := s.resolveModel(v, other, "")
+	if err != nil || string(independent.Parameters["max_output_tokens"]) != "128" || independent.Parameters["temperature"] != nil || string(third.Parameters["temperature"]) != "0.2" || third.Parameters["max_output_tokens"] != nil {
+		t.Fatal("assistant bindings mixed generation parameters", err)
 	}
 	w := Definition{Name: strings.Repeat("名", 100), Mode: "chat", ScopeKind: "platform", RuntimePolicy: defaultRuntimePolicy(), SystemPrompt: strings.Repeat("a", 128*1024)}
 	if e = validateDefinition(&w); e != nil {

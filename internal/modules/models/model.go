@@ -124,30 +124,32 @@ type Capabilities struct {
 }
 type ThinkingOption = modelcore.ThinkingOption
 type Definition struct {
-	ThinkingLevels   []string                   `db:"-" json:"thinking_levels"`
-	ThinkingMapping  map[string]json.RawMessage `db:"-" json:"thinking_mapping"`
-	IconKey          *string                    `db:"icon_key" json:"icon_key"`
-	ID               uint64                     `db:"id" json:"id,string"`
-	ProviderID       uint64                     `db:"provider_id" json:"provider_id,string"`
-	RemoteModelID    string                     `db:"model_id" json:"model_id"`
-	Name             string                     `db:"name" json:"name"`
-	Description      string                     `db:"description" json:"description"`
-	Protocol         string                     `db:"protocol" json:"protocol"`
-	Enabled          bool                       `db:"enabled" json:"enabled"`
-	Capabilities     Capabilities               `db:"-" json:"declared_capabilities"`
-	ContextWindow    uint64                     `db:"context_window_tokens" json:"context_window"`
-	MaxOutput        uint64                     `db:"max_output_tokens" json:"max_output_tokens"`
-	Parameters       json.RawMessage            `db:"generation_defaults" json:"default_parameters"`
-	Thinking         []ThinkingOption           `db:"-" json:"thinking_options"`
-	Version          string                     `db:"-" json:"version"`
-	CreatedAt        time.Time                  `db:"created_at" json:"created_at"`
-	UpdatedAt        time.Time                  `db:"updated_at" json:"updated_at"`
-	CapabilitiesJSON json.RawMessage            `db:"capabilities" json:"-"`
-	ThinkingJSON     json.RawMessage            `db:"thinking_options" json:"-"`
-	SchemaVersion    uint64                     `db:"capability_schema_version" json:"-"`
-	RowVersion       uint64                     `db:"row_version" json:"-"`
-	ConfigVersion    uint64                     `db:"config_version" json:"-"`
-	Creator          uint64                     `db:"created_by_user_id" json:"-"`
+	ThinkingLevels  []string                   `db:"-" json:"thinking_levels"`
+	ThinkingMapping map[string]json.RawMessage `db:"-" json:"thinking_mapping"`
+	IconKey         *string                    `db:"icon_key" json:"icon_key"`
+	ID              uint64                     `db:"id" json:"id,string"`
+	ProviderID      uint64                     `db:"provider_id" json:"provider_id,string"`
+	RemoteModelID   string                     `db:"model_id" json:"model_id"`
+	Name            string                     `db:"name" json:"name"`
+	Description     string                     `db:"description" json:"description"`
+	Protocol        string                     `db:"protocol" json:"protocol"`
+	Enabled         bool                       `db:"enabled" json:"enabled"`
+	Capabilities    Capabilities               `db:"-" json:"declared_capabilities"`
+	ContextWindow   uint64                     `db:"context_window_tokens" json:"context_window"`
+	MaxOutput       uint64                     `db:"max_output_tokens" json:"max_output_tokens"`
+
+	Thinking         []ThinkingOption `db:"-" json:"thinking_options"`
+	Version          string           `db:"-" json:"version"`
+	CreatedAt        time.Time        `db:"created_at" json:"created_at"`
+	UpdatedAt        time.Time        `db:"updated_at" json:"updated_at"`
+	CapabilitiesJSON json.RawMessage  `db:"capabilities" json:"-"`
+	LevelsJSON       json.RawMessage  `db:"thinking_levels" json:"-"`
+	MappingJSON      json.RawMessage  `db:"thinking_mapping" json:"-"`
+	ProviderType     string           `db:"provider_type" json:"-"`
+	SchemaVersion    uint64           `db:"capability_schema_version" json:"-"`
+	RowVersion       uint64           `db:"row_version" json:"-"`
+	ConfigVersion    uint64           `db:"config_version" json:"-"`
+	Creator          uint64           `db:"created_by_user_id" json:"-"`
 }
 type DefinitionSummary struct {
 	IconKey       *string      `db:"icon_key" json:"icon_key"`
@@ -174,8 +176,6 @@ type DefinitionCreate struct {
 	Capabilities    Capabilities               `json:"declared_capabilities"`
 	ContextWindow   uint64                     `json:"context_window"`
 	MaxOutput       uint64                     `json:"max_output_tokens"`
-	Parameters      json.RawMessage            `json:"default_parameters"`
-	Thinking        []ThinkingOption           `json:"-"`
 }
 type DefinitionPatch struct {
 	ThinkingLevels  Field[[]string]                   `json:"thinking_levels"`
@@ -187,8 +187,6 @@ type DefinitionPatch struct {
 	Capabilities    Field[Capabilities]               `json:"declared_capabilities"`
 	ContextWindow   Field[uint64]                     `json:"context_window"`
 	MaxOutput       Field[uint64]                     `json:"max_output_tokens"`
-	Parameters      Field[json.RawMessage]            `json:"default_parameters"`
-	Thinking        Field[[]ThinkingOption]           `json:"-"`
 }
 type Query struct {
 	Page, PageSize            int

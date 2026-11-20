@@ -91,9 +91,6 @@ func probeModelConnection(ctx context.Context, request models.ProbeRequest) (jso
 	if request.Model != nil {
 		config.Protocol = modelcore.Protocol(request.Model.Protocol)
 		probe.Model = request.Model.RemoteModelID
-		if err := json.Unmarshal(request.Model.Parameters, &probe.Parameters); err != nil {
-			return nil, modelcore.ErrInvalidRequest
-		}
 		if len(request.Model.Thinking) > 0 {
 			choice := request.Model.Thinking[0]
 			for _, level := range request.Levels {
@@ -101,7 +98,7 @@ func probeModelConnection(ctx context.Context, request models.ProbeRequest) (jso
 					continue
 				}
 				for _, option := range request.Model.Thinking {
-					if diagnosticThinkingEnabled(option.Parameters) {
+					if option.Key != "none" {
 						choice = option
 						break
 					}
@@ -139,20 +136,4 @@ func probeModelConnection(ctx context.Context, request models.ProbeRequest) (jso
 	return json.Marshal(struct {
 		Diagnostic *modeladapters.Diagnostic `json:"diagnostic"`
 	}{result.Diagnostic})
-}
-
-func diagnosticThinkingEnabled(parameters json.RawMessage) bool {
-	var values struct {
-		Thinking struct {
-			Type string `json:"type"`
-		} `json:"thinking"`
-		Effort string `json:"reasoning_effort"`
-		Output struct {
-			Effort string `json:"effort"`
-		} `json:"output_config"`
-	}
-	if json.Unmarshal(parameters, &values) != nil || values.Thinking.Type == "disabled" || values.Effort == "none" || values.Output.Effort == "none" {
-		return false
-	}
-	return values.Thinking.Type == "enabled" || values.Thinking.Type == "adaptive" || values.Effort != "" || values.Output.Effort != ""
 }

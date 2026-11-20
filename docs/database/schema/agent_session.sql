@@ -15,7 +15,7 @@ CREATE TABLE `agent_session` (
     title_model_call_id BIGINT UNSIGNED NULL,
     cloud_computer_id BIGINT UNSIGNED NULL,
     selected_model_binding_id BIGINT UNSIGNED NOT NULL,
-    selected_thinking_option_key VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    selected_thinking_option_key VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
     locked_model_config JSON NULL,
     model_selection_hash BINARY(32) NULL,
     model_locked_at DATETIME(3) NULL,

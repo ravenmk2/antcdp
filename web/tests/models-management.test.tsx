@@ -113,10 +113,9 @@ const model: ModelDefinition = {
   },
   context_window: 128000,
   max_output_tokens: 8192,
-  default_parameters: { temperature: 0.6 },
   thinking_levels: [],
   thinking_mapping: {},
-  thinking_options: [{ key: "standard", label: "默认", parameters: {} }],
+  thinking_options: [],
   version: "model-v1",
   created_at: provider.created_at,
   updated_at: provider.updated_at,
@@ -373,6 +372,7 @@ it("saves explicit icons and two-state capabilities without changing other decla
   await user.click(await screen.findByRole("button", { name: "工具模型" }));
   await user.click(await screen.findByRole("button", { name: "选择模型图标" }));
   await user.click(screen.getByRole("button", { name: "Qwen" }));
+  await user.click(screen.getByRole("tab", { name: "能力与限制" }));
   expect(screen.getByRole("switch", { name: "文本输入" })).toBeChecked();
   expect(screen.getByRole("switch", { name: "图像输入" })).not.toBeChecked();
   await user.click(screen.getByRole("switch", { name: "图像输入" }));
@@ -501,6 +501,7 @@ it("discovery requires a manual model create and leaves capability switches off"
   expect(within(dialog).getByLabelText(/^模型名称/)).toHaveValue(
     "发现的新模型",
   );
+  await user.click(within(dialog).getByRole("tab", { name: "能力与限制" }));
   expect(
     within(dialog).getByRole("switch", { name: "工具调用" }),
   ).not.toBeChecked();
@@ -510,23 +511,16 @@ it("discovery requires a manual model create and leaves capability switches off"
         path === "/admin/models/definitions" && options?.method === "POST",
     ),
   ).toBe(false);
+  await user.click(within(dialog).getByRole("tab", { name: "基本配置" }));
   await user.click(within(dialog).getByRole("combobox", { name: /调用协议/ }));
   expect(
     await screen.findByRole("option", { name: /该适配器尚未开放/ }),
   ).toHaveAttribute("aria-disabled", "true");
 });
 
-it("edits model defaults without dropping registered advanced parameters or immutable identity", async () => {
+it("edits model metadata independently of generation settings", async () => {
   let body: unknown;
   override = async (path, options) => {
-    if (path.endsWith("/definitions/12") && !options.method)
-      return response(
-        {
-          ...model,
-          default_parameters: { ...model.default_parameters, stop: ["\n\n"] },
-        },
-        '"model-v1"',
-      );
     if (path.endsWith("/definitions/12") && options.method === "PATCH") {
       body = options.body;
       return response({ ...model, ...(options.body as object) }, '"model-v2"');
@@ -548,13 +542,10 @@ it("edits model defaults without dropping registered advanced parameters or immu
   await waitFor(() => expect(body).toBeDefined());
   expect(body).toMatchObject({
     name: "更新模型名称",
-    default_parameters: {
-      temperature: 0.6,
-      stop: ["\n\n"],
-    },
     thinking_levels: [],
     thinking_mapping: {},
   });
+  expect(body).not.toHaveProperty("default_parameters");
   expect(body).not.toHaveProperty("provider_id");
   expect(body).not.toHaveProperty("model_id");
   expect(body).not.toHaveProperty("protocol");
@@ -604,26 +595,26 @@ it("cancels a transient test when its panel closes and never polls operations", 
   ).toBe(false);
 });
 
-it("keeps parameter drafts across tabs and reveals the first invalid section", async () => {
+it("keeps limit drafts across tabs and reveals the first invalid section", async () => {
   const { user } = setup("/admin/models/3");
   await user.click(
     await screen.findByRole("button", { name: "工具模型的操作" }),
   );
   await user.click(await screen.findByRole("menuitem", { name: "编辑" }));
   await screen.findByLabelText(/^模型名称/);
-  await user.click(screen.getByRole("tab", { name: "生成参数" }));
-  const advanced = screen.getByLabelText("高级参数（JSON）");
+  await user.click(screen.getByRole("tab", { name: "能力与限制" }));
+  const advanced = screen.getByRole("textbox", { name: /模型输出上限/ });
   await user.clear(advanced);
-  await user.type(advanced, "invalid");
+  await user.type(advanced, "150000");
   await user.click(screen.getByRole("tab", { name: "基本配置" }));
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   await waitFor(() =>
-    expect(screen.getByRole("tab", { name: "生成参数" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "能力与限制" })).toHaveAttribute(
       "aria-selected",
       "true",
     ),
   );
-  expect(advanced).toHaveValue("invalid");
+  expect(advanced).toHaveValue("150000");
   await waitFor(() => expect(advanced).toHaveFocus());
   expect(
     mocked.mock.calls.some(([, options]) => options?.method === "PATCH"),
@@ -666,6 +657,7 @@ it("adds selected discovered models one at a time with explicit limits", async (
     await waitFor(() =>
       expect(within(dialog).getByLabelText(/^模型 ID/)).toHaveValue(id),
     );
+    await user.click(within(dialog).getByRole("tab", { name: "能力与限制" }));
     await user.type(
       within(dialog).getByRole("textbox", { name: /上下文窗口/ }),
       "128000",
@@ -697,9 +689,15 @@ it("selects unified thinking levels without editable keys or duplicate generatio
   await user.click(await screen.findByRole("button", { name: "工具模型" }));
   await screen.findByLabelText(/^模型名称/);
   await user.click(screen.getByRole("tab", { name: "思考档位" }));
-  expect(screen.getByText(/未选择档位时，不发送思考参数/)).toBeVisible();
+  expect(screen.getByLabelText("高的提供商映射")).toBeDisabled();
   expect(screen.queryByLabelText("选项键")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("档位映射（JSON）")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("checkbox", { name: /关闭/ }));
+  const noneMapping = screen.getByRole("textbox", { name: "关闭的提供商映射" });
+  await user.type(noneMapping, "draft");
+  await user.clear(noneMapping);
+  await user.click(screen.getByRole("checkbox", { name: /关闭/ }));
+  expect(screen.getByRole("button", { name: "保存修改" })).toBeDisabled();
   await user.click(screen.getByRole("checkbox", { name: /关闭/ }));
   await user.click(screen.getByRole("checkbox", { name: /^高/ }));
   await user.click(screen.getByRole("button", { name: "保存修改" }));
@@ -713,7 +711,7 @@ it("selects unified thinking levels without editable keys or duplicate generatio
   expect(body).not.toHaveProperty("thinking_options");
 });
 
-it("keeps custom thinking drafts and focuses a missing mapping before saving", async () => {
+it("validates an individual provider mapping and saves the override", async () => {
   let body: unknown;
   const customType = {
     ...catalog[0],
@@ -748,14 +746,13 @@ it("keeps custom thinking drafts and focuses a missing mapping before saving", a
   await screen.findByLabelText(/^模型名称/);
   await user.click(screen.getByRole("tab", { name: "思考档位" }));
   await user.click(screen.getByRole("checkbox", { name: /关闭/ }));
+  const mapping = screen.getByRole("textbox", { name: "关闭的提供商映射" });
+  await user.type(mapping, "invalid");
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   expect(body).toBeUndefined();
-  const mapping = screen.getByRole("textbox", { name: /档位映射/ });
-  expect(mapping).toBeVisible();
-  expect(screen.getByRole("checkbox", { name: /关闭/ })).toBeChecked();
-  await user.click(
-    screen.getByRole("button", { name: "填入所选档位的协议示例" }),
-  );
+  await user.clear(mapping);
+  await user.click(mapping);
+  await user.paste('{"reasoning_effort":"none"}');
   await user.click(screen.getByRole("button", { name: "保存修改" }));
   await waitFor(() =>
     expect(body).toMatchObject({

@@ -18,13 +18,15 @@ type ThinkingOption struct {
 	Hash  string `json:"model_selection_hash,omitempty"`
 }
 type ModelOption struct {
-	BindingID     uint64            `json:"binding_id,string"`
-	ModelID       uint64            `json:"model_id,string"`
-	Name          string            `json:"display_name"`
-	ProviderLabel string            `json:"provider_label"`
-	Protocol      string            `json:"protocol"`
-	ImageInput    modelcore.Support `json:"image_input"`
-	Thinking      []ThinkingOption  `json:"thinking_options"`
+	DefaultThinking string            `json:"default_thinking_option_key,omitempty"`
+	Hash            string            `json:"model_selection_hash,omitempty"`
+	BindingID       uint64            `json:"binding_id,string"`
+	ModelID         uint64            `json:"model_id,string"`
+	Name            string            `json:"display_name"`
+	ProviderLabel   string            `json:"provider_label"`
+	Protocol        string            `json:"protocol"`
+	ImageInput      modelcore.Support `json:"image_input"`
+	Thinking        []ThinkingOption  `json:"thinking_options"`
 }
 type CatalogAgent struct {
 	Favorited       bool          `json:"favorited"`
@@ -61,23 +63,23 @@ type EffectiveSelection struct {
 	Availability  Availability      `json:"availability"`
 }
 
+func thinkingAllowed(allowed []string, key string) bool {
+	if key == "" {
+		return len(allowed) == 0
+	}
+	return slices.Contains(allowed, key)
+}
+
 func (s *Service) resolveModel(view *models.RuntimeModel, b ModelBinding, thinking string) (agentcore.LockedModel, EffectiveSelection, error) {
-	if !slices.Contains(b.ThinkingOptions, thinking) {
+	if !thinkingAllowed(b.ThinkingOptions, thinking) {
 		return agentcore.LockedModel{}, EffectiveSelection{}, httpx.Invalid("thinking_option_key", "not_allowed")
 	}
 	if _, e := s.validateModelBinding(view, modelWrites([]ModelBinding{b})[0]); e != nil {
 		return agentcore.LockedModel{}, EffectiveSelection{}, e
 	}
-	parameters, e := objectJSON(view.Parameters, "model.default_parameters")
+	parameters, e := objectJSON(b.GenerationParameters, "generation_parameters")
 	if e != nil {
 		return agentcore.LockedModel{}, EffectiveSelection{}, e
-	}
-	overrides, e := objectJSON(b.GenerationOverrides, "generation_overrides")
-	if e != nil {
-		return agentcore.LockedModel{}, EffectiveSelection{}, e
-	}
-	for k, v := range overrides {
-		parameters[k] = v
 	}
 	label := thinking
 	for _, opt := range view.Thinking {
@@ -141,7 +143,16 @@ func (s *Service) catalogAgent(tx identity.Tx, r Repository, v *Definition, hash
 		if !view.Available {
 			continue
 		}
-		option := ModelOption{BindingID: b.ID, ModelID: b.ModelID, Name: view.Name, ProviderLabel: view.ProviderName, Protocol: view.Protocol, ImageInput: modelcore.Support(view.Capabilities.Image), Thinking: []ThinkingOption{}}
+		option := ModelOption{DefaultThinking: b.DefaultThinking, BindingID: b.ID, ModelID: b.ModelID, Name: view.Name, ProviderLabel: view.ProviderName, Protocol: view.Protocol, ImageInput: modelcore.Support(view.Capabilities.Image), Thinking: []ThinkingOption{}}
+		if len(b.ThinkingOptions) == 0 {
+			_, selection, e := s.resolveModel(view, b, "")
+			if e != nil {
+				return out, e
+			}
+			if hashes {
+				option.Hash = selection.Hash
+			}
+		}
 		for _, key := range b.ThinkingOptions {
 			_, selection, e := s.resolveModel(view, b, key)
 			if e != nil {
@@ -150,16 +161,21 @@ func (s *Service) catalogAgent(tx identity.Tx, r Repository, v *Definition, hash
 			thinking := ThinkingOption{Key: key, Label: selection.ThinkingLabel}
 			if hashes {
 				thinking.Hash = selection.Hash
+				if key == b.DefaultThinking {
+					option.Hash = selection.Hash
+				}
 			}
 			option.Thinking = append(option.Thinking, thinking)
 		}
 		out.Models = append(out.Models, option)
 		if v.DefaultModelBindingID != nil && b.ID == *v.DefaultModelBindingID {
 			key := b.DefaultThinking
-			out.DefaultThinking = &key
+			out.Availability.Available = v.Enabled
+			if key != "" {
+				out.DefaultThinking = &key
+			}
 		}
 	}
-	out.Availability.Available = v.Enabled && out.DefaultThinking != nil
 	if !out.Availability.Available {
 		reason := "AGENT_UNAVAILABLE"
 		out.Availability.Reason = &reason

@@ -71,7 +71,6 @@ export interface ModelDefinition extends ModelSummary {
   description: string;
   context_window: number;
   max_output_tokens: number;
-  default_parameters: JsonObject;
   thinking_options: ThinkingOption[];
   thinking_levels: string[];
   thinking_mapping: Record<string, JsonObject>;

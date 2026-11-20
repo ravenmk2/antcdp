@@ -22,7 +22,7 @@ type agentsTx struct {
 func (t *identityTx) Agents() a.Repository { return &agentsTx{t.ctx, t.tx} }
 
 const agentDefinitionColumns = "id,code,name,description,agent_type,scope_kind,scope_id,robot_user_id,enabled,system_prompt,config_schema_version,default_model_binding_id,runtime_policy,pool_capacity,config_version,row_version,created_by_user_id,created_at,updated_at,deleted_at"
-const agentModelBindingColumns = "id,agent_id,model_definition_id,thinking_options,default_thinking,generation_overrides,sort_order,created_at,updated_at,removed_at"
+const agentModelBindingColumns = "id,agent_id,model_definition_id,thinking_options,COALESCE(default_thinking,'') AS default_thinking,generation_parameters,sort_order,created_at,updated_at,removed_at"
 
 func (t *agentsTx) DefinitionByPath(project uint64, path resourcecode.Locator) (*a.Definition, error) {
 	condition := "scope_kind='project' AND scope_id=?"
@@ -173,7 +173,7 @@ func (t *agentsTx) SaveModelBindings(id uint64, rows []a.ModelBinding, now time.
 		v.AgentID = id
 		v.CreatedAt = now
 		v.UpdatedAt = now
-		_, e := t.named("INSERT INTO agent_model_binding(agent_id,model_definition_id,thinking_options,default_thinking,generation_overrides,sort_order,created_at,updated_at) VALUES(:agent_id,:model_definition_id,:thinking_options,:default_thinking,:generation_overrides,:sort_order,:created_at,:updated_at) ON DUPLICATE KEY UPDATE thinking_options=VALUES(thinking_options),default_thinking=VALUES(default_thinking),generation_overrides=VALUES(generation_overrides),sort_order=VALUES(sort_order),removed_at=NULL,updated_at=VALUES(updated_at)", v)
+		_, e := t.named("INSERT INTO agent_model_binding(agent_id,model_definition_id,thinking_options,default_thinking,generation_parameters,sort_order,created_at,updated_at) VALUES(:agent_id,:model_definition_id,:thinking_options,NULLIF(:default_thinking,''),:generation_parameters,:sort_order,:created_at,:updated_at) ON DUPLICATE KEY UPDATE thinking_options=VALUES(thinking_options),default_thinking=VALUES(default_thinking),generation_parameters=VALUES(generation_parameters),sort_order=VALUES(sort_order),removed_at=NULL,updated_at=VALUES(updated_at)", v)
 		if e != nil {
 			return e
 		}
