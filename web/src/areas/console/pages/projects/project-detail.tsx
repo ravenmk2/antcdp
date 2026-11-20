@@ -13,6 +13,11 @@ import {
   UsersRound,
 } from "lucide-react";
 import { ApiError, request } from "@/api/client";
+import {
+  ConsoleDialog,
+  ConsoleDialogCancel,
+} from "@/areas/console/components/dialog";
+import styles from "@/areas/console/styles/management.module.css";
 import { Button } from "@/components/button";
 import {
   AsyncBoundary,
@@ -21,7 +26,6 @@ import {
   StatusBadge,
 } from "@/components/feedback";
 import { ResourceDetailShell, ResourceHeader, Tabs } from "@/components/layout";
-import { ConfirmDialog } from "@/components/overlays";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { ResourceIcon } from "@/components/resource-icon";
 import {
@@ -220,8 +224,11 @@ function DetailContent({
     return <Navigate replace to={`/admin/projects/${project.id}`} />;
   return (
     <ResourceDetailShell
+      className={styles.scope}
+      contentClassName={styles.projectContent}
       header={
         <ResourceHeader
+          className={styles.projectHeading}
           icon={<ResourceIcon resource={project} className="size-11" />}
           title={project.name}
           badge={
@@ -234,44 +241,54 @@ function DetailContent({
           meta={<ResourceMetadata resource={project} kind="projects" />}
           summary={project.summary}
           actions={
-            <RowActions label={project.name} disabled={submission.pending}>
-              <RowAction
-                icon={<Pencil />}
-                disabled={!project.can_manage}
-                onSelect={() => setEdit(true)}
-              >
-                编辑资料
-              </RowAction>
-              <RowAction
-                icon={<FileText />}
-                disabled={!project.can_manage}
-                to={
-                  project.can_manage
-                    ? `/admin/projects/${project.id}/description/edit`
-                    : undefined
-                }
-              >
-                编辑介绍
-              </RowAction>
-              <RowActionSeparator />
-              <RowAction
-                icon={project.status === "active" ? <Archive /> : <RotateCcw />}
-                variant={
-                  project.status === "active" ? "destructive" : undefined
-                }
-                onSelect={() => {
-                  submission.setError(null);
-                  setLife(project.status === "active" ? "archive" : "restore");
-                }}
-              >
-                {project.status === "active" ? "归档项目" : "恢复项目"}
-              </RowAction>
-            </RowActions>
+            <div className={styles.projectActions}>
+              {project.can_manage && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEdit(true)}
+                >
+                  <Pencil />
+                  编辑资料
+                </Button>
+              )}
+              <RowActions label={project.name} disabled={submission.pending}>
+                <RowAction
+                  icon={<FileText />}
+                  disabled={!project.can_manage}
+                  to={
+                    project.can_manage
+                      ? `/admin/projects/${project.id}/description/edit`
+                      : undefined
+                  }
+                >
+                  编辑介绍
+                </RowAction>
+                <RowActionSeparator />
+                <RowAction
+                  icon={
+                    project.status === "active" ? <Archive /> : <RotateCcw />
+                  }
+                  variant={
+                    project.status === "active" ? "destructive" : undefined
+                  }
+                  onSelect={() => {
+                    submission.setError(null);
+                    setLife(
+                      project.status === "active" ? "archive" : "restore",
+                    );
+                  }}
+                >
+                  {project.status === "active" ? "归档项目" : "恢复项目"}
+                </RowAction>
+              </RowActions>
+            </div>
           }
         />
       }
       navigation={
         <Tabs
+          className={styles.projectTabs}
           label={`${project.name}功能`}
           items={tabs}
           value={tab}
@@ -301,16 +318,27 @@ function DetailContent({
           />
         )}
       </OverlayPresence>
-      <ConfirmDialog
+      <ConsoleDialog
         open={Boolean(life)}
-        danger={life === "archive"}
+        tone={life === "archive" ? "danger" : undefined}
+        icon={life === "archive" ? <Archive /> : <RotateCcw />}
         title={life === "archive" ? "归档项目" : "恢复项目"}
         description={project.name}
-        confirmLabel={life === "archive" ? "确认归档" : "确认恢复"}
         pending={submission.pending}
-        confirmDisabled={submission.uncertain || recovering}
         onClose={() => setLife(null)}
-        onConfirm={() => void lifecycle()}
+        footer={
+          <>
+            <ConsoleDialogCancel pending={submission.pending} initialFocus />
+            <Button
+              variant={life === "archive" ? "danger" : "default"}
+              pending={submission.pending}
+              disabled={submission.uncertain || recovering}
+              onClick={() => void lifecycle()}
+            >
+              {life === "archive" ? "确认归档" : "确认恢复"}
+            </Button>
+          </>
+        }
       >
         {recoverable ? (
           <Notice tone="warning">
@@ -337,7 +365,7 @@ function DetailContent({
             ? "归档后项目资料与仓库标签只读，成员关系和仓库快照保留。"
             : "恢复后可继续维护项目，既有成员关系保持不变。"}
         </p>
-      </ConfirmDialog>
+      </ConsoleDialog>
     </ResourceDetailShell>
   );
 }

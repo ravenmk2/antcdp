@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { request } from "@/api/client";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 import { Button } from "@/components/button";
 import { DescriptionPreview } from "@/components/description-preview";
 import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
@@ -204,113 +205,116 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
   ];
 
   return (
-    <div className="page page-wide">
+    <ConsoleListPage>
       <PageHeader
         title={title}
         description={`管理全部${kind === "projects" ? "项目，包括你未参与的对象" : "团队及直接成员"}。`}
+      />
+      <ErrorNotice error={submission.error} />
+      <TableToolbar
+        onReset={() => {
+          search.setValue("");
+          update({ q: "", status: "active" });
+        }}
+        onRefresh={() => void list.refetch()}
+        refreshing={list.isFetching}
         actions={
           <Button onClick={() => setCreate(true)}>
             <Plus />
             创建{kind === "projects" ? "项目" : "团队"}
           </Button>
         }
-      />
-      <ErrorNotice error={submission.error} />
-      <section className="panel">
-        <TableToolbar
-          onReset={() => {
-            search.setValue("");
-            update({ q: "", status: "active" });
+      >
+        <form
+          className="relative flex items-center"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!search.composing.current) search.submit();
           }}
-          onRefresh={() => void list.refetch()}
-          refreshing={list.isFetching}
         >
-          <form
-            className="flex shrink-0 items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              search.submit();
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-3 size-4 text-muted"
+          />
+          <StandaloneInput
+            className="ps-9"
+            aria-label={`搜索${title}`}
+            placeholder="搜索名称、编码或摘要"
+            value={search.value}
+            onChange={(event) => search.setValue(event.target.value)}
+            onCompositionStart={() => {
+              search.composing.current = true;
             }}
-          >
-            <StandaloneInput
-              aria-label={`搜索${title}`}
-              placeholder="搜索名称、编码或摘要"
-              value={search.value}
-              onChange={(event) => search.setValue(event.target.value)}
-              onCompositionStart={() => {
-                search.composing.current = true;
-              }}
-              onCompositionEnd={search.compositionEnd}
-            />
-          </form>
-          <StandaloneSelect
-            aria-label="状态筛选"
-            value={status}
-            onValueChange={(value) => update({ status: value })}
-          >
-            <option value="active">
-              正常 · {activeCount.data?.data.total ?? "—"}
-            </option>
-            <option value={ended}>
-              {kind === "projects" ? "已归档" : "已解散"} ·{" "}
-              {endedCount.data?.data.total ?? "—"}
-            </option>
-            <option value="all">全部</option>
-          </StandaloneSelect>
-        </TableToolbar>
-        <AsyncBoundary
-          loading={list.isPending}
-          error={list.error}
-          onRetry={() => void list.refetch()}
-          empty={!list.data?.data.items.length}
-          emptyTitle={
-            q || status !== "active"
-              ? "没有匹配的结果"
-              : `暂无${kind === "projects" ? "项目" : "团队"}`
-          }
-          emptyDescription={
-            q || status !== "active"
-              ? "请调整筛选条件。"
-              : "可通过右上角创建入口开始。"
-          }
+            onCompositionEnd={search.compositionEnd}
+          />
+        </form>
+        <StandaloneSelect
+          aria-label="状态筛选"
+          value={status}
+          onValueChange={(value) => update({ status: value })}
         >
-          {list.data && (
-            <DataTable
-              actionColumn="actions"
-              data={list.data.data.items}
-              columns={
-                kind === "teams"
-                  ? columns.filter((column) => column.id !== "role")
-                  : columns
-              }
-              label={title}
-              rowKey={(row) => row.id}
-              onRowClick={
-                kind === "teams"
-                  ? undefined
-                  : (row) => navigate(`/admin/${kind}/${row.id}`)
-              }
-            />
-          )}
-        </AsyncBoundary>
+          <option value="active">
+            正常 · {activeCount.data?.data.total ?? "—"}
+          </option>
+          <option value={ended}>
+            {kind === "projects" ? "已归档" : "已解散"} ·{" "}
+            {endedCount.data?.data.total ?? "—"}
+          </option>
+          <option value="all">全部</option>
+        </StandaloneSelect>
+      </TableToolbar>
+      <AsyncBoundary
+        loading={list.isPending}
+        error={list.error}
+        onRetry={() => void list.refetch()}
+        empty={!list.data?.data.items.length}
+        emptyTitle={
+          q || status !== "active"
+            ? "没有匹配的结果"
+            : `暂无${kind === "projects" ? "项目" : "团队"}`
+        }
+        emptyDescription={
+          q || status !== "active"
+            ? "请调整筛选条件。"
+            : "可通过右上角创建入口开始。"
+        }
+      >
         {list.data && (
-          <Pagination
-            page={page}
-            size={size}
-            total={list.data.data.total}
-            pending={list.isFetching}
-            onChange={(nextPage, nextSize) => {
-              if (nextSize !== size) setPreferredSize(nextSize);
-              setParams((current) => {
-                const next = new URLSearchParams(current);
-                next.set("page", String(nextPage));
-                next.set("page_size", String(nextSize));
-                return next;
-              });
-            }}
+          <DataTable
+            actionColumn="actions"
+            data={list.data.data.items}
+            columns={
+              kind === "teams"
+                ? columns.filter((column) => column.id !== "role")
+                : columns
+            }
+            label={title}
+            rowKey={(row) => row.id}
+            onRowClick={
+              kind === "teams"
+                ? undefined
+                : (row) => navigate(`/admin/${kind}/${row.id}`)
+            }
           />
         )}
-      </section>
+      </AsyncBoundary>
+      {list.data && (
+        <Pagination
+          page={page}
+          size={size}
+          total={list.data.data.total}
+          pending={list.isFetching}
+          onChange={(nextPage, nextSize) => {
+            if (nextSize !== size) setPreferredSize(nextSize);
+            setParams((current) => {
+              const next = new URLSearchParams(current);
+              next.set("page", String(nextPage));
+              next.set("page_size", String(nextSize));
+              return next;
+            });
+          }}
+        />
+      )}
       {dissolving && (
         <TeamDissolveDialog
           team={dissolving}
@@ -346,6 +350,6 @@ export function ResourceList({ kind }: { kind: ResourceKind }) {
           />
         )}
       </OverlayPresence>
-    </div>
+    </ConsoleListPage>
   );
 }

@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 import { Button } from "@/components/button";
 import { Field, Input } from "@/components/fields";
-import { PageHeader, Panel } from "@/components/layout";
+import { PageHeader, Panel, Tabs } from "@/components/layout";
 import { AsyncBoundary } from "@/components/feedback";
 import { ConfirmDialog } from "@/components/overlays";
 import { SimpleTable } from "@/components/table";
+import { TableToolbar } from "@/components/table-toolbar";
 import { useApiQuery } from "@/hooks/use-api";
 import { useUnsaved } from "@/hooks/use-unsaved";
 import { ConnectionEditor } from "@/features/agents/cloud/connection-editor";
@@ -26,24 +29,28 @@ export function SandboxesPage() {
   const [params, setParams] = useSearchParams();
   const specs = params.get("tab") === "specs";
   return (
-    <div className="page space-y-5">
+    <ConsoleListPage>
       <PageHeader title="沙箱配置" description="管理平台沙箱连接与运行规格。" />
-      <div className="flex gap-2">
-        <Button
-          variant={specs ? "outline" : "default"}
-          onClick={() => setParams({})}
-        >
-          服务连接
-        </Button>
-        <Button
-          variant={specs ? "default" : "outline"}
-          onClick={() => setParams({ tab: "specs" })}
-        >
-          沙箱规格
-        </Button>
-      </div>
-      {specs ? <SpecCatalog /> : <ConnectionEditor />}
-    </div>
+      <Tabs
+        className="px-6"
+        label="沙箱配置分类"
+        items={[
+          { value: "connection", label: "服务连接" },
+          { value: "specs", label: "沙箱规格" },
+        ]}
+        value={specs ? "specs" : "connection"}
+        onChange={(value) =>
+          setParams(value === "specs" ? { tab: "specs" } : {})
+        }
+      />
+      {specs ? (
+        <SpecCatalog />
+      ) : (
+        <div className="p-6">
+          <ConnectionEditor />
+        </div>
+      )}
+    </ConsoleListPage>
   );
 }
 function SpecCatalog() {
@@ -60,15 +67,26 @@ function SpecCatalog() {
   }
   if (editing)
     return (
-      <SpecForm
-        key={editing === "new" ? "new" : editing.id}
-        initial={editing === "new" ? null : editing}
-        close={finish}
-      />
+      <div className="p-6">
+        <SpecForm
+          key={editing === "new" ? "new" : editing.id}
+          initial={editing === "new" ? null : editing}
+          close={finish}
+        />
+      </div>
     );
   return (
-    <Panel title="沙箱规格" bodyClassName="space-y-4 p-6">
-      <Button onClick={() => setEditing("new")}>创建规格</Button>
+    <>
+      <TableToolbar
+        onRefresh={() => q.refetch()}
+        refreshing={q.isFetching}
+        actions={
+          <Button onClick={() => setEditing("new")}>
+            <Plus />
+            创建规格
+          </Button>
+        }
+      />
       <AsyncBoundary
         loading={q.isPending}
         error={q.error}
@@ -77,6 +95,7 @@ function SpecCatalog() {
         onRetry={() => q.refetch()}
       >
         <SimpleTable
+          actions
           label="沙箱规格"
           headers={[
             "名称",
@@ -95,7 +114,11 @@ function SpecCatalog() {
               <td>{v.memory_mib}</td>
               <td>{v.config_version}</td>
               <td>
-                <Button variant="outline" onClick={() => setEditing(v)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditing(v)}
+                >
                   管理
                 </Button>
               </td>
@@ -103,7 +126,7 @@ function SpecCatalog() {
           ))}
         </SimpleTable>
       </AsyncBoundary>
-    </Panel>
+    </>
   );
 }
 function SpecForm({

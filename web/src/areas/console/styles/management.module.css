@@ -1,0 +1,272 @@
+@layer components {
+  .scope .memberDirectory {
+    overflow: hidden;
+  }
+  .scope .directoryToolbar {
+    align-items: center;
+    padding: 14px 18px;
+  }
+  .scope .directoryToolbar :global(.toolbar-filters) {
+    align-items: center;
+  }
+  .scope .search {
+    position: relative;
+    width: min(100%, 254px);
+  }
+  .scope .search > svg,
+  .scope .pickerSearch > svg {
+    position: absolute;
+    top: 50%;
+    left: 12px;
+    width: 16px;
+    height: 16px;
+    color: var(--faint);
+    pointer-events: none;
+    translate: 0 -50%;
+  }
+  .scope .tableViewport {
+    max-height: max(18rem, calc(100dvh - 296px));
+  }
+  .scope .tableViewport th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+  }
+  .scope .userTable,
+  .scope .memberTable {
+    width: 100%;
+    min-width: 780px;
+    table-layout: fixed;
+  }
+  .scope .memberTable th,
+  .scope .memberTable td {
+    padding-inline: 18px;
+  }
+  .scope .userTable td,
+  .scope .memberTable td {
+    padding-block: 9px;
+  }
+  .scope .userTable th:nth-child(2),
+  .scope .userTable th:nth-child(3) {
+    width: clamp(7rem, 11cqw, 11rem);
+  }
+  .scope .userTable th:nth-child(4),
+  .scope .userTable th:nth-child(5) {
+    width: clamp(10rem, 16cqw, 15.5rem);
+  }
+  .scope .userTable th:last-child {
+    width: 72px;
+  }
+  .scope .memberTable th:first-child {
+    width: 28%;
+  }
+  .scope .memberTable th:nth-child(2),
+  .scope .memberTable th:nth-child(5) {
+    width: 13%;
+  }
+  .scope .memberTable th:last-child {
+    width: 100px;
+  }
+  .scope .identity {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 10px;
+    line-height: 1.35;
+  }
+  .scope .nameLine {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 7px;
+  }
+  .scope .nameButton,
+  .scope .account {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .scope .nameButton {
+    max-width: 100%;
+    color: var(--text);
+    font-weight: 650;
+    text-align: left;
+  }
+  .scope button.nameButton {
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .scope button.nameButton:hover {
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .scope .account,
+  .scope .timestamp,
+  .scope .self {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .scope .timestamp {
+    font-variant-numeric: tabular-nums;
+  }
+  .scope .self {
+    flex-shrink: 0;
+    font-size: 11px;
+  }
+  .scope.form {
+    display: grid;
+    gap: 18px;
+  }
+  .scope .formSection {
+    min-width: 0;
+    padding: 15px 16px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-subtle);
+  }
+  .scope .formSection > legend {
+    padding-inline: 5px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 650;
+  }
+  .scope .formGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .scope .fullField {
+    grid-column: 1 / -1;
+  }
+  .scope .profileFields {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 132px;
+    align-items: start;
+    gap: 18px;
+  }
+  .scope .avatarEditor {
+    display: grid;
+    gap: 6px;
+  }
+  .scope .avatarEditor > div {
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .scope .fieldLabel {
+    color: var(--text-soft);
+    font-size: 12px;
+    font-weight: 550;
+  }
+  .scope .projectContent {
+    width: min(1540px, 100%);
+    margin-inline: 0;
+    padding-inline: var(--console-gutter);
+  }
+  .scope .projectOverview {
+    display: grid;
+    max-width: 1180px;
+    gap: 20px;
+  }
+  .scope .projectHeading {
+    padding-inline: var(--console-gutter);
+  }
+  .scope .projectActions {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .scope .projectTabs :global(.tabs) {
+    padding-inline: var(--console-gutter);
+  }
+  .scope .projectTabs :global(.tab:first-child) {
+    margin-inline-start: -10px;
+  }
+  .scope .projectContent :global(.resource-document .markdown-reading-grid),
+  .scope
+    .projectContent
+    :global(
+      .resource-document
+        .markdown-layout.has-directory:not(.markdown-layout-compact)
+        > .markdown-reading-grid
+    ),
+  .scope .projectContent :global(.resource-document .markdown) {
+    margin-inline: 0;
+  }
+  .scope .memberHeading {
+    margin-bottom: 14px;
+  }
+  .scope .memberHeading > h2 {
+    font-size: 19px;
+    font-weight: 650;
+  }
+  .scope .memberFields {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 20px;
+  }
+  .scope .pickerSearch {
+    position: relative;
+  }
+  .scope .pickerCount {
+    margin: 8px 0;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .scope .pickerResults {
+    height: 258px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    overscroll-behavior: contain;
+  }
+  .scope .pickerResults :global(.empty-state) {
+    min-height: 120px;
+  }
+  .scope .candidate {
+    display: flex;
+    min-height: 49px;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: pointer;
+  }
+  .scope .candidate:last-child {
+    border-bottom: 0;
+  }
+  .scope .candidate:hover {
+    background: var(--surface-hover);
+  }
+  .scope .candidate[data-selected="true"] {
+    background: var(--accent-soft);
+  }
+  .scope .candidate > input {
+    flex: 0 0 auto;
+    accent-color: var(--accent);
+  }
+  .scope .memberSelection {
+    display: grid;
+    min-width: 0;
+    gap: 15px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface-subtle);
+  }
+  .scope .selectionIdentity {
+    display: grid;
+    gap: 7px;
+    padding-bottom: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  @media (max-width: 700px) {
+    .scope .memberFields,
+    .scope .profileFields {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

@@ -191,12 +191,7 @@ it("uses a compact project header and separates profile editing from the descrip
   );
   expect(screen.getByRole("tab", { name: "成员管理" })).toBeInTheDocument();
   expect(screen.getByLabelText("项目介绍内容")).toHaveTextContent("项目目标");
-  expect(
-    screen.queryByRole("button", { name: "编辑资料" }),
-  ).not.toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "交付平台的操作" }));
-  await user.click(await screen.findByRole("menuitem", { name: "编辑资料" }));
+  await user.click(screen.getByRole("button", { name: "编辑资料" }));
   expect(
     await screen.findByRole("dialog", { name: "编辑项目" }),
   ).toHaveTextContent("基本资料与项目介绍分开编辑");
@@ -308,12 +303,13 @@ it("offers restore instead of archive for an archived project", async () => {
   project.status = "archived";
   project.can_manage = false;
   const { user } = mount();
+  await screen.findByRole("heading", { name: /交付平台/ });
+  expect(
+    screen.queryByRole("button", { name: "编辑资料" }),
+  ).not.toBeInTheDocument();
   await user.click(
     await screen.findByRole("button", { name: "交付平台的操作" }),
   );
-  expect(
-    await screen.findByRole("menuitem", { name: "编辑资料" }),
-  ).toHaveAttribute("aria-disabled", "true");
   expect(
     await screen.findByRole("menuitem", { name: "恢复项目" }),
   ).toBeVisible();

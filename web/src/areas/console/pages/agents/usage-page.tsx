@@ -3,6 +3,7 @@ import { AsyncBoundary, EmptyState, StatusBadge } from "@/components/feedback";
 import { Field, Input, Select, StandaloneSelect } from "@/components/fields";
 import { PageHeader, Panel } from "@/components/layout";
 import { Drawer, OverlayCancelButton } from "@/components/overlays";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 import { Pagination } from "@/components/pagination";
 import { SimpleTable } from "@/components/table";
 import { agentAdminRoot, agentQuery } from "@/features/agents/data/agent-api";
@@ -52,12 +53,12 @@ export function AgentUsagePage() {
   });
   const valid = Boolean(draft.from && draft.to && draft.from <= draft.to);
   return (
-    <div className="page">
+    <ConsoleListPage>
       <PageHeader
         title="运行与用量"
         description="仅查看调用、状态与用量元数据；管理权限不会开放其他用户的对话正文、工具参数或文件内容。"
       />
-      <nav aria-label="运行与用量分区" className="tabs mb-6 gap-1">
+      <nav aria-label="运行与用量分区" className="tabs mx-6 gap-1">
         {[
           ["usage", "用量汇总"],
           ["runs", "运行元数据"],
@@ -77,97 +78,91 @@ export function AgentUsagePage() {
           </Link>
         ))}
       </nav>
-      <Panel bodyClassName="p-5">
-        <form
-          className="grid grid-cols-4 items-end gap-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (valid) {
-              setFilters({ ...draft });
-              setPage(1);
+      <form
+        className="grid grid-cols-4 items-end gap-4 p-6"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (valid) {
+            setFilters({ ...draft });
+            setPage(1);
+          }
+        }}
+      >
+        <Field label="开始日期">
+          <Input
+            type="date"
+            required
+            value={draft.from}
+            max={draft.to}
+            onChange={(event) =>
+              setDraft({ ...draft, from: event.target.value })
             }
-          }}
-        >
-          <Field label="开始日期">
+          />
+        </Field>
+        <Field label="结束日期">
+          <Input
+            type="date"
+            required
+            value={draft.to}
+            min={draft.from}
+            onChange={(event) => setDraft({ ...draft, to: event.target.value })}
+          />
+        </Field>
+        <Field label="运行模式">
+          <Select
+            value={draft.agent_type}
+            onValueChange={(value) => setDraft({ ...draft, agent_type: value })}
+          >
+            <option value="all">全部身份</option>
+            <option value="chat">对话型</option>
+            <option value="service">服务型</option>
+          </Select>
+        </Field>
+        {(
+          [
+            ["agent_id", "助手 ID"],
+            ["owner_user_id", "用户 ID"],
+            ["model_definition_id", "模型 ID"],
+            ["provider_id", "提供商 ID"],
+          ] as const
+        ).map(([key, label]) => (
+          <Field key={key} label={`${label}（选填）`}>
             <Input
-              type="date"
-              required
-              value={draft.from}
-              max={draft.to}
+              value={draft[key]}
+              inputMode="numeric"
+              pattern="[1-9][0-9]*"
               onChange={(event) =>
-                setDraft({ ...draft, from: event.target.value })
+                setDraft({ ...draft, [key]: event.target.value })
               }
             />
           </Field>
-          <Field label="结束日期">
-            <Input
-              type="date"
-              required
-              value={draft.to}
-              min={draft.from}
-              onChange={(event) =>
-                setDraft({ ...draft, to: event.target.value })
-              }
-            />
-          </Field>
-          <Field label="运行模式">
-            <Select
-              value={draft.agent_type}
-              onValueChange={(value) =>
-                setDraft({ ...draft, agent_type: value })
-              }
-            >
-              <option value="all">全部身份</option>
-              <option value="chat">对话型</option>
-              <option value="service">服务型</option>
-            </Select>
-          </Field>
-          {(
-            [
-              ["agent_id", "助手 ID"],
-              ["owner_user_id", "用户 ID"],
-              ["model_definition_id", "模型 ID"],
-              ["provider_id", "提供商 ID"],
-            ] as const
-          ).map(([key, label]) => (
-            <Field key={key} label={`${label}（选填）`}>
-              <Input
-                value={draft[key]}
-                inputMode="numeric"
-                pattern="[1-9][0-9]*"
-                onChange={(event) =>
-                  setDraft({ ...draft, [key]: event.target.value })
-                }
-              />
-            </Field>
-          ))}
-          <div className="flex gap-2">
-            <Button type="submit" disabled={!valid}>
-              查询
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const cleared = {
-                  ...filters,
-                  agent_type: "all",
-                  agent_id: "",
-                  owner_user_id: "",
-                  model_definition_id: "",
-                  provider_id: "",
-                };
-                setDraft(cleared);
-                setFilters(cleared);
-                setPage(1);
-              }}
-            >
-              清除筛选
-            </Button>
-          </div>
-        </form>
-      </Panel>
+        ))}
+        <div className="flex gap-2">
+          <Button type="submit" disabled={!valid}>
+            查询
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const cleared = {
+                ...filters,
+                agent_type: "all",
+                agent_id: "",
+                owner_user_id: "",
+                model_definition_id: "",
+                provider_id: "",
+              };
+              setDraft(cleared);
+              setFilters(cleared);
+              setPage(1);
+            }}
+          >
+            清除筛选
+          </Button>
+        </div>
+      </form>
       <Panel
-        className="mt-6"
+        className="mx-6 mb-6"
         action={
           tab === "usage" ? (
             <StandaloneSelect
@@ -224,11 +219,11 @@ export function AgentUsagePage() {
         )}
       </Panel>
       {tab === "calls" && (
-        <p className="mt-3 text-xs text-muted">
+        <p className="mx-6 mb-6 text-xs text-muted">
           模型调用支持日期、模型和提供商筛选；身份、助手与用户筛选用于用量及运行记录。
         </p>
       )}
-    </div>
+    </ConsoleListPage>
   );
 }
 function UsageReportView({ query }: { query: string }) {

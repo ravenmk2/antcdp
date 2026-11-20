@@ -114,249 +114,253 @@ export function AuditPage() {
       className="page page-wide console-audit-page"
       data-inline-preview={inline}
     >
-      <PageHeader
-        title="审计日志"
-        description="查询和查看已记录的系统与业务操作。"
-      />
-      <div className="console-audit-layout">
-        <Panel
-          className="console-audit-list"
-          bodyClassName="console-audit-list-body"
-        >
-          <TableToolbar
-            onReset={() => {
-              search.setValue("");
-              setParams({ page_size: String(size), page: "1" });
-            }}
-            onRefresh={() => void query.refetch()}
-            refreshing={query.isFetching}
-          >
-            <form
-              className="flex shrink-0 items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (!search.composing.current) search.submit();
-              }}
-            >
-              <StandaloneInput
-                name="q"
-                aria-label="搜索审计"
-                value={search.value}
-                onChange={(event) => search.setValue(event.target.value)}
-                onCompositionStart={() => {
-                  search.composing.current = true;
-                }}
-                onCompositionEnd={search.compositionEnd}
-                maxLength={64}
-                placeholder="搜索事件、操作者或对象"
-              />
-            </form>
-            <StandaloneSelect
-              className="w-50"
-              name="action_prefix"
-              aria-label="事件类型"
-              value={params.get("action_prefix") ?? ""}
-              onValueChange={(action_prefix) => filter({ action_prefix })}
-            >
-              {[
-                ["", "全部事件"],
-                ["user.", "用户操作"],
-                ["settings.", "系统设置"],
-                ["auth.", "登录与退出"],
-                ["installation.", "系统安装"],
-                ["project.", "项目"],
-                ["project_", "仓库与标签"],
-                ["team.", "团队"],
-                ["service_", "服务集成"],
-                ["remote_host.", "远程主机"],
-                ["ssh_credential.", "SSH 凭证"],
-                ["model_", "模型与提供商"],
-                ["mcp_server.", "MCP 服务"],
-                ["skill.", "技能"],
-                ["email.", "邮件"],
-                ["sms.", "短信"],
-                ["dingtalk.", "钉钉"],
-              ].map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </StandaloneSelect>
-            <DateRangePicker
-              timezone={auth.settings.timezone}
-              value={{
-                from: params.get("from") ?? "",
-                to: params.get("to") ?? "",
-              }}
-              onApply={(range) => filter({ from: range.from, to: range.to })}
-            />
-          </TableToolbar>
-          <AsyncBoundary
-            loading={query.isPending}
-            error={query.error}
-            onRetry={() => void query.refetch()}
-            empty={!query.data?.data.length}
-            emptyTitle="当前筛选下没有审计记录"
-          >
-            {query.data && (
-              <SimpleTable
-                actions
-                label="审计日志"
-                containerProps={{ className: "console-audit-table-scroll" }}
-                className="min-w-[760px] table-fixed [&_th:nth-child(1)]:w-44 [&_th:nth-child(2)]:w-[30%] [&_th:nth-child(3)]:w-[24%] [&_th:last-child]:w-16"
-                headers={["时间", "事件", "操作者", "操作对象", "详情"]}
-              >
-                {query.data.data.map((event) => (
-                  <tr
-                    key={event.id}
-                    tabIndex={0}
-                    data-active={inline && selected === event.id}
-                    aria-label={`查看 ${auditActionLabels[event.action] ?? event.action}，${event.actor.display_name}`}
-                    className="cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
-                    onClick={(clickEvent) =>
-                      openDetail(event.id, clickEvent.currentTarget)
-                    }
-                    onKeyDown={(keyEvent) => {
-                      if (keyEvent.target !== keyEvent.currentTarget) return;
-                      if (keyEvent.key === "Enter" || keyEvent.key === " ") {
-                        keyEvent.preventDefault();
-                        openDetail(event.id, keyEvent.currentTarget);
-                      } else if (
-                        inline &&
-                        selected &&
-                        keyEvent.key === "Escape"
-                      ) {
-                        keyEvent.preventDefault();
-                        closePreview();
-                      }
-                    }}
-                  >
-                    <td className="text-xs whitespace-nowrap text-muted">
-                      {formatDate(event.occurred_at, auth.settings.timezone)}
-                    </td>
-                    <td>
-                      <strong
-                        className="line-clamp-2 wrap-anywhere text-foreground"
-                        title={auditActionLabels[event.action] ?? event.action}
-                      >
-                        {auditActionLabels[event.action] ?? event.action}
-                      </strong>
-                      {auditActionLabels[event.action] && (
-                        <span
-                          className="mono mt-1 block truncate text-xs text-muted"
-                          title={event.action}
-                        >
-                          {event.action}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <div
-                        className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
-                        title={`${event.actor.display_name}${event.actor.username ? ` @${event.actor.username}` : "（系统）"}`}
-                      >
-                        <span className="min-w-0 truncate text-foreground">
-                          {event.actor.display_name}
-                        </span>
-                        <span className="min-w-0 max-w-[55%] shrink-0 truncate text-xs text-muted">
-                          {event.actor.username
-                            ? `@${event.actor.username}`
-                            : "系统"}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <span
-                        className="block truncate"
-                        title={event.target.label || undefined}
-                      >
-                        {event.target.label || "—"}
-                      </span>
-                    </td>
-                    <td>
-                      <IconButton
-                        size="iconSm"
-                        label={`查看 ${auditActionLabels[event.action] ?? event.action}`}
-                        aria-controls={inline ? detailId : undefined}
-                        aria-expanded={
-                          inline ? selected === event.id : undefined
-                        }
-                        aria-haspopup={inline ? undefined : "dialog"}
-                        onClick={(clickEvent) => {
-                          clickEvent.stopPropagation();
-                          openDetail(event.id, clickEvent.currentTarget);
-                        }}
-                      >
-                        <ChevronRight />
-                      </IconButton>
-                    </td>
-                  </tr>
-                ))}
-              </SimpleTable>
-            )}
-          </AsyncBoundary>
-          {query.data && (
-            <Pagination
-              page={page}
-              size={size}
-              total={total}
-              pending={query.isFetching}
-              onChange={(nextPage, nextSize) => {
-                if (nextSize !== size) setPreferredSize(nextSize);
-                setParams((current) => {
-                  const updated = new URLSearchParams(current);
-                  updated.set("page_size", String(nextSize));
-                  updated.set("page", String(nextPage));
-                  updated.delete("limit");
-                  return updated;
-                });
-              }}
-            />
-          )}
-        </Panel>
-        {inline && (
+      <section className="panel console-audit-surface">
+        <PageHeader
+          title="审计日志"
+          description="查询和查看已记录的系统与业务操作。"
+        />
+        <div className="console-audit-layout">
           <Panel
-            id={detailId}
-            aria-label="审计事件详情"
-            title="审计事件详情"
-            className="console-audit-preview"
-            bodyClassName="console-audit-preview-body"
-            action={
-              selected && (
-                <IconButton
-                  label="关闭详情"
-                  size="iconSm"
-                  onClick={closePreview}
-                >
-                  <X aria-hidden />
-                </IconButton>
-              )
-            }
-            onKeyDown={(event) => {
-              if (
-                selected &&
-                event.key === "Escape" &&
-                !event.defaultPrevented
-              ) {
-                event.preventDefault();
-                closePreview();
-              }
-            }}
+            className="console-audit-list"
+            bodyClassName="console-audit-list-body"
           >
-            <div className="console-audit-preview-scroll" key={selected}>
-              {selected ? (
-                <AuditEventDetails id={selected} />
-              ) : (
-                <EmptyState
-                  compact
-                  title="选择一条审计记录查看详情"
-                  icon={ScrollText}
+            <TableToolbar
+              onReset={() => {
+                search.setValue("");
+                setParams({ page_size: String(size), page: "1" });
+              }}
+              onRefresh={() => void query.refetch()}
+              refreshing={query.isFetching}
+            >
+              <form
+                className="flex shrink-0 items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!search.composing.current) search.submit();
+                }}
+              >
+                <StandaloneInput
+                  name="q"
+                  aria-label="搜索审计"
+                  value={search.value}
+                  onChange={(event) => search.setValue(event.target.value)}
+                  onCompositionStart={() => {
+                    search.composing.current = true;
+                  }}
+                  onCompositionEnd={search.compositionEnd}
+                  maxLength={64}
+                  placeholder="搜索事件、操作者或对象"
                 />
+              </form>
+              <StandaloneSelect
+                className="w-50"
+                name="action_prefix"
+                aria-label="事件类型"
+                value={params.get("action_prefix") ?? ""}
+                onValueChange={(action_prefix) => filter({ action_prefix })}
+              >
+                {[
+                  ["", "全部事件"],
+                  ["user.", "用户操作"],
+                  ["settings.", "系统设置"],
+                  ["auth.", "登录与退出"],
+                  ["installation.", "系统安装"],
+                  ["project.", "项目"],
+                  ["project_", "仓库与标签"],
+                  ["team.", "团队"],
+                  ["service_", "服务集成"],
+                  ["remote_host.", "远程主机"],
+                  ["ssh_credential.", "SSH 凭证"],
+                  ["model_", "模型与提供商"],
+                  ["mcp_server.", "MCP 服务"],
+                  ["skill.", "技能"],
+                  ["email.", "邮件"],
+                  ["sms.", "短信"],
+                  ["dingtalk.", "钉钉"],
+                ].map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </StandaloneSelect>
+              <DateRangePicker
+                timezone={auth.settings.timezone}
+                value={{
+                  from: params.get("from") ?? "",
+                  to: params.get("to") ?? "",
+                }}
+                onApply={(range) => filter({ from: range.from, to: range.to })}
+              />
+            </TableToolbar>
+            <AsyncBoundary
+              loading={query.isPending}
+              error={query.error}
+              onRetry={() => void query.refetch()}
+              empty={!query.data?.data.length}
+              emptyTitle="当前筛选下没有审计记录"
+            >
+              {query.data && (
+                <SimpleTable
+                  actions
+                  label="审计日志"
+                  containerProps={{ className: "console-audit-table-scroll" }}
+                  className="min-w-[760px] table-fixed [&_th:nth-child(1)]:w-44 [&_th:nth-child(2)]:w-[30%] [&_th:nth-child(3)]:w-[24%] [&_th:last-child]:w-16"
+                  headers={["时间", "事件", "操作者", "操作对象", "详情"]}
+                >
+                  {query.data.data.map((event) => (
+                    <tr
+                      key={event.id}
+                      tabIndex={0}
+                      data-active={inline && selected === event.id}
+                      aria-label={`查看 ${auditActionLabels[event.action] ?? event.action}，${event.actor.display_name}`}
+                      className="cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                      onClick={(clickEvent) =>
+                        openDetail(event.id, clickEvent.currentTarget)
+                      }
+                      onKeyDown={(keyEvent) => {
+                        if (keyEvent.target !== keyEvent.currentTarget) return;
+                        if (keyEvent.key === "Enter" || keyEvent.key === " ") {
+                          keyEvent.preventDefault();
+                          openDetail(event.id, keyEvent.currentTarget);
+                        } else if (
+                          inline &&
+                          selected &&
+                          keyEvent.key === "Escape"
+                        ) {
+                          keyEvent.preventDefault();
+                          closePreview();
+                        }
+                      }}
+                    >
+                      <td className="text-xs whitespace-nowrap text-muted">
+                        {formatDate(event.occurred_at, auth.settings.timezone)}
+                      </td>
+                      <td>
+                        <strong
+                          className="line-clamp-2 wrap-anywhere text-foreground"
+                          title={
+                            auditActionLabels[event.action] ?? event.action
+                          }
+                        >
+                          {auditActionLabels[event.action] ?? event.action}
+                        </strong>
+                        {auditActionLabels[event.action] && (
+                          <span
+                            className="mono mt-1 block truncate text-xs text-muted"
+                            title={event.action}
+                          >
+                            {event.action}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        <div
+                          className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
+                          title={`${event.actor.display_name}${event.actor.username ? ` @${event.actor.username}` : "（系统）"}`}
+                        >
+                          <span className="min-w-0 truncate text-foreground">
+                            {event.actor.display_name}
+                          </span>
+                          <span className="min-w-0 max-w-[55%] shrink-0 truncate text-xs text-muted">
+                            {event.actor.username
+                              ? `@${event.actor.username}`
+                              : "系统"}
+                          </span>
+                        </div>
+                      </td>
+                      <td>
+                        <span
+                          className="block truncate"
+                          title={event.target.label || undefined}
+                        >
+                          {event.target.label || "—"}
+                        </span>
+                      </td>
+                      <td>
+                        <IconButton
+                          size="iconSm"
+                          label={`查看 ${auditActionLabels[event.action] ?? event.action}`}
+                          aria-controls={inline ? detailId : undefined}
+                          aria-expanded={
+                            inline ? selected === event.id : undefined
+                          }
+                          aria-haspopup={inline ? undefined : "dialog"}
+                          onClick={(clickEvent) => {
+                            clickEvent.stopPropagation();
+                            openDetail(event.id, clickEvent.currentTarget);
+                          }}
+                        >
+                          <ChevronRight />
+                        </IconButton>
+                      </td>
+                    </tr>
+                  ))}
+                </SimpleTable>
               )}
-            </div>
+            </AsyncBoundary>
+            {query.data && (
+              <Pagination
+                page={page}
+                size={size}
+                total={total}
+                pending={query.isFetching}
+                onChange={(nextPage, nextSize) => {
+                  if (nextSize !== size) setPreferredSize(nextSize);
+                  setParams((current) => {
+                    const updated = new URLSearchParams(current);
+                    updated.set("page_size", String(nextSize));
+                    updated.set("page", String(nextPage));
+                    updated.delete("limit");
+                    return updated;
+                  });
+                }}
+              />
+            )}
           </Panel>
-        )}
-      </div>
+          {inline && (
+            <Panel
+              id={detailId}
+              aria-label="审计事件详情"
+              title="审计事件详情"
+              className="console-audit-preview"
+              bodyClassName="console-audit-preview-body"
+              action={
+                selected && (
+                  <IconButton
+                    label="关闭详情"
+                    size="iconSm"
+                    onClick={closePreview}
+                  >
+                    <X aria-hidden />
+                  </IconButton>
+                )
+              }
+              onKeyDown={(event) => {
+                if (
+                  selected &&
+                  event.key === "Escape" &&
+                  !event.defaultPrevented
+                ) {
+                  event.preventDefault();
+                  closePreview();
+                }
+              }}
+            >
+              <div className="console-audit-preview-scroll" key={selected}>
+                {selected ? (
+                  <AuditEventDetails id={selected} />
+                ) : (
+                  <EmptyState
+                    compact
+                    title="选择一条审计记录查看详情"
+                    icon={ScrollText}
+                  />
+                )}
+              </div>
+            </Panel>
+          )}
+        </div>
+      </section>
       <OverlayPresence>
         {!inline && selected && (
           <AuditDetail id={selected} onClose={() => setSelection(null)} />

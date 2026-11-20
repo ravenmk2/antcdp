@@ -1,5 +1,10 @@
 import { request } from "@/api/client";
 import { useSession } from "@/app/auth";
+import {
+  ConsoleDialog,
+  ConsoleDialogCancel,
+} from "@/areas/console/components/dialog";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 import { Button } from "@/components/button";
 import {
   AsyncBoundary,
@@ -15,7 +20,6 @@ import {
   StandaloneSelect,
 } from "@/components/fields";
 import { PageHeader } from "@/components/layout";
-import { Modal, OverlayCancelButton } from "@/components/overlays";
 import { Pagination } from "@/components/pagination";
 import { Avatar } from "@/components/resource-icon";
 import {
@@ -42,14 +46,18 @@ import {
   KeyRound,
   Pencil,
   Plus,
+  Search,
   Shield,
   Trash2,
   UserCheck,
+  UserRound,
+  UserRoundPlus,
   UserX,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { z } from "zod";
+import styles from "@/areas/console/styles/management.module.css";
 
 interface Counts {
   users_total: number;
@@ -60,6 +68,7 @@ type Action = "create" | "edit" | "role" | "status" | "password" | "delete";
 
 export function UsersPage() {
   const session = useSession();
+  const heading = useRef<HTMLElement>(null);
   const [params, setParams] = useSearchParams();
   const [preferredSize, setPreferredSize] = usePageSize("users", 10);
   const q = params.get("q") ?? "";
@@ -110,25 +119,46 @@ export function UsersPage() {
       {
         id: "user",
         header: "用户",
-        cell: ({ row }) => (
-          <div className="flex min-w-48 items-center gap-3">
-            <Avatar
-              url={row.original.avatar?.url}
-              name={row.original.display_name}
-            />
-            <div>
-              <strong className="text-foreground">
-                {row.original.display_name}
-              </strong>
-              {row.original.id === session.user.id && (
-                <span className="ml-2 text-xs text-muted">你</span>
-              )}
-              <small className="block text-muted">
-                @{row.original.username}
-              </small>
+        cell: ({ row }) => {
+          const user = row.original;
+          const canEdit = !user.is_founder || user.id === session.user.id;
+          return (
+            <div className={styles.identity}>
+              <Avatar
+                className="size-8"
+                url={user.avatar?.url}
+                name={user.display_name}
+              />
+              <div className="min-w-0">
+                <div className={styles.nameLine}>
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      className={styles.nameButton}
+                      title={user.display_name}
+                      onClick={() => setAction({ type: "edit", user })}
+                    >
+                      {user.display_name}
+                    </button>
+                  ) : (
+                    <strong
+                      className={styles.nameButton}
+                      title={user.display_name}
+                    >
+                      {user.display_name}
+                    </strong>
+                  )}
+                  {user.id === session.user.id && (
+                    <span className={styles.self}>你</span>
+                  )}
+                </div>
+                <small className={styles.account} title={user.username}>
+                  @{user.username}
+                </small>
+              </div>
             </div>
-          </div>
-        ),
+          );
+        },
       },
       {
         id: "role",
@@ -165,7 +195,7 @@ export function UsersPage() {
         id: "created",
         header: "创建时间",
         cell: ({ row }) => (
-          <span className="text-xs text-muted">
+          <span className={styles.timestamp}>
             {formatDate(row.original.created_at)}
           </span>
         ),
@@ -174,7 +204,7 @@ export function UsersPage() {
         id: "login",
         header: "最近登录",
         cell: ({ row }) => (
-          <span className="text-xs text-muted">
+          <span className={styles.timestamp}>
             {formatDate(row.original.last_login_at)}
           </span>
         ),
@@ -212,106 +242,117 @@ export function UsersPage() {
     [session.user.id],
   );
   return (
-    <div className="page">
+    <ConsoleListPage className={styles.scope}>
       <PageHeader
+        ref={heading}
+        tabIndex={-1}
         title="用户管理"
-        description="创建账号、维护资料与身份，执行状态、密码和逻辑删除操作。"
+        description="管理系统账号、管理员权限与登录状态。"
       />
-      <section className="panel">
-        <TableToolbar
-          onReset={() => {
-            search.setValue("");
-            filter({ q: "", status: "", identity: "" });
+      <TableToolbar
+        onReset={() => {
+          search.setValue("");
+          filter({ q: "", status: "", identity: "" });
+        }}
+        onRefresh={() => void list.refetch()}
+        refreshing={list.isFetching}
+        actions={
+          <Button onClick={() => setAction({ type: "create" })}>
+            <Plus />
+            添加用户
+          </Button>
+        }
+      >
+        <form
+          className={styles.search}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!search.composing.current) search.submit();
           }}
-          onRefresh={() => void list.refetch()}
-          refreshing={list.isFetching}
-          actions={
-            <Button onClick={() => setAction({ type: "create" })}>
-              <Plus />
-              添加用户
-            </Button>
-          }
         >
-          <form
-            className="flex shrink-0 items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!search.composing.current) search.submit();
+          <Search aria-hidden />
+          <StandaloneInput
+            name="q"
+            className="w-full ps-9"
+            aria-label="搜索用户"
+            value={search.value}
+            onChange={(event) => search.setValue(event.target.value)}
+            onCompositionStart={() => {
+              search.composing.current = true;
             }}
-          >
-            <StandaloneInput
-              name="q"
-              aria-label="搜索用户"
-              value={search.value}
-              onChange={(event) => search.setValue(event.target.value)}
-              onCompositionStart={() => {
-                search.composing.current = true;
-              }}
-              onCompositionEnd={search.compositionEnd}
-              placeholder="搜索用户名或显示名称"
-            />
-          </form>
-          <StandaloneSelect
-            aria-label="用户状态"
-            value={status}
-            onValueChange={(value) => filter({ status: value })}
-          >
-            <option value="">
-              全部 · {counts.data?.data.users_total ?? "—"}
-            </option>
-            <option value="active">
-              正常 · {counts.data?.data.users_active ?? "—"}
-            </option>
-            <option value="disabled">
-              禁用 · {counts.data?.data.users_disabled ?? "—"}
-            </option>
-          </StandaloneSelect>
-          <StandaloneSelect
-            aria-label="用户身份"
-            value={identity}
-            onValueChange={(value) => filter({ identity: value })}
-          >
-            <option value="">全部身份</option>
-            <option value="founder">创始人</option>
-            <option value="admin">管理员</option>
-            <option value="user">普通用户</option>
-          </StandaloneSelect>
-        </TableToolbar>
-        <AsyncBoundary
-          loading={list.isPending}
-          error={list.error}
-          onRetry={() => void list.refetch()}
-          empty={!list.data?.data.length}
-          emptyTitle="没有找到匹配的用户"
+            onCompositionEnd={search.compositionEnd}
+            placeholder="搜索用户名或显示名称"
+          />
+        </form>
+        <StandaloneSelect
+          aria-label="用户状态"
+          value={status}
+          onValueChange={(value) => filter({ status: value })}
         >
-          {list.data && (
-            <DataTable
-              actionColumn="actions"
-              data={list.data.data}
-              columns={columns}
-              rowKey={(row) => row.id}
-              label="用户管理"
-            />
-          )}
-        </AsyncBoundary>
+          <option value="">
+            全部状态 · {counts.data?.data.users_total ?? "—"}
+          </option>
+          <option value="active">
+            正常 · {counts.data?.data.users_active ?? "—"}
+          </option>
+          <option value="disabled">
+            已禁用 · {counts.data?.data.users_disabled ?? "—"}
+          </option>
+        </StandaloneSelect>
+        <StandaloneSelect
+          aria-label="用户身份"
+          value={identity}
+          onValueChange={(value) => filter({ identity: value })}
+        >
+          <option value="">全部身份</option>
+          <option value="founder">创始人</option>
+          <option value="admin">管理员</option>
+          <option value="user">普通用户</option>
+        </StandaloneSelect>
+      </TableToolbar>
+      <AsyncBoundary
+        loading={list.isPending}
+        error={list.error}
+        onRetry={() => void list.refetch()}
+        empty={!list.data?.data.length}
+        emptyTitle={q || status || identity ? "没有匹配的用户" : "暂无用户"}
+        emptyDescription={
+          q || status || identity ? "请调整搜索或筛选条件。" : undefined
+        }
+      >
         {list.data && (
-          <Pagination
-            page={page}
-            size={size}
-            total={list.data.pagination?.total ?? 0}
-            pending={list.isFetching}
-            onChange={(nextPage, nextSize) => {
-              if (nextSize !== size) setPreferredSize(nextSize);
-              setParams((current) => {
-                const next = new URLSearchParams(current);
-                next.set("page", String(nextPage));
-                next.set("page_size", String(nextSize));
-                return next;
-              });
-            }}
+          <DataTable
+            actionColumn="actions"
+            data={list.data.data}
+            columns={columns}
+            rowKey={(row) => row.id}
+            label="用户管理"
+            className={styles.userTable}
           />
         )}
-      </section>
+      </AsyncBoundary>
+      {list.data && (
+        <Pagination
+          page={page}
+          size={size}
+          total={list.data.pagination?.total ?? 0}
+          pending={list.isFetching}
+          onChange={(nextPage, nextSize) => {
+            if (nextSize !== size) setPreferredSize(nextSize);
+            setParams((current) => {
+              const next = new URLSearchParams(current);
+              next.set("page", String(nextPage));
+              next.set("page_size", String(nextSize));
+              return next;
+            });
+            const header = heading.current;
+            if (header && window.scrollY > 0) {
+              header.focus({ preventScroll: true });
+              header.scrollIntoView({ block: "start" });
+            }
+          }}
+        />
+      )}
       {action &&
         (action.type === "create" ? (
           <UserEditor onClose={() => setAction(null)} onSaved={saved} />
@@ -325,7 +366,7 @@ export function UsersPage() {
             />
           )
         ))}
-    </div>
+    </ConsoleListPage>
   );
 }
 
@@ -381,6 +422,7 @@ function UserEditor({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const formId = useId();
   const [form, setForm] = useState({
     username: "",
     display_name: "",
@@ -427,11 +469,11 @@ function UserEditor({
     );
   }
   return (
-    <Modal
-      open
+    <ConsoleDialog
       wide
       title="创建用户"
-      description="创建后用户首次登录必须修改密码"
+      icon={<UserRoundPlus />}
+      description="新用户首次登录时需要更改初始密码。"
       pending={submission.pending}
       dirty={
         Boolean(
@@ -443,84 +485,114 @@ function UserEditor({
       onClose={onClose}
       footer={
         <>
-          <OverlayCancelButton />
-          <Button pending={submission.pending} onClick={() => void save()}>
+          <ConsoleDialogCancel pending={submission.pending} />
+          <Button
+            type="submit"
+            form={formId}
+            pending={submission.pending}
+            disabled={submission.uncertain}
+          >
             创建用户
           </Button>
         </>
       }
     >
       <form
+        id={formId}
         ref={errors.formRef}
-        className="grid gap-4"
+        className={`${styles.scope} ${styles.form}`}
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
           void save();
         }}
       >
-        <ErrorNotice error={errors.error} />
-        <ImageEditor kind="avatar" value={avatar} onChange={setAvatar} />
-        <div className="form-grid">
-          <Field label="用户名" required error={errors.fields.username}>
-            <Input
-              name="username"
-              autoComplete="off"
-              value={form.username}
-              onChange={(event) =>
-                setForm({ ...form, username: event.target.value })
-              }
-            />
-          </Field>
-          <Field label="显示名称" required error={errors.fields.display_name}>
-            <Input
-              name="display_name"
-              autoComplete="off"
-              value={form.display_name}
-              onChange={(event) =>
-                setForm({ ...form, display_name: event.target.value })
-              }
-            />
-          </Field>
-          <Field label="系统身份" required className="form-full">
-            <Select
-              value={form.role}
-              onValueChange={(value) =>
-                setForm({
-                  ...form,
-                  role: value as "user" | "admin",
-                })
-              }
-            >
-              <option value="user">普通用户</option>
-              <option value="admin">管理员</option>
-            </Select>
-          </Field>
-          <Field label="初始密码" required error={errors.fields.password}>
-            <Input
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              value={form.password}
-              onChange={(event) =>
-                setForm({ ...form, password: event.target.value })
-              }
-            />
-          </Field>
-          <Field label="确认密码" required error={errors.fields.confirm}>
-            <Input
-              name="confirm"
-              type="password"
-              autoComplete="new-password"
-              value={form.confirm}
-              onChange={(event) =>
-                setForm({ ...form, confirm: event.target.value })
-              }
-            />
-          </Field>
-        </div>
+        <ErrorNotice error={errors.error || submission.error} />
+        <fieldset disabled={submission.pending} className={styles.formSection}>
+          <legend>账号资料</legend>
+          <div className={styles.profileFields}>
+            <div className={styles.formGrid}>
+              <Field label="用户名" required error={errors.fields.username}>
+                <Input
+                  name="username"
+                  data-console-initial-focus
+                  autoComplete="off"
+                  value={form.username}
+                  onChange={(event) =>
+                    setForm({ ...form, username: event.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="显示名称"
+                required
+                error={errors.fields.display_name}
+              >
+                <Input
+                  name="display_name"
+                  autoComplete="off"
+                  value={form.display_name}
+                  onChange={(event) =>
+                    setForm({ ...form, display_name: event.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="系统身份"
+                required
+                className={styles.fullField}
+                error={errors.fields.role}
+              >
+                <Select
+                  name="role"
+                  value={form.role}
+                  onValueChange={(value) =>
+                    setForm({
+                      ...form,
+                      role: value as "user" | "admin",
+                    })
+                  }
+                >
+                  <option value="user">普通用户</option>
+                  <option value="admin">管理员</option>
+                </Select>
+              </Field>
+            </div>
+            <div className={styles.avatarEditor}>
+              <span className={styles.fieldLabel}>头像（可选）</span>
+              <ImageEditor kind="avatar" value={avatar} onChange={setAvatar} />
+            </div>
+          </div>
+        </fieldset>
+        <fieldset disabled={submission.pending} className={styles.formSection}>
+          <legend>登录凭证</legend>
+          <div className={styles.formGrid}>
+            <Field label="初始密码" required error={errors.fields.password}>
+              <Input
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                value={form.password}
+                onChange={(event) =>
+                  setForm({ ...form, password: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="确认密码" required error={errors.fields.confirm}>
+              <Input
+                name="confirm"
+                type="password"
+                autoComplete="new-password"
+                value={form.confirm}
+                onChange={(event) =>
+                  setForm({ ...form, confirm: event.target.value })
+                }
+              />
+            </Field>
+          </div>
+        </fieldset>
       </form>
-    </Modal>
+    </ConsoleDialog>
   );
 }
 
@@ -548,19 +620,17 @@ function UserAction({
   // Never initialize a form or derive a toggle from a previous opening's cache.
   if (detail.isPending || !detail.isFetchedAfterMount)
     return (
-      <Modal
-        open
+      <ConsoleDialog
         restoreFocusTo={restoreFocusTo}
         title="读取用户"
         onClose={onClose}
       >
         <AsyncBoundary loading />
-      </Modal>
+      </ConsoleDialog>
     );
   if (detail.error)
     return (
-      <Modal
-        open
+      <ConsoleDialog
         restoreFocusTo={restoreFocusTo}
         title="无法读取用户"
         onClose={onClose}
@@ -569,7 +639,7 @@ function UserAction({
         <Button variant="outline" onClick={() => void detail.refetch()}>
           重新加载
         </Button>
-      </Modal>
+      </ConsoleDialog>
     );
   if (action === "edit")
     return (
@@ -606,6 +676,7 @@ function EditUser({
   onSaved: () => Promise<void>;
   restoreFocusTo: HTMLElement | null;
 }) {
+  const formId = useId();
   const [form, setForm] = useState({
     username: user.username,
     display_name: user.display_name,
@@ -641,59 +712,80 @@ function EditUser({
     );
   }
   return (
-    <Modal
+    <ConsoleDialog
       restoreFocusTo={restoreFocusTo}
-      open
       wide
       title="编辑用户"
+      icon={<UserRound />}
       description={`@${user.username}`}
       dirty={dirty}
       pending={submission.pending}
       onClose={onClose}
       footer={
         <>
-          <OverlayCancelButton />
-          <Button pending={submission.pending} onClick={() => void save()}>
+          <ConsoleDialogCancel pending={submission.pending} />
+          <Button
+            type="submit"
+            form={formId}
+            pending={submission.pending}
+            disabled={submission.uncertain}
+          >
             保存更改
           </Button>
         </>
       }
     >
       <form
+        id={formId}
         ref={errors.formRef}
-        className="grid gap-4"
+        className={`${styles.scope} ${styles.form}`}
         onSubmit={(event) => {
           event.preventDefault();
           void save();
         }}
       >
         <ErrorNotice error={errors.error || submission.error} />
-        <ImageEditor
-          kind="avatar"
-          current={user.avatar?.url}
-          value={avatar}
-          onChange={setAvatar}
-        />
-        <Field label="用户名" required error={errors.fields.username}>
-          <Input
-            name="username"
-            value={form.username}
-            onChange={(event) =>
-              setForm({ ...form, username: event.target.value })
-            }
-          />
-        </Field>
-        <Field label="显示名称" required error={errors.fields.display_name}>
-          <Input
-            name="display_name"
-            value={form.display_name}
-            onChange={(event) =>
-              setForm({ ...form, display_name: event.target.value })
-            }
-          />
-        </Field>
+        <fieldset disabled={submission.pending} className={styles.formSection}>
+          <legend>账号资料</legend>
+          <div className={styles.profileFields}>
+            <div className={styles.formGrid}>
+              <Field label="用户名" required error={errors.fields.username}>
+                <Input
+                  name="username"
+                  data-console-initial-focus
+                  value={form.username}
+                  onChange={(event) =>
+                    setForm({ ...form, username: event.target.value })
+                  }
+                />
+              </Field>
+              <Field
+                label="显示名称"
+                required
+                error={errors.fields.display_name}
+              >
+                <Input
+                  name="display_name"
+                  value={form.display_name}
+                  onChange={(event) =>
+                    setForm({ ...form, display_name: event.target.value })
+                  }
+                />
+              </Field>
+            </div>
+            <div className={styles.avatarEditor}>
+              <span className={styles.fieldLabel}>头像</span>
+              <ImageEditor
+                kind="avatar"
+                current={user.avatar?.url}
+                value={avatar}
+                onChange={setAvatar}
+              />
+            </div>
+          </div>
+        </fieldset>
       </form>
-    </Modal>
+    </ConsoleDialog>
   );
 }
 
@@ -712,11 +804,14 @@ function SimpleUserAction({
   onSaved: () => Promise<void>;
   restoreFocusTo: HTMLElement | null;
 }) {
+  const formId = useId();
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const errors = useFormErrors();
   const submission = useSubmission();
+  const destructive = action === "delete";
+  const consequential = destructive || action === "role" || action === "status";
   const title =
     action === "role"
       ? user.role === "admin"
@@ -778,10 +873,17 @@ function SimpleUserAction({
     );
   }
   return (
-    <Modal
+    <ConsoleDialog
       restoreFocusTo={restoreFocusTo}
-      open
       title={title}
+      tone={destructive ? "danger" : consequential ? "warning" : undefined}
+      icon={
+        destructive ? (
+          <Trash2 />
+        ) : action === "password" ? (
+          <KeyRound />
+        ) : undefined
+      }
       description={`${user.display_name} · @${user.username}`}
       pending={submission.pending}
       dirty={
@@ -794,11 +896,16 @@ function SimpleUserAction({
       onClose={onClose}
       footer={
         <>
-          <OverlayCancelButton />
-          <Button
-            variant={action === "delete" ? "danger" : "default"}
+          <ConsoleDialogCancel
             pending={submission.pending}
-            onClick={() => void save()}
+            initialFocus={consequential}
+          />
+          <Button
+            variant={destructive ? "danger" : "default"}
+            type="submit"
+            form={formId}
+            pending={submission.pending}
+            disabled={submission.uncertain}
           >
             {title}
           </Button>
@@ -806,17 +913,23 @@ function SimpleUserAction({
       }
     >
       <form
+        id={formId}
         ref={errors.formRef}
         className="grid gap-4"
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
           void save();
         }}
       >
         <ErrorNotice error={errors.error || submission.error} />
-        <Notice tone={action === "delete" ? "danger" : "warning"}>
-          {action === "delete"
-            ? "逻辑删除无法从界面恢复，用户名不可复用；会话与凭证将被撤销。"
+        <Notice
+          tone={
+            destructive ? "danger" : action === "password" ? "info" : "warning"
+          }
+        >
+          {destructive
+            ? "删除后无法从界面恢复，用户名不可复用。该用户的会话与凭证将被撤销。"
             : action === "password"
               ? "重置后撤销全部会话，并强制用户下次登录改密。"
               : "此操作会撤销目标用户的既有会话。"}
@@ -827,6 +940,7 @@ function SimpleUserAction({
               <Input
                 name="password"
                 type="password"
+                data-console-initial-focus
                 autoComplete="new-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -858,6 +972,6 @@ function SimpleUserAction({
           </Field>
         )}
       </form>
-    </Modal>
+    </ConsoleDialog>
   );
 }

@@ -1,4 +1,5 @@
 import { Button } from "@/components/button";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 import { Notice } from "@/components/feedback";
 import { PageHeader } from "@/components/layout";
 import { OverlayPresence } from "@/components/overlay-presence";
@@ -47,7 +48,7 @@ export function RemoteHostsPage({
       </div>
     );
   return (
-    <div className="page">
+    <ConsoleListPage nested>
       <PageHeader
         title={
           admin ? "远程主机" : projectId ? "项目 SSH 凭证" : "个人 SSH 凭证"
@@ -84,6 +85,6 @@ export function RemoteHostsPage({
       <OverlayPresence>
         {creating && <HostCreateDrawer onClose={closeCreate} />}
       </OverlayPresence>
-    </div>
+    </ConsoleListPage>
   );
 }

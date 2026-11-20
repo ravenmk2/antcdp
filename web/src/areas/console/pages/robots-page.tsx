@@ -1,6 +1,8 @@
 import { Link } from "react-router";
 import { useState, type FormEvent } from "react";
+import { Plus, Search } from "lucide-react";
 import { request } from "@/api/client";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 import { Drawer } from "@/components/overlays";
 import { ErrorNotice } from "@/components/feedback";
 import { Field, Input } from "@/components/fields";
@@ -9,9 +11,10 @@ import { usernameSchema, displayNameSchema } from "@/domain/validation";
 import { Button } from "@/components/button";
 import { AsyncBoundary, StatusBadge } from "@/components/feedback";
 import { StandaloneInput } from "@/components/fields";
-import { PageHeader, Panel } from "@/components/layout";
+import { PageHeader } from "@/components/layout";
 import { Pagination } from "@/components/pagination";
 import { SimpleTable } from "@/components/table";
+import { TableToolbar } from "@/components/table-toolbar";
 import { useApiQuery } from "@/hooks/use-api";
 import { useDebouncedSearch } from "@/hooks/use-search";
 import { useListParams } from "@/features/agents/resources/admin-shared";
@@ -29,84 +32,108 @@ export function RobotsPage() {
     `/admin/robots?${new URLSearchParams({ q, page: String(page), page_size: String(size) })}`,
   );
   return (
-    <div className="page">
+    <ConsoleListPage>
       <PageHeader
         title="机器人账号"
         description="独立管理执行身份、项目权限和账号凭据。机器人不能登录，可被订阅使用；服务型助手绑定后不可换绑。"
-        actions={<Button onClick={() => setEdit("new")}>创建机器人</Button>}
       />
-      <Panel bodyClassName="space-y-5 p-5">
-        <div className="flex items-center justify-between">
+      <TableToolbar
+        refreshing={query.isFetching}
+        onRefresh={() => void query.refetch()}
+        onReset={() => {
+          search.setValue("");
+          change({ q: "", page: "1" });
+        }}
+        actions={
+          <Button onClick={() => setEdit("new")}>
+            <Plus />
+            创建机器人
+          </Button>
+        }
+      >
+        <form
+          className="relative flex items-center"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!search.composing.current) search.submit();
+          }}
+        >
+          <Search
+            aria-hidden
+            className="pointer-events-none absolute left-3 size-4 text-muted"
+          />
           <StandaloneInput
             aria-label="搜索机器人"
             placeholder="搜索名称或账号"
-            className="max-w-sm"
+            className="ps-9"
             value={search.value}
             onChange={(e) => search.setValue(e.target.value)}
+            onCompositionStart={() => {
+              search.composing.current = true;
+            }}
+            onCompositionEnd={search.compositionEnd}
           />
-          <Button
-            variant="outline"
-            pending={query.isFetching}
-            onClick={() => void query.refetch()}
-          >
-            刷新
-          </Button>
-        </div>
-        <AsyncBoundary
-          loading={query.isPending}
-          error={query.error}
-          onRetry={() => query.refetch()}
-          empty={query.data?.data.length === 0}
-          emptyTitle="暂无机器人账号"
+        </form>
+      </TableToolbar>
+      <AsyncBoundary
+        loading={query.isPending}
+        error={query.error}
+        onRetry={() => query.refetch()}
+        empty={query.data?.data.length === 0}
+        emptyTitle="暂无机器人账号"
+      >
+        <SimpleTable
+          actions
+          label="机器人账号"
+          headers={["机器人", "状态", "绑定助手", "操作"]}
         >
-          <SimpleTable
-            label="机器人账号"
-            headers={["机器人", "状态", "绑定助手", "操作"]}
-          >
-            {query.data?.data.map((user) => (
-              <tr key={user.id}>
-                <td>
-                  <strong>{user.display_name}</strong>
-                  <p className="mt-1 text-xs text-muted">{user.username}</p>
-                </td>
-                <td>
-                  <StatusBadge
-                    tone={user.status === "active" ? "success" : "neutral"}
+          {query.data?.data.map((user) => (
+            <tr key={user.id}>
+              <td>
+                <strong>{user.display_name}</strong>
+                <p className="mt-1 text-xs text-muted">{user.username}</p>
+              </td>
+              <td>
+                <StatusBadge
+                  tone={user.status === "active" ? "success" : "neutral"}
+                >
+                  {user.status === "active" ? "已启用" : "已停用"}
+                </StatusBadge>
+              </td>
+              <td>
+                {user.managed_agent_id ? (
+                  <Link
+                    className="text-primary"
+                    to={`/admin/agents/${user.managed_agent_id}?tab=resources`}
                   >
-                    {user.status === "active" ? "已启用" : "已停用"}
-                  </StatusBadge>
-                </td>
-                <td>
-                  {user.managed_agent_id ? (
-                    <Link
-                      className="text-primary"
-                      to={`/admin/agents/${user.managed_agent_id}?tab=resources`}
-                    >
-                      管理所属助手
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td>
-                  <Button variant="outline" onClick={() => setEdit(user.id)}>
-                    管理
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </SimpleTable>
-          <Pagination
-            page={page}
-            size={size}
-            total={query.data?.pagination?.total}
-            pending={query.isFetching}
-            onChange={(next, count) =>
-              change({ page: String(next), page_size: String(count) })
-            }
-          />
-        </AsyncBoundary>
-      </Panel>
+                    管理所属助手
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </td>
+              <td>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEdit(user.id)}
+                >
+                  管理
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </SimpleTable>
+        <Pagination
+          page={page}
+          size={size}
+          total={query.data?.pagination?.total}
+          pending={query.isFetching}
+          onChange={(next, count) =>
+            change({ page: String(next), page_size: String(count) })
+          }
+        />
+      </AsyncBoundary>
       {edit && (
         <RobotEditor
           key={edit}
@@ -115,7 +142,7 @@ export function RobotsPage() {
           onSaved={() => void query.refetch()}
         />
       )}
-    </div>
+    </ConsoleListPage>
   );
 }
 

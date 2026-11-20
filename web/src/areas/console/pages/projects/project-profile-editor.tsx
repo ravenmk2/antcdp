@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Pencil } from "lucide-react";
 import { request } from "@/api/client";
+import {
+  ConsoleDialog,
+  ConsoleDialogCancel,
+} from "@/areas/console/components/dialog";
+import styles from "@/areas/console/styles/management.module.css";
 import { Button } from "@/components/button";
 import { ErrorNotice } from "@/components/feedback";
 import { Field, Input, Textarea } from "@/components/fields";
-import { Drawer, OverlayCancelButton } from "@/components/overlays";
 import { ResourceIconField } from "@/features/collaboration/resource-icon-field";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
 import { useUnsaved } from "@/hooks/use-unsaved";
@@ -19,6 +24,7 @@ export function ProjectProfileEditor({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const formId = useId();
   const [form, setForm] = useState({
     name: project.name,
     summary: project.summary,
@@ -68,21 +74,22 @@ export function ProjectProfileEditor({
   }
 
   return (
-    <Drawer
-      open
-      wide
+    <ConsoleDialog
+      side="right"
       title="编辑项目资料"
-      description={`${project.code} · 编码创建后不可修改`}
+      description={project.name}
+      icon={<Pencil />}
       dirty={dirty}
       pending={submission.pending}
       onClose={onClose}
       footer={
         <>
-          <OverlayCancelButton />
+          <ConsoleDialogCancel pending={submission.pending} />
           <Button
+            type="submit"
+            form={formId}
             pending={submission.pending}
             disabled={submission.uncertain}
-            onClick={() => void save()}
           >
             保存更改
           </Button>
@@ -90,7 +97,9 @@ export function ProjectProfileEditor({
       }
     >
       <form
+        id={formId}
         ref={errors.formRef}
+        className={`${styles.scope} ${styles.form}`}
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
@@ -98,11 +107,13 @@ export function ProjectProfileEditor({
         }}
       >
         <ErrorNotice error={errors.error || submission.error} />
-        <fieldset disabled={submission.pending} className="min-w-0">
-          <div className="form-grid">
+        <fieldset disabled={submission.pending} className={styles.formSection}>
+          <legend>基本资料</legend>
+          <div className={styles.formGrid}>
             <Field label="项目名称" required error={errors.fields.name}>
               <Input
                 name="name"
+                data-console-initial-focus
                 value={form.name}
                 onChange={(event) => {
                   setForm((current) => ({
@@ -124,7 +135,7 @@ export function ProjectProfileEditor({
             <Field
               label="摘要"
               hint="最多 300 个字符"
-              className="form-full"
+              className={styles.fullField}
               error={errors.fields.summary}
             >
               <Textarea
@@ -153,7 +164,7 @@ export function ProjectProfileEditor({
           </div>
         </fieldset>
       </form>
-    </Drawer>
+    </ConsoleDialog>
   );
 }
 

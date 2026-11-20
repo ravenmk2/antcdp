@@ -30,6 +30,7 @@ import {
 import { Pagination } from "@/components/pagination";
 import { SimpleTable } from "@/components/table";
 import { TableToolbar } from "@/components/table-toolbar";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -119,7 +120,7 @@ function SkillLibrary({ creating = false }: { creating?: boolean }) {
     else change({ action: "", skill: "", upload: "" });
   };
   return (
-    <div className="page skill-library">
+    <ConsoleListPage>
       <PageHeader
         title="技能库"
         description="管理可复用的技能、版本与技能包。"
@@ -223,21 +224,21 @@ function SkillLibrary({ creating = false }: { creating?: boolean }) {
               description="上传包含 SKILL.md 的 ZIP 技能包，创建第一个技能。"
             />
           )}
-          <div className="skill-pagination">
-            <Pagination
-              page={page}
-              size={size}
-              sizeOptions={grid.sizeOptions}
-              total={list.data?.pagination?.total}
-              hasNext={list.data?.pagination?.has_more}
-              pending={list.isFetching}
-              onChange={(page, size) =>
-                change({ page: String(page), page_size: String(size) })
-              }
-            />
-          </div>
         </AsyncBoundary>
       </div>
+      {list.data && !list.error && (
+        <Pagination
+          page={page}
+          size={size}
+          sizeOptions={grid.sizeOptions}
+          total={list.data.pagination?.total}
+          hasNext={list.data.pagination?.has_more}
+          pending={list.isFetching}
+          onChange={(page, size) =>
+            change({ page: String(page), page_size: String(size) })
+          }
+        />
+      )}
       <SkillOverlay
         action={action}
         id={id}
@@ -253,7 +254,7 @@ function SkillLibrary({ creating = false }: { creating?: boolean }) {
           navigate(`/admin/skills/${v.skill_id}/versions/${v.id}`)
         }
       />
-    </div>
+    </ConsoleListPage>
   );
 }
 

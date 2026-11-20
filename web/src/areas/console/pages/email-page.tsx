@@ -4,6 +4,7 @@ import {
 } from "@/features/email/email-parameters";
 import { OverlayPresence } from "@/components/overlay-presence";
 import { TableToolbar } from "@/components/table-toolbar";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 import { useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -103,24 +104,26 @@ export function EmailPage() {
   const navigate = useNavigate();
   if (!sections.some((item) => item.value === section))
     return <Notice tone="danger">页面不存在。</Notice>;
-  return (
-    <div className="page">
-      {(!id || section === "send-logs") && (
+  const listing = !id || section === "send-logs";
+  const content = (
+    <>
+      {listing && (
         <PageHeader
           title="邮件配置"
           description="配置发件服务、编写邮件模板并查看发送记录。"
           actions={<EmailTestButton />}
         />
       )}
-      {(!id || section === "send-logs") && (
+      {listing && (
         <Tabs
+          className="px-6"
           label="邮件功能"
           value={section}
           onChange={(value) => navigate(`${base}/${value}`)}
           items={sections}
         />
       )}
-      <div className="mt-5">
+      <div className={listing ? "contents" : "mt-5"}>
         {section === "send-logs" && <EmailLogList />}
         <OverlayPresence>
           {section === "send-logs" && id && (
@@ -151,7 +154,12 @@ export function EmailPage() {
           />
         )}
       </OverlayPresence>
-    </div>
+    </>
+  );
+  return listing ? (
+    <ConsoleListPage nested>{content}</ConsoleListPage>
+  ) : (
+    <div className="page">{content}</div>
   );
 }
 

@@ -101,6 +101,7 @@ import {
   SpecPicker,
 } from "@/features/agents/cloud/spec-binding-editor";
 import { AgentOverview, AgentActivation } from "./agent-overview";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 
 export function AgentsPage() {
   const { params, page, size, change } = useListParams();
@@ -125,169 +126,165 @@ export function AgentsPage() {
     `${agentAdminRoot}/definitions?${query}`,
   );
   return (
-    <div className="page">
+    <ConsoleListPage>
       <PageHeader
         title="助手管理"
         description="配置助手归属和能力。对话型使用对话用户身份，服务型使用专属机器人身份。"
       />
-      <Panel>
-        <TableToolbar
-          onRefresh={() => agents.refetch()}
-          refreshing={agents.isFetching}
-          onReset={() =>
-            change({
-              q: "",
-              agent_type: "",
-              scope_kind: "",
-              enabled: "",
-              page: "1",
-            })
-          }
-          actions={
-            <Button
-              render={
-                <Link to="/admin/agents/new">
-                  <Plus className="size-4" />
-                  新建助手
-                </Link>
-              }
-              nativeButton={false}
-              role="link"
-            />
-          }
-        >
-          <StandaloneInput
-            aria-label="搜索助手"
-            placeholder="搜索名称或说明"
-            value={search.value}
-            onChange={(event) => search.setValue(event.target.value)}
-            className="w-64"
-          />
-          <StandaloneSelect
-            aria-label="类型"
-            value={mode}
-            onValueChange={(value) => change({ agent_type: value, page: "1" })}
-          >
-            <option value="all">全部类型</option>
-            <option value="chat">对话型</option>
-            <option value="service">服务型</option>
-          </StandaloneSelect>
-          <StandaloneSelect
-            aria-label="归属"
-            value={scope}
-            onValueChange={(value) => change({ scope_kind: value, page: "1" })}
-          >
-            <option value="all">全部归属</option>
-            <option value="platform">平台</option>
-            <option value="team">团队</option>
-            <option value="project">项目</option>
-          </StandaloneSelect>
-          <StandaloneSelect
-            aria-label="启用状态"
-            value={enabled}
-            onValueChange={(value) => change({ enabled: value, page: "1" })}
-          >
-            <option value="all">全部状态</option>
-            <option value="true">已启用</option>
-            <option value="false">已停用</option>
-          </StandaloneSelect>
-        </TableToolbar>
-        <AsyncBoundary
-          loading={agents.isPending}
-          error={agents.error}
-          onRetry={() => agents.refetch()}
-        >
-          {agents.data?.data.length ? (
-            <SimpleTable
-              label="助手列表"
-              headers={["助手", "类型", "归属", "模型 / 工具", "状态", "操作"]}
-              actions
-            >
-              {agents.data.data.map((agent) => (
-                <tr key={agent.id}>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <Link
-                        to={`/admin/agents/${agent.id}`}
-                        className="max-w-lg truncate font-medium text-primary"
-                        title={agent.name}
-                      >
-                        {agent.name}
-                      </Link>
-                      {agent.description && (
-                        <DescriptionPreview
-                          name={agent.name}
-                          description={agent.description}
-                        />
-                      )}
-                    </div>
-                    <p
-                      className="mt-1 max-w-xl truncate text-xs text-muted"
-                      title={agent.description}
-                    >
-                      {agent.description || "暂无说明"}
-                    </p>
-                  </td>
-                  <td>
-                    <IdentityBadge mode={agent.agent_type} />
-                  </td>
-                  <td>
-                    {scopeLabel(agent.scope_kind)}
-                    <p className="mt-1 text-xs text-muted">
-                      {agent.scope_id ? `ID ${agent.scope_id}` : "所有登录用户"}
-                    </p>
-                  </td>
-                  <td>
-                    <span className="inline-flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                      <span>
-                        <strong className="font-medium text-foreground">
-                          {agent.model_binding_count}
-                        </strong>{" "}
-                        个模型
-                      </span>
-                      <span>
-                        <strong className="font-medium text-foreground">
-                          {agent.tool_binding_count} / MCP{" "}
-                          {agent.mcp_binding_count}
-                        </strong>{" "}
-                        项工具
-                      </span>
-                    </span>
-                  </td>
-                  <td>
-                    <EnabledState enabled={agent.enabled} />
-                  </td>
-                  <td>
-                    <Button
-                      render={
-                        <Link to={`/admin/agents/${agent.id}`}>配置</Link>
-                      }
-                      nativeButton={false}
-                      role="link"
-                      variant="link"
-                    />
-                  </td>
-                </tr>
-              ))}
-            </SimpleTable>
-          ) : (
-            <EmptyState
-              title="暂无匹配的助手"
-              description="创建后配置模型与权限，再开放使用。"
-            />
-          )}
-          <Pagination
-            page={page}
-            size={size}
-            total={agents.data?.pagination?.total}
-            pending={agents.isFetching}
-            onChange={(next, count) =>
-              change({ page: String(next), page_size: String(count) })
+      <TableToolbar
+        onRefresh={() => agents.refetch()}
+        refreshing={agents.isFetching}
+        onReset={() =>
+          change({
+            q: "",
+            agent_type: "",
+            scope_kind: "",
+            enabled: "",
+            page: "1",
+          })
+        }
+        actions={
+          <Button
+            render={
+              <Link to="/admin/agents/new">
+                <Plus className="size-4" />
+                新建助手
+              </Link>
             }
+            nativeButton={false}
+            role="link"
           />
-        </AsyncBoundary>
-      </Panel>
-    </div>
+        }
+      >
+        <StandaloneInput
+          aria-label="搜索助手"
+          placeholder="搜索名称或说明"
+          value={search.value}
+          onChange={(event) => search.setValue(event.target.value)}
+          className="w-64"
+        />
+        <StandaloneSelect
+          aria-label="类型"
+          value={mode}
+          onValueChange={(value) => change({ agent_type: value, page: "1" })}
+        >
+          <option value="all">全部类型</option>
+          <option value="chat">对话型</option>
+          <option value="service">服务型</option>
+        </StandaloneSelect>
+        <StandaloneSelect
+          aria-label="归属"
+          value={scope}
+          onValueChange={(value) => change({ scope_kind: value, page: "1" })}
+        >
+          <option value="all">全部归属</option>
+          <option value="platform">平台</option>
+          <option value="team">团队</option>
+          <option value="project">项目</option>
+        </StandaloneSelect>
+        <StandaloneSelect
+          aria-label="启用状态"
+          value={enabled}
+          onValueChange={(value) => change({ enabled: value, page: "1" })}
+        >
+          <option value="all">全部状态</option>
+          <option value="true">已启用</option>
+          <option value="false">已停用</option>
+        </StandaloneSelect>
+      </TableToolbar>
+      <AsyncBoundary
+        loading={agents.isPending}
+        error={agents.error}
+        onRetry={() => agents.refetch()}
+      >
+        {agents.data?.data.length ? (
+          <SimpleTable
+            label="助手列表"
+            headers={["助手", "类型", "归属", "模型 / 工具", "状态", "操作"]}
+            actions
+          >
+            {agents.data.data.map((agent) => (
+              <tr key={agent.id}>
+                <td>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      to={`/admin/agents/${agent.id}`}
+                      className="max-w-lg truncate font-medium text-primary"
+                      title={agent.name}
+                    >
+                      {agent.name}
+                    </Link>
+                    {agent.description && (
+                      <DescriptionPreview
+                        name={agent.name}
+                        description={agent.description}
+                      />
+                    )}
+                  </div>
+                  <p
+                    className="mt-1 max-w-xl truncate text-xs text-muted"
+                    title={agent.description}
+                  >
+                    {agent.description || "暂无说明"}
+                  </p>
+                </td>
+                <td>
+                  <IdentityBadge mode={agent.agent_type} />
+                </td>
+                <td>
+                  {scopeLabel(agent.scope_kind)}
+                  <p className="mt-1 text-xs text-muted">
+                    {agent.scope_id ? `ID ${agent.scope_id}` : "所有登录用户"}
+                  </p>
+                </td>
+                <td>
+                  <span className="inline-flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+                    <span>
+                      <strong className="font-medium text-foreground">
+                        {agent.model_binding_count}
+                      </strong>{" "}
+                      个模型
+                    </span>
+                    <span>
+                      <strong className="font-medium text-foreground">
+                        {agent.tool_binding_count} / MCP{" "}
+                        {agent.mcp_binding_count}
+                      </strong>{" "}
+                      项工具
+                    </span>
+                  </span>
+                </td>
+                <td>
+                  <EnabledState enabled={agent.enabled} />
+                </td>
+                <td>
+                  <Button
+                    render={<Link to={`/admin/agents/${agent.id}`}>配置</Link>}
+                    nativeButton={false}
+                    role="link"
+                    variant="link"
+                  />
+                </td>
+              </tr>
+            ))}
+          </SimpleTable>
+        ) : (
+          <EmptyState
+            title="暂无匹配的助手"
+            description="创建后配置模型与权限，再开放使用。"
+          />
+        )}
+        <Pagination
+          page={page}
+          size={size}
+          total={agents.data?.pagination?.total}
+          pending={agents.isFetching}
+          onChange={(next, count) =>
+            change({ page: String(next), page_size: String(count) })
+          }
+        />
+      </AsyncBoundary>
+    </ConsoleListPage>
   );
 }
 

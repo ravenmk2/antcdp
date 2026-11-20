@@ -305,6 +305,9 @@ it("closes untouched forms without confirmation and protects actual edits", asyn
   expect(
     await screen.findByRole("dialog", { name: "创建用户" }),
   ).toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.getByRole("textbox", { name: "用户名" })).toHaveFocus(),
+  );
   await user.keyboard("{Escape}");
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -318,6 +321,9 @@ it("closes untouched forms without confirmation and protects actual edits", asyn
   expect(
     await screen.findByRole("dialog", { name: "删除用户" }),
   ).toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "取消" })).toHaveFocus(),
+  );
   await user.keyboard("{Escape}");
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -333,6 +339,11 @@ it("closes untouched forms without confirmation and protects actual edits", asyn
   const confirmation = await screen.findByRole("dialog", {
     name: "放弃未保存的修改？",
   });
+  await waitFor(() =>
+    expect(
+      within(confirmation).getByRole("button", { name: "继续编辑" }),
+    ).toHaveFocus(),
+  );
   await user.click(
     within(confirmation).getByRole("button", { name: "放弃修改" }),
   );

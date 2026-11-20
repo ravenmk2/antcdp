@@ -35,8 +35,9 @@ import {
   useResourceSave,
 } from "@/features/agents/resources/admin-shared";
 import { useManagedList } from "@/features/agents/resources/use-managed-list";
-import { PageHeader, Panel } from "@/components/layout";
+import { PageHeader } from "@/components/layout";
 import { TableToolbar } from "@/components/table-toolbar";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 import { SimpleTable } from "@/components/table";
 import { Pagination } from "@/components/pagination";
 import { StandaloneInput, StandaloneSelect } from "@/components/fields";
@@ -86,6 +87,7 @@ export function MCPServersPage() {
     <>
       <MCPServerList
         title="MCP 服务"
+        createLabel="新建 MCP 服务"
         description="连接远端 MCP 端点，测试连接并单独调试工具。助手按整个服务绑定权限。"
         path={agentAdminRoot + "/mcp-servers"}
         route="/admin/mcp-servers"
@@ -743,129 +745,127 @@ function MCPServerList({
   const { page, size, change, enabled, search, list } =
     useManagedList<MCPServer>(path);
   return (
-    <div className="page">
+    <ConsoleListPage>
       <PageHeader title={title} description={description} actions={actions} />
-      <Panel>
-        <TableToolbar
-          onRefresh={() => list.refetch()}
-          refreshing={list.isFetching}
-          onReset={() => change({ q: "", enabled: "", page: "1" })}
-          actions={
-            <Button
-              render={
-                <Link to={`${route}/new`}>
-                  <Plus className="size-4" />
-                  {createLabel ?? `新建${title}`}
-                </Link>
-              }
-              nativeButton={false}
-              role="link"
-            />
-          }
-        >
-          <StandaloneInput
-            aria-label={`搜索${title}`}
-            placeholder="搜索名称或说明"
-            className="w-72"
-            value={search.value}
-            onChange={(event) => search.setValue(event.target.value)}
-          />
-          <StandaloneSelect
-            aria-label="启用状态"
-            value={enabled}
-            onValueChange={(value) => change({ enabled: value, page: "1" })}
-          >
-            <option value="all">全部状态</option>
-            <option value="true">已启用</option>
-            <option value="false">已停用</option>
-          </StandaloneSelect>
-        </TableToolbar>
-        <AsyncBoundary
-          loading={list.isPending}
-          error={list.error}
-          onRetry={() => list.refetch()}
-        >
-          {list.data?.data.length ? (
-            <SimpleTable
-              headers={[
-                "名称与说明",
-                ...(columns?.map((c) => c.title) ?? [extraHeading]),
-                "状态",
-                "操作",
-              ]}
-              label={title}
-              actions
-            >
-              {list.data.data.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <div className="max-w-lg">
-                      <div className="flex items-center gap-2">
-                        <Link
-                          className="min-w-0 truncate font-medium text-primary hover:underline"
-                          title={label(item)}
-                          to={nameHref ? nameHref(item) : `${route}/${item.id}`}
-                        >
-                          {label(item)}
-                        </Link>
-                        {preview
-                          ? preview(item)
-                          : item.description && (
-                              <DescriptionPreview
-                                name={label(item)}
-                                description={item.description}
-                              />
-                            )}
-                      </div>
-                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted">
-                        {secondary
-                          ? secondary(item)
-                          : item.description || "暂无说明"}
-                      </p>
-                    </div>
-                  </td>
-                  {columns ? (
-                    columns.map((column) => (
-                      <td key={column.title}>{column.render(item)}</td>
-                    ))
-                  ) : (
-                    <td>{extra?.(item)}</td>
-                  )}
-                  <td>
-                    <EnabledState enabled={item.enabled} />
-                  </td>
-                  <td>
-                    {rowActions ? (
-                      rowActions(item)
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        render={<Link to={`${route}/${item.id}`}>管理</Link>}
-                        nativeButton={false}
-                        role="link"
-                      />
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </SimpleTable>
-          ) : (
-            <EmptyState
-              title={`暂无${title}`}
-              description="可以创建第一项配置，或调整筛选条件。"
-            />
-          )}
-          <Pagination
-            page={page}
-            size={size}
-            total={list.data?.pagination?.total}
-            pending={list.isFetching}
-            onChange={(next, count) =>
-              change({ page: String(next), page_size: String(count) })
+      <TableToolbar
+        onRefresh={() => list.refetch()}
+        refreshing={list.isFetching}
+        onReset={() => change({ q: "", enabled: "", page: "1" })}
+        actions={
+          <Button
+            render={
+              <Link to={`${route}/new`}>
+                <Plus className="size-4" />
+                {createLabel ?? `新建${title}`}
+              </Link>
             }
+            nativeButton={false}
+            role="link"
           />
-        </AsyncBoundary>
-      </Panel>
-    </div>
+        }
+      >
+        <StandaloneInput
+          aria-label={`搜索${title}`}
+          placeholder="搜索名称或说明"
+          className="w-72"
+          value={search.value}
+          onChange={(event) => search.setValue(event.target.value)}
+        />
+        <StandaloneSelect
+          aria-label="启用状态"
+          value={enabled}
+          onValueChange={(value) => change({ enabled: value, page: "1" })}
+        >
+          <option value="all">全部状态</option>
+          <option value="true">已启用</option>
+          <option value="false">已停用</option>
+        </StandaloneSelect>
+      </TableToolbar>
+      <AsyncBoundary
+        loading={list.isPending}
+        error={list.error}
+        onRetry={() => list.refetch()}
+      >
+        {list.data?.data.length ? (
+          <SimpleTable
+            headers={[
+              "名称与说明",
+              ...(columns?.map((c) => c.title) ?? [extraHeading]),
+              "状态",
+              "操作",
+            ]}
+            label={title}
+            actions
+          >
+            {list.data.data.map((item) => (
+              <tr key={item.id}>
+                <td>
+                  <div className="max-w-lg">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        className="min-w-0 truncate font-medium text-primary hover:underline"
+                        title={label(item)}
+                        to={nameHref ? nameHref(item) : `${route}/${item.id}`}
+                      >
+                        {label(item)}
+                      </Link>
+                      {preview
+                        ? preview(item)
+                        : item.description && (
+                            <DescriptionPreview
+                              name={label(item)}
+                              description={item.description}
+                            />
+                          )}
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted">
+                      {secondary
+                        ? secondary(item)
+                        : item.description || "暂无说明"}
+                    </p>
+                  </div>
+                </td>
+                {columns ? (
+                  columns.map((column) => (
+                    <td key={column.title}>{column.render(item)}</td>
+                  ))
+                ) : (
+                  <td>{extra?.(item)}</td>
+                )}
+                <td>
+                  <EnabledState enabled={item.enabled} />
+                </td>
+                <td>
+                  {rowActions ? (
+                    rowActions(item)
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      render={<Link to={`${route}/${item.id}`}>管理</Link>}
+                      nativeButton={false}
+                      role="link"
+                    />
+                  )}
+                </td>
+              </tr>
+            ))}
+          </SimpleTable>
+        ) : (
+          <EmptyState
+            title={`暂无${title}`}
+            description="可以创建第一项配置，或调整筛选条件。"
+          />
+        )}
+        <Pagination
+          page={page}
+          size={size}
+          total={list.data?.pagination?.total}
+          pending={list.isFetching}
+          onChange={(next, count) =>
+            change({ page: String(next), page_size: String(count) })
+          }
+        />
+      </AsyncBoundary>
+    </ConsoleListPage>
   );
 }

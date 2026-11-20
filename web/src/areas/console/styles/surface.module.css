@@ -46,7 +46,7 @@
     --faint: #6f6f74;
     --border: #e1e1e3;
     --border-subtle: #ebebed;
-    --border-strong: #a6a6ab;
+    --border-strong: #cfcfcf;
     --success: #236b47;
     --success-soft: #eaf5ee;
     --warning: #865b17;
@@ -97,7 +97,7 @@
     --faint: #9b9b9e;
     --border: #3b3b3e;
     --border-subtle: #333336;
-    --border-strong: var(--border);
+    --border-strong: #575757;
     --success: #8ed4ab;
     --success-soft: #243b30;
     --warning: #e3bd77;
@@ -1279,10 +1279,13 @@
   .scope :global(.model-workspace) {
     display: grid;
     grid-template-columns: 280px minmax(0, 1fr);
-    height: calc(100dvh - var(--console-topbar-height));
+    height: calc(100dvh - var(--console-topbar-height) - 48px);
     min-height: 560px;
+    margin: 24px var(--console-gutter);
     overflow: hidden;
-    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
   }
   .scope :global(.mcp-debug-layout) {
     display: grid;
@@ -1374,7 +1377,7 @@
     display: flex;
     flex-direction: column;
     border-right: 1px solid var(--border);
-    background: var(--surface);
+    background: var(--surface-subtle);
   }
   .scope :global(.model-provider-list-tools) {
     display: grid;
@@ -1408,7 +1411,7 @@
   }
   .scope :global(.model-provider-item[aria-current="page"]) {
     background: var(--accent-soft);
-    border-color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
   }
   .scope :global(.model-provider-list-footer) {
     display: flex;
@@ -1558,10 +1561,13 @@
   .scope :global(.web-access-workspace) {
     display: grid;
     grid-template-columns: 280px minmax(0, 1fr);
-    height: calc(100dvh - var(--console-topbar-height));
+    height: calc(100dvh - var(--console-topbar-height) - 48px);
     min-height: 560px;
+    margin: 24px var(--console-gutter);
     overflow: hidden;
-    background: var(--canvas);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
   }
   .scope :global(.web-access-sidebar) {
     display: flex;
@@ -1569,7 +1575,7 @@
     min-width: 0;
     min-height: 0;
     border-right: 1px solid var(--border);
-    background: var(--surface);
+    background: var(--surface-subtle);
   }
   .scope :global(.web-access-nav-item) {
     display: flex;
@@ -1587,7 +1593,7 @@
   }
   .scope :global(.web-access-nav-item[aria-current="page"]) {
     background: var(--accent-soft);
-    border-color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
   }
   .scope :global(.web-access-provider-icon) {
     display: block;
@@ -1747,19 +1753,15 @@
       padding: 24px 16px;
     }
   }
-  .scope :global(.skill-library > .table-toolbar) {
-    border: 0;
-    padding: 0;
-    background: transparent;
-  }
-  .scope :global(.skill-library > .table-toolbar > .toolbar) {
-    padding: 0;
-  }
   .scope :global(.skill-grid-area) {
     --skill-gap: 16px;
     --skill-column-min: 320px;
     --skill-card-height: 148px;
-    margin-top: 20px;
+    display: flex;
+    min-width: 0;
+    flex: 1 0 auto;
+    flex-direction: column;
+    margin: 16px 24px 0;
   }
   .scope :global(.skill-grid) {
     display: grid;
@@ -1846,10 +1848,6 @@
   .scope :global(.skill-card .skill-icon > svg) {
     width: 22px;
     height: 22px;
-  }
-  .scope :global(.skill-pagination > nav) {
-    background: transparent;
-    padding-inline: 0;
   }
   .scope :global(.skill-detail-header) {
     display: flex;
@@ -2335,23 +2333,43 @@
     }
   }
 
-  .scope :global(.console-audit-page[data-inline-preview="true"]) {
+  .scope :global(.console-audit-page) {
     display: flex;
+    min-height: calc(100dvh - var(--console-topbar-height));
+    flex-direction: column;
+    padding-block: 24px;
+  }
+  .scope :global(.console-audit-page[data-inline-preview="true"]) {
     min-height: 680px;
     height: calc(100dvh - var(--console-topbar-height));
-    flex-direction: column;
-    padding-bottom: 28px;
   }
-  .scope :global(.console-audit-page[data-inline-preview="true"] > header) {
+  .scope :global(.console-audit-surface) {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    border-radius: 16px;
+  }
+  .scope :global(.console-audit-surface > .page-header) {
     flex-shrink: 0;
+    margin: 0;
+    padding: 22px 24px 18px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .scope :global(.console-audit-surface > .page-header .page-title) {
+    margin-bottom: 4px;
+    font-size: 28px;
+  }
+  .scope :global(.console-audit-surface .console-audit-layout > .panel) {
+    border: 0;
+    border-radius: 0;
   }
   .scope :global([data-inline-preview="true"] .console-audit-layout) {
     display: grid;
     min-height: 0;
     flex: 1;
     grid-template-columns: minmax(0, 1fr) clamp(352px, 28cqw, 456px);
-    align-items: start;
-    gap: 20px;
+    align-items: stretch;
   }
   .scope :global([data-inline-preview="true"] .console-audit-list),
   .scope :global(.console-audit-preview) {
@@ -2363,7 +2381,18 @@
   .scope :global([data-inline-preview="true"] .console-audit-list-body) {
     display: flex;
     min-height: 0;
+    flex: 1;
     flex-direction: column;
+  }
+  .scope :global(.console-audit-list-body > nav) {
+    margin-top: auto;
+  }
+  .scope
+    :global(
+      .console-audit-surface .console-audit-layout > .console-audit-preview
+    ) {
+    border-inline-start: 1px solid var(--border);
+    background: var(--surface-subtle);
   }
   .scope :global(.console-audit-list-body > :not(.console-audit-table-scroll)) {
     flex-shrink: 0;

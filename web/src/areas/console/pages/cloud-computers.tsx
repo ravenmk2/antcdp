@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { request } from "@/api/client";
+import { ConsoleListPage } from "@/areas/console/components/list-page";
 import { Button } from "@/components/button";
 import { AsyncBoundary, Notice } from "@/components/feedback";
 import { StandaloneSelect, StandaloneInput } from "@/components/fields";
@@ -53,7 +54,7 @@ export function CloudComputersPage() {
     `${agentAdminRoot}/cloud-computers?${queryString}`,
   );
   return (
-    <div className="page">
+    <ConsoleListPage>
       <PageHeader
         title="云电脑"
         description="管理账号所属的长期运行环境和专属数据卷。首次使用时创建，空闲不会自动删除。"
@@ -68,118 +69,116 @@ export function CloudComputersPage() {
           />
         }
       />
-      <Panel>
-        <TableToolbar
-          onRefresh={() => query.refetch()}
-          refreshing={query.isFetching}
-          onReset={() =>
+      <TableToolbar
+        onRefresh={() => query.refetch()}
+        refreshing={query.isFetching}
+        onReset={() =>
+          change({
+            state: "",
+            pool_agent_id: "",
+            owner_user_id: "",
+            page: "1",
+          })
+        }
+      >
+        <StandaloneSelect
+          aria-label="云电脑状态"
+          value={state}
+          onValueChange={(v) => change({ state: v, page: "1" })}
+        >
+          <option value="all">全部状态</option>
+          {Object.entries(cloudStateNames).map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </StandaloneSelect>
+        <StandaloneInput
+          aria-label="归属账号 ID"
+          placeholder="归属账号 ID"
+          value={owner}
+          onChange={(e) =>
             change({
-              state: "",
-              pool_agent_id: "",
-              owner_user_id: "",
+              owner_user_id: e.target.value.replace(/\D/g, ""),
               page: "1",
             })
           }
+        />
+        <StandaloneInput
+          aria-label="服务型助手 ID"
+          placeholder="服务型助手 ID"
+          value={pool}
+          onChange={(e) =>
+            change({
+              pool_agent_id: e.target.value.replace(/\D/g, ""),
+              page: "1",
+            })
+          }
+        />
+      </TableToolbar>
+      <AsyncBoundary
+        loading={query.isPending}
+        error={query.error}
+        onRetry={() => query.refetch()}
+        empty={query.data?.data.length === 0}
+        emptyTitle="暂无匹配的云电脑"
+        emptyDescription="个人电脑和服务型云电脑池成员均在需要时创建。"
+      >
+        <SimpleTable
+          label="云电脑列表"
+          headers={[
+            "云电脑",
+            "归属账号",
+            "资源池",
+            "状态",
+            "活动轮次 / 待核实",
+            "最近活动",
+          ]}
         >
-          <StandaloneSelect
-            aria-label="云电脑状态"
-            value={state}
-            onValueChange={(v) => change({ state: v, page: "1" })}
-          >
-            <option value="all">全部状态</option>
-            {Object.entries(cloudStateNames).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </StandaloneSelect>
-          <StandaloneInput
-            aria-label="归属账号 ID"
-            placeholder="归属账号 ID"
-            value={owner}
-            onChange={(e) =>
-              change({
-                owner_user_id: e.target.value.replace(/\D/g, ""),
-                page: "1",
-              })
-            }
-          />
-          <StandaloneInput
-            aria-label="服务型助手 ID"
-            placeholder="服务型助手 ID"
-            value={pool}
-            onChange={(e) =>
-              change({
-                pool_agent_id: e.target.value.replace(/\D/g, ""),
-                page: "1",
-              })
-            }
-          />
-        </TableToolbar>
-        <AsyncBoundary
-          loading={query.isPending}
-          error={query.error}
-          onRetry={() => query.refetch()}
-          empty={query.data?.data.length === 0}
-          emptyTitle="暂无匹配的云电脑"
-          emptyDescription="个人电脑和服务型云电脑池成员均在需要时创建。"
-        >
-          <SimpleTable
-            label="云电脑列表"
-            headers={[
-              "云电脑",
-              "归属账号",
-              "资源池",
-              "状态",
-              "活动轮次 / 待核实",
-              "最近活动",
-            ]}
-          >
-            {query.data?.data.map((v) => (
-              <tr key={v.id}>
-                <td>
+          {query.data?.data.map((v) => (
+            <tr key={v.id}>
+              <td>
+                <Link
+                  className="font-medium text-primary"
+                  to={`/admin/cloud-computers/${v.id}`}
+                >
+                  {v.id}
+                </Link>
+              </td>
+              <td>{v.owner_user_id}</td>
+              <td>
+                {v.pool_agent_id ? (
                   <Link
-                    className="font-medium text-primary"
-                    to={`/admin/cloud-computers/${v.id}`}
+                    className="text-primary"
+                    to={`/admin/agents/${v.pool_agent_id}?tab=computer`}
                   >
-                    {v.id}
+                    助手 {v.pool_agent_id}
                   </Link>
-                </td>
-                <td>{v.owner_user_id}</td>
-                <td>
-                  {v.pool_agent_id ? (
-                    <Link
-                      className="text-primary"
-                      to={`/admin/agents/${v.pool_agent_id}?tab=computer`}
-                    >
-                      助手 {v.pool_agent_id}
-                    </Link>
-                  ) : (
-                    "个人电脑"
-                  )}
-                </td>
-                <td>
-                  <CloudStatus state={v.state} />
-                </td>
-                <td>
-                  {v.active_leases} / {v.unknown_executions}
-                </td>
-                <td>{new Date(v.last_activity_at).toLocaleString()}</td>
-              </tr>
-            ))}
-          </SimpleTable>
-          <Pagination
-            page={page}
-            size={size}
-            total={query.data?.pagination?.total}
-            pending={query.isFetching}
-            onChange={(next, count) =>
-              change({ page: String(next), page_size: String(count) })
-            }
-          />
-        </AsyncBoundary>
-      </Panel>
-    </div>
+                ) : (
+                  "个人电脑"
+                )}
+              </td>
+              <td>
+                <CloudStatus state={v.state} />
+              </td>
+              <td>
+                {v.active_leases} / {v.unknown_executions}
+              </td>
+              <td>{new Date(v.last_activity_at).toLocaleString()}</td>
+            </tr>
+          ))}
+        </SimpleTable>
+        <Pagination
+          page={page}
+          size={size}
+          total={query.data?.pagination?.total}
+          pending={query.isFetching}
+          onChange={(next, count) =>
+            change({ page: String(next), page_size: String(count) })
+          }
+        />
+      </AsyncBoundary>
+    </ConsoleListPage>
   );
 }
 export function CloudSettingsPage() {

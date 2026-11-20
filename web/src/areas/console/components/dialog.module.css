@@ -1,0 +1,129 @@
+@layer components {
+  .scope .backdrop {
+    position: fixed;
+    z-index: 50;
+    inset: 0;
+    background: rgb(12 18 30 / 39%);
+    transition: opacity 160ms ease;
+  }
+  .scope .popup {
+    position: fixed;
+    z-index: 50;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    width: min(510px, calc(100% - 40px));
+    max-height: calc(100dvh - 48px);
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+    outline: none;
+    translate: -50% -50%;
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease,
+      filter 160ms ease;
+  }
+  .scope .popup[data-nested-dialog-open] {
+    filter: brightness(0.84);
+  }
+  .scope .popup[data-wide] {
+    width: min(680px, calc(100% - 40px));
+  }
+  .scope .popup[data-side="right"] {
+    inset: 16px 16px auto auto;
+    width: min(620px, calc(100% - 32px));
+    max-height: calc(100dvh - 32px);
+    translate: none;
+  }
+  .scope .popup:is([data-starting-style], [data-ending-style]) {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+    pointer-events: none;
+  }
+  .scope
+    .popup[data-side="right"]:is([data-starting-style], [data-ending-style]) {
+    transform: translateX(18px);
+  }
+  .scope .backdrop:is([data-starting-style], [data-ending-style]) {
+    opacity: 0;
+  }
+  .scope .header {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 22px 24px 19px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .scope .heading {
+    min-width: 0;
+    flex: 1;
+    overflow-wrap: anywhere;
+  }
+  .scope .title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 650;
+    line-height: 1.35;
+    letter-spacing: -0.015em;
+  }
+  .scope .description {
+    margin: 5px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .scope .icon {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 11px;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .scope .icon > svg {
+    width: 20px;
+    height: 20px;
+  }
+  .scope [data-tone="danger"] > .header > .icon {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+  .scope [data-tone="warning"] > .header > .icon {
+    background: var(--warning-soft);
+    color: var(--warning);
+  }
+  .scope .popup:not(:has(> .body)) > .header {
+    border-bottom: 0;
+  }
+  .scope .body {
+    min-height: 0;
+    overflow: auto;
+    padding: 20px 24px 24px;
+    overscroll-behavior: contain;
+  }
+  .scope .popup[data-side="right"] > .body {
+    flex: 1;
+  }
+  .scope .footer {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 24px;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--surface-subtle);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .scope .popup,
+    .scope .backdrop {
+      transition: none;
+    }
+  }
+}
