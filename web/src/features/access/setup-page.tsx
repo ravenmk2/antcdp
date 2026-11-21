@@ -285,6 +285,7 @@ export function SetupPage({
                         required
                         hint="由部署维护者提供"
                         error={errors.fields.install_password}
+                        className="form-full"
                       >
                         <Input
                           name="install_password"
