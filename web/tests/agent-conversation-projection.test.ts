@@ -28,7 +28,7 @@ it("keeps existing tool rows in their original group when late text arrives", ()
       {
         type: "tool_call",
         draft_call_id: "draft-0",
-        name: "exec_command",
+        name: "exec",
         arguments_text: "",
       },
     ],
@@ -525,7 +525,10 @@ it("allows manual folding of ended turns while retaining attention for unsafe to
       data: {
         ...result.data,
         sandbox_execution: {
-          execution_id: "process-1",
+          description: "Run command",
+          output_incomplete: false,
+          output_pending: false,
+          task_id: "process-1",
           cloud_computer_id: "1",
           command: "exit 7",
           cwd: "/data/workspace",

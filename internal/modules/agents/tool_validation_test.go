@@ -11,16 +11,16 @@ import (
 )
 
 func TestToolValidationReportsSafeFields(t *testing.T) {
-	tool := agentcore.ToolSpec{Definition: modelcore.Tool{Name: "exec_command", InputSchema: json.RawMessage(`{"type":"object","required":["command"],"properties":{"command":{"type":"string"},"timeout_seconds":{"type":"integer","maximum":600}},"additionalProperties":false}`)}}
+	tool := agentcore.ToolSpec{Definition: modelcore.Tool{Name: "exec", InputSchema: json.RawMessage(`{"type":"object","required":["command"],"properties":{"command":{"type":"string"},"timeout_seconds":{"type":"integer","maximum":600}},"additionalProperties":false}`)}}
 	for _, tc := range []struct{ args, path, keyword, expected string }{
 		{`{"command":"private-command","timeout_seconds":601}`, "/timeout_seconds", "maximum", "600"},
 		{`{"command":"private-command","timeout_seconds":"private-secret"}`, "/timeout_seconds", "type", "integer"},
 		{`{}`, "/command", "required", ""},
 		{`{"command":"private-command","private-property":true}`, "", "additionalProperties", ""},
 	} {
-		_, err := attemptValidation(attemptSnapshot{Tools: []agentcore.ToolSpec{tool}}, modelcore.Response{Message: modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "test", Name: "exec_command", Arguments: tc.args}}}})
+		_, err := attemptValidation(attemptSnapshot{Tools: []agentcore.ToolSpec{tool}}, modelcore.Response{Message: modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "test", Name: "exec", Arguments: tc.args}}}})
 		d := diagnostic.From(err)
-		if d == nil || d.ToolName != "exec_command" || d.ToolIndex != 1 || d.FieldPath != tc.path || d.Constraint != tc.keyword || d.Expected != tc.expected {
+		if d == nil || d.ToolName != "exec" || d.ToolIndex != 1 || d.FieldPath != tc.path || d.Constraint != tc.keyword || d.Expected != tc.expected {
 			t.Fatalf("unexpected detail %+v", d)
 		}
 		raw, _ := json.Marshal(d)

@@ -127,16 +127,25 @@ type ExecResult struct {
 }
 
 type ExecutionOutput struct {
-	Text      string
-	Cursor    int64 // byte offset into the remote combined background log
-	Truncated bool
+	Stdout, Stderr string
+	Cursor         int64 // retained UTF-8 byte offset across both channels
+	Truncated      bool  // another page is available, or the preview was shortened
+	Incomplete     bool  // source bytes were lost
+	Pending        bool  // stream reader is still draining output
 }
+
+// PreviewCursor requests the bounded head and tail of each output stream.
+const PreviewCursor int64 = -1
 
 type ExecCallbacks struct {
 	// Started must durably record the handle. Returning an error stops local
 	// consumption; the remote command may still be active and must be reconciled.
 	Started func(context.Context, ExecutionHandle) error
-	Output  func(context.Context, Output) error
+	// Output receives synchronous foreground frames. Background readers use ReadExecutionOutput.
+	Output func(context.Context, Output) error
+	// Finished is called once after a managed background stream drains or fails,
+	// independently of the context that received the launch acknowledgement.
+	Finished func(context.Context, ExecResult, error)
 }
 
 type FileRequest struct {

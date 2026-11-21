@@ -35,7 +35,10 @@ export interface DiagnosticDetail {
 import type { JsonObject } from "./models";
 
 export interface SandboxExecution {
-  execution_id: string;
+  description: string;
+  output_incomplete: boolean;
+  output_pending: boolean;
+  task_id: string;
   cloud_computer_id: string;
   command: string;
   cwd: string;

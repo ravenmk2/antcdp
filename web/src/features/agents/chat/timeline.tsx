@@ -21,6 +21,7 @@ import {
   type PresentedProcess,
 } from "../data/conversation-presentation";
 import { diagnosticReason, diagnosticLines } from "../data/diagnostics";
+import { useCommandTaskStates } from "../data/command-task-states";
 import { turnIssues } from "../data/turn-issues";
 import { TurnIssues } from "./turn-issues";
 import { MessageContent } from "./content";
@@ -77,10 +78,11 @@ function Timeline({
   const { user } = useSession();
   const projector = useMemo(() => new ConversationProjector(), []);
   const presenter = useMemo(() => new ConversationPresenter(), []);
-  const nodes = useMemo(
+  const presented = useMemo(
     () => presenter.project(projector.project(records), attempt),
     [presenter, projector, records, attempt],
   );
+  const nodes = useCommandTaskStates(sessionId, presented);
   const turns = useMemo(
     () => conversationTurns(records, nodes),
     [records, nodes],
@@ -760,6 +762,7 @@ const ProcessGroup = memo(function ProcessGroup({
         rejected={tool.rejected}
         call={tool.call}
         result={tool.result}
+        taskStatus={tool.taskStatus}
         reconciliation={tool.reconciliation}
         status={tool.status}
         question={tool.question}

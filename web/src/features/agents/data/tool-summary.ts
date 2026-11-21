@@ -76,24 +76,27 @@ export function toolSummary(
     tool.call?.data.arguments ??
     draftArgumentStrings(tool.draft?.argumentsText ?? "");
   const hint =
-    (name === "papi_call" || name === "papi_desc") &&
-    typeof tool.call?.data.arguments.api === "string"
-      ? tool.call.data.arguments.api
-      : (name === "glob" || name === "grep") && typeof args.pattern === "string"
-        ? [args.pattern, typeof args.path === "string" ? args.path : null]
-            .filter(Boolean)
-            .join(" · ")
-        : [
-            args.path,
-            args.file_path,
-            args.destination,
-            args.command,
-            args.pattern,
-            args.query,
-            args.url,
-          ].find(
-            (value): value is string =>
-              typeof value === "string" && Boolean(value),
-          );
+    name === "exec" && typeof args.description === "string"
+      ? args.description
+      : (name === "papi_call" || name === "papi_desc") &&
+          typeof tool.call?.data.arguments.api === "string"
+        ? tool.call.data.arguments.api
+        : (name === "glob" || name === "grep") &&
+            typeof args.pattern === "string"
+          ? [args.pattern, typeof args.path === "string" ? args.path : null]
+              .filter(Boolean)
+              .join(" · ")
+          : [
+              args.path,
+              args.file_path,
+              args.destination,
+              args.command,
+              args.pattern,
+              args.query,
+              args.url,
+            ].find(
+              (value): value is string =>
+                typeof value === "string" && Boolean(value),
+            );
   return { name, hint };
 }

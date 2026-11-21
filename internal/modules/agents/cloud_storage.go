@@ -119,6 +119,8 @@ type CloudRepository interface {
 	InsertCloudExecution(*CloudExecutionRow) error
 	SaveCloudExecution(*CloudExecutionRow) error
 	LeaseExecutions(uint64) ([]CloudExecutionRow, error)
+	ListedCommandRows(uint64) ([]CloudExecutionRow, error)
+	CommandDeclared(uint64) (bool, error)
 	CloudOperation(uint64, bool) (*CloudOperationRow, error)
 	InsertCloudOperation(*CloudOperationRow) error
 	SaveCloudOperation(*CloudOperationRow) error

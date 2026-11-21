@@ -18,23 +18,27 @@ import (
 )
 
 type CommandRequest struct {
+	Description    string `json:"description"`
+	Workdir        string `json:"workdir,omitempty"`
 	Command        string `json:"command"`
 	Background     bool   `json:"background"`
 	TimeoutSeconds int    `json:"timeout_seconds"`
-	MaxOutputBytes int    `json:"max_output_bytes"`
 }
 
 type SandboxExecutionMetadata struct {
-	ExecutionID uint64 `json:"execution_id,string"`
-	ComputerID  uint64 `json:"cloud_computer_id,string"`
-	Command     string `json:"command"`
-	CWD         string `json:"cwd"`
-	Background  bool   `json:"background"`
-	State       string `json:"state"`
-	ExitCode    *int   `json:"exit_code"`
-	Stdout      string `json:"stdout"`
-	Stderr      string `json:"stderr"`
-	Truncated   bool   `json:"truncated"`
+	Description   string `json:"description"`
+	OutputPending bool   `json:"output_pending"`
+	Incomplete    bool   `json:"output_incomplete"`
+	ExecutionID   uint64 `json:"task_id,string"`
+	ComputerID    uint64 `json:"cloud_computer_id,string"`
+	Command       string `json:"command"`
+	CWD           string `json:"cwd"`
+	Background    bool   `json:"background"`
+	State         string `json:"state"`
+	ExitCode      *int   `json:"exit_code"`
+	Stdout        string `json:"stdout"`
+	Stderr        string `json:"stderr"`
+	Truncated     bool   `json:"truncated"`
 }
 
 type CommandResult struct {
@@ -44,9 +48,9 @@ type CommandResult struct {
 	Reason    string                   `json:"-"`
 }
 type processArguments struct {
-	ExecutionID    uint64 `json:"execution_id,string"`
-	Cursor         string `json:"cursor"`
-	MaxOutputBytes int    `json:"max_output_bytes"`
+	ExecutionID uint64 `json:"task_id,string"`
+	Cursor      string `json:"cursor"`
+	WaitSeconds int    `json:"wait_seconds,omitempty"`
 }
 
 func matchesProcessArguments(raw string, expected processArguments) bool {
@@ -77,14 +81,11 @@ func normalizeCommandRequest(w CommandRequest) (CommandRequest, error) {
 	if w.TimeoutSeconds == 0 {
 		w.TimeoutSeconds = 60
 	}
-	if w.MaxOutputBytes == 0 {
-		w.MaxOutputBytes = 32 << 10
+	if strings.TrimSpace(w.Description) == "" || strings.ContainsAny(w.Description, "\r\n\x00") || utf8.RuneCountInString(w.Description) > 160 || !utf8.ValidString(w.Description) {
+		return w, httpx.Invalid("description", "invalid")
 	}
 	if w.TimeoutSeconds < 1 || w.TimeoutSeconds > 600 {
 		return w, httpx.Invalid("timeout_seconds", "out_of_range")
-	}
-	if w.MaxOutputBytes < 4 || w.MaxOutputBytes > 64<<10 {
-		return w, httpx.Invalid("max_output_bytes", "out_of_range")
 	}
 	return w, nil
 }
@@ -137,7 +138,7 @@ func (s *CloudService) reserveCommand(ctx context.Context, ref agentcore.Executi
 		if e != nil {
 			return e
 		}
-		call, e := commandTool(st, ref, callID, "exec_command")
+		call, e := commandTool(st, ref, callID, "exec")
 		if e != nil {
 			return e
 		}
@@ -170,7 +171,10 @@ func (s *CloudService) reserveCommand(ctx context.Context, ref agentcore.Executi
 		if e != nil {
 			return e
 		}
-		out.Access.CWD = x.Context.Row.CWD
+		out.Access.CWD, e = commandDirectory(x.Context.Row.CWD, w.Workdir)
+		if e != nil {
+			return e
+		}
 		locked, e := repo.Lease(binding.RootRunID, true)
 		if e != nil {
 			return e
@@ -185,27 +189,23 @@ func (s *CloudService) reserveCommand(ctx context.Context, ref agentcore.Executi
 		if computer == nil || computerCapabilities(computer).Execution != "supported" {
 			return httpx.E(409, "SANDBOX_EXECUTION_UNVERIFIED", "沙箱执行安全能力尚未验证")
 		}
-		existing, e := repo.LeaseExecutions(binding.RootRunID)
+		declared, e := repo.CommandDeclared(callID)
 		if e != nil {
 			return e
 		}
-		for _, row := range existing {
-			if row.ToolCallID == callID {
-				return httpx.E(409, "SANDBOX_EXECUTION_ALREADY_EXISTS", "已有执行意图，不能重复派发")
-			}
+		if declared {
+			return httpx.E(409, "SANDBOX_EXECUTION_ALREADY_EXISTS", "已有执行意图，不能重复派发")
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		deadline := now.Add(time.Duration(w.TimeoutSeconds) * time.Second)
 		if deadline.After(x.Root.DeadlineAt) {
 			deadline = x.Root.DeadlineAt
 		}
-		if !w.Background && deadline.After(call.DeadlineAt) {
-			deadline = call.DeadlineAt
-		}
+
 		if !deadline.After(now) {
 			return httpx.E(409, "DEADLINE_EXCEEDED", "执行期限已到")
 		}
-		out.Spec = sandboxcore.ExecSpec{Command: w.Command, CWD: out.Access.CWD, Background: w.Background, Timeout: deadline.Sub(now), MaxOutputBytes: w.MaxOutputBytes}
+		out.Spec = sandboxcore.ExecSpec{Command: w.Command, CWD: out.Access.CWD, Background: true, Timeout: deadline.Sub(now), MaxOutputBytes: 32 << 10}
 		encoded, e := json.Marshal(out.Spec)
 		if e != nil {
 			return e
@@ -215,7 +215,7 @@ func (s *CloudService) reserveCommand(ctx context.Context, ref agentcore.Executi
 		if e = repo.InsertCloudExecution(&out.Row); e != nil {
 			return e
 		}
-		out.Metadata = SandboxExecutionMetadata{ExecutionID: out.Row.ID, ComputerID: out.Access.ComputerID, Command: w.Command, CWD: out.Row.CWD, Background: w.Background, State: "running"}
+		out.Metadata = SandboxExecutionMetadata{ExecutionID: out.Row.ID, ComputerID: out.Access.ComputerID, Description: w.Description, Command: w.Command, CWD: out.Row.CWD, Background: w.Background, State: "running"}
 		out.Row.LastObservation, e = json.Marshal(out.Metadata)
 		if e != nil {
 			return e
@@ -257,7 +257,7 @@ func (s *CloudService) ExecuteCommand(ctx context.Context, ref agentcore.Executi
 		if err != nil {
 			return err
 		}
-		call, err := commandTool(st, ref, callID, "exec_command")
+		call, err := commandTool(st, ref, callID, "exec")
 		if err != nil {
 			return err
 		}
@@ -309,25 +309,8 @@ func (s *CloudService) ExecuteCommand(ctx context.Context, ref agentcore.Executi
 	result, e := s.foundation().Dispatch(ctx, sandboxes.Execution{ID: claim.Row.ID, InstanceID: claim.Row.InstanceID, LeaseID: claim.Row.SandboxLeaseID, FenceVersion: claim.Row.FenceVersion}, claim.Spec, sandboxcore.ExecCallbacks{
 		Started: func(callbackCtx context.Context, handle sandboxcore.ExecutionHandle) error {
 			return s.recordCommandHandle(callbackCtx, claim, handle)
-		},
-		Output: func(_ context.Context, output sandboxcore.Output) error {
-			remaining := w.MaxOutputBytes - len(out.Execution.Stdout) - len(out.Execution.Stderr)
-			if len(output.Text) > remaining {
-				output.Text = output.Text[:remaining]
-				for len(output.Text) > 0 && !utf8.ValidString(output.Text) {
-					output.Text = output.Text[:len(output.Text)-1]
-				}
-				out.Execution.Truncated = true
-			}
-			switch output.Stream {
-			case "stdout":
-				out.Execution.Stdout += output.Text
-			case "stderr":
-				out.Execution.Stderr += output.Text
-			default:
-				return integrity()
-			}
-			return nil
+		}, Finished: func(c context.Context, r sandboxcore.ExecResult, cause error) {
+			_ = s.settleCommand(c, claim.Row, claim.Access, claim.Metadata, r, cause, true)
 		},
 	})
 	out.Execution.Truncated = out.Execution.Truncated || result.OutputTruncated
@@ -344,6 +327,31 @@ func (s *CloudService) ExecuteCommand(ctx context.Context, ref agentcore.Executi
 		out.Execution.ExitCode = nil
 		out.Reason = "SANDBOX_SETTLEMENT_FAILED"
 		return out, settle
+	}
+	if e == nil && result.Handle != nil && result.Running && !w.Background {
+		row := claim.Row
+		row.RemoteExecutionID = &result.Handle.ID
+		waitErr := s.waitCommand(ctx, row, claim.Access, &out.Execution, 600*time.Millisecond)
+		if waitErr != nil {
+			out.Execution.State = "outcome_unknown"
+			out.Reason = remoteSandboxError(waitErr)
+			return out, waitErr
+		}
+		if out.Execution.State != "completed" {
+			if err := s.markBackground(ctx, claim); err != nil {
+				return out, err
+			}
+			out.Execution.Background = true
+		}
+	}
+	if e == nil && result.Handle != nil {
+		log, err := claim.Access.Provider.ReadExecutionOutput(ctx, *result.Handle, sandboxcore.PreviewCursor, 12<<10)
+		if err == nil {
+			applyTaskOutput(&out.Execution, log)
+			out.Cursor = strconv.FormatInt(log.Cursor, 10)
+		} else {
+			out.Execution.Incomplete = true
+		}
 	}
 	return out, e
 }
@@ -550,11 +558,16 @@ func metadataFromCommand(row *CloudExecutionRow) (SandboxExecutionMetadata, erro
 	if json.Unmarshal(row.LastObservation, &meta) != nil || meta.ExecutionID != row.ID {
 		return meta, integrity()
 	}
+	meta.Background = row.IsBackground
 	meta.ExitCode = row.ExitCode
+	if row.FinishedAt != nil {
+		meta.State = "completed"
+		return meta, nil
+	}
 	switch row.Status {
 	case "exited", "failed":
 		meta.State = "completed"
-	case "cancelling":
+	case "cancelling", "cancel_pending":
 		meta.State = "cancel_requested"
 		meta.ExitCode = nil
 	case "outcome_unknown":
@@ -613,90 +626,8 @@ func (s *CloudService) commandAccess(ctx context.Context, ref agentcore.Executio
 	return access, row, nil
 }
 
-func (s *CloudService) ProcessStatus(ctx context.Context, ref agentcore.ExecutionRef, callID, executionID uint64) (CommandResult, error) {
-	access, row, e := s.commandAccess(ctx, ref, callID, executionID, "process_status", processArguments{ExecutionID: executionID})
-	if e != nil {
-		return CommandResult{}, e
-	}
-	defer func() { _ = s.ReleaseReferences(ctx, access, json.RawMessage(`{"observation_finished":true}`)) }()
-	meta, e := metadataFromCommand(row)
-	if e != nil {
-		return CommandResult{}, e
-	}
-	if row.FinishedAt != nil {
-		return observedCommand(meta), nil
-	}
-	if row.RemoteExecutionID == nil {
-		meta.State = "outcome_unknown"
-		return observedCommand(meta), nil
-	}
-	result, e := access.Provider.InspectExecution(ctx, sandboxcore.ExecutionHandle{Resource: access.Resource, ID: *row.RemoteExecutionID})
-	meta.State, meta.ExitCode = commandProjection(result, e, true)
-	if settle := s.settleCommand(ctx, *row, access, meta, result, e, true); settle != nil {
-		return CommandResult{Execution: meta}, settle
-	}
-	if e == nil {
-		return observedCommand(meta), nil
-	}
-	return CommandResult{Execution: meta, Reason: remoteSandboxError(e)}, e
-}
-
-func (s *CloudService) ProcessOutput(ctx context.Context, ref agentcore.ExecutionRef, callID, executionID uint64, cursor string, maxBytes int) (CommandResult, error) {
-	arguments := processArguments{ExecutionID: executionID, Cursor: cursor, MaxOutputBytes: maxBytes}
-	if cursor == "" {
-		cursor = "0"
-	}
-	offset, e := strconv.ParseInt(cursor, 10, 64)
-	if e != nil || offset < 0 {
-		return CommandResult{}, httpx.Invalid("cursor", "invalid")
-	}
-	if maxBytes == 0 {
-		maxBytes = 32 << 10
-	}
-	if maxBytes < 4 || maxBytes > 64<<10 {
-		return CommandResult{}, httpx.Invalid("max_bytes", "out_of_range")
-	}
-	access, row, e := s.commandAccess(ctx, ref, callID, executionID, "process_output", arguments)
-	if e != nil {
-		return CommandResult{}, e
-	}
-	defer func() { _ = s.ReleaseReferences(ctx, access, json.RawMessage(`{"observation_finished":true}`)) }()
-	meta, e := metadataFromCommand(row)
-	if e != nil {
-		return CommandResult{}, e
-	}
-	if !row.IsBackground {
-		return CommandResult{Execution: meta}, httpx.E(409, "PROCESS_OUTPUT_UNAVAILABLE", "前台输出已记录在原工具结果中")
-	}
-	if row.RemoteExecutionID == nil {
-		return CommandResult{Execution: meta}, httpx.E(409, "PROCESS_ID_UNKNOWN", "远端执行句柄尚未确认")
-	}
-	meta.Stdout, meta.Stderr = "", ""
-	base, _ := json.Marshal(map[string]any{"cloud_execution": meta})
-	// Each original byte can require up to six bytes when JSON escaped. Read
-	// only what the public metadata budget can represent, keeping the remote
-	// byte cursor aligned with returned output even for control characters.
-	available := ((64 << 10) - len(base) - 128) / 6
-	if available < 4 {
-		return CommandResult{Execution: meta}, integrity()
-	}
-	if maxBytes > available {
-		maxBytes = available
-	}
-	output, e := access.Provider.ReadExecutionOutput(ctx, sandboxcore.ExecutionHandle{Resource: access.Resource, ID: *row.RemoteExecutionID}, offset, maxBytes)
-	if e != nil {
-		return CommandResult{Execution: meta}, e
-	}
-	// The provider exposes one combined log, not independently labeled streams.
-	// Preserve it in stdout and leave stderr empty; do not fabricate separation.
-	meta.Stdout, meta.Stderr, meta.Truncated = output.Text, "", output.Truncated
-	out := observedCommand(meta)
-	out.Cursor = strconv.FormatInt(output.Cursor, 10)
-	return out, nil
-}
-
-func (s *CloudService) ProcessCancel(ctx context.Context, ref agentcore.ExecutionRef, callID, executionID uint64) (CommandResult, error) {
-	access, row, e := s.commandAccess(ctx, ref, callID, executionID, "process_cancel", processArguments{ExecutionID: executionID})
+func (s *CloudService) TaskKill(ctx context.Context, ref agentcore.ExecutionRef, callID, executionID uint64) (CommandResult, error) {
+	access, row, e := s.commandAccess(ctx, ref, callID, executionID, "task_kill", processArguments{ExecutionID: executionID})
 	if e != nil {
 		return CommandResult{}, e
 	}
@@ -708,14 +639,22 @@ func (s *CloudService) ProcessCancel(ctx context.Context, ref agentcore.Executio
 	if row.FinishedAt != nil {
 		return observedCommand(meta), nil
 	}
-	e = s.cancelCommand(ctx, *row, access)
-	meta.State = "cancel_requested"
-	if e != nil {
-		meta.State = "outcome_unknown"
+	if e = s.waitCommand(ctx, *row, access, &meta, 0); e != nil {
+		return CommandResult{}, e
 	}
-	if e == nil {
+	if meta.State == "completed" {
 		return observedCommand(meta), nil
 	}
+	e = s.cancelCommand(ctx, *row, access)
+	if e == nil {
+		meta.State = "cancel_requested"
+		return observedCommand(meta), nil
+	}
+	// The command may have exited between inspection and the interrupt.
+	if observeErr := s.waitCommand(ctx, *row, access, &meta, 0); observeErr == nil && meta.State == "completed" {
+		return observedCommand(meta), nil
+	}
+	meta.State = "outcome_unknown"
 	return CommandResult{Execution: meta, Reason: remoteSandboxError(e)}, e
 }
 
@@ -800,7 +739,7 @@ func (s *CloudService) reconcileCommandTool(ctx context.Context, executionID uin
 		if err != nil || call == nil || call.ResultEventSeq == nil || call.Status != "outcome_unknown" || call.ReconciledOutcome != nil {
 			return err
 		}
-		if call.RunID != row.RunID || call.RootRunID != row.RootRunID || call.ToolKey != "exec_command" {
+		if call.RunID != row.RunID || call.RootRunID != row.RootRunID || call.ToolKey != "exec" {
 			return integrity()
 		}
 		status := "cancelled"
@@ -860,7 +799,7 @@ func (s *CloudService) reconcileCommandReadReferences(ctx context.Context, bindi
 			if call == nil || call.ResultEventSeq == nil || call.RootRunID != binding.RootRunID {
 				continue
 			}
-			if call.ToolKey != "process_status" && call.ToolKey != "process_output" && call.ToolKey != "process_cancel" {
+			if call.ToolKey != "task_list" && call.ToolKey != "task_output" && call.ToolKey != "task_kill" {
 				continue
 			}
 			// These calls only observe or request cancellation. The actual process

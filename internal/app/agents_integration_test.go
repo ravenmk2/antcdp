@@ -81,7 +81,9 @@ func TestAgentApplicationIntegration(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	t.Cleanup(func() { cleanupApplicationSandboxes(t, db, installer, endpoint) })
+	t.Cleanup(app.streams.Close)
 	var calls atomic.Int32
+	var currentTask string
 	modelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
 			Messages []struct{ Role, Content string }
@@ -99,11 +101,35 @@ func TestAgentApplicationIntegration(t *testing.T) {
 				t.Errorf("step %d did not receive successful tool result: %s", step, last.Content)
 			}
 		}
+
+		if step == 5 || step == 8 {
+			var v struct {
+				Execution a.SandboxExecutionMetadata `json:"sandbox_execution"`
+			}
+			if err := json.Unmarshal([]byte(request.Messages[len(request.Messages)-1].Content), &v); err != nil || v.Execution.ExecutionID == 0 || !v.Execution.Background {
+				t.Errorf("expected background handoff at step %d: %s", step, request.Messages[len(request.Messages)-1].Content)
+			}
+			currentTask = strconv.FormatUint(v.Execution.ExecutionID, 10)
+		}
+		if step == 7 {
+			var v struct {
+				Execution a.SandboxExecutionMetadata `json:"sandbox_execution"`
+			}
+			last := request.Messages[len(request.Messages)-1].Content
+			if err := json.Unmarshal([]byte(last), &v); err != nil || v.Execution.ExitCode == nil || *v.Execution.ExitCode != 7 || v.Execution.Stderr != "final diagnostic" || v.Execution.Stdout != "from subdirectory" || !strings.HasSuffix(v.Execution.CWD, "/subdir") {
+				t.Errorf("waited split result: %s", last)
+			}
+		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		tools := []struct{ name, args string }{
 			{"write", `{"file_path":"verification.txt","content":"application-chain-ok"}`},
 			{"read", `{"file_path":"verification.txt"}`},
-			{"exec_command", `{"command":"cat verification.txt"}`},
+			{"exec", `{"description":"Read verification file","command":"mkdir subdir && cat verification.txt"}`},
+			{"exec", `{"description":"Collect delayed test output","command":"sleep 2; printf 'from subdirectory'; printf 'final diagnostic' >&2; exit 7","workdir":"subdir"}`},
+			{"task_list", `{}`},
+			{"task_output", fmt.Sprintf(`{"task_id":%q,"wait_seconds":10}`, currentTask)},
+			{"exec", `{"description":"Start cancellable command","command":"sleep 60","background":true}`},
+			{"task_kill", fmt.Sprintf(`{"task_id":%q}`, currentTask)},
 			{"save_artifacts", `{"files":[{"path":"verification.txt","description":"Integration result"}]}`},
 		}
 		if step <= int32(len(tools)) {
@@ -164,7 +190,7 @@ func TestAgentApplicationIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	items := []a.ToolBindingWrite{}
-	for _, name := range []string{"write", "read", "exec_command", "save_artifacts"} {
+	for _, name := range []string{"write", "read", "exec", "task_list", "task_output", "task_kill", "save_artifacts"} {
 		items = append(items, a.ToolBindingWrite{ToolKey: name, Policy: "allow", Constraints: json.RawMessage(`{}`)})
 	}
 	_, err = app.Service.PutToolBindings(ctx, raw, agentID, bindings.Tag, a.ToolBindingsWrite{Items: items})
@@ -193,7 +219,7 @@ func TestAgentApplicationIntegration(t *testing.T) {
 		maintainAgentResources(workerCtx, installer, app, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}()
 	t.Cleanup(func() { stop(); <-done; <-maintenanceDone })
-	_, err = app.Service.SubmitInput(ctx, raw, session.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []agentcore.TextBlock{{Type: "text", Text: "Perform these steps using the provided tools, in order: 1. write verification.txt with exact content application-chain-ok. 2. read verification.txt and verify it. 3. exec_command cat verification.txt. 4. save_artifacts verification.txt as a retained artifact. Finally reply application-chain-ok. Do not ask questions or skip tools."}}, ExpectedHash: session.Selection.Hash})
+	_, err = app.Service.SubmitInput(ctx, raw, session.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []agentcore.TextBlock{{Type: "text", Text: "Perform these steps using the provided tools, in order: 1. write verification.txt with exact content application-chain-ok. 2. read verification.txt and verify it. 3. exec cat verification.txt. 4. save_artifacts verification.txt as a retained artifact. Finally reply application-chain-ok. Do not ask questions or skip tools."}}, ExpectedHash: session.Selection.Hash})
 	if err != nil {
 		t.Fatal("submit:", err)
 	}
@@ -219,15 +245,15 @@ func TestAgentApplicationIntegration(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
-	if !realModel && calls.Load() != 5 {
-		t.Fatalf("expected five model steps, got %d", calls.Load())
+	if !realModel && calls.Load() != 10 {
+		t.Fatalf("expected ten model steps, got %d", calls.Load())
 	}
 	var artifacts int
 	if err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_artifact WHERE content_session_id=?", session.Configuration.ID).Scan(&artifacts); err != nil || artifacts != 1 {
 		t.Fatalf("artifact count=%d: %v", artifacts, err)
 	}
 	var succeeded int
-	if err = db.QueryRowContext(ctx, "SELECT COUNT(DISTINCT tool_key) FROM agent_tool_call WHERE session_id=? AND status='succeeded'", session.Configuration.ID).Scan(&succeeded); err != nil || succeeded != 4 {
+	if err = db.QueryRowContext(ctx, "SELECT COUNT(DISTINCT tool_key) FROM agent_tool_call WHERE session_id=? AND status='succeeded'", session.Configuration.ID).Scan(&succeeded); err != nil || (!realModel && succeeded != 7 || realModel && succeeded < 4) {
 		t.Fatalf("successful tools=%d: %v", succeeded, err)
 	}
 }

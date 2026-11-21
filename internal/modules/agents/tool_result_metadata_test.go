@@ -38,7 +38,7 @@ func metadataFixture(t *testing.T) (SandboxExecutionMetadata, metadataTx, execut
 	workspaceID := uint64(2)
 	repo := metadataRepository{binding: &CloudLeaseRow{RootRunID: 5, ComputerID: workspaceID}, execution: &CloudExecutionRow{ID: 7, RootRunID: 5, RunID: 6, ToolCallID: 8, CWD: meta.CWD, IsBackground: true, LastObservation: raw}}
 	x := executionRows{Root: &RunRow{ID: 5}, Agent: &Definition{ID: 9}}
-	call := &ToolCallRow{ID: 8, RootRunID: 5, RunID: 6, ToolKey: "exec_command"}
+	call := &ToolCallRow{ID: 8, RootRunID: 5, RunID: 6, ToolKey: "exec"}
 	return meta, metadataTx{repo: repo}, x, call
 }
 
@@ -59,7 +59,7 @@ func TestToolMetadataRejectsAmbiguousUntrustedProjection(t *testing.T) {
 		"wrong workspace":      strings.Replace(string(valid), `"cloud_computer_id":"2"`, `"cloud_computer_id":"88"`, 1),
 		"wrong command":        strings.Replace(string(valid), "echo ok", "echo fake", 1),
 		"invalid state":        strings.Replace(string(valid), `"state":"running"`, `"state":"succeeded"`, 1),
-		"zero execution":       strings.Replace(string(valid), `"execution_id":"7"`, `"execution_id":"0"`, 1),
+		"zero execution":       strings.Replace(string(valid), `"task_id":"7"`, `"task_id":"0"`, 1),
 		"oversized":            strings.Repeat(" ", toolMetadataLimit) + string(valid),
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -83,7 +83,7 @@ func TestExecutionMetadataAllowsRootFamilyObservationButNotForgedLaunch(t *testi
 	if err := verifyExecutionMetadata(tx.repo, x.Root, call, meta); err == nil {
 		t.Fatal("launch from another call accepted")
 	}
-	call.ToolKey = "process_status"
+	call.ToolKey = "task_list"
 	exit := 0
 	meta.State, meta.ExitCode = "completed", &exit
 	if err := verifyExecutionMetadata(tx.repo, x.Root, call, meta); err != nil {
@@ -105,7 +105,7 @@ func TestMetadataEncoderBoundsEscapedOutputAndPreservesIdentity(t *testing.T) {
 	var result struct {
 		Execution SandboxExecutionMetadata `json:"sandbox_execution"`
 	}
-	if json.Unmarshal(raw, &result) != nil || !result.Execution.Truncated || result.Execution.Command != meta.Command || result.Execution.ExecutionID != meta.ExecutionID || !strings.HasPrefix(meta.Stdout, result.Execution.Stdout) {
+	if json.Unmarshal(raw, &result) != nil || !result.Execution.Truncated || result.Execution.Command != meta.Command || result.Execution.ExecutionID != meta.ExecutionID || !strings.Contains(result.Execution.Stdout, "…") || !strings.HasPrefix(result.Execution.Stderr, "中文") || !strings.HasSuffix(result.Execution.Stderr, "中文") {
 		t.Fatal("invalid bounded projection")
 	}
 }

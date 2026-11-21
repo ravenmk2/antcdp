@@ -1,4 +1,4 @@
-import type { DurableRecord } from "@/types/agent-events";
+import type { DurableRecord, SandboxExecution } from "@/types/agent-events";
 import type { ToolCall, QuestionInteraction } from "@/types/agents";
 import type { PresentedNode } from "./conversation-presentation";
 
@@ -6,7 +6,13 @@ type Event<K extends DurableRecord["event_type"]> = Extract<
   DurableRecord,
   { event_type: K }
 >;
+export type TaskStatus = Pick<
+  SandboxExecution,
+  "task_id" | "state" | "exit_code"
+>;
+
 export interface ToolNode {
+  taskStatus?: TaskStatus;
   rejected?: {
     diagnostic?: import("@/types/agent-events").DiagnosticDetail | null;
     reason: string;
@@ -379,7 +385,7 @@ export function conversationTurns(
 }
 
 export function toolNeedsAttention(tool: ToolNode): boolean {
-  const execution = tool.result?.data.sandbox_execution;
+  const execution = tool.taskStatus ?? tool.result?.data.sandbox_execution;
   return (
     (tool.question &&
       ["waiting", "continued"].includes(tool.question.status)) ||

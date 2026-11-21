@@ -215,7 +215,10 @@ export function validRecord(record: DurableRecord) {
       if (
         !execution ||
         typeof execution !== "object" ||
-        typeof execution.execution_id !== "string" ||
+        typeof execution.task_id !== "string" ||
+        typeof execution.description !== "string" ||
+        typeof execution.output_pending !== "boolean" ||
+        typeof execution.output_incomplete !== "boolean" ||
         typeof execution.cloud_computer_id !== "string" ||
         typeof execution.command !== "string" ||
         typeof execution.cwd !== "string" ||

@@ -142,7 +142,12 @@ func (s *Service) Dispatch(ctx context.Context, expected Execution, spec sandbox
 				return cb.Started(c, h)
 			}
 			return nil
-		}, Output: cb.Output,
+		}, Output: cb.Output, Finished: func(c context.Context, result sandboxcore.ExecResult, cause error) {
+			finishErr := s.finishExecution(c, expected, result, cause, true)
+			if cb.Finished != nil {
+				cb.Finished(c, result, errors.Join(cause, finishErr))
+			}
+		},
 	})
 	return result, errors.Join(cause, s.finishExecution(ctx, expected, result, cause, true))
 }
@@ -166,7 +171,7 @@ func (s *Service) finishExecution(ctx context.Context, expected Execution, resul
 		}
 		now := nowUTC()
 		row.LastObservedAt = &now
-		if result.ExitCode != nil && !result.Running {
+		if cause == nil && result.ExitCode != nil && !result.Running {
 			code := int(*result.ExitCode)
 			row.ExitCode = &code
 			row.Status = "completed"

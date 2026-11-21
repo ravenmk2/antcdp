@@ -29,6 +29,7 @@ import (
 )
 
 type agentApplication struct {
+	streams   opensandbox.Factory
 	Service   *agents.Service
 	Resources *agentresources.Service
 	Runtime   *agentcore.Runtime
@@ -68,7 +69,8 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 		}
 		return client.Open(ctx)
 	}
-	sandboxes := &agents.CloudService{Host: service, Connection: installer.SandboxConnection, ControlKey: installer.SandboxControlKey, InstallationID: installer.SandboxInstallationID, Epoch: epoch, Factory: opensandbox.NewFactory(), ProtectedTargets: func() ([]string, error) { return agentSandboxProtectedTargets(installer) }}
+	streams := opensandbox.NewFactory(filepath.Join(dataDir, "agents", "command-logs"))
+	sandboxes := &agents.CloudService{Host: service, Connection: installer.SandboxConnection, ControlKey: installer.SandboxControlKey, InstallationID: installer.SandboxInstallationID, Epoch: epoch, ReadSavedOutput: streams.ReadSavedOutput, Factory: streams, ProtectedTargets: func() ([]string, error) { return agentSandboxProtectedTargets(installer) }}
 	sandboxes.PrepareWorkspace = sandboxes.InitializeComputer
 	sandboxes.VerifyEnvironment = sandboxes.VerifyWorkspaceEnvironment
 	sandboxes.ExecutionReconciler = sandboxes.ReconcileExecutions
@@ -110,7 +112,7 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 	}
 	service.CancelRun = runtime.Cancel
 	service.SessionChanged = hub.SessionChanged
-	return &agentApplication{Service: service, Resources: resources, Runtime: runtime, Hub: hub, Sandboxes: sandboxes}, nil
+	return &agentApplication{streams: streams, Service: service, Resources: resources, Runtime: runtime, Hub: hub, Sandboxes: sandboxes}, nil
 }
 
 type agentModelFactory struct{ service *models.Service }

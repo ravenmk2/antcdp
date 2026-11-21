@@ -57,7 +57,7 @@ func (p *environmentMemoryProvider) ReadExecutionOutput(_ context.Context, h sb.
 	output := p.outputs[h.ID]
 	start := min(cursor, int64(len(output)))
 	end := min(start+int64(maxBytes), int64(len(output)))
-	return sb.ExecutionOutput{Text: output[start:end], Cursor: end, Truncated: end < int64(len(output))}, nil
+	return sb.ExecutionOutput{Stdout: output[start:end], Cursor: end, Truncated: end < int64(len(output))}, nil
 }
 func (p *environmentMemoryProvider) CancelExecution(_ context.Context, h sb.ExecutionHandle) error {
 	result := p.executions[h.ID]

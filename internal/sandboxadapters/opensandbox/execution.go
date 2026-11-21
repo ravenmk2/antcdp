@@ -14,6 +14,13 @@ import (
 )
 
 func (p *Provider) Exec(ctx context.Context, ref sandboxcore.ResourceRef, s sandboxcore.ExecSpec, callbacks sandboxcore.ExecCallbacks) (sandboxcore.ExecResult, error) {
+	if s.Background {
+		return p.startCommand(ctx, ref, s, callbacks)
+	}
+	return p.streamCommand(ctx, ref, s, callbacks)
+}
+
+func (p *Provider) streamCommand(ctx context.Context, ref sandboxcore.ResourceRef, s sandboxcore.ExecSpec, callbacks sandboxcore.ExecCallbacks) (sandboxcore.ExecResult, error) {
 	out := sandboxcore.ExecResult{}
 	request, err := commandRequest(s)
 	if err != nil {
@@ -24,7 +31,10 @@ func (p *Provider) Exec(ctx context.Context, ref sandboxcore.ResourceRef, s sand
 	}
 	ctx, cancel := context.WithTimeout(ctx, s.Timeout+10*time.Second)
 	defer cancel()
-	client, err := p.execd(ctx, ref)
+	streamHTTP := *p.http
+	// The stream uses the command deadline; control and filesystem requests keep their own timeout.
+	streamHTTP.Timeout = 0
+	client, err := p.execdWithClient(ctx, ref, &streamHTTP)
 	if err != nil {
 		return out, err
 	}
@@ -69,7 +79,7 @@ func (p *Provider) Exec(ctx context.Context, ref sandboxcore.ResourceRef, s sand
 		switch ev.Type {
 		case "stdout", "stderr":
 			text := ev.Text
-			if len(text) > s.MaxOutputBytes-used {
+			if !s.Background && len(text) > s.MaxOutputBytes-used {
 				text = text[:s.MaxOutputBytes-used]
 				for !utf8.ValidString(text) && len(text) > 0 {
 					text = text[:len(text)-1]
@@ -91,16 +101,14 @@ func (p *Provider) Exec(ctx context.Context, ref sandboxcore.ResourceRef, s sand
 			// A nonzero foreground exit is a terminal command observation, not a
 			// transport failure. Older execd sends only CommandExecError/evalue;
 			// confirm its exit code through status instead of parsing error text.
-			if !s.Background && (out.ExitCode != nil || ev.Error != nil && ev.Error.Name == "CommandExecError") {
+			if out.ExitCode != nil || ev.Error != nil && ev.Error.Name == "CommandExecError" {
 				complete, out.Running = true, false
 			}
 		case "execution_complete":
 			complete = true
-			if !s.Background {
-				out.Running = false
-				if ev.ExitCode != nil {
-					out.ExitCode = ev.ExitCode
-				}
+			out.Running = false
+			if ev.ExitCode != nil {
+				out.ExitCode = ev.ExitCode
 			}
 		default:
 			return failure("SANDBOX_STREAM_INVALID", true)
@@ -112,12 +120,6 @@ func (p *Provider) Exec(ctx context.Context, ref sandboxcore.ResourceRef, s sand
 	}
 	if !started || !complete {
 		return out, failure("SANDBOX_EXECUTION_UNCONFIRMED", true)
-	}
-	if s.Background {
-		// This event acknowledges launch. It is not the process terminal state.
-		out.Running = true
-		out.ExitCode = nil
-		return out, nil
 	}
 	if out.ExitCode == nil {
 		// Older execd releases omit a foreground exit code. Confirm through the
@@ -161,7 +163,7 @@ func commandRequest(s sandboxcore.ExecSpec) (sdk.RunCommandRequest, error) {
 		u, g := int32(*s.UID), int32(*s.GID)
 		uid, gid = &u, &g
 	}
-	return sdk.RunCommandRequest{Command: s.Command, Argv: s.Argv, Cwd: s.CWD, UID: uid, GID: gid, Background: s.Background, Timeout: s.Timeout.Milliseconds()}, nil
+	return sdk.RunCommandRequest{Command: s.Command, Argv: s.Argv, Cwd: s.CWD, UID: uid, GID: gid, Background: false, Timeout: s.Timeout.Milliseconds()}, nil
 }
 
 func (p *Provider) InspectExecution(ctx context.Context, h sandboxcore.ExecutionHandle) (sandboxcore.ExecResult, error) {

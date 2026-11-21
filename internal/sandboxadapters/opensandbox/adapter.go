@@ -30,15 +30,23 @@ const (
 	execdPort       = 44772
 )
 
-type Factory struct{ endpoints *endpointCache }
+type Factory struct {
+	endpoints *endpointCache
+	streams   *commandStreams
+}
 
 // NewFactory shares validated download addresses across short-lived providers.
-func NewFactory() Factory { return Factory{endpoints: newEndpointCache()} }
+func NewFactory(logDir string) Factory {
+	return Factory{endpoints: newEndpointCache(), streams: newCommandStreams(logDir)}
+}
+
+func (f Factory) Close() { f.streams.close() }
 
 var _ sandboxcore.Factory = Factory{}
 var _ sandboxcore.Provider = (*Provider)(nil)
 
 type Provider struct {
+	streams       *commandStreams
 	connection    sandboxcore.Connection
 	base          *url.URL
 	lifecycle     *sdk.LifecycleClient
@@ -74,7 +82,7 @@ func (f Factory) Open(ctx context.Context, c sandboxcore.Connection) (sandboxcor
 	client := &http.Client{Transport: boundedTransport{base: transport}, Timeout: c.OperationTimeout,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	c.ControlKey = append([]byte(nil), c.ControlKey...)
-	return &Provider{connection: c, base: base, http: client, endpoints: f.endpoints, connectionKey: endpointConnectionKey(c), lifecycle: sdk.NewLifecycleClientWithCache(strings.TrimRight(base.String(), "/")+"/v1", c.APIKey, nil, sdk.WithHTTPClient(client))}, nil
+	return &Provider{streams: f.streams, connection: c, base: base, http: client, endpoints: f.endpoints, connectionKey: endpointConnectionKey(c), lifecycle: sdk.NewLifecycleClientWithCache(strings.TrimRight(base.String(), "/")+"/v1", c.APIKey, nil, sdk.WithHTTPClient(client))}, nil
 }
 
 func connectionURL(raw string) (*url.URL, error) {
@@ -236,11 +244,14 @@ func (p *Provider) Health(ctx context.Context, ref *sandboxcore.ResourceRef) err
 }
 
 func (p *Provider) execd(ctx context.Context, ref sandboxcore.ResourceRef) (*sdk.ExecdClient, error) {
+	return p.execdWithClient(ctx, ref, p.http)
+}
+func (p *Provider) execdWithClient(ctx context.Context, ref sandboxcore.ResourceRef, client *http.Client) (*sdk.ExecdClient, error) {
 	endpoint, err := p.dataEndpoint(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
-	return sdk.NewExecdClient(endpoint.Endpoint, "", sdk.WithHTTPClient(p.http), sdk.WithHeaders(endpoint.Headers)), nil
+	return sdk.NewExecdClient(endpoint.Endpoint, "", sdk.WithHTTPClient(client), sdk.WithHeaders(endpoint.Headers)), nil
 }
 
 func (p *Provider) dataEndpoint(ctx context.Context, ref sandboxcore.ResourceRef) (*sdk.Endpoint, error) {

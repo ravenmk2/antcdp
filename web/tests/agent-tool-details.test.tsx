@@ -192,7 +192,7 @@ it("uses the applied overwrite diff from the result event", async () => {
 });
 
 it("updates a reconciled tool in place without reopening it or showing the stale unknown warning", async () => {
-  const node = tool("exec_command", { command: "sleep 90" }, "interrupted");
+  const node = tool("exec", { command: "sleep 90" }, "interrupted");
   node.result!.data.status = "outcome_unknown";
   node.result!.data.outcome.certainty = "unknown";
   const { rerender } = render(<ToolEvent {...node} sessionId="1" />);

@@ -41,8 +41,9 @@ func EncodeSandboxExecutionMetadata(meta SandboxExecutionMetadata) (json.RawMess
 	for low < high {
 		mid := low + (high-low+1)/2
 		candidate := meta
-		candidate.Stdout = utf8Prefix(stdout, min(mid, len(stdout)))
-		candidate.Stderr = utf8Prefix(stderr, max(0, mid-len(stdout)))
+		stderrBudget := min(len(stderr), max(mid/2, mid-len(stdout)))
+		candidate.Stdout = agentcore.HeadTail(stdout, mid-stderrBudget, "\n…\n")
+		candidate.Stderr = agentcore.HeadTail(stderr, stderrBudget, "\n…\n")
 		encoded, e := encode(candidate)
 		if e != nil {
 			return nil, e
@@ -231,7 +232,7 @@ func validateToolMetadata(tx identity.Tx, x executionRows, call *ToolCallRow, ra
 		return nil
 	}
 	switch call.ToolKey {
-	case "exec_command", "process_status", "process_output", "process_cancel":
+	case "exec", "task_output", "task_kill":
 	default:
 		return integrity()
 	}
@@ -240,7 +241,7 @@ func validateToolMetadata(tx identity.Tx, x executionRows, call *ToolCallRow, ra
 		return err
 	}
 	var meta SandboxExecutionMetadata
-	if err = decodeMetadata(fields["sandbox_execution"], &meta, "exit_code", "execution_id", "cloud_computer_id", "command", "cwd", "background", "state", "exit_code", "stdout", "stderr", "truncated"); err != nil {
+	if err = decodeMetadata(fields["sandbox_execution"], &meta, "exit_code", "task_id", "description", "output_incomplete", "output_pending", "cloud_computer_id", "command", "cwd", "background", "state", "exit_code", "stdout", "stderr", "truncated"); err != nil {
 		return err
 	}
 	if err = validExecutionMetadata(meta); err != nil {
@@ -299,11 +300,11 @@ func verifyExecutionMetadata(repo CloudRepository, root *RunRow, call *ToolCallR
 	if binding == nil || binding.RootRunID != root.ID || binding.ComputerID == 0 || binding.ComputerID != meta.ComputerID || execution == nil || execution.RootRunID != root.ID || execution.RootRunID != binding.RootRunID || execution.CWD != meta.CWD || execution.IsBackground != meta.Background || call.RootRunID != root.ID {
 		return integrity()
 	}
-	if call.ToolKey == "exec_command" && (execution.ToolCallID != call.ID || execution.RunID != call.RunID) {
+	if call.ToolKey == "exec" && (execution.ToolCallID != call.ID || execution.RunID != call.RunID) {
 		return integrity()
 	}
 	var recorded SandboxExecutionMetadata
-	if json.Unmarshal(execution.LastObservation, &recorded) != nil || recorded.ExecutionID != execution.ID || recorded.Command != meta.Command {
+	if json.Unmarshal(execution.LastObservation, &recorded) != nil || recorded.ExecutionID != execution.ID || recorded.Command != meta.Command || recorded.Description != meta.Description {
 		return integrity()
 	}
 	// State/output are a point-in-time observation. Background progress may

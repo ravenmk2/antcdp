@@ -62,7 +62,7 @@ func testReadEndpointCache(t *testing.T, mode string) {
 		}
 	}))
 	defer server.Close()
-	factory := NewFactory()
+	factory := testFactory(t)
 	connection := sandboxcore.Connection{Endpoint: server.URL, AccessMode: "server_proxy", APIKey: "test-key", ControlKey: []byte(strings.Repeat("k", 32))}
 	ref := testRef()
 	read := func(wantRequests int32, wantError bool) {

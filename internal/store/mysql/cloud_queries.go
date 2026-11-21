@@ -99,6 +99,18 @@ func (t *agentsTx) PendingLeases(limit int) ([]a.CloudLeaseRow, error) {
 	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+leaseColumns+" FROM agent_cloud_computer_lease WHERE released_at IS NULL ORDER BY updated_at,root_run_id LIMIT ?", limit)
 	return rows, e
 }
+func (t *agentsTx) CommandDeclared(call uint64) (bool, error) {
+	var found bool
+	err := t.tx.GetContext(t.ctx, &found, "SELECT EXISTS(SELECT 1 FROM agent_sandbox_execution WHERE tool_call_id=?)", call)
+	return found, err
+}
+func (t *agentsTx) ListedCommandRows(root uint64) ([]a.CloudExecutionRow, error) {
+	const base = "SELECT e.id,e.status,e.is_background,e.exit_code,e.last_observation,e.finished_at FROM agent_sandbox_execution a JOIN sandbox_execution e ON e.id=a.sandbox_execution_id WHERE a.root_run_id=? AND e.is_background=1"
+	rows := []a.CloudExecutionRow{}
+	query := "(" + base + " AND e.finished_at IS NULL) UNION ALL (" + base + " AND e.finished_at IS NOT NULL ORDER BY e.finished_at DESC,e.id DESC LIMIT 10) ORDER BY finished_at IS NOT NULL,id DESC"
+	err := t.tx.SelectContext(t.ctx, &rows, query, root, root)
+	return rows, err
+}
 func (t *agentsTx) LeaseExecutions(root uint64) ([]a.CloudExecutionRow, error) {
 	ids := []uint64{}
 	if err := t.tx.SelectContext(t.ctx, &ids, "SELECT sandbox_execution_id FROM agent_sandbox_execution WHERE root_run_id=? ORDER BY sandbox_execution_id", root); err != nil {

@@ -30,6 +30,7 @@ type CloudService struct {
 	ControlKey          func() ([]byte, error)
 	InstallationID      func() (string, error)
 	Epoch               string
+	ReadSavedOutput     func(context.Context, sandboxcore.ExecutionHandle, int64, int) (sandboxcore.ExecutionOutput, error)
 	Factory             sandboxcore.Factory
 	ProtectedTargets    func() ([]string, error)
 	EndpointTargets     func(string) ([]string, error)

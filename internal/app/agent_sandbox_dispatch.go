@@ -65,9 +65,15 @@ func (d *agentToolDispatcher) dispatchSandbox(ctx context.Context, execution age
 			return sandboxToolFailure(httpx.Invalid("arguments", "invalid_format")), nil
 		}
 		output, err = s.SaveArtifacts(ctx, execution.Ref, callID, input)
+	case "task_list":
+		var tasks []agents.CommandTask
+		tasks, err = s.TaskList(ctx, execution.Ref, callID)
+		if err == nil {
+			output, err = toolJSON(tasks)
+		}
 	default:
 		var result agents.CommandResult
-		if key == "exec_command" {
+		if key == "exec" {
 			var input agents.CommandRequest
 			if json.Unmarshal(args, &input) != nil {
 				return sandboxToolFailure(httpx.Invalid("arguments", "invalid_format")), nil
@@ -75,20 +81,18 @@ func (d *agentToolDispatcher) dispatchSandbox(ctx context.Context, execution age
 			result, err = s.ExecuteCommand(ctx, execution.Ref, callID, input)
 		} else {
 			var input struct {
-				ID       uint64 `json:"execution_id,string"`
-				Cursor   string `json:"cursor"`
-				MaxBytes int    `json:"max_output_bytes"`
+				ID          uint64 `json:"task_id,string"`
+				Cursor      string `json:"cursor"`
+				WaitSeconds int    `json:"wait_seconds"`
 			}
 			if json.Unmarshal(args, &input) != nil || input.ID == 0 {
 				return sandboxToolFailure(httpx.Invalid("arguments", "invalid_format")), nil
 			}
 			switch key {
-			case "process_status":
-				result, err = s.ProcessStatus(ctx, execution.Ref, callID, input.ID)
-			case "process_output":
-				result, err = s.ProcessOutput(ctx, execution.Ref, callID, input.ID, input.Cursor, input.MaxBytes)
-			case "process_cancel":
-				result, err = s.ProcessCancel(ctx, execution.Ref, callID, input.ID)
+			case "task_output":
+				result, err = s.TaskOutput(ctx, execution.Ref, callID, input.ID, input.Cursor, input.WaitSeconds)
+			case "task_kill":
+				result, err = s.TaskKill(ctx, execution.Ref, callID, input.ID)
 			default:
 				return sandboxToolFailure(httpx.Invalid("tool_key", "unsupported")), nil
 			}
@@ -108,6 +112,20 @@ func (d *agentToolDispatcher) dispatchSandbox(ctx context.Context, execution age
 			output.Diagnostic = diagnostic.From(diagnostic.With(err, diagnostic.Detail{Source: "sandbox", Stage: key}))
 			return output, nil
 		}
+		if key == "task_list" || key == "task_output" {
+			reason := "SANDBOX_OBSERVATION_FAILED"
+			var remote *sandboxcore.Error
+			var input *httpx.Error
+			if errors.As(err, &remote) {
+				reason = remote.Code
+			} else if errors.As(err, &input) {
+				reason = input.Code
+			}
+			no := false
+			failed := toolFailure(reason, &no)
+			failed.Diagnostic = diagnostic.From(diagnostic.With(err, diagnostic.Detail{Source: "sandbox", Stage: key}))
+			return failed, nil
+		}
 		return sandboxToolFailure(err), nil
 	}
 	return output, nil
@@ -125,13 +143,14 @@ func sandboxCommandObservation(result agents.CommandResult) (agentcore.DispatchO
 		status = "failed"
 	}
 	// Keep the captured output before the smaller UI metadata projection trims it.
-	full, err := json.Marshal(map[string]any{"sandbox_execution": result.Execution})
+	value := map[string]any{"sandbox_execution": result.Execution}
+	if result.Cursor != "" {
+		value["next_cursor"] = result.Cursor
+	}
+	full, err := json.Marshal(value)
 	if err != nil {
 		return agentcore.DispatchObservation{}, err
 	}
 	content := string(full)
-	if result.Cursor != "" {
-		content += "\noutput_cursor: " + result.Cursor
-	}
 	return agentcore.DispatchObservation{Status: status, Executed: result.Executed, Content: content, Reason: result.Reason, Metadata: metadata, Truncated: result.Execution.Truncated}, nil
 }

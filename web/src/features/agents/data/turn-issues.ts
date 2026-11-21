@@ -106,7 +106,7 @@ export function turnIssues(records: DurableRecord[], nodes: PresentedNode[]) {
     const run = node.runId;
     for (const tool of node.tools) {
       const data = tool.result?.data;
-      const execution = data?.sandbox_execution;
+      const execution = tool.taskStatus ?? data?.sandbox_execution;
       const reconciled = tool.reconciliation?.data;
       const status = reconciled?.observed_status ?? data?.status ?? tool.status;
       const unknown =

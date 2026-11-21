@@ -2,50 +2,72 @@ package opensandbox
 
 import (
 	"context"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strconv"
+	"os"
 	"strings"
 	"testing"
 
-	sdk "github.com/alibaba/OpenSandbox/sdks/sandbox/go"
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
-func TestBackgroundOutputPagesDoNotSkipUnreadBytes(t *testing.T) {
-	text := "中文abcdef"
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.Contains(r.URL.Path, "/endpoints/"):
-			jsonReply(t, w, sdk.Endpoint{Endpoint: server.URL + "/data"})
-		case strings.HasPrefix(r.URL.Path, "/v1/"):
-			jsonReply(t, w, testInfo())
-		case strings.HasSuffix(r.URL.Path, "/logs"):
-			cursor, _ := strconv.Atoi(r.URL.Query().Get("cursor"))
-			if cursor > len(text) {
-				cursor = len(text)
-			}
-			w.Header().Set("EXECD-COMMANDS-TAIL-CURSOR", strconv.Itoa(len(text)))
-			_, _ = io.WriteString(w, text[cursor:])
-		default:
-			w.WriteHeader(404)
+func TestCommandJournalPagesAndRestart(t *testing.T) {
+	dir := t.TempDir()
+	streams := newCommandStreams(dir)
+	p := Provider{streams: streams}
+	h := sandboxcore.ExecutionHandle{Resource: testRef(), ID: "exec-1"}
+	path := streams.path(h)
+	w, err := openJournal(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	streams.setActive(path, true)
+	for _, chunk := range []sandboxcore.Output{{Stream: "stdout", Text: "中文"}, {Stream: "stderr", Text: "failed"}} {
+		if err = w.appendOutput(chunk); err != nil {
+			t.Fatal(err)
 		}
-	}))
-	defer server.Close()
-	p := providerFor(t, server, "direct")
-	handle := sandboxcore.ExecutionHandle{Resource: testRef(), ID: "exec-1"}
-	one, err := p.ReadExecutionOutput(context.Background(), handle, 0, 4)
-	if err != nil || one.Text != "中" || one.Cursor != 3 || !one.Truncated {
-		t.Fatalf("first %+v %v", one, err)
 	}
-	two, err := p.ReadExecutionOutput(context.Background(), handle, one.Cursor, 100)
-	if err != nil || two.Text != "文abcdef" || two.Cursor != int64(len(text)) || two.Truncated {
-		t.Fatalf("second %+v %v", two, err)
+	read := func(cursor int64, limit int) sandboxcore.ExecutionOutput {
+		t.Helper()
+		o, e := p.ReadExecutionOutput(context.Background(), h, cursor, limit)
+		if e != nil {
+			t.Fatal(e)
+		}
+		return o
 	}
-	end, err := p.ReadExecutionOutput(context.Background(), handle, 10000, 100)
-	if err != nil || end.Cursor != int64(len(text)) || end.Text != "" {
-		t.Fatalf("end %+v %v", end, err)
+	one := read(0, 4)
+	if one.Stdout != "中" || one.Cursor != 3 || !one.Pending || !one.Truncated || read(0, 4) != one {
+		t.Fatal(one)
+	}
+	p.streams = newCommandStreams(dir)
+	partial := read(3, 100)
+	if partial.Pending || !partial.Incomplete || partial.Stdout != "文" || partial.Stderr != "failed" {
+		t.Fatal(partial)
+	}
+	w.finish(false)
+	if final := read(3, 100); final.Incomplete || final.Pending || final.Cursor != 12 {
+		t.Fatal(final)
+	}
+}
+
+func TestJournalKeepsDiagnosticsAfterRetentionLimit(t *testing.T) {
+	path := t.TempDir() + "/test.log"
+	w, e := openJournal(path)
+	if e != nil {
+		t.Fatal(e)
+	}
+	w.remaining = 64
+	if e = w.appendOutput(sandboxcore.Output{Stream: "stdout", Text: strings.Repeat("x", 4096)}); e != nil {
+		t.Fatal(e)
+	}
+	if e = w.appendOutput(sandboxcore.Output{Stream: "stderr", Text: "final error"}); e != nil {
+		t.Fatal(e)
+	}
+	w.finish(false)
+	data, e := os.ReadFile(path)
+	if e != nil {
+		t.Fatal(e)
+	}
+	o, e := readJournal(data, sandboxcore.PreviewCursor, 64, false)
+	if e != nil || !o.Truncated || !o.Incomplete || o.Stderr != "final error" || len(o.Stdout)+len(o.Stderr) > 64 {
+		t.Fatal(o, e)
 	}
 }

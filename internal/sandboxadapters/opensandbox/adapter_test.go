@@ -45,9 +45,16 @@ func jsonReply(t *testing.T, w http.ResponseWriter, v any) {
 		t.Error(err)
 	}
 }
+func testFactory(t *testing.T) Factory {
+	t.Helper()
+	f := NewFactory(t.TempDir())
+	t.Cleanup(f.Close)
+	return f
+}
+
 func providerFor(t *testing.T, server *httptest.Server, mode string) sandboxcore.Provider {
 	t.Helper()
-	p, err := (Factory{}).Open(context.Background(), sandboxcore.Connection{Endpoint: server.URL, AccessMode: mode, APIKey: "private-test-key", ControlKey: []byte(strings.Repeat("k", 32))})
+	p, err := testFactory(t).Open(context.Background(), sandboxcore.Connection{Endpoint: server.URL, AccessMode: mode, APIKey: "private-test-key", ControlKey: []byte(strings.Repeat("k", 32))})
 	if err != nil {
 		t.Fatal(err)
 	}

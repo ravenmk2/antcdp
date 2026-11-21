@@ -63,11 +63,14 @@ func (p *commandMemoryProvider) CancelExecution(context.Context, sb.ExecutionHan
 	return nil // acceptance deliberately does not change the observed process state
 }
 func (p *commandMemoryProvider) ReadExecutionOutput(_ context.Context, _ sb.ExecutionHandle, cursor int64, maxBytes int) (sb.ExecutionOutput, error) {
+	if cursor == sb.PreviewCursor {
+		return sb.ExecutionOutput{}, nil
+	}
 	p.outputReads++
 	const output = "first\nsecond\n"
 	start := min(cursor, int64(len(output)))
 	end := min(start+int64(maxBytes), int64(len(output)))
-	return sb.ExecutionOutput{Text: output[start:end], Cursor: end, Truncated: end < int64(len(output))}, nil
+	return sb.ExecutionOutput{Stdout: output[start:end], Cursor: end, Truncated: end < int64(len(output))}, nil
 }
 
 type commandMemoryFactory struct{ provider *commandMemoryProvider }
@@ -107,9 +110,9 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(e)
 	}
 	x.Binding = binding
-	request := a.CommandRequest{Command: "printf background", Background: true, TimeoutSeconds: 60, MaxOutputBytes: 4096}
+	request := a.CommandRequest{Description: "Print background message", Command: "printf background", Background: true, TimeoutSeconds: 60}
 	args, _ := json.Marshal(request)
-	call := commandDeclare(t, f, x, 1, "exec_command", string(args))
+	call := commandDeclare(t, f, x, 1, "exec", string(args))
 	remote.afterStarted = func(h sb.ExecutionHandle) {
 		var persisted string
 		if e := f.Store.db.GetContext(ctx, &persisted, "SELECT e.remote_execution_id FROM sandbox_execution e JOIN agent_sandbox_execution a ON a.sandbox_execution_id=e.id WHERE a.tool_call_id=?", uint64(call.ID)); e != nil || persisted != h.ID {
@@ -124,34 +127,48 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	executionID := launched.Execution.ExecutionID
 	commandAssertHeld(t, f, executionID, true)
 	commandComplete(t, f, x, call, launched)
+	readTask := func() a.CommandTask {
+		t.Helper()
+		res, err := svc.SessionTaskStatus(ctx, f.AdminToken, uint64(x.Ref.SessionID), uint64(call.ID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.Data.(a.CommandTask)
+	}
+	if task := readTask(); task.ID != executionID || task.State != "running" || task.ExitCode != nil {
+		t.Fatalf("live task: %+v", task)
+	}
 	commandAssertHeld(t, f, executionID, true) // tool success is not process exit
 	if _, e = svc.ExecuteCommand(ctx, x.Ref, uint64(call.ID), request); e == nil || remote.launches != 1 {
 		t.Fatal("duplicate launch replayed", e)
 	}
-	statusCall := commandDeclare(t, f, x, 2, "process_status", fmt.Sprintf(`{"execution_id":"%d"}`, executionID))
-	status, e := svc.ProcessStatus(ctx, x.Ref, uint64(statusCall.ID), executionID)
-	if e != nil || status.Execution.State != "running" {
-		t.Fatal("process status", e)
+	listCall := commandDeclare(t, f, x, 2, "task_list", "{}")
+	tasks, e := svc.TaskList(ctx, x.Ref, uint64(listCall.ID))
+	if e != nil || len(tasks) != 1 || tasks[0].ID != executionID {
+		t.Fatal("task listing", tasks, e)
 	}
-	commandComplete(t, f, x, statusCall, status)
-	outputCall := commandDeclare(t, f, x, 3, "process_output", fmt.Sprintf(`{"execution_id":"%d","cursor":"0","max_output_bytes":4096}`, executionID))
+	yes := true
+	if _, e = host.CompleteTool(ctx, x.Ref, core.ToolResult{Call: listCall, Observation: core.DispatchObservation{Status: "succeeded", Executed: &yes, Content: "task list"}}); e != nil {
+		t.Fatal(e)
+	}
+	outputCall := commandDeclare(t, f, x, 3, "task_output", fmt.Sprintf(`{"task_id":"%d","cursor":"0"}`, executionID))
 	for _, changed := range []struct {
 		cursor string
 		limit  int
-	}{{"1", 4096}, {"0", 8192}} {
-		_, e = svc.ProcessOutput(ctx, x.Ref, uint64(outputCall.ID), executionID, changed.cursor, changed.limit)
+	}{{"1", 0}, {"0", 1}} {
+		_, e = svc.TaskOutput(ctx, x.Ref, uint64(outputCall.ID), executionID, changed.cursor, changed.limit)
 		modelsExpectCode(t, e, "DATA_INTEGRITY_ERROR")
 	}
 	if remote.outputReads != 0 {
 		t.Fatal("changed frozen output parameters reached provider")
 	}
-	output, e := svc.ProcessOutput(ctx, x.Ref, uint64(outputCall.ID), executionID, "0", 4096)
+	output, e := svc.TaskOutput(ctx, x.Ref, uint64(outputCall.ID), executionID, "0", 0)
 	if e != nil || output.Cursor != "13" || output.Execution.Stdout != "first\nsecond\n" || remote.outputReads != 1 {
 		t.Fatal("background output cursor", output.Cursor, e)
 	}
 	commandComplete(t, f, x, outputCall, output)
-	cancelCall := commandDeclare(t, f, x, 4, "process_cancel", fmt.Sprintf(`{"execution_id":"%d"}`, executionID))
-	cancelled, e := svc.ProcessCancel(ctx, x.Ref, uint64(cancelCall.ID), executionID)
+	cancelCall := commandDeclare(t, f, x, 4, "task_kill", fmt.Sprintf(`{"task_id":"%d"}`, executionID))
+	cancelled, e := svc.TaskKill(ctx, x.Ref, uint64(cancelCall.ID), executionID)
 	if e != nil || cancelled.Execution.State != "cancel_requested" || remote.cancels != 1 {
 		t.Fatal("cancel acceptance", e)
 	}
@@ -176,7 +193,7 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	commandAssertHeld(t, f, executionID, false)
 	// Stop can win the race with a foreground command's result. Its immutable
 	// unknown result must be reconciled before releasing the root lease.
-	stoppedCall := commandDeclare(t, f, x, 5, "exec_command", string(args))
+	stoppedCall := commandDeclare(t, f, x, 5, "exec", string(args))
 	stopped, e := svc.ExecuteCommand(ctx, x.Ref, uint64(stoppedCall.ID), request)
 	if e != nil {
 		t.Fatal(e)
@@ -205,6 +222,9 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if e = f.Store.db.GetContext(ctx, &settled, "SELECT COUNT(*) FROM agent_run WHERE id=? AND settled_at IS NOT NULL", uint64(x.Ref.RunID)); e != nil || settled != 1 {
 		t.Fatal("verified command exit did not release stopped turn", e)
 	}
+	if task := readTask(); task.State != "completed" || task.ExitCode == nil || *task.ExitCode != 143 {
+		t.Fatalf("replayed task: %+v", task)
+	}
 	// Unknown-without-ID survives root termination and process restart without
 	// repeating the POST. Only physical instance termination frees occupancy.
 	y := runtimeClaim(t, f, runtimeSession(t, f, agent.ID).Configuration.ID, "uncertain command")
@@ -216,15 +236,17 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(e)
 	}
 	y.Binding = yBinding
+	_, e = svc.SessionTaskStatus(ctx, f.AdminToken, uint64(y.Ref.SessionID), uint64(call.ID))
+	modelsExpectCode(t, e, "NOT_FOUND")
 	// Another root cannot observe that execution by guessing its local ID.
-	foreignCall := commandDeclare(t, f, y, 1, "process_status", fmt.Sprintf(`{"execution_id":"%d"}`, executionID))
-	_, e = svc.ProcessStatus(ctx, y.Ref, uint64(foreignCall.ID), executionID)
+	foreignCall := commandDeclare(t, f, y, 1, "task_output", fmt.Sprintf(`{"task_id":"%d"}`, executionID))
+	_, e = svc.TaskOutput(ctx, y.Ref, uint64(foreignCall.ID), executionID, "", 0)
 	modelsExpectCode(t, e, "NOT_FOUND")
 	no := false
 	if _, e = host.CompleteTool(ctx, y.Ref, core.ToolResult{Call: foreignCall, Observation: core.DispatchObservation{Status: "failed", Executed: &no, Content: "not found"}}); e != nil {
 		t.Fatal(e)
 	}
-	unknownCall := commandDeclare(t, f, y, 2, "exec_command", string(args))
+	unknownCall := commandDeclare(t, f, y, 2, "exec", string(args))
 	remote.unknownNext = true
 	unknown, e := svc.ExecuteCommand(ctx, y.Ref, uint64(unknownCall.ID), request)
 	if e == nil || unknown.Execution.State != "outcome_unknown" || unknown.Executed != nil {
@@ -277,7 +299,7 @@ func commandSetPolicies(t *testing.T, f *agentIntegrationFixture, agentID uint64
 		t.Fatal(e)
 	}
 	items := []a.ToolBindingWrite{}
-	for _, key := range []string{"exec_command", "process_status", "process_output", "process_cancel"} {
+	for _, key := range []string{"exec", "task_list", "task_output", "task_kill"} {
 		items = append(items, a.ToolBindingWrite{ToolKey: key, Policy: policy, Constraints: json.RawMessage(`{}`)})
 	}
 	if _, e = f.Agents.PutToolBindings(f.Context, f.AdminToken, agentID, current.Tag, a.ToolBindingsWrite{Items: items}); e != nil {

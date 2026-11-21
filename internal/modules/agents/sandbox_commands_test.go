@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
@@ -39,11 +40,11 @@ func TestManagedCommandOutcomeRequiresPhysicalEvidence(t *testing.T) {
 }
 
 func TestManagedCommandArgumentsAreBounded(t *testing.T) {
-	got, err := normalizeCommandRequest(CommandRequest{Command: "printf ok"})
-	if err != nil || got.TimeoutSeconds != 60 || got.MaxOutputBytes != 32<<10 {
+	got, err := normalizeCommandRequest(CommandRequest{Description: "Print message", Command: "printf ok"})
+	if err != nil || got.TimeoutSeconds != 60 {
 		t.Fatalf("defaults %+v %v", got, err)
 	}
-	for _, w := range []CommandRequest{{Command: " "}, {Command: "a\x00b"}, {Command: strings.Repeat("x", (32<<10)+1)}, {Command: "echo", TimeoutSeconds: 601}, {Command: "echo", MaxOutputBytes: 1}} {
+	for _, w := range []CommandRequest{{Command: " "}, {Command: "a\x00b"}, {Command: strings.Repeat("x", (32<<10)+1)}, {Command: "echo", TimeoutSeconds: 601}, {Command: "echo", Description: "a\nb"}} {
 		if _, err := normalizeCommandRequest(w); err == nil {
 			t.Fatalf("unbounded command accepted %+v", w)
 		}
@@ -51,12 +52,12 @@ func TestManagedCommandArgumentsAreBounded(t *testing.T) {
 }
 
 func TestProcessArgumentsCannotChangeAfterAuthorization(t *testing.T) {
-	raw := `{"execution_id":"42","cursor":"8","max_output_bytes":4096}`
-	valid := processArguments{ExecutionID: 42, Cursor: "8", MaxOutputBytes: 4096}
+	raw := `{"task_id":"42","cursor":"8","wait_seconds":4096}`
+	valid := processArguments{ExecutionID: 42, Cursor: "8", WaitSeconds: 4096}
 	if !matchesProcessArguments(raw, valid) {
 		t.Fatal("frozen arguments rejected")
 	}
-	for _, changed := range []processArguments{{ExecutionID: 43, Cursor: "8", MaxOutputBytes: 4096}, {ExecutionID: 42, Cursor: "9", MaxOutputBytes: 4096}, {ExecutionID: 42, Cursor: "8", MaxOutputBytes: 8192}} {
+	for _, changed := range []processArguments{{ExecutionID: 43, Cursor: "8", WaitSeconds: 4096}, {ExecutionID: 42, Cursor: "9", WaitSeconds: 4096}, {ExecutionID: 42, Cursor: "8", WaitSeconds: 8192}} {
 		if matchesProcessArguments(raw, changed) {
 			t.Fatal("authorized process request changed")
 		}
@@ -64,5 +65,15 @@ func TestProcessArgumentsCannotChangeAfterAuthorization(t *testing.T) {
 	result := observedCommand(SandboxExecutionMetadata{State: "outcome_unknown"})
 	if result.Executed == nil || !*result.Executed || result.Execution.State != "outcome_unknown" {
 		t.Fatal("successful observation confused with process completion")
+	}
+}
+
+func TestTaskMetadataAfterStreamCompletion(t *testing.T) {
+	now := time.Now()
+	exit := 7
+	row := CloudExecutionRow{ID: 41, Status: "completed", FinishedAt: &now, ExitCode: &exit, LastObservation: []byte(`{"task_id":"41","state":"running"}`)}
+	meta, err := metadataFromCommand(&row)
+	if err != nil || meta.State != "completed" || meta.ExitCode == nil || *meta.ExitCode != exit {
+		t.Fatalf("finished task projection: %+v, %v", meta, err)
 	}
 }

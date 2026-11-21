@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ConversationTimeline } from "@/features/agents/chat/timeline";
@@ -125,7 +125,7 @@ it("keeps a rejected streamed tool mounted, updates its status and restores it f
       {
         type: "tool_call",
         draft_call_id: "draft-0",
-        name: "exec_command",
+        name: "exec",
         arguments_text: '{"command":"pwd","timeout_seconds":601}',
       },
     ],
@@ -147,14 +147,14 @@ it("keeps a rejected streamed tool mounted, updates its status and restores it f
         reason_code: "MODEL_RESPONSE_INVALID",
         diagnostic: {
           code: "MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH",
-          tool_name: "exec_command",
+          tool_name: "exec",
           field_path: "/timeout_seconds",
           constraint: "maximum",
           expected: "600",
         },
         rejected_tools: [
           {
-            name: "exec_command",
+            name: "exec",
             arguments_text: '{"command":"pwd","timeout_seconds":601}',
             truncated: false,
           },
@@ -520,4 +520,63 @@ it("allows manual turn folding while automatic folding is paused", async () => {
   expect(turn()).toHaveAttribute("aria-expanded", "true");
   update(finished, null, "page", "10", false);
   expect(turn()).toHaveAttribute("aria-expanded", "true");
+});
+
+it("refreshes a detached command in a finished turn without altering the tool result", async () => {
+  const sessionTask = "/sessions/10/tool-calls/80/task";
+  let exited = false;
+  const fetchStatus = vi.fn(async (url: string) => {
+    if (!String(url).endsWith(sessionTask)) throw Error("Unexpected request");
+    return Response.json({
+      data: {
+        task_id: "48",
+        state: exited ? "completed" : "running",
+        exit_code: exited ? 0 : null,
+      },
+    });
+  });
+  vi.stubGlobal("fetch", fetchStatus);
+  const launch = {
+    ...call,
+    data: {
+      ...call.data,
+      tool_key: "exec",
+      arguments: { description: "Check network", command: "probe" },
+    },
+  };
+  const snapshot = {
+    task_id: "48",
+    cloud_computer_id: "6",
+    command: "probe",
+    cwd: "/data/home",
+    background: true,
+    description: "Check network",
+    state: "running" as const,
+    exit_code: null,
+    stdout: "initial",
+    stderr: "",
+    truncated: false,
+    output_pending: true,
+    output_incomplete: false,
+  };
+  const launched = {
+    ...result,
+    data: { ...result.data, sandbox_execution: snapshot },
+  };
+  const { user } = setup([records[0], thought, launch, launched, reply, end]);
+  await user.click(turn());
+  if (group().getAttribute("aria-expanded") !== "true")
+    await user.click(group());
+  const card = await screen.findByRole("button", {
+    name: /执行命令.*Check network.*进程运行中/,
+  });
+  exited = true;
+  await waitFor(() => expect(card).toHaveTextContent("已结束 · 退出码 0"), {
+    timeout: 5000,
+  });
+  expect(screen.queryByRole("button", { name: "本轮异常 · 1 项" })).toBeNull();
+  await user.click(card);
+  expect(screen.getByLabelText("标准输出")).toHaveTextContent("initial");
+  expect(snapshot.state).toBe("running");
+  expect(snapshot.exit_code).toBeNull();
 });

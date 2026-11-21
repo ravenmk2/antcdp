@@ -40,10 +40,10 @@ export const builtinToolNames: Record<string, string> = {
   edit: "编辑文件",
   glob: "查找文件",
   grep: "检索文件内容",
-  exec_command: "执行命令",
-  process_status: "查看进程状态",
-  process_output: "读取进程输出",
-  process_cancel: "停止进程",
+  exec: "执行命令",
+  task_list: "列出命令任务",
+  task_output: "读取进程输出",
+  task_kill: "停止命令任务",
   save_artifacts: "保存制品",
   load_artifacts: "载入制品",
   list_artifacts: "列出制品",
@@ -55,6 +55,7 @@ export function ToolEvent({
   rejected,
   call,
   result,
+  taskStatus,
   reconciliation,
   status: liveStatus,
   question,
@@ -76,8 +77,22 @@ export function ToolEvent({
   const builtin = Boolean(
     call && !call.data.mcp_server_id && !call.data.mcp_binding_id,
   );
-  const attention = toolNeedsAttention({ id, call, result, status });
-  const execution = result?.data.sandbox_execution;
+  const attention = toolNeedsAttention({
+    id,
+    call,
+    result,
+    status,
+    taskStatus,
+  });
+  const snapshot = result?.data.sandbox_execution;
+  const execution =
+    snapshot && taskStatus
+      ? {
+          ...snapshot,
+          state: taskStatus.state,
+          exit_code: taskStatus.exit_code,
+        }
+      : snapshot;
   const failed = reconciliation
     ? reconciliation.data.observed_status === "failed"
     : status === "failed" ||
@@ -142,17 +157,20 @@ export function ToolEvent({
       : null);
   const running =
     !reconciliation &&
-    (execution?.state === "running" ||
+    (taskStatus?.state === "running" ||
       (status && ["prepared", "dispatching", "running"].includes(status)));
-  const verifiedStatus = reconciliation
-    ? reconciliation.data.executed === false
-      ? "确认未执行"
-      : ({
-          succeeded: "已核实结束",
-          failed: "已核实失败",
-          cancelled: "已确认停止",
-        }[reconciliation.data.observed_status] ?? "已核实结束")
-    : undefined;
+  const verifiedStatus =
+    taskStatus?.state === "completed"
+      ? executionStatus(taskStatus)
+      : reconciliation
+        ? reconciliation.data.executed === false
+          ? "确认未执行"
+          : ({
+              succeeded: "已核实结束",
+              failed: "已核实失败",
+              cancelled: "已确认停止",
+            }[reconciliation.data.observed_status] ?? "已核实结束")
+        : undefined;
   const label = rejected
     ? `${rejected.interrupted ? "生成已中断" : rejected.diagnostic?.code === "MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH" ? "参数校验失败" : "调用未完成"} · 未执行`
     : draft
@@ -163,7 +181,7 @@ export function ToolEvent({
         (result?.data.outcome.certainty === "unknown"
           ? "结果未知"
           : execution
-            ? `${status === "failed" ? "工具调用失败 · " : ""}${executionStatus(execution)}`
+            ? `${status === "failed" ? "工具调用失败 · " : ""}${executionStatus(execution, !taskStatus)}`
             : status
               ? {
                   succeeded: "已完成",
@@ -261,7 +279,10 @@ export function ToolEvent({
             <span title={typeof hint === "string" ? hint : undefined}>
               {typeof hint === "string" ? hint : label}
               {typeof hint === "string" &&
-              (rejected || running || (attention && !onIssue))
+              (name === "exec" ||
+                rejected ||
+                running ||
+                (attention && !onIssue))
                 ? ` · ${label}`
                 : ""}
             </span>
@@ -378,6 +399,8 @@ export function ToolEvent({
             {execution && (
               <SandboxExecutionResult
                 execution={execution}
+                currentStatus={Boolean(taskStatus)}
+                logPath={`/sessions/${sessionId}/tool-calls/${id}/output`}
                 verifiedStatus={verifiedStatus}
                 diagnosticsInHeader={Boolean(onIssue)}
               />
@@ -467,15 +490,21 @@ export function ToolEvent({
                   )}
               </>
             )}
-            {!result &&
-              name === "exec_command" &&
-              typeof args.command === "string" && (
+            {!result && name === "exec" && typeof args.command === "string" && (
+              <div>
+                <p>
+                  工作目录 ·{" "}
+                  {typeof args.workdir === "string"
+                    ? args.workdir
+                    : "会话工作目录"}
+                </p>
                 <ToolCode
                   source={args.command}
                   title="待执行命令"
                   language="bash"
                 />
-              )}
+              </div>
+            )}
           </div>
         )}
       </ChatDisclosure>

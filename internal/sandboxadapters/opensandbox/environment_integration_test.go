@@ -111,7 +111,7 @@ func TestOpenSandboxPersistentWorkspaceIntegration(t *testing.T) {
 			connection, image := integrationConnection(t, mode)
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
-			provider, err := (Factory{}).Open(ctx, connection)
+			provider, err := testFactory(t).Open(ctx, connection)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -186,7 +186,7 @@ func integrationNetworkPolicy(t *testing.T, mode, public, internal string, addre
 	connection, image := integrationConnection(t, mode)
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
-	provider, err := (Factory{}).Open(ctx, connection)
+	provider, err := testFactory(t).Open(ctx, connection)
 	if err != nil {
 		t.Fatal(err)
 	}

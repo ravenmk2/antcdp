@@ -195,7 +195,7 @@ func (p *workspaceRecoveryProvider) InspectExecution(_ context.Context, handle s
 	return sandboxcore.ExecResult{Handle: &handle, ExitCode: &code}, nil
 }
 func (p *workspaceRecoveryProvider) ReadExecutionOutput(context.Context, sandboxcore.ExecutionHandle, int64, int) (sandboxcore.ExecutionOutput, error) {
-	return sandboxcore.ExecutionOutput{Text: p.output, Cursor: int64(len(p.output))}, nil
+	return sandboxcore.ExecutionOutput{Stdout: p.output, Cursor: int64(len(p.output))}, nil
 }
 func (p *workspaceRecoveryProvider) Exec(context.Context, sandboxcore.ResourceRef, sandboxcore.ExecSpec, sandboxcore.ExecCallbacks) (sandboxcore.ExecResult, error) {
 	p.execs++

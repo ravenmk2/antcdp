@@ -109,6 +109,40 @@ func registerSandboxFiles(u *gin.RouterGroup, o Options) {
 
 func registerSessionWorkspaceFiles(u *gin.RouterGroup, o Options) {
 	s := o.Sandboxes
+	u.GET("/sessions/:id/tool-calls/:call_id/task", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+		id, ok := agentID(c, "id")
+		if !ok {
+			return nil, nil
+		}
+		callID, ok := agentID(c, "call_id")
+		if !ok || !modelNoQuery(c) {
+			return nil, nil
+		}
+		return s.SessionTaskStatus(c.Request.Context(), rawSession(c), id, callID)
+	}))
+	u.GET("/sessions/:id/tool-calls/:call_id/output", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
+		id, ok := agentID(c, "id")
+		if !ok {
+			return nil, nil
+		}
+		callID, ok := agentID(c, "call_id")
+		if !ok {
+			return nil, nil
+		}
+		q, ok := modelQuery(c, "cursor")
+		if !ok {
+			return nil, nil
+		}
+		cursor := int64(0)
+		if value := q.Get("cursor"); value != "" {
+			var err error
+			cursor, err = strconv.ParseInt(value, 10, 64)
+			if err != nil || cursor < 0 {
+				return nil, httpx.Invalid("cursor", "invalid")
+			}
+		}
+		return s.SessionTaskOutput(c.Request.Context(), rawSession(c), id, callID, cursor)
+	}))
 	u.POST("/sessions/:id/workspace/prepare", agentJSON[struct{}](o, 1024, func(c *gin.Context, _ struct{}) (*agents.Result, error) {
 		id, ok := agentID(c, "id")
 		if !ok || !modelNoQuery(c) {

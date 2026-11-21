@@ -70,13 +70,18 @@ func integrationExec(t *testing.T, ctx context.Context, p sandboxcore.Provider, 
 	var cursor int64
 	for {
 		chunk, err := p.ReadExecutionOutput(ctx, *handle, cursor, 64<<10)
-		if err != nil || len(data)+len(chunk.Text) > 1<<20 || chunk.Cursor < cursor || chunk.Cursor == cursor && chunk.Text != "" {
+		if err != nil || len(data)+len(chunk.Stdout) > 1<<20 || chunk.Cursor < cursor || chunk.Cursor == cursor && chunk.Stdout != "" {
 			t.Fatal("invalid execution output:", err)
 		}
-		data = append(data, chunk.Text...)
+		data = append(data, chunk.Stdout...)
 		cursor = chunk.Cursor
-		if !chunk.Truncated || chunk.Text == "" {
-			return data
+		if !chunk.Truncated {
+			if !chunk.Pending {
+				return data
+			}
+			if !integrationWait(ctx) {
+				t.Fatal("output drain deadline")
+			}
 		}
 	}
 }

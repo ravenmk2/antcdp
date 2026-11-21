@@ -3,7 +3,9 @@ package opensandbox
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,7 +18,7 @@ func TestOpenSandboxNativeRuntimeIntegration(t *testing.T) {
 			connection, image := integrationConnection(t, mode)
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
-			p, err := (Factory{}).Open(ctx, connection)
+			p, err := testFactory(t).Open(ctx, connection)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -68,6 +70,7 @@ func TestOpenSandboxNativeRuntimeIntegration(t *testing.T) {
 			if string(output) != "native-ok" {
 				t.Fatalf("command output %q", output)
 			}
+			integrationCommandLog(t, ctx, p, ref, dir)
 			integrationCancellation(t, ctx, p, ref)
 			if err = fs.RemoveFile(ctx, ref, moved, false); err != nil {
 				t.Fatal("remove file", err)
@@ -92,5 +95,51 @@ func integrationNativeRead(t *testing.T, ctx context.Context, p sandboxcore.Prov
 	closeErr := r.Close()
 	if err != nil || closeErr != nil || !bytes.Equal(got, want) {
 		t.Fatal("native content mismatch", err, closeErr)
+	}
+}
+
+func integrationCommandLog(t *testing.T, ctx context.Context, p sandboxcore.Provider, ref sandboxcore.ResourceRef, cwd string) {
+	t.Helper()
+	settled := make(chan error, 1)
+	result, err := p.Exec(ctx, ref, sandboxcore.ExecSpec{Command: "head -c 72000 /dev/zero | tr '\\000' x; printf TAIL; printf 'last diagnostic' >&2; exit 7", CWD: cwd, Background: true, Timeout: 20 * time.Second, MaxOutputBytes: 4096}, sandboxcore.ExecCallbacks{Started: func(context.Context, sandboxcore.ExecutionHandle) error { return nil }, Finished: func(_ context.Context, r sandboxcore.ExecResult, err error) {
+		if err == nil && (r.ExitCode == nil || *r.ExitCode != 7) {
+			err = fmt.Errorf("missing nonzero exit: %v", r)
+		}
+		settled <- err
+	}})
+	if err != nil || result.Handle == nil {
+		t.Fatal("launch", err)
+	}
+	select {
+	case err = <-settled:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	preview, err := p.ReadExecutionOutput(ctx, *result.Handle, sandboxcore.PreviewCursor, 4096)
+	if err != nil || preview.Incomplete || preview.Pending || !preview.Truncated || preview.Stderr != "last diagnostic" || !strings.HasSuffix(preview.Stdout, "TAIL") {
+		t.Fatal("invalid preview", preview.Stderr, err)
+	}
+	var cursor int64
+	var out, stderr strings.Builder
+	for {
+		page, e := p.ReadExecutionOutput(ctx, *result.Handle, cursor, 8192)
+		if e != nil {
+			t.Fatal(e)
+		}
+		out.WriteString(page.Stdout)
+		stderr.WriteString(page.Stderr)
+		if !page.Truncated {
+			break
+		}
+		if page.Cursor <= cursor {
+			t.Fatal("cursor did not advance")
+		}
+		cursor = page.Cursor
+	}
+	if out.String() != strings.Repeat("x", 72000)+"TAIL" || stderr.String() != "last diagnostic" {
+		t.Fatalf("retained log mismatch: stdout bytes=%d, stderr=%q", out.Len(), stderr.String())
 	}
 }
