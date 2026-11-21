@@ -41,7 +41,7 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 		return accepted, httpx.Invalid("requestKey", "invalid")
 	}
 	content := []agentcore.TextBlock{{Type: "text", Text: w.Message}}
-	if err := agentcore.ValidateInput(content, nil); err != nil {
+	if err := agentcore.ValidateInput(content, nil, nil); err != nil {
 		return accepted, coreError(err)
 	}
 	title := strings.TrimSpace(w.Title)
@@ -162,7 +162,7 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 			return err
 		}
 		source := &agentcore.SourceRef{Kind: "event_consumption", ID: agentcore.ID(w.ConsumptionID)}
-		if err = s.admitInput(st, out, rec, v, agent, model, selection, w.ActorID, "trigger", source, InputCreate{Content: content, ExpectedHash: model.SelectionHash}); err != nil {
+		if err = s.admitInput(st, out, rec, v, agent, model, selection, w.ActorID, "trigger", source, nil, InputCreate{Content: content, ExpectedHash: model.SelectionHash}); err != nil {
 			return err
 		}
 		input := out.Data.(InputAccepted)

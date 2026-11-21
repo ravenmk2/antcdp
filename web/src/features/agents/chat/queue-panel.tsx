@@ -1,3 +1,4 @@
+import { WorkspaceFileLabels } from "./workspace-file-labels";
 import { useEffect, useId, useState } from "react";
 import {
   Pencil,
@@ -202,6 +203,7 @@ function QueuedInput({
         .map((block) => block.text)
         .join("\n")
         .trim(),
+      input.workspace_files?.map((file) => file.filename).join("、"),
       input.question_answer &&
         questionReplyText(
           input.question_answer,
@@ -331,11 +333,16 @@ function QueuedInput({
           </div>
           <p className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-sm leading-6">
             {input.content.map((block) => block.text).join("\n") ||
-              (input.kind === "question_reply"
-                ? "对先前问题的补充回答"
-                : "重新尝试当前会话中失败的生成")}
+              (input.workspace_files?.length
+                ? ""
+                : input.kind === "question_reply"
+                  ? "对先前问题的补充回答"
+                  : "重新尝试当前会话中失败的生成")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
+            <WorkspaceFileLabels
+              names={input.workspace_files?.map((file) => file.filename)}
+            />
             {input.file_refs.map((ref) => (
               <FileReference
                 key={`${ref.kind}:${ref.id}`}
@@ -498,7 +505,7 @@ function InputEditorForm({
   );
   const valid =
     input.kind === "message"
-      ? Boolean(text.trim() || refs.length)
+      ? Boolean(text.trim() || refs.length || input.workspace_files?.length)
       : questionData?.kind === "question" &&
         answer &&
         validAnswer(questionData.questions, answer);
@@ -523,6 +530,9 @@ function InputEditorForm({
       )}
       {input.kind === "message" ? (
         <>
+          <WorkspaceFileLabels
+            names={input.workspace_files?.map((file) => file.filename)}
+          />
           <Field label="消息正文">
             <Textarea
               rows={8}

@@ -61,7 +61,7 @@ func runtimeReconciliationContext(t *testing.T, f *agentIntegrationFixture, agen
 			var contexts int
 			countContexts := func() int {
 				t.Helper()
-				if err = f.Store.db.GetContext(f.Context, &contexts, "SELECT COUNT(*) FROM agent_event WHERE session_id=? AND event_type='context/tool_reconciliation'", session.Configuration.ID); err != nil {
+				if err = f.Store.db.GetContext(f.Context, &contexts, "SELECT COUNT(*) FROM agent_event WHERE session_id=? AND event_type='context/message' AND payload->>'$.public.source.kind'='tool-reconciliation'", session.Configuration.ID); err != nil {
 					t.Fatal(err)
 				}
 				return contexts
@@ -89,7 +89,7 @@ func runtimeReconciliationContext(t *testing.T, f *agentIntegrationFixture, agen
 			}
 			var found bool
 			for _, message := range next.Request.Messages {
-				if !strings.HasPrefix(message.Content, "[Platform context: tool_reconciliation]") {
+				if !strings.HasPrefix(message.Content, "<system-reminder>\nUpdated tool execution result:\n") {
 					continue
 				}
 				found = true
@@ -111,7 +111,7 @@ func runtimeReconciliationContext(t *testing.T, f *agentIntegrationFixture, agen
 				t.Fatal(err)
 			}
 			encoded, err := json.Marshal(prepared.Request.Messages)
-			if err != nil || strings.Count(string(encoded), "[Platform context: tool_reconciliation]") != 1 || countContexts() != 1 {
+			if err != nil || strings.Count(string(encoded), "Updated tool execution result:") != 1 || countContexts() != 1 {
 				t.Fatal("replay duplicated or lost observation", err)
 			}
 			runtimeEnd(t, f, resumed)

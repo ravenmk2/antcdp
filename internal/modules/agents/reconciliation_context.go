@@ -43,24 +43,14 @@ func appendReconciliationContext(st StateRepository, session *SessionRow, runID 
 			if call == nil || call.SessionID != session.ID || call.ResultEventSeq == nil || row.RunID == nil || call.RunID != *row.RunID {
 				return integrity()
 			}
-			content, err := json.Marshal(map[string]any{
-				"source_event_seq":    agentcore.Seq(row.Seq),
-				"tool_call_id":        evidence.ToolCallID,
-				"provider_call_id":    call.ProviderCallID,
-				"tool_key":            call.ToolKey,
-				"original_result_seq": agentcore.Seq(*call.ResultEventSeq),
-				"original_status":     "outcome_unknown",
-				"observed_status":     evidence.Status,
-				"executed":            evidence.Executed,
-				"reason":              evidence.Reason,
-				"observed_at":         evidence.ObservedAt,
-				"note":                "Later verified observation of the original tool execution, not a new execution. Only the reported status is confirmed; missing output has not been recovered. A null executed value still means it is unknown whether the action started. Do not automatically repeat an external action.",
+			fact := agentcore.ContextFact{Kind: "tool-reconciliation", Form: "notice", SourceEventSeq: agentcore.Seq(row.Seq), ToolCallID: evidence.ToolCallID, Summary: "Updated tool execution result"}
+			update, err := json.Marshal(map[string]any{
+				"provider_call_id": call.ProviderCallID, "tool": call.ToolKey, "original_status": "outcome_unknown", "observed_status": evidence.Status, "executed": evidence.Executed,
 			})
 			if err != nil {
 				return err
 			}
-			fact := agentcore.ContextFact{Kind: "context/tool_reconciliation", Content: content}
-			if _, err = appendEvent(st, session, &runID, fact.Kind, "reconciliation-context:"+strconv.FormatUint(row.Seq, 10), json.RawMessage(content), &StoredEvent{Context: &fact}, now); err != nil {
+			if err = appendContextMessage(st, session, runID, "reconciliation-context:"+strconv.FormatUint(row.Seq, 10), fact, "Updated tool execution result:\n"+string(update), now); err != nil {
 				return err
 			}
 		}

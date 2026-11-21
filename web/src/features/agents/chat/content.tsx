@@ -99,6 +99,16 @@ function ReasoningBlock({
     </ChatDisclosure>
   );
 }
+export function useFileReference(reference: FileRef, sessionId?: string) {
+  return useApiQuery<Artifact | Attachment>(
+    ["agent-session", sessionId, "reference", reference.kind, reference.id],
+    reference.kind === "artifact"
+      ? `${agentRoot}/artifacts/${reference.id}`
+      : `${agentRoot}/sessions/${sessionId}/attachments/${reference.id}`,
+    { enabled: reference.kind === "artifact" || Boolean(sessionId) },
+  );
+}
+
 export function FileReference({
   reference,
   sessionId,
@@ -107,12 +117,7 @@ export function FileReference({
   sessionId: string;
 }) {
   const [open, setOpen] = useState(false);
-  const query = useApiQuery<Artifact | Attachment>(
-    ["agent-session", sessionId, "reference", reference.kind, reference.id],
-    reference.kind === "artifact"
-      ? `${agentRoot}/artifacts/${reference.id}`
-      : `${agentRoot}/sessions/${sessionId}/attachments/${reference.id}`,
-  );
+  const query = useFileReference(reference, sessionId);
   const file = query.data?.data;
   return (
     <>

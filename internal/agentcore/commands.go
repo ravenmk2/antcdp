@@ -14,6 +14,7 @@ type AdmissionState struct {
 	Policy    Policy
 }
 type AdmissionCommand struct {
+	WorkspaceFiles    []WorkspaceFile
 	InputID           ID
 	Actor             ActorRef
 	Origin            string
@@ -29,7 +30,7 @@ type AdmissionPlan struct {
 	Events  []Event
 }
 
-func ValidateInput(content []TextBlock, files []FileRef) error {
+func ValidateInput(content []TextBlock, files []FileRef, uploads []WorkspaceFile) error {
 	if len(content) > 16 || len(files) > 10 {
 		return invalid("content")
 	}
@@ -42,7 +43,7 @@ func ValidateInput(content []TextBlock, files []FileRef) error {
 		size += len(b.Text)
 		nonblank = nonblank || strings.TrimSpace(b.Text) != ""
 	}
-	if size > 32<<10 || !nonblank && len(files) == 0 {
+	if size > 32<<10 || !nonblank && len(files) == 0 && len(uploads) == 0 {
 		return invalid("content")
 	}
 	seen := map[FileRef]bool{}
@@ -68,7 +69,7 @@ func PlanAdmission(state AdmissionState, command AdmissionCommand, now time.Time
 	if err := ValidatePolicy(state.Policy); err != nil {
 		return AdmissionPlan{}, err
 	}
-	if err := ValidateInput(command.Content, command.Files); err != nil {
+	if err := ValidateInput(command.Content, command.Files, command.WorkspaceFiles); err != nil {
 		return AdmissionPlan{}, err
 	}
 	if command.InputID == 0 || command.Origin != "human" && command.Origin != "system" && command.Origin != "trigger" {
@@ -108,7 +109,7 @@ func PlanAdmission(state AdmissionState, command AdmissionCommand, now time.Time
 	if plan.Session.NextInputOrder == 0 {
 		plan.Session.NextInputOrder = 1
 	}
-	i := Input{ID: command.InputID, SessionID: s.ID, Kind: command.Kind, Origin: command.Origin, Actor: command.Actor, Source: command.Source, Content: append([]TextBlock(nil), command.Content...), Files: append([]FileRef(nil), command.Files...), Delivery: "next_turn", State: "pending", Position: plan.Session.NextInputOrder, Revision: 1, Version: 1, QueueDeadline: now.Add(time.Duration(state.Policy.QueueTimeoutSeconds) * time.Second)}
+	i := Input{WorkspaceFiles: append([]WorkspaceFile(nil), command.WorkspaceFiles...), ID: command.InputID, SessionID: s.ID, Kind: command.Kind, Origin: command.Origin, Actor: command.Actor, Source: command.Source, Content: append([]TextBlock(nil), command.Content...), Files: append([]FileRef(nil), command.Files...), Delivery: "next_turn", State: "pending", Position: plan.Session.NextInputOrder, Revision: 1, Version: 1, QueueDeadline: now.Add(time.Duration(state.Policy.QueueTimeoutSeconds) * time.Second)}
 	plan.Session.NextInputOrder++
 	i.AcceptedSeq = plan.Session.LastSeq + 1
 	e, err := NewEvent(s.ID, i.AcceptedSeq, nil, "input/accepted", "", map[string]any{"input": i}, now)

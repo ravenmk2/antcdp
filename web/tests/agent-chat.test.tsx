@@ -400,13 +400,13 @@ function failedHistory(partial = ""): DurableRecord[] {
 
 function deliveryEvent(
   names = ["排查报告.md"],
-): Extract<DurableRecord, { event_type: "artifact/retained" }> {
+): Extract<DurableRecord, { event_type: "artifact/shown" }> {
   return {
     schema_version: 1,
     seq: "50",
     occurred_at: time,
     run_id: "20",
-    event_type: "artifact/retained",
+    event_type: "artifact/shown",
     data: {
       tool_call_id: "8",
       artifacts: names.map((filename, i): Artifact => ({
@@ -454,10 +454,10 @@ it("waits for the run boundary and places deliveries after the final reply but b
   }
   const { user } = mount(<Stream />);
   expect(
-    screen.queryByRole("region", { name: "本轮成果" }),
+    screen.queryByRole("region", { name: "本轮制品" }),
   ).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "结束验收任务" }));
-  const cards = screen.getByRole("region", { name: "本轮成果" });
+  const cards = screen.getByRole("region", { name: "本轮制品" });
   expect(
     screen.getByText("已完成配置核对。").compareDocumentPosition(cards) &
       Node.DOCUMENT_POSITION_FOLLOWING,
@@ -468,7 +468,7 @@ it("waits for the run boundary and places deliveries after the final reply but b
     ) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(
-    screen.getByRole("button", { name: "查看成果：排查报告.md" }),
+    screen.getByRole("button", { name: "查看制品：排查报告.md" }),
   ).toHaveAttribute("data-file-kind", "markdown");
 });
 
@@ -483,7 +483,7 @@ it("keeps saved deliveries accessible when a failed run has no final reply and i
   );
   await user.click(screen.getByRole("button", { name: "失败 · 执行过程" }));
   expect(
-    screen.getByRole("button", { name: "查看成果：opaque.custom" }),
+    screen.getByRole("button", { name: "查看制品：opaque.custom" }),
   ).toBeVisible();
   expect(screen.getByText("二进制文件")).toBeVisible();
   expect(
@@ -509,11 +509,11 @@ it("expands a file collection, preserves ownership and removes deleted deliverie
       attempt={null}
     />,
   );
-  expect(screen.getAllByRole("button", { name: /^查看成果：/ })).toHaveLength(
+  expect(screen.getAllByRole("button", { name: /^查看制品：/ })).toHaveLength(
     6,
   );
-  await user.click(screen.getByRole("button", { name: "展开其余 1 个成果" }));
-  expect(screen.getAllByRole("button", { name: /^查看成果：/ })).toHaveLength(
+  await user.click(screen.getByRole("button", { name: "展开其余 1 个制品" }));
+  expect(screen.getAllByRole("button", { name: /^查看制品：/ })).toHaveLength(
     7,
   );
   const deleted: DurableRecord = {
@@ -642,7 +642,7 @@ it("keeps tool failure details local without turning them into a turn warning", 
     event_type: "tool/call",
     data: {
       tool_call_id: "t1",
-      tool_key: "read_file",
+      tool_key: "read",
       mcp_server_id: null,
       mcp_binding_id: null,
       mcp_tool_name: null,
@@ -1309,7 +1309,7 @@ it("keeps archived conversations and files read only, while restore remains expl
     screen.queryByRole("button", { name: "压缩上下文" }),
   ).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "恢复会话" })).toBeEnabled();
-  await user.click(screen.getByRole("button", { name: "附件与成果" }));
+  await user.click(screen.getByRole("button", { name: "附件与制品" }));
   expect(
     screen.queryByRole("button", { name: /删除|引用到消息/ }),
   ).not.toBeInTheDocument();
@@ -1794,6 +1794,103 @@ it("renders and copies a late answer without empty text blocks or surrounding bl
   );
 });
 
+it("shows the saved filename for upload-only submissions and durable messages", () => {
+  const first = records[0];
+  if (first.event_type !== "input/message")
+    throw new Error("Unexpected fixture");
+  const upload = {
+    operation_id: "42",
+    filename: "notes (2).txt",
+    path: "/data/sessions/10/notes (2).txt",
+  };
+  const record: DurableRecord = {
+    ...first,
+    data: {
+      ...first.data,
+      content: [],
+      file_refs: [],
+      workspace_files: [upload],
+    },
+  };
+  const { container } = mount(
+    <ConversationTimeline
+      records={[record]}
+      submissions={[
+        {
+          inputId: "pending",
+          text: "",
+          fileRefs: [],
+          workspaceFiles: [upload],
+          time,
+        },
+      ]}
+      sessionId="10"
+      attempt={null}
+    />,
+  );
+  expect(container.querySelector(".agent-user-bubble")).toBeNull();
+  expect(
+    screen.getAllByRole("button", { name: "查看附件 notes (2).txt" }),
+  ).toHaveLength(2);
+  expect(
+    screen.queryByRole("button", { name: "复制消息" }),
+  ).not.toBeInTheDocument();
+});
+
+it("places a mixed attachment strip above the text and opens the full list from its overflow", async () => {
+  const first = records[0];
+  if (first.event_type !== "input/message")
+    throw new Error("Unexpected fixture");
+  mock.mockResolvedValue(
+    response({
+      filename: "photo.png",
+      file_id: "90",
+      media_type: "image/png",
+      state: "bound",
+    }),
+  );
+  const files = ["report.pdf", "table.csv", "code.ts", "extra.zip"].map(
+    (filename, index) => ({
+      filename,
+      path: "/data/sessions/10/" + filename,
+      operation_id: String(index + 1),
+    }),
+  );
+  const { user, container } = mount(
+    <ConversationTimeline
+      sessionId="10"
+      computerId="3"
+      attempt={null}
+      records={[
+        {
+          ...first,
+          data: {
+            ...first.data,
+            file_refs: [{ kind: "attachment", id: "71" }],
+            workspace_files: files,
+          },
+        },
+      ]}
+    />,
+  );
+  const strip = screen.getByRole("group", { name: "消息附件" });
+  expect(strip.nextElementSibling).toBe(
+    container.querySelector(".agent-user-bubble"),
+  );
+  expect(
+    await within(strip).findByRole("button", { name: "查看附件 photo.png" }),
+  ).toBeVisible();
+  expect(within(strip).getAllByRole("button")).toHaveLength(4);
+  const more = within(strip).getByRole("button", {
+    name: "查看全部 5 个附件，另有 2 个",
+  });
+  await user.click(more);
+  const dialog = await screen.findByRole("dialog", { name: "消息附件（5）" });
+  expect(within(dialog).getAllByRole("listitem")).toHaveLength(5);
+  expect(within(dialog).getByText("extra.zip")).toBeVisible();
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
 it("does not mark child history as read and keeps the user message on the right", () => {
   const { container } = mount(
     <ConversationTimeline records={records} sessionId="11" attempt={null} />,
@@ -1943,7 +2040,7 @@ it("preserves nested disclosure combinations across whole-turn toggles without h
     event_type: "tool/call",
     data: {
       tool_call_id: "80",
-      tool_key: "read_file",
+      tool_key: "read",
       mcp_server_id: null,
       mcp_binding_id: null,
       mcp_tool_name: null,
@@ -2242,7 +2339,7 @@ it("keeps live reasoning mounted through tools and finalization, and the final t
     event_type: "tool/call",
     data: {
       tool_call_id: "80",
-      tool_key: "read_file",
+      tool_key: "read",
       mcp_server_id: null,
       mcp_binding_id: null,
       mcp_tool_name: null,

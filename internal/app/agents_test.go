@@ -17,18 +17,20 @@ import (
 func TestAgentBuiltinSchemasSupportControlAndRejectExtraArguments(t *testing.T) {
 	valid := map[string]string{
 		"read_tool_output":  `{"file_id":"1","query":"ERROR"}`,
-		"read_file":         `{"path":"note.md"}`,
+		"read":              `{"file_path":"note.md"}`,
 		"read_image":        `{"path":"/data/storage/plot.png"}`,
-		"write_file":        `{"path":"note.md","content":"report"}`,
-		"edit_file":         `{"path":"note.md","old_text":"old","new_text":"new"}`,
+		"write":             `{"file_path":"note.md","content":"report"}`,
+		"edit":              `{"file_path":"note.md","old_string":"old","new_string":"new"}`,
 		"glob":              `{"pattern":"*.go"}`,
 		"grep":              `{"pattern":"TODO","literal":true}`,
-		"import_file":       `{"source":{"kind":"attachment","id":"1"},"destination":"input.txt"}`,
+		"load_artifacts":    `{"items":[{"artifact_id":"1"}]}`,
+		"list_artifacts":    `{}`,
+		"show_artifacts":    `{"artifact_ids":["1"]}`,
 		"exec_command":      `{"command":"pwd"}`,
 		"process_status":    `{"execution_id":"1"}`,
 		"process_output":    `{"execution_id":"1"}`,
 		"process_cancel":    `{"execution_id":"1"}`,
-		"present":           `{"files":[{"path":"report.md","description":"排查结果"}]}`,
+		"save_artifacts":    `{"files":[{"path":"report.md","description":"排查结果"}]}`,
 		"web_search":        `{"query":"public test"}`,
 		"web_fetch":         `{"url":"https://example.com/"}`,
 		"skill":             `{"name":"review-code","path":"SKILL.md"}`,
@@ -41,6 +43,12 @@ func TestAgentBuiltinSchemasSupportControlAndRejectExtraArguments(t *testing.T) 
 	}
 	seen := map[string]bool{}
 	for _, tool := range builtinAgentTools() {
+		for _, forbidden := range []string{"sandbox", "沙箱", "antcdp"} {
+			if strings.Contains(strings.ToLower(tool.Definition.Description), forbidden) {
+				t.Errorf("%s description mentions %s", tool.Key, forbidden)
+			}
+		}
+
 		if seen[tool.Key] {
 			t.Fatal("duplicate builtin identity")
 		}

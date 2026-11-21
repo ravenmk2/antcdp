@@ -99,7 +99,7 @@ export function ArtifactCards({
   if (!files.length) return null;
   const visible = expanded ? files : files.slice(0, 6);
   return (
-    <section className={styles.root} aria-label="本轮成果">
+    <section className={styles.root} aria-label="本轮制品">
       <div className={styles.grid}>
         {visible.map((file) => {
           const format = artifactFormat(file.filename, file.media_type);
@@ -109,7 +109,7 @@ export function ArtifactCards({
               key={file.id}
               type="button"
               className={styles.card}
-              aria-label={`查看成果：${file.filename}`}
+              aria-label={`查看制品：${file.filename}`}
               data-file-kind={format.kind}
               title={[file.filename, file.description]
                 .filter(Boolean)
@@ -148,7 +148,7 @@ export function ArtifactCards({
             motion.toggle(event, () => setExpanded(!expanded))
           }
         >
-          {expanded ? "收起成果" : `展开其余 ${files.length - 6} 个成果`}
+          {expanded ? "收起制品" : `展开其余 ${files.length - 6} 个制品`}
           {expanded ? (
             <ChevronUp aria-hidden="true" />
           ) : (

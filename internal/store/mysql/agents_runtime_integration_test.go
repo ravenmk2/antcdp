@@ -90,9 +90,9 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 				t.Fatal("skill exposed without source")
 			}
 		}
-		var content string
-		if err = f.Store.db.GetContext(f.Context, &content, "SELECT JSON_EXTRACT(payload,'$.public.entries') FROM agent_event WHERE session_id=? AND event_type='context/skills' ORDER BY seq DESC LIMIT 1", session.Configuration.ID); err != nil || content != "[]" {
-			t.Fatal("missing explicit empty directory", content, err)
+		var catalogs int
+		if err = f.Store.db.GetContext(f.Context, &catalogs, "SELECT COUNT(*) FROM agent_event WHERE session_id=? AND event_type='context/message' AND payload->>'$.public.source.kind'='skill-catalog'", session.Configuration.ID); err != nil || catalogs != 0 {
+			t.Fatal("empty skill catalog unexpectedly published", catalogs, err)
 		}
 		if _, err = svc.StopRun(f.Context, f.AdminToken, uint64(x.Ref.RunID), cryptox.ID(), a.StopRunWrite{}); err != nil {
 			t.Fatal(err)
@@ -146,7 +146,7 @@ func runtimeToolPolicies(t *testing.T, f *agentIntegrationFixture, id uint64, ef
 		t.Fatal(e)
 	}
 	items := []a.ToolBindingWrite{}
-	for _, key := range []string{"echo", "ask_user_question", "delegate", "effect"} {
+	for _, key := range []string{"echo", "ask_user_question", "delegate", "effect", "read_tool_output"} {
 		policy := "allow"
 		if key == "effect" {
 			policy = effectPolicy
@@ -674,7 +674,7 @@ func runtimeCompaction(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 			t.Fatal(e)
 		}
 		if kind == "success" {
-			if after <= revision || len(model.request.Tools) == 0 || model.request.Messages[0].Role != "system" {
+			if after <= revision || len(model.request.Tools) == 0 || len(model.request.Messages) == 0 || model.request.Messages[0].Role != "user" {
 				t.Fatal("summary did not retain head/tools or replace surface")
 			}
 			var persisted string
@@ -686,7 +686,7 @@ func runtimeCompaction(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 				Suffix []modelcore.Message `json:"suffix"`
 				Tools  []modelcore.Tool    `json:"model_tools"`
 			}
-			if e = json.Unmarshal([]byte(persisted), &snapshot); e != nil || len(snapshot.System) == 0 || len(snapshot.Suffix) != 1 || len(snapshot.Tools) != len(model.request.Tools) {
+			if e = json.Unmarshal([]byte(persisted), &snapshot); e != nil || len(snapshot.System) != 0 || len(snapshot.Suffix) != 1 || len(snapshot.Tools) != len(model.request.Tools) {
 				t.Fatal("persisted summary omitted deterministic prompt/tools", e)
 			}
 			x := runtimeClaim(t, f, session.Configuration.ID, "继续检查摘要后的上下文")

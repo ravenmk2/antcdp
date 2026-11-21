@@ -59,7 +59,7 @@ func TestNativeFilesProtectPathsAndRequireUniqueEdits(t *testing.T) {
 	p := &nativeTestProvider{data: []byte("one two one")}
 	a := &SandboxAccess{Provider: p}
 	for _, name := range []string{".", "agents/1/skills/a/SKILL.md", "workspace/.system/key", "../outside"} {
-		if _, err := runNativeRequest(context.Background(), a, workspace.Request{Operation: "write", Path: name, Data: "eA==", Overwrite: true}); err == nil {
+		if _, err := runNativeRequest(context.Background(), a, workspace.Request{Operation: "write", Path: name, Data: "eA=="}); err == nil {
 			t.Fatal("protected path", name)
 		}
 	}
@@ -73,25 +73,27 @@ func TestNativeFilesProtectPathsAndRequireUniqueEdits(t *testing.T) {
 	if err != nil || string(p.data) != "one 中 one" || p.writes != 1 {
 		t.Fatal("edit", err, string(p.data))
 	}
-	if _, err = runNativeRequest(context.Background(), a, workspace.Request{Operation: "write", Path: "workspace/a", Data: "eA=="}); err == nil || p.writes != 1 {
-		t.Fatal("existing file overwritten")
+	updated, err := runNativeRequest(t.Context(), a, workspace.Request{Operation: "edit", Path: "workspace/a", Pattern: "one", Data: "eA==", ReplaceAll: true})
+	var change struct{ Diff string }
+	if err != nil || json.Unmarshal(updated.Result, &change) != nil || !strings.Contains(change.Diff, "-one 中 one") || !strings.Contains(change.Diff, "+x 中 x") || string(p.data) != "x 中 x" {
+		t.Fatal("replace_all diff", string(updated.Result), err)
 	}
-	if _, err = runNativeRequest(context.Background(), a, workspace.Request{Operation: "write", Path: "workspace/a", Data: "eA==", Overwrite: true, Identity: strings.Repeat("f", 64)}); err == nil || p.writes != 1 {
-		t.Fatal("stale identity accepted")
+	if _, err = runNativeRequest(t.Context(), a, workspace.Request{Operation: "write", Path: "workspace/a", Data: "eA=="}); err != nil || string(p.data) != "x" {
+		t.Fatal("replace existing file", err)
 	}
+
 }
 
 func TestNativeReadRangeAndSearchScope(t *testing.T) {
-	p := &nativeTestProvider{data: []byte("0123456789")}
+	p := &nativeTestProvider{data: []byte("one\ntwo\nthree\nfour")}
 	a := &SandboxAccess{Provider: p}
-	r, err := runNativeRequest(context.Background(), a, workspace.Request{Operation: "read", Path: "workspace/a", Offset: 3, Limit: 4})
+	r, err := runNativeRequest(t.Context(), a, workspace.Request{Operation: "read", Path: "workspace/a", Offset: 2, Limit: 2})
 	var result struct {
-		Data string `json:"data_base64"`
-		Next int64  `json:"next_offset"`
-		More bool   `json:"has_more"`
+		Text string
+		More bool `json:"has_more"`
 	}
-	if err != nil || json.Unmarshal(r.Result, &result) != nil || result.Data != "MzQ1Ng==" || result.Next != 7 || !result.More {
-		t.Fatal("range", string(r.Result), err)
+	if err != nil || json.Unmarshal(r.Result, &result) != nil || result.Text != "2\ttwo\n3\tthree" || !result.More {
+		t.Fatal("line range", string(r.Result), err)
 	}
 	p.searches = []sandboxcore.FileInfo{{Path: "/data/workspace/a", Kind: "file", Size: 10}, {Path: "/data/workspace-other/private", Kind: "file", Size: 10}, {Path: "/data/workspace/.system/key", Kind: "file", Size: 10}, {Path: "/etc/passwd", Kind: "file", Size: 10}}
 	r, err = runNativeRequest(context.Background(), a, workspace.Request{Operation: "glob", Path: "workspace", Pattern: "**", Limit: 10})

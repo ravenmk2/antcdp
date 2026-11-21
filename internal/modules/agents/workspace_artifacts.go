@@ -23,23 +23,26 @@ import (
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
-type PresentFile struct {
+type SaveArtifactItem struct {
 	Path        string `json:"path"`
 	Description string `json:"description,omitempty"`
 }
-type PresentRequest struct {
-	Files []PresentFile `json:"files"`
+type SaveArtifactsRequest struct {
+	Files []SaveArtifactItem `json:"files"`
 }
-type ImportFileRequest struct {
-	Source      agentcore.FileRef `json:"source"`
-	Destination string            `json:"destination"`
+type LoadArtifactsRequest struct {
+	Items []LoadArtifactItem `json:"items"`
+}
+type LoadArtifactItem struct {
+	ArtifactID  agentcore.ID `json:"artifact_id"`
+	Destination string       `json:"destination,omitempty"`
 }
 type ReadImageRequest struct {
 	Path string `json:"path"`
 }
 type fileTransferIntent struct {
-	Present    *PresentRequest        `json:"present,omitempty"`
-	Import     *ImportFileRequest     `json:"import,omitempty"`
+	Save       *SaveArtifactsRequest  `json:"save_artifacts,omitempty"`
+	Load       *LoadArtifactsRequest  `json:"load_artifacts,omitempty"`
 	Image      *ReadImageRequest      `json:"image,omitempty"`
 	Operations []uint64               `json:"operations"`
 	Ref        agentcore.ExecutionRef `json:"execution"`
@@ -50,17 +53,17 @@ type fileTransferClaim struct {
 	Items      []FileOperationItemRow
 	Access     *SandboxAccess
 	Connection CloudConnection
-	Source     *FileRow
+	Sources    []*FileRow
 	Replay     *agentcore.DispatchObservation
 }
 
-func validatePresent(w PresentRequest) error {
+func validateSaveArtifacts(w SaveArtifactsRequest) error {
 	if len(w.Files) < 1 || len(w.Files) > 20 {
 		return httpx.Invalid("files", "invalid_count")
 	}
 	seen := map[string]bool{}
 	for _, v := range w.Files {
-		if _, e := workspace.Normalize(v.Path, false); e != nil || seen[v.Path] || !safeFilename(path.Base(v.Path)) {
+		if _, e := workspace.Normalize(strings.TrimPrefix(v.Path, "/data/"), false); e != nil || seen[v.Path] || !safeFilename(path.Base(v.Path)) {
 			return httpx.Invalid("files.path", "invalid_format")
 		}
 		if len(v.Description) > 8000 || !utf8.ValidString(v.Description) || utf8.RuneCountInString(v.Description) > 2000 {
@@ -71,6 +74,7 @@ func validatePresent(w PresentRequest) error {
 	return nil
 }
 func fileCWDPath(cwd, relative string) (string, error) {
+	relative = strings.TrimPrefix(relative, cwd+"/")
 	if _, e := workspace.Normalize(relative, false); e != nil {
 		return "", httpx.Invalid("path", "invalid_format")
 	}
@@ -84,60 +88,37 @@ func fileCWDPath(cwd, relative string) (string, error) {
 	}
 	return resolved, e
 }
-func fileRefSource(st StateRepository, x executionRows, source agentcore.FileRef) (*FileRow, error) {
-	if source.Kind != "attachment" && source.Kind != "artifact" || source.ID == 0 {
-		return nil, httpx.Invalid("source", "invalid_format")
-	}
-	selected, e := st.RootInputFileSelected(x.Root.ID, source.Kind, uint64(source.ID))
+func artifactSource(st StateRepository, x executionRows, id agentcore.ID) (*FileRow, string, error) {
+	v, e := st.Artifact(uint64(id), true)
 	if e != nil {
-		return nil, e
+		return nil, "", e
 	}
-	if !selected {
-		return nil, missing()
+	if v == nil || v.ContentSessionID != x.RootSession.ID || v.DeletedAt != nil {
+		return nil, "", missing()
 	}
-	var id uint64
-	if source.Kind == "attachment" {
-		v, e := st.Attachment(uint64(source.ID), false)
-		if e != nil {
-			return nil, e
-		}
-		if v == nil || v.ContentSessionID != x.RootSession.ID || v.State != "bound" {
-			return nil, missing()
-		}
-		id = v.FileID
-	} else {
-		v, e := st.Artifact(uint64(source.ID), false)
-		if e != nil {
-			return nil, e
-		}
-		if v == nil || v.ContentSessionID != x.RootSession.ID || v.DeletedAt != nil {
-			return nil, missing()
-		}
-		id = v.FileID
-	}
-	file, e := st.File(id, true)
+	file, e := st.File(v.FileID, true)
 	if e != nil {
-		return nil, e
+		return nil, "", e
 	}
 	if file == nil || file.ContentSessionID == nil || *file.ContentSessionID != x.RootSession.ID || file.ContentDomain != x.RootSession.ExecutionMode || file.State != "bound" || file.IntegrityState != "verified" || file.SizeBytes == nil || *file.SizeBytes > 100<<20 || len(file.SHA256) != 32 {
-		return nil, httpx.E(409, "FILE_UNAVAILABLE", "来源文件当前不可用")
+		return nil, "", httpx.E(409, "FILE_UNAVAILABLE", "来源文件当前不可用")
 	}
 	if file.ContentDomain == "chat" && (file.OwnerUserID == nil || x.RootSession.personalOwnerID() == nil || *file.OwnerUserID != *x.RootSession.personalOwnerID()) || file.ContentDomain == "service" && (file.AgentID == nil || *file.AgentID != x.RootSession.AgentID) {
-		return nil, missing()
+		return nil, "", missing()
 	}
-	return file, nil
+	return file, v.Filename, nil
 }
 
-func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.ExecutionRef, callID uint64, present *PresentRequest, imported *ImportFileRequest, readImage *ReadImageRequest) (fileTransferClaim, error) {
+func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.ExecutionRef, callID uint64, save *SaveArtifactsRequest, load *LoadArtifactsRequest, readImage *ReadImageRequest) (fileTransferClaim, error) {
 	var out fileTransferClaim
 	if s.Host.Files == nil {
 		return out, unavailable()
 	}
-	kind := "present"
-	var body any = present
-	if imported != nil {
-		kind = "import_file"
-		body = imported
+	kind := "save_artifacts"
+	var body any = save
+	if load != nil {
+		kind = "load_artifacts"
+		body = load
 	}
 	if readImage != nil {
 		kind = "read_image"
@@ -201,10 +182,10 @@ func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.Ex
 		var frozen any
 		if readImage != nil {
 			frozen = &ReadImageRequest{}
-		} else if present != nil {
-			frozen = &PresentRequest{}
+		} else if save != nil {
+			frozen = &SaveArtifactsRequest{}
 		} else {
-			frozen = &ImportFileRequest{}
+			frozen = &LoadArtifactsRequest{}
 		}
 		if json.Unmarshal([]byte(prepared.Call.Arguments), frozen) != nil {
 			return integrity()
@@ -239,12 +220,6 @@ func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.Ex
 		if computer == nil || computer.VolumeID == nil || computerCapabilities(computer).FileTransfer != "supported" {
 			return httpx.E(409, "SANDBOX_FILE_TRANSFER_UNVERIFIED", "沙箱文件传输能力尚未验证")
 		}
-		if imported != nil {
-			out.Source, e = fileRefSource(st, x, imported.Source)
-			if e != nil {
-				return e
-			}
-		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		deadline := now.Add(120 * time.Second)
 		if call.DeadlineAt.Before(deadline) {
@@ -257,24 +232,41 @@ func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.Ex
 		if e = st.InsertFileOperation(&out.Operation); e != nil {
 			return e
 		}
-		out.Intent = fileTransferIntent{Present: present, Import: imported, Image: readImage, Ref: ref, Operations: []uint64{}}
+		out.Intent = fileTransferIntent{Save: save, Load: load, Image: readImage, Ref: ref, Operations: []uint64{}}
 		count := 1
-		if present != nil {
-			count = len(present.Files)
+		if save != nil {
+			count = len(save.Files)
+		} else if load != nil {
+			count = len(load.Items)
 		}
+		paths := map[string]bool{}
+		var loadBytes uint64
 		for i := 0; i < count; i++ {
 			item := FileOperationItemRow{OperationID: out.Operation.ID, Ordinal: uint64(i), PublicationToken: NewStorageKey(), State: "pending"}
 			var relative string
-			if present != nil {
-				relative = present.Files[i].Path
+			if save != nil {
+				relative = save.Files[i].Path
 				item.SourceKind = "workspace"
 			} else {
-				relative = imported.Destination
-				item.SourceKind = imported.Source.Kind
-				source := uint64(imported.Source.ID)
+				entry := load.Items[i]
+				file, filename, err := artifactSource(st, x, entry.ArtifactID)
+				if err != nil {
+					return err
+				}
+				loadBytes += *file.SizeBytes
+				if loadBytes > 200<<20 {
+					return httpx.Invalid("items", "total_size_exceeded")
+				}
+				relative = entry.Destination
+				if relative == "" {
+					relative = filename
+				}
+				item.SourceKind = "artifact"
+				source := uint64(entry.ArtifactID)
 				item.SourceReferenceID = &source
-				item.SourceFileID = &out.Source.ID
-				item.ExpectedSHA256 = out.Source.SHA256
+				item.SourceFileID = &file.ID
+				item.ExpectedSHA256 = file.SHA256
+				out.Sources = append(out.Sources, file)
 			}
 			name, e := fileCWDPath(out.Access.CWD, relative)
 			if readImage != nil {
@@ -283,7 +275,11 @@ func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.Ex
 			if e != nil {
 				return e
 			}
-			if present != nil {
+			if paths[name] {
+				return httpx.Invalid("path", "duplicate")
+			}
+			paths[name] = true
+			if save != nil {
 				item.SourcePath = &name
 			} else {
 				item.DestinationPath = &name
@@ -313,8 +309,14 @@ func (s *CloudService) reserveFileTransfer(ctx context.Context, ref agentcore.Ex
 		if e = s.acquireReferences(st, repo, out.Access, "file_operation", strconv.FormatUint(out.Operation.ID, 10)); e != nil {
 			return e
 		}
-		if out.Source != nil {
-			return holdTransferFile(st, &out.Operation, out.Source.ID, now)
+		held := map[uint64]bool{}
+		for _, file := range out.Sources {
+			if !held[file.ID] {
+				if err := holdTransferFile(st, &out.Operation, file.ID, now); err != nil {
+					return err
+				}
+				held[file.ID] = true
+			}
 		}
 		return nil
 	})
@@ -324,8 +326,8 @@ func holdTransferFile(st StateRepository, op *FileOperationRow, id uint64, now t
 	return st.InsertResourceReference(&ResourceReferenceRow{HolderKind: "file_operation", HolderID: strconv.FormatUint(op.ID, 10), ResourceKind: "file", ResourceID: id, State: "active", ExecutorEpoch: op.ExecutorEpoch, FenceVersion: 1, CreatedAt: now, UpdatedAt: now, ReleaseEvidence: json.RawMessage(`null`)})
 }
 
-func (s *CloudService) Present(ctx context.Context, ref agentcore.ExecutionRef, callID uint64, w PresentRequest) (agentcore.DispatchObservation, error) {
-	if e := validatePresent(w); e != nil {
+func (s *CloudService) SaveArtifacts(ctx context.Context, ref agentcore.ExecutionRef, callID uint64, w SaveArtifactsRequest) (agentcore.DispatchObservation, error) {
+	if e := validateSaveArtifacts(w); e != nil {
 		return agentcore.DispatchObservation{}, e
 	}
 	claim, e := s.reserveFileTransfer(ctx, ref, callID, &w, nil, nil)
@@ -353,11 +355,11 @@ func (s *CloudService) Present(ctx context.Context, ref agentcore.ExecutionRef, 
 		if e == nil {
 			total += facts.Size
 			if total > 200<<20 {
-				e = httpx.E(422, "FILE_TOTAL_LIMIT_EXCEEDED", "成果总大小超过限制")
+				e = httpx.E(422, "FILE_TOTAL_LIMIT_EXCEEDED", "制品总大小超过限制")
 			}
 		}
 		if e == nil {
-			e = s.stagePresentedFile(ctx, claim, *item, key, facts)
+			e = s.stageWorkspaceSnapshot(ctx, claim, *item, key, facts)
 		}
 		if finish := s.finishWorkspaceOperation(ctx, access.WorkspaceOperationID, &access, nil, e); e == nil {
 			e = finish
@@ -375,8 +377,8 @@ func (s *CloudService) ReadImage(ctx context.Context, ref agentcore.ExecutionRef
 	if w.Path == "" || len(w.Path) > 1024 {
 		return agentcore.DispatchObservation{}, httpx.Invalid("path", "invalid_format")
 	}
-	present := PresentRequest{Files: []PresentFile{{Path: w.Path}}}
-	claim, e := s.reserveFileTransfer(ctx, ref, callID, &present, nil, &w)
+	save := SaveArtifactsRequest{Files: []SaveArtifactItem{{Path: w.Path}}}
+	claim, e := s.reserveFileTransfer(ctx, ref, callID, &save, nil, &w)
 	if e != nil {
 		return agentcore.DispatchObservation{}, e
 	}
@@ -394,7 +396,7 @@ func (s *CloudService) ReadImage(ctx context.Context, ref agentcore.ExecutionRef
 		var facts ByteFacts
 		key, facts, e = s.copyWorkspaceSnapshot(ctx, &access, access.WorkspaceOperationID, *claim.Items[0].SourcePath)
 		if e == nil {
-			e = s.stagePresentedFile(ctx, claim, claim.Items[0], key, facts)
+			e = s.stageWorkspaceSnapshot(ctx, claim, claim.Items[0], key, facts)
 		}
 	}
 	if finish := s.finishWorkspaceOperation(ctx, access.WorkspaceOperationID, &access, nil, e); e == nil {
@@ -406,7 +408,7 @@ func (s *CloudService) ReadImage(ctx context.Context, ref agentcore.ExecutionRef
 	return s.failFileTransfer(ctx, claim, e)
 }
 
-func (s *CloudService) stagePresentedFile(ctx context.Context, claim fileTransferClaim, item FileOperationItemRow, key string, facts ByteFacts) error {
+func (s *CloudService) stageWorkspaceSnapshot(ctx context.Context, claim fileTransferClaim, item FileOperationItemRow, key string, facts ByteFacts) error {
 	media := "application/octet-stream"
 	reader, e := s.Host.Files.Open(key)
 	if e != nil {
@@ -433,7 +435,7 @@ func (s *CloudService) stagePresentedFile(ctx context.Context, claim fileTransfe
 		}
 		config, _, decodeErr := image.DecodeConfig(picture)
 		closeErr := picture.Close()
-		if decodeErr != nil || closeErr != nil || config.Width <= 0 || config.Height <= 0 || config.Width > 4096 || config.Height > 4096 || int64(config.Width)*int64(config.Height) > 16777216 {
+		if decodeErr != nil || closeErr != nil || !validToolImageSize(config.Width, config.Height) {
 			return httpx.E(422, "IMAGE_INVALID", "图像尺寸或内容无效")
 		}
 		properties, _ = json.Marshal(map[string]int{"width": config.Width, "height": config.Height})
@@ -487,9 +489,9 @@ func sameFileOperation(op *FileOperationRow, expected FileOperationRow) bool {
 	return op != nil && op.ID == expected.ID && op.OperationToken == expected.OperationToken && op.ExecutorEpoch == expected.ExecutorEpoch && op.FenceVersion == expected.FenceVersion && op.BackendGeneration == expected.BackendGeneration && op.InstanceID == expected.InstanceID && op.StorageGeneration == expected.StorageGeneration && op.VolumeID == expected.VolumeID && op.FinishedAt == nil
 }
 
-func (s *CloudService) ImportFile(ctx context.Context, ref agentcore.ExecutionRef, callID uint64, w ImportFileRequest) (agentcore.DispatchObservation, error) {
-	if _, e := workspace.Normalize(w.Destination, false); e != nil {
-		return agentcore.DispatchObservation{}, httpx.Invalid("destination", "invalid_format")
+func (s *CloudService) LoadArtifacts(ctx context.Context, ref agentcore.ExecutionRef, callID uint64, w LoadArtifactsRequest) (agentcore.DispatchObservation, error) {
+	if len(w.Items) == 0 || len(w.Items) > 20 {
+		return agentcore.DispatchObservation{}, httpx.Invalid("items", "invalid_count")
 	}
 	claim, e := s.reserveFileTransfer(ctx, ref, callID, nil, &w, nil)
 	if e != nil {
@@ -500,15 +502,28 @@ func (s *CloudService) ImportFile(ctx context.Context, ref agentcore.ExecutionRe
 	}
 	ctx, cancel := context.WithDeadline(ctx, claim.Operation.DeadlineAt)
 	defer cancel()
-	access := *claim.Access
-	access.WorkspaceOperationID = claim.Intent.Operations[0]
-	access.WorkspaceOperationFence = 1
-	access.Provider, e = s.openProvider(ctx, claim.Connection)
-	if e == nil {
-		e = s.transferImportedFile(ctx, claim, &access)
-	}
-	if finish := s.finishWorkspaceOperation(ctx, access.WorkspaceOperationID, &access, nil, e); e == nil {
-		e = finish
+	claim.Access.Provider, e = s.openProvider(ctx, claim.Connection)
+	loaded := []string{}
+	for i, item := range claim.Items {
+		if e != nil {
+			break
+		}
+		access := *claim.Access
+		access.WorkspaceOperationID = claim.Intent.Operations[i]
+		access.WorkspaceOperationFence = 1
+		e = s.copyArtifactToWorkspace(ctx, claim, &access, item, claim.Sources[i])
+		if e == nil {
+			loaded = append(loaded, "/data/"+*item.DestinationPath)
+		}
+		if finish := s.finishWorkspaceOperation(ctx, access.WorkspaceOperationID, &access, nil, e); e == nil {
+			e = finish
+		}
+		if e != nil {
+			obs, cause := s.failFileTransfer(ctx, claim, e)
+			details, _ := json.Marshal(map[string]any{"loaded": loaded, "stopped_at": "/data/" + *item.DestinationPath, "reason": obs.Reason})
+			obs.Content = string(details)
+			return obs, cause
+		}
 	}
 	if e == nil {
 		return s.commitFileTransfer(ctx, claim)
@@ -516,9 +531,7 @@ func (s *CloudService) ImportFile(ctx context.Context, ref agentcore.ExecutionRe
 	return s.failFileTransfer(ctx, claim, e)
 }
 
-func (s *CloudService) transferImportedFile(ctx context.Context, claim fileTransferClaim, access *SandboxAccess) error {
-	item := claim.Items[0]
-	source := claim.Source
+func (s *CloudService) copyArtifactToWorkspace(ctx context.Context, claim fileTransferClaim, access *SandboxAccess, item FileOperationItemRow, source *FileRow) error {
 	facts, e := s.Host.Files.Inspect(ctx, source.StorageKey, 100<<20)
 	if e != nil {
 		return e
@@ -587,7 +600,7 @@ func (s *CloudService) transferImportedFile(ctx context.Context, claim fileTrans
 		if !sameFileOperation(op, claim.Operation) {
 			return integrity()
 		}
-		row, e := st.FileOperationItem(op.ID, 0, true)
+		row, e := st.FileOperationItem(op.ID, item.Ordinal, true)
 		if e != nil {
 			return e
 		}
@@ -689,9 +702,9 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 			}
 			total += *item.ObservedSizeBytes
 			if total > 200<<20 {
-				return httpx.E(422, "FILE_TOTAL_LIMIT_EXCEEDED", "成果总大小超过限制")
+				return httpx.E(422, "FILE_TOTAL_LIMIT_EXCEEDED", "制品总大小超过限制")
 			}
-			if op.Kind == "present" || op.Kind == "read_image" {
+			if op.Kind == "save_artifacts" || op.Kind == "read_image" {
 				if item.StagedFileID == nil || item.SourcePath == nil {
 					return integrity()
 				}
@@ -721,7 +734,7 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 					imageMetadata = map[string]any{"path": "/data/" + *item.SourcePath, "media_type": file.MediaType, "width": dimensions.Width, "height": dimensions.Height, "size_bytes": strconv.FormatUint(*file.SizeBytes, 10), "sha256": hexHash(file.SHA256)}
 				} else {
 					source, _ := json.Marshal(ArtifactSource{ComputerID: op.ComputerID, BindingID: op.BindingID, BackendGeneration: op.BackendGeneration, InstanceID: op.InstanceID, StorageGeneration: op.StorageGeneration, VolumeID: op.VolumeID, Path: "/data/" + *item.SourcePath})
-					artifact := &ArtifactRow{ContentSessionID: op.ContentSessionID, RunID: call.RunID, ToolCallID: call.ID, OutputOrdinal: item.Ordinal, FileID: file.ID, Filename: path.Base(*item.SourcePath), Description: claim.Intent.Present.Files[i].Description, SourcePath: "/data/" + *item.SourcePath, SourceSnapshot: source, RetainedEventSeq: rootFrom, RowVersion: 1, CreatedAt: now}
+					artifact := &ArtifactRow{ContentSessionID: op.ContentSessionID, RunID: call.RunID, ToolCallID: call.ID, OutputOrdinal: item.Ordinal, FileID: file.ID, Filename: path.Base(*item.SourcePath), Description: claim.Intent.Save.Files[i].Description, SourcePath: "/data/" + *item.SourcePath, SourceSnapshot: source, RetainedEventSeq: rootFrom, RowVersion: 1, CreatedAt: now}
 					if e = st.InsertArtifact(artifact); e != nil {
 						return e
 					}
@@ -732,7 +745,7 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 					artifacts = append(artifacts, view)
 					ids = append(ids, agentcore.ID(artifact.ID))
 					item.ArtifactID = &artifact.ID
-					summaries = append(summaries, map[string]any{"id": agentcore.ID(artifact.ID), "file_id": agentcore.ID(file.ID), "filename": artifact.Filename, "size_bytes": strconv.FormatUint(*file.SizeBytes, 10), "sha256": hexHash(file.SHA256)})
+					summaries = append(summaries, map[string]any{"artifact_id": agentcore.ID(artifact.ID), "filename": artifact.Filename, "size_bytes": strconv.FormatUint(*file.SizeBytes, 10), "sha256": hexHash(file.SHA256)})
 				}
 			}
 			item.State = "published"
@@ -744,7 +757,7 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 		extra := map[string]any{}
 		var content string
 		switch op.Kind {
-		case "present":
+		case "save_artifacts":
 			if _, e = appendEvent(st, x.RootSession, &x.Root.ID, "artifact/retained", "", map[string]any{"artifacts": artifacts, "tool_call_id": agentcore.ID(call.ID)}, nil, now); e != nil {
 				return e
 			}
@@ -753,20 +766,21 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 			extra["artifacts"] = summaries
 			extra["commit_receipt"] = map[string]any{"tool_call_id": agentcore.ID(call.ID), "artifact_ids": ids, "content_session_id": agentcore.ID(x.RootSession.ID), "event_seq_from": agentcore.Seq(rootFrom), "event_seq_to": agentcore.Seq(rootThrough), "tool_result": map[string]any{"session_id": agentcore.ID(x.Session.ID), "event_seq": agentcore.Seq(resultSeq)}}
 			b, _ := json.Marshal(summaries)
-			content = "已保存成果：" + string(b)
+			content = "已保存制品：" + string(b)
 		case "read_image":
 			if len(images) != 1 || imageMetadata == nil {
 				return integrity()
 			}
 			extra["read_image"] = imageMetadata
 			b, _ := json.Marshal(imageMetadata)
-			content = "已读取图像并加入当前模型上下文（未保存为成果）：" + string(b)
-		case "import_file":
-			item := items[0]
-			imported := map[string]any{"source": claim.Intent.Import.Source, "binding_id": agentcore.ID(op.BindingID), "cloud_computer_id": agentcore.ID(op.ComputerID), "path": "/data/" + *item.DestinationPath, "sha256": hexHash(item.ObservedSHA256), "size_bytes": strconv.FormatUint(*item.ObservedSizeBytes, 10), "available": true, "verified_at": now}
-			extra["imported_file"] = imported
-			b, _ := json.Marshal(imported)
-			content = "已导入工作副本（此时核实可用，后续可能被修改或清理）：" + string(b)
+			content = "已读取图像并加入当前模型上下文（未保存为制品）：" + string(b)
+		case "load_artifacts":
+			loaded := make([]map[string]any, 0, len(items))
+			for _, item := range items {
+				loaded = append(loaded, map[string]any{"artifact_id": idString(*item.SourceReferenceID), "path": "/data/" + *item.DestinationPath})
+			}
+			b, _ := json.Marshal(loaded)
+			content = string(b)
 		default:
 			return integrity()
 		}
@@ -781,7 +795,7 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 		commit.Receipt.Ranges[0].Through = agentcore.Seq(x.Session.LastSeq)
 		commit.Receipt.ContentSessionID = agentcore.ID(x.RootSession.ID)
 		commit.Receipt.ArtifactIDs = ids
-		if op.Kind == "present" {
+		if op.Kind == "save_artifacts" {
 			if x.Session.ID == x.RootSession.ID {
 				commit.Receipt.Ranges[0].From = agentcore.Seq(rootFrom)
 			} else {

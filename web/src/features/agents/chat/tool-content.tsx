@@ -48,7 +48,32 @@ export function ToolCode({
         data-wrapped={wrapped}
         data-expanded={expanded}
       >
-        {source || <span className="agent-empty-output">内容为空</span>}
+        {language === "diff" && source
+          ? source
+              .replace(/\n$/, "")
+              .split("\n")
+              .map((line, index) => {
+                const marker =
+                  (index === 1 && line.startsWith("+++ ")) ||
+                  (index === 0 && line.startsWith("--- "))
+                    ? "font-semibold text-muted"
+                    : line.startsWith("@@")
+                      ? "bg-primary/10 text-primary"
+                      : line.startsWith("+")
+                        ? "bg-success/15 text-success"
+                        : line.startsWith("-")
+                          ? "bg-destructive/15 text-destructive"
+                          : "";
+                return (
+                  <span
+                    key={index}
+                    className={`block min-h-[1lh] px-1 ${marker}`}
+                  >
+                    {line}
+                  </span>
+                );
+              })
+          : source || <span className="agent-empty-output">内容为空</span>}
       </pre>
       {(overflowing || expanded) && (
         <button
@@ -80,67 +105,39 @@ export function readToolObject(blocks: ContentBlock[]): JsonObject | null {
 // schemas keep their raw output so protocol changes cannot silently hide data.
 export function FileToolResult({
   name,
-  args,
   value,
 }: {
   name: string;
-  args: JsonObject;
   value: JsonObject;
 }) {
-  if (typeof value.path !== "string") return null;
-  if (name === "read_file" && typeof value.text === "string")
-    return (
-      <div className="space-y-3">
-        <p className="break-all font-mono text-xs text-muted">{value.path}</p>
-        <ToolCode source={value.text} title="读取内容" />
-        <p className="text-xs text-muted">
-          {typeof value.offset === "number" &&
-          typeof value.next_offset === "number"
-            ? `字节范围 ${value.offset}–${value.next_offset}`
-            : ""}
-          {typeof value.size_bytes === "string" &&
-            ` · 文件共 ${value.size_bytes} 字节`}
-          {value.has_more === true && " · 尚有未读取内容"}
-        </p>
-      </div>
-    );
+  const read = name === "read";
+  const source = String(read ? value.text : value.diff);
   return (
     <div className="space-y-3">
-      <p className="break-all text-xs text-muted">
-        <span className="font-mono">{value.path}</span>
-        {typeof value.size_bytes === "string" && ` · ${value.size_bytes} 字节`}
+      <p className="break-all font-mono text-xs text-muted">
+        {String(value.path)}
       </p>
-      {name === "write_file" && typeof args.content === "string" && (
-        <ToolCode source={args.content} title="写入内容" />
+      {read || source ? (
+        <ToolCode
+          source={source}
+          title={read ? "读取内容" : "文件差异"}
+          language={read ? "text" : "diff"}
+        />
+      ) : (
+        <p className="text-xs text-muted">无文本差异</p>
       )}
-      {name === "edit_file" &&
-        typeof args.old_text === "string" &&
-        typeof args.new_text === "string" && (
-          <div className="space-y-3">
-            <div className="border-l-2 border-destructive/40 pl-3">
-              <ToolCode source={args.old_text} title="替换前片段" />
-            </div>
-            <div className="border-l-2 border-success/40 pl-3">
-              <ToolCode source={args.new_text} title="替换后片段" />
-            </div>
-          </div>
-        )}
+      {read && value.has_more === true && (
+        <p className="text-xs text-muted">尚有未读取内容</p>
+      )}
     </div>
   );
 }
 
-export function fileResultSupported(
-  name: string,
-  args: JsonObject,
-  value: JsonObject,
-): boolean {
-  if (typeof value.path !== "string") return false;
-  if (name === "read_file") return typeof value.text === "string";
-  if (name === "write_file") return typeof args.content === "string";
+export function fileResultSupported(name: string, value: JsonObject): boolean {
   return (
-    name === "edit_file" &&
-    typeof args.old_text === "string" &&
-    typeof args.new_text === "string"
+    typeof value.path === "string" &&
+    ((name === "read" && typeof value.text === "string") ||
+      ((name === "write" || name === "edit") && typeof value.diff === "string"))
   );
 }
 
@@ -199,31 +196,36 @@ export function readSearchResult(
       count: value.paths.length,
       truncated: value.truncated === true,
     };
-  if (
-    name === "grep" &&
-    Array.isArray(value.matches) &&
-    value.matches.every(
-      (item: unknown) =>
-        item &&
-        typeof item === "object" &&
-        "path" in item &&
-        typeof item.path === "string" &&
-        "line" in item &&
-        typeof item.line === "number" &&
-        "text" in item &&
-        typeof item.text === "string",
-    )
-  ) {
-    const matches = value.matches as {
-      path: string;
-      line: number;
-      text: string;
-    }[];
+  if (name === "grep" && Array.isArray(value.groups)) {
+    const sections: string[] = [];
+    let count = 0;
+    for (const group of value.groups) {
+      if (
+        !group ||
+        typeof group !== "object" ||
+        Array.isArray(group) ||
+        typeof group.path !== "string" ||
+        !Array.isArray(group.lines)
+      )
+        return null;
+      const lines: string[] = [group.path];
+      for (const hit of group.lines) {
+        if (
+          !hit ||
+          typeof hit !== "object" ||
+          Array.isArray(hit) ||
+          typeof hit.line !== "number" ||
+          typeof hit.text !== "string"
+        )
+          return null;
+        lines.push(`  ${hit.line}: ${hit.text}`);
+        count++;
+      }
+      sections.push(lines.join("\n"));
+    }
     return {
-      text: matches
-        .map((item) => `${item.path}:${item.line}: ${item.text}`)
-        .join("\n"),
-      count: matches.length,
+      text: sections.join("\n\n"),
+      count,
       truncated: value.truncated === true,
     };
   }

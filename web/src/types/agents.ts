@@ -197,9 +197,9 @@ export interface CapabilityCatalog {
     | "skill_file_count"
     | "skill_compression_ratio"
     | "skill_parse_timeout_seconds"
-    | "present_file_count"
-    | "present_file_bytes"
-    | "present_total_bytes"
+    | "artifact_file_count"
+    | "artifact_file_bytes"
+    | "artifact_total_bytes"
     | "model_bindings"
     | "tool_bindings"
     | "skill_bindings"
@@ -344,6 +344,7 @@ export type ContentBlock =
   | ({ type: "file_reference" } & FileRef)
   | { type: "tool_reference"; tool_call_id: string };
 export interface InputCreate {
+  workspace_upload_keys?: string[];
   content: { type: "text"; text: string }[];
   expected_model_selection_hash?: string;
   file_refs?: FileRef[];
@@ -364,6 +365,7 @@ export type InputSource =
   | { kind: "run"; id: string; boundary_seq: string }
   | null;
 export interface AgentInput extends Versioned, Timestamped {
+  workspace_files?: { operation_id: string; filename: string; path: string }[];
   id: string;
   session_id: string;
   kind: "message" | "question_reply" | "approval_reply" | "continue";

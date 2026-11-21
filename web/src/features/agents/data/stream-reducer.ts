@@ -46,11 +46,9 @@ export const eventTypes: readonly EventType[] = [
   "compaction/start",
   "compaction/summary",
   "compaction/end",
-  "context/runtime",
-  "context/skills",
-  "context/authorization",
-  "context/tool_reconciliation",
+  "context/message",
   "artifact/retained",
+  "artifact/shown",
   "artifact/deleted",
 ];
 const eventTypeSet = new Set<string>(eventTypes);
@@ -146,6 +144,11 @@ export function validRecord(record: DurableRecord) {
           ["attachment", "artifact"].includes(ref.kind) &&
           typeof ref.id === "string",
       ) ||
+      (input.workspace_files !== undefined &&
+        (!Array.isArray(input.workspace_files) ||
+          !input.workspace_files.every(
+            (file) => file && typeof file.filename === "string",
+          ))) ||
       !input.actor_ref ||
       (input.question_answer &&
         (!Array.isArray(input.question_answer.answers) ||
@@ -165,7 +168,8 @@ export function validRecord(record: DurableRecord) {
   )
     return false;
   if (
-    record.event_type === "artifact/retained" &&
+    (record.event_type === "artifact/retained" ||
+      record.event_type === "artifact/shown") &&
     !Array.isArray(record.data.artifacts)
   )
     return false;
@@ -426,10 +430,11 @@ function inputSummary(input: AgentInput): InputSummary {
     id: input.id,
     kind: input.kind,
     delivery: input.delivery,
-    preview: input.content
-      .map((block) => block.text)
-      .join("\n")
-      .slice(0, 256),
+    preview: (
+      input.content.map((block) => block.text).join("\n") ||
+      input.workspace_files?.map((file) => file.filename).join("、") ||
+      ""
+    ).slice(0, 256),
     actor_ref: input.actor_ref,
     queue_deadline_at: input.queue_deadline_at,
     version: input.version,

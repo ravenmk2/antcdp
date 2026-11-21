@@ -18,6 +18,7 @@ import {
 } from "./command-store";
 
 export interface SendPlan {
+  textLimit?: number;
   placement?: "transcript" | "queued";
   session:
     | { id: string; selection_hash: string; workspaceReady?: boolean }
@@ -37,15 +38,20 @@ interface WorkspacePreparation {
 }
 type WorkspaceUpload = Operation<{ path: string; size_bytes: string }>;
 
+export interface MessageWorkspaceFile {
+  filename: string;
+  path?: string;
+  file?: File;
+}
 export interface AcceptedSubmission {
   inputId: string;
   text: string;
   fileRefs: FileRef[];
+  workspaceFiles?: MessageWorkspaceFile[];
   time: string;
 }
 export interface SendState {
-  phase:
-    "idle" | "sending" | "uncertain" | "failed" | "confirm-rename" | "accepted";
+  phase: "idle" | "sending" | "uncertain" | "failed" | "accepted";
   stage: "session" | "image" | "prepare" | "workspace" | "input";
   uploadIndex: number;
   workspaceIndex: number;
@@ -76,7 +82,6 @@ export class ConversationSendFlow {
   private workspaceReady = false;
   private preparationId: string | undefined;
   private workspaceKey: string | undefined;
-  private renamesConfirmed = false;
   private readonly workspaceAbort = new AbortController();
   private busy = false;
   private disposed = false;
@@ -186,10 +191,21 @@ export class ConversationSendFlow {
     const plan = this.state.plan;
     const index = this.state.workspaceIndex;
     const item = plan?.workspaceFiles[index];
-    const savedName = operation.result?.path.split("/").at(-1);
-    if (operation.status === "succeeded" && plan && item && savedName) {
+    const path = operation.result?.path;
+    const savedName = path?.split("/").at(-1);
+    if (
+      operation.status === "succeeded" &&
+      plan &&
+      item &&
+      this.workspaceKey &&
+      savedName
+    ) {
       const workspaceFiles = [...plan.workspaceFiles];
-      workspaceFiles[index] = { file: item.file, savedName };
+      workspaceFiles[index] = {
+        file: item.file,
+        savedName,
+        uploadKey: this.workspaceKey,
+      };
       this.workspaceKey = undefined;
       this.update({ plan: { ...plan, workspaceFiles } });
       return true;
@@ -207,7 +223,7 @@ export class ConversationSendFlow {
           (unknown
             ? "WORKSPACE_IO_OUTCOME_UNKNOWN"
             : "WORKSPACE_UPLOAD_FAILED"),
-        unknown ? "附件保存结果待核实。" : "附件保存失败。",
+        unknown ? "工作区文件保存结果待核实。" : "工作区文件保存失败。",
         409,
       ),
     });
@@ -316,7 +332,7 @@ export class ConversationSendFlow {
         this.update({ uploadIndex: index + 1 });
       }
       for (const [index, item] of plan.workspaceFiles.entries()) {
-        if (item.savedName) continue;
+        if (item.uploadKey) continue;
         if (!this.workspaceReady) {
           this.workspaceReady = await this.prepareWorkspace(sessionId);
           if (!this.workspaceReady) return;
@@ -324,19 +340,37 @@ export class ConversationSendFlow {
         this.update({ workspaceIndex: index });
         if (!(await this.saveWorkspaceFile(sessionId, item.file))) return;
       }
+      this.update({ stage: "input" });
+      const currentPlan = this.state.plan!;
+      const text = currentPlan.text;
+      const uploads = currentPlan.workspaceFiles.flatMap((file) =>
+        file.uploadKey ? [file.uploadKey] : [],
+      );
       if (
-        !this.renamesConfirmed &&
-        this.state.plan?.workspaceFiles.some(
-          (item) => item.savedName && item.savedName !== item.file.name,
-        )
+        uploads.length !== currentPlan.workspaceFiles.length ||
+        (!text.trim() && !this.refs.length && !uploads.length)
       ) {
-        this.update({ phase: "confirm-rename" });
+        this.update({
+          phase: "failed",
+          stage: "input",
+          error: "没有可发送的文件或正文，请返回编辑。",
+        });
         return;
       }
-      this.update({ stage: "input" });
+      if (
+        new TextEncoder().encode(text).length > (currentPlan.textLimit ?? 32768)
+      ) {
+        this.update({
+          phase: "failed",
+          stage: "input",
+          error: "正文超过消息长度限制，请编辑后重新发送。",
+        });
+        return;
+      }
       const body: InputCreate = {
-        content: plan.text.trim() ? [{ type: "text", text: plan.text }] : [],
+        content: text.trim() ? [{ type: "text", text }] : [],
         file_refs: this.refs,
+        ...(uploads.length && { workspace_upload_keys: uploads }),
         expected_model_selection_hash: this.selectionHash,
       };
       const result = await this.execute<InputAccepted>("input", {
@@ -350,8 +384,12 @@ export class ConversationSendFlow {
         if (plan.placement === "transcript")
           this.onAccepted?.(sessionId, {
             inputId: result.input_id,
-            text: plan.text,
+            text,
             fileRefs: [...this.refs],
+            workspaceFiles: currentPlan.workspaceFiles.map((item) => ({
+              filename: item.savedName ?? item.file.name,
+              file: item.file,
+            })),
             time: new Date().toISOString(),
           });
         this.update({ phase: "accepted", result });
@@ -410,19 +448,6 @@ export class ConversationSendFlow {
       });
     }
   }
-  editRenameText(text: string) {
-    if (this.state.phase === "confirm-rename" && this.state.plan)
-      this.update({ plan: { ...this.state.plan, text } });
-  }
-  async confirmRenames() {
-    if (
-      this.state.phase !== "confirm-rename" ||
-      (!this.state.plan?.text.trim() && !this.refs.length)
-    )
-      return;
-    this.renamesConfirmed = true;
-    await this.drive();
-  }
   async removeFailedWorkspaceFiles() {
     const { plan, phase, stage, workspaceIndex } = this.state;
     if (
@@ -460,7 +485,6 @@ export class ConversationSendFlow {
     this.workspaceReady = false;
     this.preparationId = undefined;
     this.workspaceKey = undefined;
-    this.renamesConfirmed = false;
     this.update({
       phase: "idle",
       stage: "session",

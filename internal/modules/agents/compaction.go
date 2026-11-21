@@ -441,7 +441,7 @@ func (s *Service) ProcessPendingCompactions(ctx context.Context, limit int) erro
 				spec := agentcore.ToolSpec{Key: binding.ToolKey, Definition: descriptor.Definition, ExecutionClass: descriptor.ExecutionClass, ParallelSafe: descriptor.ParallelSafe, Policy: binding.Policy, ResultLimit: 64 << 10}
 				tools = append(tools, spec)
 			}
-			prepared, e := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 1, frozen.LockedModel, agentcore.PromptConfig{Platform: platformPrompt, Administrator: agent.SystemPrompt}, request.Source, nil, tools, agent.RuntimePolicy.MaxParallelTools)
+			prepared, e := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 1, frozen.LockedModel, agent.SystemPrompt, request.Source, nil, tools, agent.RuntimePolicy.MaxParallelTools)
 			if e != nil {
 				return e
 			}

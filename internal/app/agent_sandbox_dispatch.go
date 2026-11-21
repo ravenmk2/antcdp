@@ -45,7 +45,7 @@ func (d *agentToolDispatcher) dispatchSandbox(ctx context.Context, execution age
 	var output agentcore.DispatchObservation
 	var err error
 	switch key {
-	case "read_file", "write_file", "edit_file", "glob", "grep":
+	case "read", "write", "edit", "glob", "grep":
 		output, err = s.FileTool(ctx, execution.Ref, callID, key, args)
 	case "read_image":
 		var input agents.ReadImageRequest
@@ -53,18 +53,18 @@ func (d *agentToolDispatcher) dispatchSandbox(ctx context.Context, execution age
 			return sandboxToolFailure(httpx.Invalid("arguments", "invalid_format")), nil
 		}
 		output, err = s.ReadImage(ctx, execution.Ref, callID, input)
-	case "import_file":
-		var input agents.ImportFileRequest
+	case "load_artifacts":
+		var input agents.LoadArtifactsRequest
 		if json.Unmarshal(args, &input) != nil {
 			return sandboxToolFailure(httpx.Invalid("arguments", "invalid_format")), nil
 		}
-		output, err = s.ImportFile(ctx, execution.Ref, callID, input)
-	case "present":
-		var input agents.PresentRequest
+		output, err = s.LoadArtifacts(ctx, execution.Ref, callID, input)
+	case "save_artifacts":
+		var input agents.SaveArtifactsRequest
 		if json.Unmarshal(args, &input) != nil {
 			return sandboxToolFailure(httpx.Invalid("arguments", "invalid_format")), nil
 		}
-		output, err = s.Present(ctx, execution.Ref, callID, input)
+		output, err = s.SaveArtifacts(ctx, execution.Ref, callID, input)
 	default:
 		var result agents.CommandResult
 		if key == "exec_command" {

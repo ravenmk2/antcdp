@@ -9,7 +9,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-func (s *Service) pruneToolOutputs(ctx context.Context, execution agentcore.ExecutionContext, step agentcore.PreparedStep, prompt agentcore.PromptConfig, tools []agentcore.ToolSpec) (agentcore.PreparedStep, error) {
+func (s *Service) pruneToolOutputs(ctx context.Context, execution agentcore.ExecutionContext, step agentcore.PreparedStep, prompt string, tools []agentcore.ToolSpec) (agentcore.PreparedStep, error) {
 	var receipt agentcore.CommitReceipt
 	err := s.background(ctx, func(tx identity.Tx, r Repository, st StateRepository) error {
 		x, err := s.lockExecution(tx, r, st, execution.Ref, true)

@@ -55,7 +55,15 @@ func agentRootContext(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(prepared.Tools) != 4 {
+	for _, message := range prepared.Request.Messages {
+		if message.Role == "system" && (agent.SystemPrompt == "" || message.Content != agent.SystemPrompt) {
+			t.Fatalf("unexpected system message: %q", message.Content)
+		}
+	}
+	if len(prepared.Request.Tools) == 0 {
+		t.Fatal("enabled tools missing from model request")
+	}
+	if len(prepared.Tools) != 5 {
 		t.Fatalf("root capabilities changed after revocation: %d", len(prepared.Tools))
 	}
 	var status, prompt string
@@ -73,10 +81,23 @@ func agentRootContext(t *testing.T, f *agentIntegrationFixture) {
 	if _, err = s.PatchDefinition(f.Context, f.AdminToken, agent.ID, current.Tag, a.DefinitionPatch{Enabled: a.Field[bool]{Set: true, Value: true}}); err != nil {
 		t.Fatal(err)
 	}
-	next := runtimeClaim(t, f, session.Configuration.ID, "new turn")
+	const instruction = "inspect the next file"
+	next := runtimeClaim(t, f, session.Configuration.ID, instruction)
 	prepared, err = s.PrepareStep(f.Context, next, 1)
 	if err != nil || len(prepared.Tools) != 0 {
 		t.Fatalf("new turn reused old capabilities: %d %v", len(prepared.Tools), err)
+	}
+	if len(prepared.Request.Tools) != 0 || prepared.Request.Messages[0].Role != "system" || prepared.Request.Messages[0].Content != "replacement prompt" {
+		t.Fatal("new turn did not use the exact configured system message and tool list")
+	}
+	foundInstruction := false
+	for _, m := range prepared.Request.Messages {
+		if m.Role == "user" && m.Content == instruction {
+			foundInstruction = true
+		}
+	}
+	if !foundInstruction {
+		t.Fatal("user instruction was lost")
 	}
 	runtimeEnd(t, f, next)
 }

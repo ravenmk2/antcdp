@@ -8,17 +8,8 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 )
 
-type PromptConfig struct {
-	Platform      string
-	Administrator string
-}
-
-// BuildPreparedStep implements the ordinary, universally supported route:
-// current system head and current complete tool declarations. Unverified
-// provider-specific in-history update semantics are deliberately not inferred.
-// Clearing Administrator removes that entire contribution, including older
-// versions; the model's locked route and generation parameters never change.
-func BuildPreparedStep(ref ExecutionRef, step uint32, locked LockedModel, prompt PromptConfig, manifest SurfaceManifest, messages []modelcore.Message, tools []ToolSpec, parallel int) (PreparedStep, error) {
+// BuildPreparedStep uses the configured system prompt and the tools admitted for this step.
+func BuildPreparedStep(ref ExecutionRef, step uint32, locked LockedModel, system string, manifest SurfaceManifest, messages []modelcore.Message, tools []ToolSpec, parallel int) (PreparedStep, error) {
 	if step == 0 || locked.RemoteModelID == "" || locked.Protocol != modelcore.ChatCompletions && locked.Protocol != modelcore.AnthropicMessages || parallel < 1 || parallel > 16 {
 		return PreparedStep{}, invalid("prepared_step")
 	}
@@ -34,13 +25,6 @@ func BuildPreparedStep(ref ExecutionRef, step uint32, locked LockedModel, prompt
 		return PreparedStep{}, err
 	}
 	request.Parameters = withOutputCap(request.Parameters, output)
-	system := prompt.Platform
-	if prompt.Administrator != "" {
-		if system != "" {
-			system += "\n\n"
-		}
-		system += prompt.Administrator
-	}
 	if system != "" {
 		request.Messages = append(request.Messages, modelcore.Message{Role: "system", Content: system})
 	}

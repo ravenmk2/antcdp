@@ -178,7 +178,7 @@ it("does not treat an absent receipt as nonexecution or allow replacing the draf
   store.dispose();
 });
 
-it("prepares the first workspace, confirms renamed files, and submits only text and image refs", async () => {
+it("prepares the first workspace, submits verified upload keys separately from text and image refs", async () => {
   const { flow, store } = setup();
   vi.useFakeTimers();
   try {
@@ -198,6 +198,7 @@ it("prepares the first workspace, confirms renamed files, and submits only text 
           result: { path: "sessions/10/sales (2).csv" },
         }),
       );
+    mock.mockResolvedValueOnce(ok({ input_id: "11" }));
     const sending = flow.start({
       ...plan(),
       workspaceFiles: [{ file: new File(["a,b"], "sales.csv") }],
@@ -210,19 +211,19 @@ it("prepares the first workspace, confirms renamed files, and submits only text 
       "/agents/sessions/10/workspace/prepare",
       "/agents/sessions/10/workspace/operations/21",
       "/agents/sessions/10/workspace/file-uploads",
+      "/agents/sessions/10/inputs",
     ]);
-    expect(flow.getSnapshot()).toMatchObject({
-      phase: "confirm-rename",
-      plan: { workspaceFiles: [{ savedName: "sales (2).csv" }] },
-    });
-    flow.editRenameText("分析 sales (2).csv");
-    mock.mockResolvedValueOnce(ok({ input_id: "11" }));
-    await flow.confirmRenames();
     expect(mock).toHaveBeenLastCalledWith(
       "/agents/sessions/10/inputs",
       expect.objectContaining({
         body: {
-          content: [{ type: "text", text: "分析 sales (2).csv" }],
+          content: [
+            {
+              type: "text",
+              text: "原始问题",
+            },
+          ],
+          workspace_upload_keys: [mock.mock.calls[4][1]?.idempotencyKey],
           file_refs: [{ kind: "attachment", id: "90" }],
           expected_model_selection_hash: "locked",
         },
@@ -281,7 +282,11 @@ it("recovers a lost workspace receipt and skips a failed file without uploading 
     "/agents/sessions/10/workspace/file-uploads",
     "/agents/sessions/10/inputs",
   ]);
-  expect(mock.mock.calls[3][1]?.body).toMatchObject({ file_refs: [] });
+  expect(mock.mock.calls[3][1]?.body).toMatchObject({
+    file_refs: [],
+    workspace_upload_keys: [key],
+    content: [{ type: "text", text: "原始问题" }],
+  });
   flow.dispose();
   store.dispose();
 });

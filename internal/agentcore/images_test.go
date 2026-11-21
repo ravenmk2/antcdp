@@ -10,7 +10,7 @@ func TestPreparedToolImageRequiresVerifiedCapabilityAndInternalProvenance(t *tes
 	locked := LockedModel{RemoteModelID: "model", Protocol: modelcore.ChatCompletions, Capabilities: modelcore.Capabilities{ImageInput: modelcore.Supported}}
 	message := modelcore.Message{Role: "tool", ToolCallID: "call", Images: []modelcore.ImagePart{{MIME: "image/png", ContentSHA256: "hash", Origin: "tool_image"}}}
 	build := func() (PreparedStep, error) {
-		return BuildPreparedStep(ExecutionRef{}, 1, locked, PromptConfig{}, SurfaceManifest{}, []modelcore.Message{message}, nil, 1)
+		return BuildPreparedStep(ExecutionRef{}, 1, locked, "", SurfaceManifest{}, []modelcore.Message{message}, nil, 1)
 	}
 	prepared, err := build()
 	if err != nil || prepared.Request.Messages[0].Images[0].Origin != "tool_image" {

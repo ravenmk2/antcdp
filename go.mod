@@ -16,6 +16,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pelletier/go-toml/v2 v2.2.4
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/robfig/cron/v3 v3.0.1
 	golang.org/x/crypto v0.58.0

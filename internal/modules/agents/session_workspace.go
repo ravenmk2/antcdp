@@ -2,12 +2,14 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
@@ -234,4 +236,53 @@ func (s *CloudService) reserveSessionUpload(st StateRepository, repo CloudReposi
 		return nil, err
 	}
 	return &workspaceClaim{op: op, access: access, connection: resolvedConnection, intent: intent}, nil
+}
+
+// Resolve paths from the submitting user's session-scoped upload receipts. Capture
+// the result in the accepted input so claim and replay need no live workspace.
+func resolveWorkspaceUploads(tx identity.Tx, session *SessionRow, actor uint64, keys []string) ([]agentcore.WorkspaceFile, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	repo, err := CloudStateFor(tx)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(keys))
+	files := make([]agentcore.WorkspaceFile, 0, len(keys))
+	pathBytes := 0
+	for _, key := range keys {
+		if !keyPattern.MatchString(key) || seen[key] {
+			return nil, httpx.Invalid("workspace_upload_keys", "invalid_or_duplicate")
+		}
+		seen[key] = true
+		receipt, err := repo.CloudReceipt(idString(actor), "session", idString(session.ID), sessionWorkspaceUploadCommand, key)
+		if err != nil {
+			return nil, err
+		}
+		if receipt == nil || receipt.Status != "completed" || receipt.OperationID == nil {
+			return nil, httpx.Invalid("workspace_upload_keys", "upload_unavailable")
+		}
+		op, err := workspaceReceiptOperation(repo, receipt)
+		if err != nil {
+			return nil, err
+		}
+		public := cloudPublicOperation(op)
+		if op.Kind != "workspace_upload" || public.Status != "succeeded" || session.CloudComputerID == nil || op.ComputerID != *session.CloudComputerID {
+			return nil, httpx.Invalid("workspace_upload_keys", "upload_unavailable")
+		}
+		var result struct {
+			Path string `json:"path"`
+		}
+		if json.Unmarshal(public.Result, &result) != nil || result.Path == "" {
+			return nil, integrity()
+		}
+		name := "/data/" + result.Path
+		pathBytes += len(name)
+		if pathBytes > 32<<10 {
+			return nil, httpx.Invalid("workspace_upload_keys", "paths_too_large")
+		}
+		files = append(files, agentcore.WorkspaceFile{OperationID: agentcore.ID(op.ID), Filename: path.Base(name), Path: name})
+	}
+	return files, nil
 }

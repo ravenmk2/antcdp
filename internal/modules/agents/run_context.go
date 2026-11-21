@@ -49,7 +49,6 @@ type frozenRunContext struct {
 	PAPIGrants    []agentcore.PAPIGrant
 	MCP           []mcpPreparation
 	MCPTools      []agentcore.ToolSpec
-	MCPFact       agentcore.ContextFact
 }
 
 func readRunContext(st StateRepository, root uint64) (*frozenRunContext, error) {
@@ -72,13 +71,12 @@ func readRunContext(st StateRepository, root uint64) (*frozenRunContext, error) 
 	}
 	if row.MCPPreparedAt != nil {
 		var surface struct {
-			Tools []agentcore.ToolSpec  `json:"tools"`
-			Fact  agentcore.ContextFact `json:"fact"`
+			Tools []agentcore.ToolSpec `json:"tools"`
 		}
 		if json.Unmarshal(row.MCPSurface, &surface) != nil {
 			return nil, integrity()
 		}
-		x.MCPTools, x.MCPFact = surface.Tools, surface.Fact
+		x.MCPTools = surface.Tools
 	}
 	if x.Authorization.AccountID != agentcore.ID(row.ExecutorUserID) {
 		return nil, integrity()
@@ -97,21 +95,6 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 		return nil, err
 	}
 	tools := []FrozenTool{}
-	// Reading already-authorized session output requires no external capability.
-	// Include it by default; an explicit configured policy remains authoritative.
-	outputReadConfigured := false
-	for _, binding := range bindings {
-		outputReadConfigured = outputReadConfigured || binding.ToolKey == "read_tool_output"
-	}
-	if !outputReadConfigured && s.Catalog.Tool != nil {
-		reader, err := s.Catalog.Tool(ctx, tx, "read_tool_output")
-		if err != nil {
-			return nil, err
-		}
-		if reader != nil && reader.Availability.Available && reader.ExecutionClass == "read_only" {
-			bindings = append(bindings, ToolBinding{ToolKey: "read_tool_output", Policy: "allow", Constraints: json.RawMessage(`{}`)})
-		}
-	}
 	for _, binding := range bindings {
 		if binding.Policy == "deny" || binding.ToolKey == "skill" && s.Skills == nil || binding.ToolKey == "read_image" && model.Capabilities.ImageInput != modelcore.Supported {
 			continue

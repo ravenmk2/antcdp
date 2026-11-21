@@ -470,7 +470,6 @@ type StateRepository interface {
 	FileOperationByTool(uint64, bool) (*FileOperationRow, error)
 	FileOperationItems(uint64, bool) ([]FileOperationItemRow, error)
 	PendingFileOperations(string, time.Time, int) ([]FileOperationRow, error)
-	RootInputFileSelected(uint64, string, uint64) (bool, error)
 	InsertFileOperation(*FileOperationRow) error
 	SaveFileOperation(*FileOperationRow) error
 	FileOperationItem(uint64, uint64, bool) (*FileOperationItemRow, error)

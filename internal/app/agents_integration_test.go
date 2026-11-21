@@ -101,10 +101,10 @@ func TestAgentApplicationIntegration(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		tools := []struct{ name, args string }{
-			{"write_file", `{"path":"verification.txt","content":"application-chain-ok"}`},
-			{"read_file", `{"path":"verification.txt"}`},
+			{"write", `{"file_path":"verification.txt","content":"application-chain-ok"}`},
+			{"read", `{"file_path":"verification.txt"}`},
 			{"exec_command", `{"command":"cat verification.txt"}`},
-			{"present", `{"files":[{"path":"verification.txt","description":"Integration result"}]}`},
+			{"save_artifacts", `{"files":[{"path":"verification.txt","description":"Integration result"}]}`},
 		}
 		if step <= int32(len(tools)) {
 			tool := tools[step-1]
@@ -164,7 +164,7 @@ func TestAgentApplicationIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	items := []a.ToolBindingWrite{}
-	for _, name := range []string{"write_file", "read_file", "exec_command", "present"} {
+	for _, name := range []string{"write", "read", "exec_command", "save_artifacts"} {
 		items = append(items, a.ToolBindingWrite{ToolKey: name, Policy: "allow", Constraints: json.RawMessage(`{}`)})
 	}
 	_, err = app.Service.PutToolBindings(ctx, raw, agentID, bindings.Tag, a.ToolBindingsWrite{Items: items})
@@ -193,7 +193,7 @@ func TestAgentApplicationIntegration(t *testing.T) {
 		maintainAgentResources(workerCtx, installer, app, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	}()
 	t.Cleanup(func() { stop(); <-done; <-maintenanceDone })
-	_, err = app.Service.SubmitInput(ctx, raw, session.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []agentcore.TextBlock{{Type: "text", Text: "Perform these steps using the provided tools, in order: 1. write_file verification.txt with exact content application-chain-ok. 2. read_file verification.txt and verify it. 3. exec_command cat verification.txt. 4. present verification.txt as a retained artifact. Finally reply application-chain-ok. Do not ask questions or skip tools."}}, ExpectedHash: session.Selection.Hash})
+	_, err = app.Service.SubmitInput(ctx, raw, session.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []agentcore.TextBlock{{Type: "text", Text: "Perform these steps using the provided tools, in order: 1. write verification.txt with exact content application-chain-ok. 2. read verification.txt and verify it. 3. exec_command cat verification.txt. 4. save_artifacts verification.txt as a retained artifact. Finally reply application-chain-ok. Do not ask questions or skip tools."}}, ExpectedHash: session.Selection.Hash})
 	if err != nil {
 		t.Fatal("submit:", err)
 	}

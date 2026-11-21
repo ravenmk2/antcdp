@@ -112,17 +112,19 @@ export function ActivityIcon({
   const alias =
     (
       {
-        read_file: "read",
+        read: "read",
         read_image: "read_media",
-        write_file: "write",
-        edit_file: "write",
+        write: "write",
+        edit: "write",
         exec_command: "exec",
         process_status: "exec",
         process_output: "exec",
         process_cancel: "exec",
         delegate: "task",
-        import_file: "read",
-        present: "write",
+        save_artifacts: "write",
+        load_artifacts: "read",
+        list_artifacts: "read",
+        show_artifacts: "read",
       } as Record<string, string>
     )[name] ?? name;
   name = alias;

@@ -188,3 +188,109 @@ func (s *Service) DeleteArtifact(ctx context.Context, raw string, id uint64, tag
 		})
 	})
 }
+
+// SessionArtifactTool operates within the calling run's content session. Showing
+// artifacts commits the display event and tool result in one transaction.
+func (s *Service) SessionArtifactTool(ctx context.Context, permit agentcore.DispatchPermit) (agentcore.DispatchObservation, error) {
+	var out agentcore.DispatchObservation
+	c := permit.Call
+	err := s.background(ctx, func(tx identity.Tx, r Repository, st StateRepository) error {
+		x, e := s.lockExecution(tx, r, st, c.Ref, true)
+		if e != nil {
+			return e
+		}
+		call, e := commandTool(st, c.Ref, uint64(c.ID), c.Spec.Key)
+		if e != nil {
+			return e
+		}
+		prepared, e := preparedCall(st, c.Ref, call)
+		if e != nil {
+			return e
+		}
+		if !semanticSame(json.RawMessage(prepared.Call.Arguments), json.RawMessage(c.Call.Arguments)) {
+			return integrity()
+		}
+		if e = currentCommandPermission(r, st, x.Agent.ID, call); e != nil {
+			return e
+		}
+		yes := true
+		if c.Spec.Key == "list_artifacts" {
+			var args struct {
+				Query    string
+				Page     int
+				PageSize int `json:"page_size"`
+			}
+			if json.Unmarshal([]byte(c.Call.Arguments), &args) != nil {
+				return integrity()
+			}
+			q := ArtifactQuery{Page: max(1, args.Page), PageSize: args.PageSize, Q: args.Query}
+			if q.PageSize == 0 {
+				q.PageSize = 20
+			}
+			rows, total, e := st.Artifacts(x.RootSession.ID, nil, q)
+			if e != nil {
+				return e
+			}
+			items := make([]map[string]any, 0, len(rows))
+			for _, row := range rows {
+				v, e := s.artifactView(st, &row)
+				if e != nil {
+					return e
+				}
+				items = append(items, map[string]any{"artifact_id": idString(row.ID), "filename": v.Filename, "size_bytes": v.Size, "created_at": v.CreatedAt})
+			}
+			data, e := json.Marshal(map[string]any{"items": items, "page": q.Page, "page_size": q.PageSize, "total": total})
+			if e != nil {
+				return e
+			}
+			out = agentcore.DispatchObservation{Status: "succeeded", Executed: &yes, Content: string(data)}
+			return nil
+		}
+		var args struct {
+			IDs []agentcore.ID `json:"artifact_ids"`
+		}
+		if c.Spec.Key != "show_artifacts" || json.Unmarshal([]byte(c.Call.Arguments), &args) != nil || len(args.IDs) == 0 || len(args.IDs) > 20 {
+			return integrity()
+		}
+		files := make([]ArtifactView, 0, len(args.IDs))
+		for _, id := range args.IDs {
+			row, e := st.Artifact(uint64(id), true)
+			if e != nil {
+				return e
+			}
+			if row == nil || row.ContentSessionID != x.RootSession.ID || row.DeletedAt != nil {
+				return missing()
+			}
+			v, e := s.artifactView(st, row)
+			if e != nil {
+				return e
+			}
+			files = append(files, v)
+		}
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		seq, e := appendEvent(st, x.RootSession, &x.Root.ID, "artifact/shown", "", map[string]any{"artifacts": files, "tool_call_id": c.ID}, nil, now)
+		if e != nil {
+			return e
+		}
+		if e = settleToolBudget(st, x.Root, call, &yes); e != nil {
+			return e
+		}
+		data, _ := json.Marshal(map[string]any{"shown": args.IDs})
+		commit, e := settleToolEvent(st, x.Session, call, "succeeded", &yes, string(data), "", nil, now)
+		if e != nil {
+			return e
+		}
+		commit.Receipt.ContentSessionID = agentcore.ID(x.RootSession.ID)
+		if x.Session.ID == x.RootSession.ID {
+			commit.Receipt.Ranges[0].From = agentcore.Seq(seq)
+		} else {
+			commit.Receipt.Ranges = append([]agentcore.EventRange{{SessionID: agentcore.ID(x.RootSession.ID), From: agentcore.Seq(seq), Through: agentcore.Seq(seq)}}, commit.Receipt.Ranges...)
+			if e = st.SaveSession(x.RootSession); e != nil {
+				return e
+			}
+		}
+		out = agentcore.DispatchObservation{Status: "succeeded", Executed: &yes, Content: string(data), Committed: &commit.Receipt}
+		return st.SaveSession(x.Session)
+	})
+	return out, err
+}

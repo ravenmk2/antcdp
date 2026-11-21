@@ -141,26 +141,34 @@ type Session struct {
 	Version            Version      `json:"version"`
 }
 
+// WorkspaceFile describes a completed upload associated with one input.
+type WorkspaceFile struct {
+	OperationID ID     `json:"operation_id"`
+	Filename    string `json:"filename"`
+	Path        string `json:"path"`
+}
+
 type Input struct {
-	ID            ID              `json:"id"`
-	SessionID     ID              `json:"session_id"`
-	Kind          string          `json:"kind"`
-	Origin        string          `json:"origin_kind"`
-	Actor         ActorRef        `json:"actor_ref"`
-	Source        *SourceRef      `json:"source_ref"`
-	ModifiedBy    *ActorRef       `json:"last_modified_by"`
-	Content       []TextBlock     `json:"content"`
-	Files         []FileRef       `json:"file_refs"`
-	Answer        *QuestionAnswer `json:"question_answer"`
-	Delivery      string          `json:"delivery"`
-	State         string          `json:"state"`
-	Position      uint64          `json:"position"`
-	ClaimedRunID  *ID             `json:"claimed_run_id"`
-	AcceptedSeq   Seq             `json:"accepted_seq"`
-	MessageSeq    *Seq            `json:"message_seq"`
-	Revision      Version         `json:"revision"`
-	Version       Version         `json:"version"`
-	QueueDeadline time.Time       `json:"queue_deadline_at"`
+	WorkspaceFiles []WorkspaceFile `json:"workspace_files,omitempty"`
+	ID             ID              `json:"id"`
+	SessionID      ID              `json:"session_id"`
+	Kind           string          `json:"kind"`
+	Origin         string          `json:"origin_kind"`
+	Actor          ActorRef        `json:"actor_ref"`
+	Source         *SourceRef      `json:"source_ref"`
+	ModifiedBy     *ActorRef       `json:"last_modified_by"`
+	Content        []TextBlock     `json:"content"`
+	Files          []FileRef       `json:"file_refs"`
+	Answer         *QuestionAnswer `json:"question_answer"`
+	Delivery       string          `json:"delivery"`
+	State          string          `json:"state"`
+	Position       uint64          `json:"position"`
+	ClaimedRunID   *ID             `json:"claimed_run_id"`
+	AcceptedSeq    Seq             `json:"accepted_seq"`
+	MessageSeq     *Seq            `json:"message_seq"`
+	Revision       Version         `json:"revision"`
+	Version        Version         `json:"version"`
+	QueueDeadline  time.Time       `json:"queue_deadline_at"`
 }
 
 type RunStatus string

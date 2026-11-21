@@ -28,9 +28,15 @@ func variantKey(hash string) string {
 	return hex.EncodeToString(imageCacheKey(imageVariantVersion + "\x00" + hash))
 }
 
+// Wide or tall screenshots can fit the existing decode pixel budget even when
+// one edge is longer than the attachment upload limit.
+func validToolImageSize(width, height int) bool {
+	return width > 0 && height > 0 && width <= 16384 && height <= 16384 && int64(width)*int64(height) <= attachmentImageMaxPixels
+}
+
 func requestImageVariant(data []byte, source modelcore.ImagePart) (modelcore.ImagePart, []byte, error) {
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
-	if err != nil || !validAttachmentImageSize(cfg.Width, cfg.Height) {
+	if err != nil || !validToolImageSize(cfg.Width, cfg.Height) {
 		return source, nil, integrity()
 	}
 	part := modelcore.ImagePart{MIME: source.MIME, SourceSHA256: source.ContentSHA256, Variant: variantKey(source.ContentSHA256), Width: cfg.Width, Height: cfg.Height}

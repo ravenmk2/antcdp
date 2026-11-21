@@ -88,7 +88,7 @@ func (s *Service) EditInput(ctx context.Context, raw string, session, id uint64,
 			if w.Files.Set {
 				view.Files = w.Files.Value
 			}
-			if e = agentcore.ValidateInput(view.Content, view.Files); e != nil {
+			if e = agentcore.ValidateInput(view.Content, view.Files, view.WorkspaceFiles); e != nil {
 				return coreError(e)
 			}
 		}

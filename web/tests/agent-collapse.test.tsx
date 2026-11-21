@@ -38,7 +38,7 @@ const call: Extract<DurableRecord, { event_type: "tool/call" }> = {
   event_type: "tool/call",
   data: {
     tool_call_id: "80",
-    tool_key: "read_file",
+    tool_key: "read",
     mcp_server_id: null,
     mcp_binding_id: null,
     mcp_tool_name: null,
@@ -182,7 +182,7 @@ it("does not render empty stream text as a placeholder or split the process grou
       {
         type: "tool_call",
         draft_call_id: "draft-0",
-        name: "read_file",
+        name: "read",
         arguments_text: '{"path":"example.txt"}',
       },
     ],
@@ -213,7 +213,7 @@ it("previews live file work only while collapsed and removes the preview at comp
       {
         type: "tool_call",
         draft_call_id: "draft-0",
-        name: "write_file",
+        name: "write",
         arguments_text: '{"path":"reports/result.txt","content":"unfinished',
       },
     ],
@@ -242,7 +242,7 @@ it("previews live file work only while collapsed and removes the preview at comp
       ...call.data,
       model_call_id: "thought",
       call_ordinal: 0,
-      tool_key: "write_file",
+      tool_key: "write",
       arguments: { path: "reports/result.txt", content: "done" },
     },
   };
@@ -456,7 +456,7 @@ it.each([false, true])(
         {
           type: "tool_call",
           draft_call_id: "draft-0",
-          name: "read_file",
+          name: "read",
           arguments_text: '{"path":"example.txt"}',
         },
       ],

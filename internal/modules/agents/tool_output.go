@@ -26,7 +26,7 @@ func toolOutputInlineLimit(key string) int {
 	// These tools already bound their output or carry structured interaction /
 	// instruction semantics. Do not turn plans or explicit file reads into previews.
 	switch key {
-	case "read_file", "read_tool_output", "skill", "update_plan", "ask_user_question", "present", "read_image", "delegate":
+	case "read", "edit", "write", "read_tool_output", "skill", "update_plan", "ask_user_question", "save_artifacts", "load_artifacts", "list_artifacts", "show_artifacts", "read_image", "delegate":
 		return 64 << 10
 	default:
 		return agentcore.ToolOutputInlineBytes

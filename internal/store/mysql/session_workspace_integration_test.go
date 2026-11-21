@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	core "github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modelcore"
@@ -127,7 +128,7 @@ func testSessionWorkspaceUpload(t *testing.T, f *agentIntegrationFixture, svc *a
 		if strings.Contains(message.Content, "normal.txt") || strings.Contains(message.Content, "ordinary workspace bytes") || len(message.Images) != 0 {
 			t.Fatal("working file was projected into the model request")
 		}
-		if message.Role == "user" && !strings.HasPrefix(message.Content, "[Platform context: ") {
+		if message.Role == "user" && !strings.HasPrefix(message.Content, "<system-reminder>") {
 			userMessages++
 			if message.Content != "inspect the workspace" {
 				t.Fatalf("user message was changed by the workspace upload: %+v", message)
@@ -174,6 +175,34 @@ func testSessionWorkspaceUpload(t *testing.T, f *agentIntegrationFixture, svc *a
 		t.Fatal(err)
 	}
 	assertSessionUploadPath(t, receipt.Data.(a.CommandReceipt).ResponseData, renamePath)
+	for _, keys := range [][]string{{cryptox.ID()}, {key, key}} {
+		_, err = f.Agents.SubmitInput(ctx, token, id, cryptox.ID(), a.InputCreate{Content: []core.TextBlock{}, WorkspaceUploadKeys: keys})
+		modelsExpectCode(t, err, "VALIDATION_FAILED")
+	}
+	other := runtimeSession(t, f, agent.ID)
+	_, err = f.Agents.SubmitInput(ctx, token, other.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []core.TextBlock{}, WorkspaceUploadKeys: []string{key}, ExpectedHash: other.Selection.Hash})
+	modelsExpectCode(t, err, "VALIDATION_FAILED")
+	pending, err := f.Agents.SubmitInput(ctx, token, id, cryptox.ID(), a.InputCreate{WorkspaceUploadKeys: []string{key, renameKey}, Content: []core.TextBlock{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inputID := pending.Data.(a.InputAccepted).InputID
+	saved, err := f.Agents.GetInput(ctx, token, id, inputID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err = f.Agents.EditInput(ctx, token, id, inputID, saved.Tag, a.InputEdit{Content: a.Field[[]core.TextBlock]{Set: true, Value: []core.TextBlock{{Type: "text", Text: "draft"}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited, err := f.Agents.EditInput(ctx, token, id, inputID, saved.Tag, a.InputEdit{Content: a.Field[[]core.TextBlock]{Set: true, Value: []core.TextBlock{}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := edited.Data.(a.InputView)
+	if len(view.Content) != 0 || len(view.WorkspaceFiles) != 2 || view.WorkspaceFiles[1].Filename != "sales (3).csv" {
+		t.Fatalf("incorrect edited upload-only input: %+v", view)
+	}
 	if err = svc.ReleaseReferences(ctx, access, json.RawMessage(`{"physical_completion_verified":true}`)); err != nil {
 		t.Fatal(err)
 	}
@@ -183,6 +212,43 @@ func testSessionWorkspaceUpload(t *testing.T, f *agentIntegrationFixture, svc *a
 	runtimeEnd(t, f, x)
 	if err = svc.ProcessPending(ctx, 50); err != nil {
 		t.Fatal(err)
+	}
+	if _, err = f.Agents.ConvergeDue(ctx, time.Now().UTC(), 50); err != nil {
+		t.Fatal(err)
+	}
+	claim, err := claimCloudRoot(t, f, svc, core.ClaimRequest{Candidate: core.Candidate{SessionID: core.ID(id), InputID: core.ID(inputID)}, Epoch: f.Agents.Epoch})
+	if err != nil || !claim.Claimed {
+		t.Fatal("claim file-only input", err)
+	}
+	defer func() {
+		runtimeEnd(t, f, claim.Execution)
+		if err = svc.ProcessPending(ctx, 50); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = f.Agents.ConvergeDue(ctx, time.Now().UTC(), 50); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	wantPaths, _ := json.Marshal([]string{"/data/" + cwd + "/sales.csv", "/data/" + renamePath})
+	want := "<system-reminder>\nWorkspace files uploaded with this input:\n" + string(wantPaths) + "\n</system-reminder>"
+	for stepNo := uint32(1); stepNo <= 2; stepNo++ {
+		step, err := f.Agents.PrepareStep(ctx, claim.Execution, stepNo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		count := 0
+		for _, msg := range step.Request.Messages {
+			if msg.Role == "user" && msg.Content == want {
+				count++
+				continue
+			}
+			if msg.Role == "user" && msg.Content == "" || strings.Contains(msg.Content, "sales.csv") || strings.Contains(msg.Content, "ordinary workspace bytes") {
+				t.Fatalf("unexpected uploaded content: %+v", msg)
+			}
+		}
+		if count != 1 {
+			t.Fatalf("missing or duplicate upload reminder: %+v", step.Request.Messages)
+		}
 	}
 }
 

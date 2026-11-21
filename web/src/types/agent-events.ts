@@ -1,7 +1,6 @@
 import type {
   ActorRef,
   AgentInput,
-  AgentType,
   ApprovalStatus,
   Artifact,
   ContentBlock,
@@ -102,6 +101,7 @@ export interface EventPayloads {
     | "actor_ref"
     | "source_ref"
     | "content"
+    | "workspace_files"
     | "file_refs"
     | "question_answer"
     | "question_context"
@@ -199,7 +199,12 @@ export interface EventPayloads {
     sandbox_execution?: SandboxExecution;
     output_file?: { file_id: string; size_bytes: string; sha256: string };
     source_truncated?: boolean;
-    artifacts?: Artifact[];
+    artifacts?: {
+      artifact_id: string;
+      filename: string;
+      size_bytes: string;
+      sha256: string;
+    }[];
     commit_receipt?: {
       content_session_id: string;
       tool_result: { session_id: string; event_seq: string };
@@ -270,38 +275,29 @@ export interface EventPayloads {
     summary_seq: string | null;
     reason_code: string | null;
   };
-  "context/tool_reconciliation": {
-    source_event_seq: string;
-    tool_call_id: string;
-    provider_call_id: string;
-    tool_key: string;
-    original_result_seq: string;
-    original_status: "outcome_unknown";
-    observed_status: "succeeded" | "failed" | "cancelled";
-    executed: boolean | null;
-    reason: string;
-    observed_at: string;
-    note: string;
-  };
-  "context/runtime": {
-    cwd: string | null;
-    cloud_computer_id: string | null;
-    availability: string;
-    restored_file_refs: { kind: string; id: string }[];
-  };
-  "context/skills": {
-    entries: { name: string; description: string }[];
-    reason: string;
-  };
-  "context/authorization": {
-    agent_configuration_revision: string;
-    agent_type?: AgentType;
-    scope_kind?: "project" | "team" | "platform";
-    resource_scope_kind?: string;
-    project_ids?: string[];
-    reason: string;
+  "context/message": {
+    source:
+      | {
+          kind: "runtime-context";
+          form: "snapshot";
+          sections?: { name: string; text: string }[];
+        }
+      | {
+          kind: "skill-catalog";
+          form: "catalog";
+          entries?: { name: string; description: string }[];
+        }
+      | {
+          kind: "tool-reconciliation";
+          form: "notice";
+          source_event_seq: string;
+          tool_call_id: string;
+          summary: string;
+        };
+    content: { type: "text"; text: string }[];
   };
   "artifact/retained": { artifacts: Artifact[]; tool_call_id: string };
+  "artifact/shown": { artifacts: Artifact[]; tool_call_id: string };
   "artifact/deleted": {
     artifact_id: string;
     deleted_at: string;

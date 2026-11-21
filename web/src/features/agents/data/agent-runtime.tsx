@@ -53,8 +53,7 @@ export function useConversationSend(id: string) {
   const release = useNavigationGuard(
     state.phase === "sending" ||
       state.phase === "uncertain" ||
-      state.phase === "failed" ||
-      state.phase === "confirm-rename",
+      state.phase === "failed",
   );
   useEffect(() => {
     if (state.phase === "idle" || state.phase === "accepted") {

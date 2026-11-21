@@ -37,15 +37,15 @@ export function SessionFiles({
     <Drawer
       open
       wide
-      title="附件与成果"
-      description="文件按当前会话的内容权限读取。正式成果已保存在平台，不依赖原工作目录持续存在。"
+      title="附件与制品"
+      description="文件按当前会话的内容权限读取。制品已保存在平台，不依赖原工作目录持续存在。"
       onClose={onClose}
       footer={<OverlayCancelButton>关闭</OverlayCancelButton>}
     >
       <div className="mb-5 flex gap-2">
         {(
           [
-            ["artifacts", "正式成果"],
+            ["artifacts", "制品"],
             ["bound", "历史附件"],
             ["staged", "我的暂存附件"],
           ] as const
@@ -84,7 +84,7 @@ export function SessionFiles({
                   </div>
                   <StatusBadge>
                     {artifact
-                      ? "正式成果"
+                      ? "制品"
                       : file.state === "staged"
                         ? "尚未发送"
                         : "历史附件"}
@@ -135,7 +135,7 @@ export function SessionFiles({
                         artifact ? "artifact.delete" : "attachment.delete"
                       }
                       etag={`"${file.version}"`}
-                      label={artifact ? "成果" : "暂存附件"}
+                      label={artifact ? "制品" : "暂存附件"}
                       onDeleted={() => {
                         void query.refetch();
                       }}

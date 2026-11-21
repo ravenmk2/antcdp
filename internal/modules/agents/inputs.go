@@ -40,6 +40,18 @@ func inputText(view InputView) string {
 	}
 	return strings.Join(parts, "\n\n")
 }
+
+// File-only inputs use the verified names for conversation titles and queue previews.
+func inputPreviewText(text string, files []agentcore.WorkspaceFile) string {
+	if text != "" || len(files) == 0 {
+		return text
+	}
+	names := make([]string, 0, len(files))
+	for _, file := range files {
+		names = append(names, file.Filename)
+	}
+	return strings.Join(names, "、")
+}
 func inputMessageData(view InputView) any {
 	if view.Content == nil {
 		view.Content = []agentcore.TextBlock{}
@@ -47,7 +59,10 @@ func inputMessageData(view InputView) any {
 	if view.Files == nil {
 		view.Files = []agentcore.FileRef{}
 	}
-	return map[string]any{"input_id": agentcore.ID(view.ID), "revision": agentcore.Version(view.Revision), "origin_kind": view.Origin, "actor_ref": view.Actor, "source_ref": view.Source, "content": view.Content, "file_refs": view.Files, "question_answer": view.Answer, "question_context": view.QuestionContext, "approval_reply": view.Approval}
+	if view.WorkspaceFiles == nil {
+		view.WorkspaceFiles = []agentcore.WorkspaceFile{}
+	}
+	return map[string]any{"input_id": agentcore.ID(view.ID), "revision": agentcore.Version(view.Revision), "origin_kind": view.Origin, "actor_ref": view.Actor, "source_ref": view.Source, "content": view.Content, "file_refs": view.Files, "workspace_files": view.WorkspaceFiles, "question_answer": view.Answer, "question_context": view.QuestionContext, "approval_reply": view.Approval}
 }
 
 func (s *Service) executionTarget(ctx context.Context, tx identity.Tx, r Repository, st StateRepository, id uint64, a *identity.Auth) (*SessionRow, *Definition, agentcore.LockedModel, EffectiveSelection, error) {
@@ -183,7 +198,7 @@ func inputFromPlan(plan agentcore.Input, row *InputRow, version string) InputVie
 	if plan.Files == nil {
 		plan.Files = []agentcore.FileRef{}
 	}
-	return InputView{ID: row.ID, SessionID: row.SessionID, Kind: row.InputKind, Content: plan.Content, Files: plan.Files, Answer: plan.Answer, Origin: row.OriginKind, Actor: plan.Actor, Source: plan.Source, Delivery: plan.Delivery, State: row.Status, Position: row.QueueOrder, QueueDeadline: row.QueueDeadlineAt, AcceptedSeq: row.AcceptedSeq, Revision: row.ContentRevision, Version: version, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	return InputView{WorkspaceFiles: plan.WorkspaceFiles, ID: row.ID, SessionID: row.SessionID, Kind: row.InputKind, Content: plan.Content, Files: plan.Files, Answer: plan.Answer, Origin: row.OriginKind, Actor: plan.Actor, Source: plan.Source, Delivery: plan.Delivery, State: row.Status, Position: row.QueueOrder, QueueDeadline: row.QueueDeadlineAt, AcceptedSeq: row.AcceptedSeq, Revision: row.ContentRevision, Version: version, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
 }
 func (s *Service) SubmitInput(ctx context.Context, raw string, id uint64, key string, w InputCreate) (*Result, error) {
 	return s.access(ctx, raw, false, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
@@ -269,23 +284,23 @@ func (s *Service) GetInput(ctx context.Context, raw string, session, id uint64) 
 }
 
 func (s *Service) submitInputTx(ctx context.Context, tx identity.Tx, r Repository, st StateRepository, a *identity.Auth, out *Result, rec *Receipt, id uint64, w InputCreate) error {
-	var e error
 	if w.Content == nil {
 		return httpx.Invalid("content", "required")
-	}
-	if e = agentcore.ValidateInput(w.Content, w.Files); e != nil {
-		return coreError(e)
 	}
 	v, agent, model, selection, e := s.executionTarget(ctx, tx, r, st, id, a)
 	if e != nil {
 		return e
 	}
-	return s.admitInput(st, out, rec, v, agent, model, selection, a.User.ID, "human", nil, w)
+	uploads, e := resolveWorkspaceUploads(tx, v, a.User.ID, w.WorkspaceUploadKeys)
+	if e != nil {
+		return e
+	}
+	return s.admitInput(st, out, rec, v, agent, model, selection, a.User.ID, "human", nil, uploads, w)
 }
 
 // admitInput applies an already authorized input inside its host transaction.
 // Console and automation commands retain separate identity and receipt handling.
-func (s *Service) admitInput(st StateRepository, out *Result, rec *Receipt, v *SessionRow, agent *Definition, model agentcore.LockedModel, selection EffectiveSelection, actorID uint64, origin string, source *agentcore.SourceRef, w InputCreate) error {
+func (s *Service) admitInput(st StateRepository, out *Result, rec *Receipt, v *SessionRow, agent *Definition, model agentcore.LockedModel, selection EffectiveSelection, actorID uint64, origin string, source *agentcore.SourceRef, uploads []agentcore.WorkspaceFile, w InputCreate) error {
 	id := v.ID
 	session, e := coreSession(v)
 	if e != nil {
@@ -308,7 +323,7 @@ func (s *Service) admitInput(st StateRepository, out *Result, rec *Receipt, v *S
 	if files == nil {
 		files = []agentcore.FileRef{}
 	}
-	plan, e := agentcore.PlanAdmission(agentcore.AdmissionState{Session: session, Candidate: model, Policy: policy}, agentcore.AdmissionCommand{InputID: agentcore.ID(row.ID), Actor: author, Origin: origin, Source: source, Kind: "message", Content: w.Content, Files: files, ExpectedModelHash: w.ExpectedHash}, now)
+	plan, e := agentcore.PlanAdmission(agentcore.AdmissionState{Session: session, Candidate: model, Policy: policy}, agentcore.AdmissionCommand{WorkspaceFiles: uploads, InputID: agentcore.ID(row.ID), Actor: author, Origin: origin, Source: source, Kind: "message", Content: w.Content, Files: files, ExpectedModelHash: w.ExpectedHash}, now)
 	if e != nil {
 		return coreError(e)
 	}

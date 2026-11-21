@@ -14,9 +14,26 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 )
 
+type ContextSection struct {
+	Name string `json:"name"`
+	Text string `json:"text"`
+}
+type CatalogEntry struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
 type ContextFact struct {
-	Kind    string          `json:"kind"`
-	Content json.RawMessage `json:"content"`
+	Kind           string           `json:"kind"`
+	Form           string           `json:"form"`
+	Sections       []ContextSection `json:"sections,omitempty"`
+	Entries        []CatalogEntry   `json:"entries,omitempty"`
+	SourceEventSeq Seq              `json:"source_event_seq,omitempty"`
+	ToolCallID     ID               `json:"tool_call_id,omitempty"`
+	Summary        string           `json:"summary,omitempty"`
+}
+type ContextMessage struct {
+	Source  ContextFact `json:"source"`
+	Content []TextBlock `json:"content"`
 }
 type SurfaceEntry struct {
 	Kind      string `json:"kind"`
@@ -35,16 +52,18 @@ type ImageOffload struct {
 	SHA256 string `json:"sha256"`
 }
 type HistoryFact struct {
-	Seq           Seq
-	Kind          string
-	SchemaVersion int
-	Message       *modelcore.Message
-	Context       *ContextFact
-	ToolCallID    string
-	Ordinal       uint32
-	ModelCallID   ID
-	Interrupted   bool
-	PartialReason string
+	ContextText    string
+	WorkspaceFiles []WorkspaceFile
+	Seq            Seq
+	Kind           string
+	SchemaVersion  int
+	Message        *modelcore.Message
+	Context        *ContextFact
+	ToolCallID     string
+	Ordinal        uint32
+	ModelCallID    ID
+	Interrupted    bool
+	PartialReason  string
 }
 
 func CanonicalJSON(value any) ([]byte, error) {
@@ -124,20 +143,29 @@ func BuildSurface(manifest SurfaceManifest, facts map[Seq]HistoryFact) ([]modelc
 				}
 				message = modelcore.Message{Role: "assistant", Content: label + message.Content}
 			}
+			if len(f.WorkspaceFiles) > 0 {
+				paths := make([]string, 0, len(f.WorkspaceFiles))
+				for _, file := range f.WorkspaceFiles {
+					paths = append(paths, file.Path)
+				}
+				data, err := json.Marshal(paths)
+				if err != nil {
+					return nil, err
+				}
+				messages = append(messages, modelcore.Message{Role: "user", Content: ReminderText("Workspace files uploaded with this input:\n" + string(data))})
+				if message.Content == "" && len(message.Images) == 0 {
+					continue
+				}
+			}
 			messages = append(messages, message)
 		case "context":
 			if len(group) != 1 || group[0].Context == nil {
 				return nil, reject("SURFACE_INVALID")
 			}
-			c := group[0].Context
-			if c.Kind != "context/runtime" && c.Kind != "context/skills" && c.Kind != "context/authorization" && c.Kind != "context/tool_reconciliation" {
-				return nil, reject("SURFACE_VERSION_UNSUPPORTED")
+			if group[0].Kind != "context/message" || group[0].ContextText == "" {
+				return nil, reject("SURFACE_INVALID")
 			}
-			b, err := CanonicalJSON(c.Content)
-			if err != nil {
-				return nil, err
-			}
-			messages = append(messages, modelcore.Message{Role: "user", Content: "[Platform context: " + strings.TrimPrefix(c.Kind, "context/") + "]\n" + string(b)})
+			messages = append(messages, modelcore.Message{Role: "user", Content: group[0].ContextText})
 		case "tool_group":
 			m, err := projectToolGroup(group)
 			if err != nil {
@@ -184,8 +212,12 @@ func cloneMessage(m modelcore.Message) modelcore.Message {
 	return m
 }
 
-// ChangedContext compares against currently VISIBLE facts, not all historical
-// occurrences. A compaction that hides a directory makes it necessary again.
+// ReminderText frames platform-authored facts as one text block.
+func ReminderText(text string) string {
+	return "<system-reminder>\n" + text + "\n</system-reminder>"
+}
+
+// ChangedContext compares against currently visible facts, including after compaction.
 func ChangedContext(visible []ContextFact, next ContextFact) (bool, error) {
 	want, err := ContentHash(next)
 	if err != nil {
@@ -213,10 +245,11 @@ func SkillContext(directory SkillDirectory, enabled bool) (ContextFact, error) {
 			return ContextFact{}, reject("SKILL_DIRECTORY_INVALID")
 		}
 	}
-	b, err := CanonicalJSON(struct {
-		Entries []SkillEntry `json:"entries"`
-	}{entries})
-	return ContextFact{Kind: "context/skills", Content: b}, err
+	fact := ContextFact{Kind: "skill-catalog", Form: "catalog"}
+	for _, entry := range entries {
+		fact.Entries = append(fact.Entries, CatalogEntry{Name: entry.Name, Description: entry.Description})
+	}
+	return fact, nil
 }
 
 type Replacement struct {

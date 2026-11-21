@@ -2,9 +2,10 @@ package agents
 
 import (
 	"context"
-	"encoding/json"
+	"html"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
@@ -41,7 +42,7 @@ func (s *Service) claimInputMessage(st StateRepository, v *SessionRow, run *RunR
 			message.Images = append(message.Images, sourceImagePart(file, ref.SourceSHA256, ""))
 		}
 	}
-	seq, e := appendEvent(st, v, &run.ID, "input/message", "input-message:"+strconv.FormatUint(input.ID, 10), inputMessageData(view), &StoredEvent{Message: &message}, now)
+	seq, e := appendEvent(st, v, &run.ID, "input/message", "input-message:"+strconv.FormatUint(input.ID, 10), inputMessageData(view), &StoredEvent{Message: &message, WorkspaceFiles: view.WorkspaceFiles}, now)
 	if e != nil {
 		return e
 	}
@@ -214,9 +215,15 @@ func (s *Service) CommitContext(ctx context.Context, ref agentcore.ExecutionRef,
 		if x.Session.SurfaceRevision != uint64(update.SurfaceRevision) {
 			return httpx.E(409, "SURFACE_CHANGED", "上下文发生变化")
 		}
-		m, facts, e := loadSurface(st, x.Session)
+		m, facts, e := loadSurfaceHistory(st, x.Session)
 		if e != nil {
 			return e
+		}
+		published := map[string]bool{}
+		for _, f := range facts {
+			if f.Context != nil {
+				published[f.Context.Kind] = true
+			}
 		}
 		visible := []agentcore.ContextFact{}
 		for _, entry := range m.Entries {
@@ -231,34 +238,24 @@ func (s *Service) CommitContext(ctx context.Context, ref agentcore.ExecutionRef,
 		from := x.Session.LastSeq + 1
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		for _, fact := range update.Events {
-			if fact.Kind != "context/runtime" && fact.Kind != "context/skills" && fact.Kind != "context/authorization" {
-				return httpx.Invalid("context", "invalid_kind")
-			}
-			changed, e := agentcore.ChangedContext(visible, fact)
-			if e != nil {
-				return e
+			changed, err := agentcore.ChangedContext(visible, fact)
+			if err != nil {
+				return err
 			}
 			if !changed {
 				continue
 			}
-			var public map[string]any
-			if json.Unmarshal(fact.Content, &public) != nil {
-				return integrity()
+			text, err := snapshotText(fact, published[fact.Kind])
+			if err != nil {
+				return err
 			}
-			if fact.Kind == "context/skills" {
-				// Integrity participates in model-context change detection, but the
-				// public directory exposes only the documented name/description.
-				if entries, ok := public["entries"].([]any); ok {
-					for _, entry := range entries {
-						if fields, ok := entry.(map[string]any); ok {
-							delete(fields, "integrity")
-						}
-					}
-				}
+			if text == "" {
+				continue
 			}
-			if _, e = appendEvent(st, x.Session, &x.Run.ID, fact.Kind, "", public, &StoredEvent{Context: &fact}, now); e != nil {
-				return e
+			if err = appendContextMessage(st, x.Session, x.Run.ID, "", fact, text, now); err != nil {
+				return err
 			}
+			published[fact.Kind] = true
 			visible = append(visible, fact)
 		}
 		if e = st.SaveSession(x.Session); e != nil {
@@ -271,4 +268,45 @@ func (s *Service) CommitContext(ctx context.Context, ref agentcore.ExecutionRef,
 		return nil
 	})
 	return out, e
+}
+
+// Empty sources are silent until a published snapshot or catalog needs clearing.
+func snapshotText(fact agentcore.ContextFact, published bool) (string, error) {
+	switch fact.Kind {
+	case "runtime-context":
+		if len(fact.Sections) == 0 {
+			if published {
+				return "Current runtime context: none. Earlier runtime-context snapshots no longer apply.", nil
+			}
+			return "", nil
+		}
+		intro := "The following information describes your current session:"
+		if published {
+			intro = "The following information describes your current session. It replaces earlier versions of this context, including any retained in conversation summaries."
+		}
+		lines := []string{intro}
+		for _, section := range fact.Sections {
+			lines = append(lines, section.Text)
+		}
+		return strings.Join(lines, "\n\n"), nil
+	case "skill-catalog":
+		if len(fact.Entries) == 0 {
+			if published {
+				return "No skills are currently available. This replaces the earlier skill catalog.", nil
+			}
+			return "", nil
+		}
+		intro := "The following skills are available in this session:"
+		if published {
+			intro = "The available skill catalog changed. This catalog replaces the earlier skill list:"
+		}
+		lines := []string{intro, "", "<available_skills>"}
+		for _, entry := range fact.Entries {
+			lines = append(lines, "- "+html.EscapeString(entry.Name)+": "+html.EscapeString(entry.Description))
+		}
+		lines = append(lines, "</available_skills>")
+		return strings.Join(lines, "\n"), nil
+	default:
+		return "", httpx.Invalid("context", "invalid_source")
+	}
 }

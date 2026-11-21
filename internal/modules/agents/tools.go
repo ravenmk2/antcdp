@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -405,7 +406,10 @@ func (s *Service) CompleteTool(ctx context.Context, ref agentcore.ExecutionRef, 
 				return err
 			}
 			extra["output_file"] = output
-			notice := fmt.Sprintf("\n\n[Platform notice: full captured output (%d bytes) is retained. Use read_tool_output with file_id=%q, offset/limit or a literal query to inspect it.]", output.Size, idString(outputFile.ID))
+			notice := fmt.Sprintf("\n\n[Full captured output retained: %d bytes, file_id=%q.]", output.Size, idString(outputFile.ID))
+			if slices.ContainsFunc(x.Context.Tools, func(tool FrozenTool) bool { return tool.Spec.Key == "read_tool_output" }) {
+				notice += " Use read_tool_output to page or search the retained output."
+			}
 			content = agentcore.HeadTail(content, inlineLimit-len(notice), "\n\n[... middle omitted ...]\n\n") + notice
 			extra["truncated"] = true
 		} else if len(content) > inlineLimit {

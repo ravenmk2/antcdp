@@ -12,6 +12,10 @@ export type AgentApiDomain =
   | typeof webAccessRoot;
 export const agentKeys = ["agents"] as const;
 export const webAccessKeys = ["web-access"] as const;
+export function workspaceFileURL(computerId: string, path: string) {
+  return `/api/v1${agentRoot}/cloud-computers/${encodeURIComponent(computerId)}/file-content?${new URLSearchParams({ path, disposition: "attachment" })}`;
+}
+
 export function agentRequest<T>(path: string, options?: RequestOptions) {
   return request<T>(`${agentRoot}${path}`, options);
 }

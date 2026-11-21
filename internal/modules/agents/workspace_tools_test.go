@@ -1,7 +1,6 @@
 package agents
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -23,59 +22,33 @@ func TestWorkspaceToolPathsStayWithinPublicData(t *testing.T) {
 	}
 }
 
-func TestWorkspaceReadOutputKeepsValidJSONAndContinuation(t *testing.T) {
-	data := []byte(strings.Repeat("\x01", 32768))
-	raw, _ := json.Marshal(map[string]any{"path": "sessions/11/note.txt", "data_base64": base64.StdEncoding.EncodeToString(data), "offset": 0, "next_offset": len(data), "size_bytes": "32768", "has_more": false, "identity": strings.Repeat("a", 64)})
-	text, err := workspaceToolContent("read_file", raw)
-	if err != nil || len(text) > 60<<10 || !json.Valid([]byte(text)) {
-		t.Fatalf("bounded output: %v %d", err, len(text))
-	}
-	var result struct {
-		Text string `json:"text"`
-		Next int    `json:"next_offset"`
-		More bool   `json:"has_more"`
-	}
-	if json.Unmarshal([]byte(text), &result) != nil || result.Next != len(result.Text) || result.Next >= len(data) || !result.More {
-		t.Fatalf("continuation: %#v", result)
-	}
-	data = []byte("报告😀")
-	raw, _ = json.Marshal(map[string]any{"path": "a", "data_base64": base64.StdEncoding.EncodeToString(data[:len(data)-1]), "offset": 0, "next_offset": len(data) - 1, "size_bytes": "100", "has_more": true})
-	text, err = workspaceToolContent("read_file", raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if json.Unmarshal([]byte(text), &result) != nil || result.Text != "报告" || result.Next != 6 {
-		t.Fatalf("UTF8 boundary: %s", text)
-	}
-}
-
 func TestWorkspaceSearchOutputBoundsWholeRecords(t *testing.T) {
 	matches := make([]workspace.Match, 200)
 	for i := range matches {
-		matches[i] = workspace.Match{Path: strings.Repeat("x", 1024), Line: i + 1, Text: strings.Repeat("\x01", 2048)}
+		matches[i] = workspace.Match{Line: i + 1, Text: strings.Repeat("\x01", 2048)}
 	}
-	raw, _ := json.Marshal(map[string]any{"paths": []string{}, "matches": matches, "truncated": false, "visited_entries": 500})
+	raw, _ := json.Marshal(map[string]any{"paths": []string{}, "groups": []workspace.MatchGroup{{Path: strings.Repeat("x", 1024), Lines: matches}}, "truncated": false, "visited_entries": 500})
 	text, err := workspaceToolContent("grep", raw)
 	if err != nil || len(text) > 60<<10 || !json.Valid([]byte(text)) {
 		t.Fatalf("bounded result: %v", err)
 	}
 	var result struct {
-		Matches   []workspace.Match `json:"matches"`
-		Truncated bool              `json:"truncated"`
+		Groups    []workspace.MatchGroup `json:"groups"`
+		Truncated bool                   `json:"truncated"`
 	}
 	_ = json.Unmarshal([]byte(text), &result)
-	if len(result.Matches) == 0 || len(result.Matches) >= len(matches) || !result.Truncated {
+	if len(result.Groups) != 1 || len(result.Groups[0].Lines) == 0 || len(result.Groups[0].Lines) >= len(matches) || !result.Truncated {
 		t.Fatalf("result was not explicitly truncated")
 	}
 }
 
 func TestWorkspaceToolRejectsEncodedOversizeBeforeDispatch(t *testing.T) {
-	raw, _ := json.Marshal(map[string]any{"path": "a", "content": strings.Repeat("中", 32768)})
-	if _, _, err := workspaceToolRequest("write_file", raw); err == nil {
+	raw, _ := json.Marshal(map[string]any{"file_path": "a", "content": strings.Repeat("中", 32768)})
+	if _, _, err := workspaceToolRequest("write", raw); err == nil {
 		t.Fatal("accepted oversized UTF-8 bytes")
 	}
-	for _, raw := range []string{`{"path":"a","old_text":"","new_text":"b"}`, `{"path":"a","old_text":"x","new_text":"b","unexpected":true}`, `{"path":"a","old_text":"x","new_text":"b"}{}`} {
-		if _, _, err := workspaceToolRequest("edit_file", []byte(raw)); err == nil {
+	for _, raw := range []string{`{"file_path":"a","old_string":"","new_string":"b"}`, `{"file_path":"a","old_string":"x","new_string":"b","unexpected":true}`, `{"file_path":"a","old_string":"x","new_string":"b"}{}`} {
+		if _, _, err := workspaceToolRequest("edit", []byte(raw)); err == nil {
 			t.Fatal("accepted invalid edit")
 		}
 	}

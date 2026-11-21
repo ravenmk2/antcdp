@@ -34,19 +34,21 @@ func ValidCWD(cwd string) bool {
 
 // Paths are relative to the Agent workspace mount. Provider APIs govern IO semantics.
 type Request struct {
-	Version      int            `json:"version"`
-	Operation    string         `json:"operation"`
-	Token        string         `json:"token,omitempty"`
-	Path         string         `json:"path,omitempty"`
-	AgentID      string         `json:"agent_id,omitempty"`
-	Offset       int64          `json:"offset,omitempty"`
-	Limit        int            `json:"limit,omitempty"`
-	Data         string         `json:"data_base64,omitempty"`
-	ExpectedHash string         `json:"expected_sha256,omitempty"`
-	Identity     string         `json:"identity,omitempty"`
-	Overwrite    bool           `json:"overwrite,omitempty"`
+	Version      int    `json:"version"`
+	Operation    string `json:"operation"`
+	Token        string `json:"token,omitempty"`
+	Path         string `json:"path,omitempty"`
+	AgentID      string `json:"agent_id,omitempty"`
+	Offset       int64  `json:"offset,omitempty"`
+	Limit        int    `json:"limit,omitempty"`
+	Data         string `json:"data_base64,omitempty"`
+	ExpectedHash string `json:"expected_sha256,omitempty"`
+	Identity     string `json:"identity,omitempty"`
+
 	Recursive    bool           `json:"recursive,omitempty"`
 	Pattern      string         `json:"pattern,omitempty"`
+	ReplaceAll   bool           `json:"replace_all,omitempty"`
+	Include      string         `json:"include,omitempty"`
 	Literal      bool           `json:"literal,omitempty"`
 	CaseFold     bool           `json:"case_fold,omitempty"`
 	Entries      []Removal      `json:"entries,omitempty"`
@@ -74,8 +76,12 @@ type Entry struct {
 	Identity   string `json:"identity"`
 }
 
+type MatchGroup struct {
+	Path  string  `json:"path"`
+	Lines []Match `json:"lines"`
+}
+
 type Match struct {
-	Path string `json:"path"`
 	Line int    `json:"line"`
 	Text string `json:"text"`
 }

@@ -1,10 +1,14 @@
+import { MessageAttachments } from "./attachment-tiles";
 import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import { Atom, Bot } from "lucide-react";
 import { useSession } from "@/app/auth";
 import { ChatCopyButton as CopyButton } from "./controls";
 import type { ActiveAttempt, DurableRecord } from "@/types/agent-events";
 import type { FileRef } from "@/types/agents";
-import type { AcceptedSubmission } from "../data/send-flow";
+import type {
+  AcceptedSubmission,
+  MessageWorkspaceFile,
+} from "../data/send-flow";
 import { runStatusNames } from "@/features/agents/resources/admin-shared";
 import {
   ConversationProjector,
@@ -19,7 +23,7 @@ import {
 import { diagnosticReason, diagnosticLines } from "../data/diagnostics";
 import { turnIssues } from "../data/turn-issues";
 import { TurnIssues } from "./turn-issues";
-import { MessageContent, FileReference } from "./content";
+import { MessageContent } from "./content";
 import { ToolEvent, builtinToolNames } from "./tool-event";
 import { toolIconActive, toolSummary } from "../data/tool-summary";
 import { ChatDisclosure } from "./disclosure";
@@ -54,6 +58,7 @@ type ConversationTimelineProps = {
   attempt: ActiveAttempt | null;
   service?: boolean;
   pauseAutoCollapse?: boolean;
+  computerId?: string | null;
   submissions?: readonly AcceptedSubmission[];
   onVisibleResult?: (
     record: Extract<DurableRecord, { event_type: "run/ended" }>,
@@ -66,6 +71,7 @@ function Timeline({
   service = false,
   pauseAutoCollapse = false,
   onVisibleResult,
+  computerId,
   submissions = [],
 }: ConversationTimelineProps) {
   const { user } = useSession();
@@ -291,6 +297,8 @@ function Timeline({
               inputId={item.inputId}
               text={item.text}
               fileRefs={item.fileRefs}
+              workspaceFiles={item.workspaceFiles}
+              computerId={computerId}
               sessionId={sessionId}
               time={item.time}
               latest
@@ -378,6 +386,7 @@ function Timeline({
           record.event_type === "input/message" &&
           !record.data.content.some((block) => block.text.trim()) &&
           !record.data.file_refs.length &&
+          !record.data.workspace_files?.length &&
           !record.data.question_answer
         )
           return null;
@@ -440,13 +449,20 @@ function Timeline({
           ]
             .filter(Boolean)
             .join("\n");
-          if (!text && !record.data.file_refs.length) return null;
+          if (
+            !text &&
+            !record.data.file_refs.length &&
+            !record.data.workspace_files?.length
+          )
+            return null;
           return (
             <UserBubble
               key={`input:${record.data.input_id}`}
               inputId={record.data.input_id}
               text={text}
               fileRefs={record.data.file_refs}
+              workspaceFiles={record.data.workspace_files}
+              computerId={computerId}
               sessionId={sessionId}
               time={record.occurred_at}
               latest={record.seq === latestInput && !submissions.length}
@@ -524,6 +540,8 @@ function UserBubble({
   inputId,
   text,
   fileRefs,
+  workspaceFiles,
+  computerId,
   sessionId,
   time,
   latest,
@@ -532,6 +550,8 @@ function UserBubble({
   inputId: string;
   text: string;
   fileRefs: FileRef[];
+  workspaceFiles?: MessageWorkspaceFile[];
+  computerId?: string | null;
   sessionId: string;
   time: string;
   latest: boolean;
@@ -544,24 +564,19 @@ function UserBubble({
       data-message-anchor={`input:${inputId}`}
     >
       <div className="agent-user-message-content">
-        <div className="agent-user-bubble">
-          {text && (
+        <MessageAttachments
+          references={fileRefs}
+          files={workspaceFiles}
+          sessionId={sessionId}
+          computerId={computerId}
+        />
+        {text && (
+          <div className="agent-user-bubble">
             <div className="whitespace-pre-wrap break-words text-base leading-[26px]">
               {text}
             </div>
-          )}
-          {fileRefs.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {fileRefs.map((ref) => (
-                <FileReference
-                  key={`${ref.kind}:${ref.id}`}
-                  reference={ref}
-                  sessionId={sessionId}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
         <div className="agent-message-actions justify-end">
           <span>
             {actorLabel}
@@ -570,7 +585,7 @@ function UserBubble({
               minute: "2-digit",
             })}
           </span>
-          <CopyButton value={text} label="复制消息" />
+          {text && <CopyButton value={text} label="复制消息" />}
         </div>
       </div>
     </article>

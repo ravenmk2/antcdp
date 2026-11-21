@@ -67,7 +67,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = host.PutToolBindings(ctx, f.AdminToken, agent.ID, bindings.Tag, a.ToolBindingsWrite{Items: []a.ToolBindingWrite{{ToolKey: "present", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "import_file", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "delegate", Policy: "allow", Constraints: json.RawMessage(`{}`)}}}); e != nil {
+	if _, e = host.PutToolBindings(ctx, f.AdminToken, agent.ID, bindings.Tag, a.ToolBindingsWrite{Items: []a.ToolBindingWrite{{ToolKey: "save_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "load_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "list_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "show_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "delegate", Policy: "allow", Constraints: json.RawMessage(`{}`)}}}); e != nil {
 		t.Fatal(e)
 	}
 	session := runtimeSession(t, f, agent.ID)
@@ -80,7 +80,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	accepted, e := host.SubmitInput(ctx, f.AdminToken, session.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []core.TextBlock{{Type: "text", Text: "导入选定附件并保存成果"}}, Files: []core.FileRef{{Kind: "attachment", ID: core.ID(attachment.ID)}}, ExpectedHash: detail.Data.(a.SessionDetail).Selection.Hash})
+	accepted, e := host.SubmitInput(ctx, f.AdminToken, session.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []core.TextBlock{{Type: "text", Text: "保存工作文件为制品"}}, Files: []core.FileRef{{Kind: "attachment", ID: core.ID(attachment.ID)}}, ExpectedHash: detail.Data.(a.SessionDetail).Selection.Hash})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -103,42 +103,25 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	if remote.requests != beforeImage {
 		t.Fatal("unsupported model performed image IO")
 	}
-	w := a.ImportFileRequest{Source: core.FileRef{Kind: "attachment", ID: core.ID(attachment.ID)}, Destination: "source.txt"}
-	args, _ := json.Marshal(w)
-	call := commandDeclare(t, f, x, 1, "import_file", string(args))
-	imported, e := svc.ImportFile(ctx, x.Ref, uint64(call.ID), w)
-	if e != nil || imported.Committed == nil {
-		t.Fatal("import commit", e)
-	}
-	if e = imported.Committed.ValidateTool(call.ID, x.Ref.SessionID); e != nil {
-		t.Fatal(e)
-	}
 	name := strings.TrimPrefix(binding.CWD, "/data/") + "/source.txt"
-	if string(remote.files[name]) != "immutable source" {
-		t.Fatal("import bytes changed")
-	}
-	before := remote.requests
-	replayed, e := svc.ImportFile(ctx, x.Ref, uint64(call.ID), w)
-	if e != nil || remote.requests != before || replayed.Content != imported.Content || !reflect.DeepEqual(replayed.Committed, imported.Committed) {
-		t.Fatal("import replay performed IO", e)
-	}
+	remote.files[name] = []byte("immutable source")
 	remote.files[strings.TrimPrefix(binding.CWD, "/data/")+"/report.md"] = []byte("retained report")
-	present := a.PresentRequest{Files: []a.PresentFile{{Path: "report.md", Description: "持久成果"}, {Path: "source.txt"}}}
-	args, _ = json.Marshal(present)
-	presentCall := commandDeclare(t, f, x, 2, "present", string(args))
-	saved, e := svc.Present(ctx, x.Ref, uint64(presentCall.ID), present)
+	present := a.SaveArtifactsRequest{Files: []a.SaveArtifactItem{{Path: binding.CWD + "/report.md", Description: "持久制品"}, {Path: "source.txt"}}}
+	args, _ := json.Marshal(present)
+	presentCall := commandDeclare(t, f, x, 1, "save_artifacts", string(args))
+	saved, e := svc.SaveArtifacts(ctx, x.Ref, uint64(presentCall.ID), present)
 	if e != nil || saved.Committed == nil || len(saved.Committed.ArtifactIDs) != 2 {
 		t.Fatal("present atomic commit", e)
 	}
 	if e = saved.Committed.ValidateTool(presentCall.ID, x.Ref.SessionID); e != nil {
 		t.Fatal(e)
 	}
-	before = remote.requests
-	if _, e = svc.Present(ctx, x.Ref, uint64(presentCall.ID), present); e != nil || remote.requests != before {
+	before := remote.requests
+	if _, e = svc.SaveArtifacts(ctx, x.Ref, uint64(presentCall.ID), present); e != nil || remote.requests != before {
 		t.Fatal("present copied twice", e)
 	}
 	var results int
-	if e = f.Store.db.GetContext(ctx, &results, "SELECT COUNT(*) FROM agent_event WHERE session_id=? AND event_type='tool/result'", session.Configuration.ID); e != nil || results != 2 {
+	if e = f.Store.db.GetContext(ctx, &results, "SELECT COUNT(*) FROM agent_event WHERE session_id=? AND event_type='tool/result'", session.Configuration.ID); e != nil || results != 1 {
 		t.Fatal("unique tool results", results, e)
 	}
 	artifactResult, e := host.GetArtifact(ctx, f.AdminToken, uint64(saved.Committed.ArtifactIDs[0]))
@@ -157,34 +140,41 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	if e != nil || closeErr != nil || string(data) != "retained report" {
 		t.Fatal("artifact depended on mutable workspace", e, closeErr)
 	}
-	// A file visible in this Session but not selected by this root is not an
-	// import authority. The just-created artifact also requires explicit input.
-	unselected := a.ImportFileRequest{Source: core.FileRef{Kind: "artifact", ID: core.ID(artifact.ID)}, Destination: "unselected.txt"}
-	args, _ = json.Marshal(unselected)
-	badCall := commandDeclare(t, f, x, 3, "import_file", string(args))
-	before = remote.requests
-	_, e = svc.ImportFile(ctx, x.Ref, uint64(badCall.ID), unselected)
-	modelsExpectCode(t, e, "NOT_FOUND")
-	if remote.requests != before {
-		t.Fatal("unselected source touched remote")
+
+	w := a.LoadArtifactsRequest{Items: []a.LoadArtifactItem{{ArtifactID: core.ID(artifact.ID), Destination: "restored.md"}, {ArtifactID: saved.Committed.ArtifactIDs[1], Destination: "copy.txt"}}}
+	args, _ = json.Marshal(w)
+	loadCall := commandDeclare(t, f, x, 2, "load_artifacts", string(args))
+	loaded, e := svc.LoadArtifacts(ctx, x.Ref, uint64(loadCall.ID), w)
+	if e != nil || loaded.Committed == nil || string(remote.files[strings.TrimPrefix(binding.CWD, "/data/")+"/restored.md"]) != "retained report" {
+		t.Fatal("load session artifacts", e, loaded)
 	}
+	before = remote.requests
+	replayed, e := svc.LoadArtifacts(ctx, x.Ref, uint64(loadCall.ID), w)
+	if e != nil || remote.requests != before || !reflect.DeepEqual(replayed.Committed, loaded.Committed) {
+		t.Fatal("load replay", e)
+	}
+	bad := a.LoadArtifactsRequest{Items: []a.LoadArtifactItem{{ArtifactID: core.ID(99999999)}}}
+	args, _ = json.Marshal(bad)
+	badCall := commandDeclare(t, f, x, 3, "load_artifacts", string(args))
+	_, e = svc.LoadArtifacts(ctx, x.Ref, uint64(badCall.ID), bad)
+	modelsExpectCode(t, e, "NOT_FOUND")
 	no := false
-	if _, e = host.CompleteTool(ctx, x.Ref, core.ToolResult{Call: badCall, Observation: core.DispatchObservation{Status: "failed", Executed: &no, Content: "not selected"}}); e != nil {
+	if _, e = host.CompleteTool(ctx, x.Ref, core.ToolResult{Call: badCall, Observation: core.DispatchObservation{Status: "failed", Executed: &no, Content: "missing"}}); e != nil {
 		t.Fatal(e)
 	}
 	// Child publication belongs to the root content domain while its unique
 	// tool result belongs to the child's independent event sequence.
-	delegated := commandDeclare(t, f, x, 4, "delegate", `{"task":"生成子任务成果","file_refs":[]}`)
-	child, e := host.CreateChild(ctx, core.ChildRequest{Parent: delegated, Content: []core.TextBlock{{Type: "text", Text: "生成子任务成果"}}})
+	delegated := commandDeclare(t, f, x, 4, "delegate", `{"task":"生成子任务制品","file_refs":[]}`)
+	child, e := host.CreateChild(ctx, core.ChildRequest{Parent: delegated, Content: []core.TextBlock{{Type: "text", Text: "生成子任务制品"}}})
 	if e != nil || !child.Created {
 		t.Fatal("create artifact child", e)
 	}
 	child.Execution.Binding = binding
 	remote.files[strings.TrimPrefix(binding.CWD, "/data/")+"/child.txt"] = []byte("child retained")
-	childRequest := a.PresentRequest{Files: []a.PresentFile{{Path: "child.txt"}}}
+	childRequest := a.SaveArtifactsRequest{Files: []a.SaveArtifactItem{{Path: "child.txt"}}}
 	args, _ = json.Marshal(childRequest)
-	childCall := commandDeclare(t, f, child.Execution, 1, "present", string(args))
-	childSaved, e := svc.Present(ctx, child.Execution.Ref, uint64(childCall.ID), childRequest)
+	childCall := commandDeclare(t, f, child.Execution, 1, "save_artifacts", string(args))
+	childSaved, e := svc.SaveArtifacts(ctx, child.Execution.Ref, uint64(childCall.ID), childRequest)
 	if e != nil || childSaved.Committed == nil || len(childSaved.Committed.Ranges) != 2 || childSaved.Committed.ContentSessionID != x.Ref.SessionID || childSaved.Committed.ToolResultSessionID != child.Execution.Ref.SessionID {
 		t.Fatal("child cross-session receipt", e)
 	}
@@ -198,24 +188,49 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(e)
 	}
 	var intent struct {
-		Present    a.PresentRequest `json:"present"`
-		Operations []uint64         `json:"operations"`
+		Present    a.SaveArtifactsRequest `json:"save_artifacts"`
+		Operations []uint64               `json:"operations"`
 	}
 	if e = json.Unmarshal(persistedIntent, &intent); e != nil || !reflect.DeepEqual(intent.Present, childRequest) || len(intent.Operations) != 1 {
 		t.Fatal("publication replaced recovery intent with result", e)
 	}
 	before = remote.requests
-	replayed, e = svc.Present(ctx, child.Execution.Ref, uint64(childCall.ID), childRequest)
+	replayed, e = svc.SaveArtifacts(ctx, child.Execution.Ref, uint64(childCall.ID), childRequest)
 	if e != nil || remote.requests != before || replayed.Content != childSaved.Content || !reflect.DeepEqual(replayed.Committed, childSaved.Committed) {
 		t.Fatal("child replay lost committed result or cross-session receipt", e)
 	}
 	if _, e = host.EndChild(ctx, child.Execution.Ref, core.ChildEnd{End: core.RunEnd{Status: core.Succeeded}}); e != nil {
 		t.Fatal(e)
 	}
+	listCall := commandDeclare(t, f, x, 5, "list_artifacts", `{"query":"report","page_size":1}`)
+	listed, e := host.SessionArtifactTool(ctx, core.DispatchPermit{Call: listCall})
+	if e != nil || !strings.Contains(listed.Content, "report.md") || strings.Contains(listed.Content, "source.txt") {
+		t.Fatal("list saved artifacts", listed, e)
+	}
+	if _, e = host.CompleteTool(ctx, x.Ref, core.ToolResult{Call: listCall, Observation: listed}); e != nil {
+		t.Fatal(e)
+	}
+	var shownEvents int
+	countShown := func() int {
+		t.Helper()
+		if e := f.Store.db.GetContext(ctx, &shownEvents, "SELECT COUNT(*) FROM agent_event WHERE session_id=? AND event_type='artifact/shown'", session.Configuration.ID); e != nil {
+			t.Fatal(e)
+		}
+		return shownEvents
+	}
+	if countShown() != 0 {
+		t.Fatal("saving or listing displayed a file")
+	}
+	showArgs, _ := json.Marshal(map[string]any{"artifact_ids": saved.Committed.ArtifactIDs})
+	showCall := commandDeclare(t, f, x, 6, "show_artifacts", string(showArgs))
+	shown, e := host.SessionArtifactTool(ctx, core.DispatchPermit{Call: showCall})
+	if e != nil || shown.Committed == nil || shown.Committed.ValidateTool(showCall.ID, x.Ref.SessionID) != nil || countShown() != 1 {
+		t.Fatal("show grouped session artifacts", shown, e)
+	}
 	// An existing destination must not be overwritten, even with equal hashes.
 	args, _ = json.Marshal(w)
-	duplicate := commandDeclare(t, f, x, 5, "import_file", string(args))
-	failed, e := svc.ImportFile(ctx, x.Ref, uint64(duplicate.ID), w)
+	duplicate := commandDeclare(t, f, x, 7, "load_artifacts", string(args))
+	failed, e := svc.LoadArtifacts(ctx, x.Ref, uint64(duplicate.ID), w)
 	if e == nil {
 		t.Fatal("existing import target replaced")
 	}
@@ -227,11 +242,12 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	}
 	// An uncertain native import retains its hold and is never sent
 	// again. Its source and workspace references survive until physical proof.
-	w.Destination = "unknown.txt"
+	w.Items = w.Items[:1]
+	w.Items[0].Destination = "unknown.txt"
 	args, _ = json.Marshal(w)
-	uncertainCall := commandDeclare(t, f, x, 6, "import_file", string(args))
+	uncertainCall := commandDeclare(t, f, x, 8, "load_artifacts", string(args))
 	remote.unknownImport = true
-	uncertain, e := svc.ImportFile(ctx, x.Ref, uint64(uncertainCall.ID), w)
+	uncertain, e := svc.LoadArtifacts(ctx, x.Ref, uint64(uncertainCall.ID), w)
 	if e == nil || uncertain.Status != "outcome_unknown" {
 		t.Fatal("lost import response treated as known", e)
 	}

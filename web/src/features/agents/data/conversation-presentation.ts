@@ -148,7 +148,11 @@ export function conversationPresentation(
       continue;
     }
     const record = node.record;
-    if (record.event_type === "artifact/retained") continue;
+    if (
+      record.event_type === "artifact/retained" ||
+      record.event_type === "artifact/shown"
+    )
+      continue;
     if (record.event_type === "assistant/attempt") {
       if (
         !record.data.rejected_tools?.length &&

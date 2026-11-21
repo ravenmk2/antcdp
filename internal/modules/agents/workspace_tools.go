@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modules/agents/workspace"
@@ -17,17 +16,18 @@ import (
 )
 
 type workspaceToolInput struct {
+	FilePath      string `json:"file_path"`
+	OldString     string `json:"old_string"`
+	NewString     string `json:"new_string"`
+	ReplaceAll    bool   `json:"replace_all"`
+	Include       string `json:"include"`
 	Path          string `json:"path"`
 	Offset        int64  `json:"offset"`
 	Limit         int    `json:"limit"`
 	Content       string `json:"content"`
-	Overwrite     bool   `json:"overwrite"`
-	Identity      string `json:"identity"`
-	OldText       string `json:"old_text"`
-	NewText       string `json:"new_text"`
 	Pattern       string `json:"pattern"`
 	Literal       bool   `json:"literal"`
-	CaseSensitive bool   `json:"case_sensitive"`
+	CaseSensitive *bool  `json:"case_sensitive"`
 }
 
 // Both modes expose the same /data namespace. Relative names always start at
@@ -58,29 +58,37 @@ func workspaceToolRequest(key string, raw json.RawMessage) (workspaceToolInput, 
 	}
 	q := workspace.Request{Path: input.Path}
 	switch key {
-	case "read_file":
-		if input.Path == "" || input.Offset < 0 || input.Limit < 0 || input.Limit > 32768 {
-			return input, q, httpx.Invalid("arguments", "out_of_range")
+	case "read", "write", "edit":
+		if input.FilePath == "" {
+			return input, q, httpx.Invalid("file_path", "required")
 		}
-		q.Operation, q.Offset, q.Limit = "read", input.Offset, input.Limit
-		if q.Limit == 0 {
-			q.Limit = 16384
+		input.Path, q.Path = input.FilePath, input.FilePath
+		switch key {
+		case "read":
+			if input.Offset < 0 || input.Offset > 100000000 || input.Limit < 0 || input.Limit > 2000 {
+				return input, q, httpx.Invalid("range", "invalid")
+			}
+			q.Operation, q.Offset, q.Limit = "read", max(1, input.Offset), input.Limit
+			if q.Limit == 0 {
+				q.Limit = 2000
+			}
+		case "write":
+			if len(input.Content) > workspace.MaxWriteBytes {
+				return input, q, httpx.Invalid("content", "too_large")
+			}
+			q.Operation, q.Data = "write", base64.StdEncoding.EncodeToString([]byte(input.Content))
+		case "edit":
+			if input.OldString == "" || input.OldString == input.NewString || len(input.OldString) > 8192 || len(input.NewString) > 16384 {
+				return input, q, httpx.Invalid("old_string", "invalid_replacement")
+			}
+			q.Operation, q.Pattern, q.Data, q.ReplaceAll = "edit", input.OldString, base64.StdEncoding.EncodeToString([]byte(input.NewString)), input.ReplaceAll
 		}
-	case "write_file":
-		if input.Path == "" || !utf8.ValidString(input.Content) || len(input.Content) > workspace.MaxWriteBytes || input.Identity != "" && len(input.Identity) != 64 {
-			return input, q, httpx.Invalid("arguments", "invalid_content")
-		}
-		q.Operation, q.Data, q.Overwrite, q.Identity = "write", base64.StdEncoding.EncodeToString([]byte(input.Content)), input.Overwrite, input.Identity
-	case "edit_file":
-		if input.Path == "" || input.OldText == "" || len(input.OldText) > 8192 || len(input.NewText) > 16384 {
-			return input, q, httpx.Invalid("arguments", "invalid_content")
-		}
-		q.Operation, q.Pattern, q.Data = "edit", input.OldText, base64.StdEncoding.EncodeToString([]byte(input.NewText))
 	case "glob", "grep":
-		if input.Pattern == "" || len(input.Pattern) > 1024 || input.Limit < 0 || input.Limit > 200 {
+		if input.Pattern == "" || len(input.Pattern) > 1024 || input.Limit < 0 || input.Limit > 250 || key == "glob" && input.Limit > 200 {
 			return input, q, httpx.Invalid("arguments", "out_of_range")
 		}
-		q.Operation, q.Pattern, q.Limit, q.Literal, q.CaseFold = key, input.Pattern, input.Limit, input.Literal, !input.CaseSensitive
+		q.Include = input.Include
+		q.Operation, q.Pattern, q.Limit, q.Literal, q.CaseFold = key, input.Pattern, input.Limit, input.Literal, input.CaseSensitive != nil && !*input.CaseSensitive
 	default:
 		return input, q, httpx.Invalid("tool_key", "unsupported")
 	}
@@ -136,19 +144,7 @@ func (s *CloudService) FileTool(ctx context.Context, ref agentcore.ExecutionRef,
 		}
 		token := s.Host.ETag("workspace-tool/" + idString(callID))[:32]
 		operation, e = s.startWorkspaceOperation(st, repo, access, "workspace_tool", "system", idString(callID), map[string]any{"tool_call_id": idString(callID), "tool_key": key, "request": q}, token)
-		if e != nil {
-			return e
-		}
-		// A previously dispatched operation is inspected by the reconciler. It
-		// must not be run again, even when a tool-result commit was lost.
-		var recorded workspaceOperationObservation
-		if json.Unmarshal(operation.Observation, &recorded) != nil {
-			return integrity()
-		}
-		if operation.Status != "running" || len(recorded.Executions) > 0 {
-			return httpx.E(409, "WORKSPACE_OPERATION_EXISTS", "文件操作已有执行记录，请核实结果")
-		}
-		return nil
+		return e
 	})
 	if err != nil {
 		return observation, err
@@ -188,62 +184,14 @@ func (s *CloudService) FileTool(ctx context.Context, ref agentcore.ExecutionRef,
 }
 
 func workspaceToolContent(key string, raw json.RawMessage) (string, error) {
-	if key == "read_file" {
-		var result struct {
-			Path     string `json:"path"`
-			Data     string `json:"data_base64"`
-			Offset   int64  `json:"offset"`
-			Next     int64  `json:"next_offset"`
-			Size     string `json:"size_bytes"`
-			More     bool   `json:"has_more"`
-			Identity string `json:"identity"`
-		}
-		if json.Unmarshal(raw, &result) != nil {
-			return "", integrity()
-		}
-		data, err := base64.StdEncoding.DecodeString(result.Data)
-		if err != nil {
-			return "", integrity()
-		}
-		for cut := 0; !utf8.Valid(data) && cut < 3 && result.More && len(data) > 0; cut++ {
-			data = data[:len(data)-1]
-		}
-		if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
-			return "", httpx.E(422, "WORKSPACE_NOT_TEXT", "文件不是 UTF-8 文本，请使用对应读取工具")
-		}
-		encode := func(value []byte) ([]byte, error) {
-			return json.Marshal(map[string]any{"path": "/data/" + result.Path, "text": string(value), "offset": result.Offset, "next_offset": result.Offset + int64(len(value)), "size_bytes": result.Size, "has_more": result.More || result.Offset+int64(len(value)) < result.Next, "identity": result.Identity})
-		}
-		out, err := encode(data)
-		if err != nil {
-			return "", err
-		}
-		if len(out) <= 60<<10 {
-			return string(out), nil
-		}
-		low, high := 0, len(data)
-		for low < high {
-			mid := low + (high-low+1)/2
-			prefix := utf8Prefix(string(data), mid)
-			candidate, e := encode([]byte(prefix))
-			if e != nil {
-				return "", e
-			}
-			if len(candidate) <= 60<<10 {
-				low = mid
-				out = candidate
-			} else {
-				high = mid - 1
-			}
-		}
-		return string(out), nil
-	}
 	if key == "glob" || key == "grep" {
 		var result struct {
-			Paths     []string          `json:"paths"`
-			Matches   []workspace.Match `json:"matches"`
-			Truncated bool              `json:"truncated"`
-			Visited   int               `json:"visited_entries"`
+			Paths        []string               `json:"paths"`
+			Groups       []workspace.MatchGroup `json:"groups"`
+			Truncated    bool                   `json:"truncated"`
+			Visited      int                    `json:"visited_entries"`
+			SkippedLarge int                    `json:"skipped_large_files,omitempty"`
+			StopReason   string                 `json:"stop_reason,omitempty"`
 		}
 		if json.Unmarshal(raw, &result) != nil {
 			return "", integrity()
@@ -251,8 +199,8 @@ func workspaceToolContent(key string, raw json.RawMessage) (string, error) {
 		for i := range result.Paths {
 			result.Paths[i] = "/data/" + result.Paths[i]
 		}
-		for i := range result.Matches {
-			result.Matches[i].Path = "/data/" + result.Matches[i].Path
+		for i := range result.Groups {
+			result.Groups[i].Path = "/data/" + result.Groups[i].Path
 		}
 		for {
 			out, err := json.Marshal(result)
@@ -263,8 +211,16 @@ func workspaceToolContent(key string, raw json.RawMessage) (string, error) {
 				return string(out), nil
 			}
 			result.Truncated = true
-			if len(result.Matches) > 0 {
-				result.Matches = result.Matches[:len(result.Matches)-1]
+			if result.StopReason == "" {
+				result.StopReason = "output_limit"
+			}
+			if len(result.Groups) > 0 {
+				last := &result.Groups[len(result.Groups)-1]
+				if len(last.Lines) > 1 {
+					last.Lines = last.Lines[:len(last.Lines)-1]
+				} else {
+					result.Groups = result.Groups[:len(result.Groups)-1]
+				}
 			} else if len(result.Paths) > 0 {
 				result.Paths = result.Paths[:len(result.Paths)-1]
 			} else {

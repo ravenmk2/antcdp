@@ -127,7 +127,7 @@ func runtimeContinuation(t *testing.T, f *agentIntegrationFixture, agent uint64)
 			}
 			var users []string
 			for _, message := range prepared.Request.Messages {
-				if message.Role == "user" && !strings.HasPrefix(message.Content, "[Platform context: ") {
+				if message.Role == "user" && !strings.HasPrefix(message.Content, "<system-reminder>") {
 					users = append(users, message.Content)
 				}
 				if strings.Contains(message.Content, "Unrelated report") || strings.Contains(message.Content, "unrelated annual report") {

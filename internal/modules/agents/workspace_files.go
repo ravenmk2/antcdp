@@ -107,6 +107,9 @@ func (s *CloudService) startWorkspaceOperation(st StateRepository, repo CloudRep
 			return nil, e
 		}
 		if previous != nil {
+			if kind == "workspace_tool" {
+				return nil, httpx.E(409, "WORKSPACE_OPERATION_EXISTS", "文件操作已登记，请核实结果")
+			}
 			if previous.Kind != kind || previous.ComputerID != access.ComputerID || previous.BackendGeneration != access.BackendGeneration || previous.InstanceID != access.InstanceID || previous.StorageGeneration != access.StorageGeneration || !semanticSame(previous.Intent, json.RawMessage(b)) {
 				return nil, integrity()
 			}

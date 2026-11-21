@@ -34,7 +34,7 @@ func TestToolImageRejectsInvalidFormatDimensionsAndSizeBeforePersistence(t *test
 	}
 	svc := CloudService{Host: &Service{Files: store}}
 	var oversized bytes.Buffer
-	if e = png.Encode(&oversized, image.NewNRGBA(image.Rect(0, 0, 4097, 1))); e != nil {
+	if e = png.Encode(&oversized, image.NewNRGBA(image.Rect(0, 0, 16385, 1))); e != nil {
 		t.Fatal(e)
 	}
 	for _, test := range []struct {
@@ -56,7 +56,7 @@ func TestToolImageRejectsInvalidFormatDimensionsAndSizeBeforePersistence(t *test
 			if test.size != 0 {
 				facts.Size = test.size
 			}
-			err = svc.stagePresentedFile(t.Context(), fileTransferClaim{Intent: fileTransferIntent{Image: &ReadImageRequest{Path: "image.png"}}}, FileOperationItemRow{}, key, facts)
+			err = svc.stageWorkspaceSnapshot(t.Context(), fileTransferClaim{Intent: fileTransferIntent{Image: &ReadImageRequest{Path: "image.png"}}}, FileOperationItemRow{}, key, facts)
 			var failure *httpx.Error
 			if !errors.As(err, &failure) || failure.Code != "IMAGE_INVALID" {
 				t.Fatal("invalid image reached persistence", err)
@@ -65,11 +65,11 @@ func TestToolImageRejectsInvalidFormatDimensionsAndSizeBeforePersistence(t *test
 	}
 }
 func TestPresentValidationDoesNotTruncateOrDuplicateFiles(t *testing.T) {
-	if e := validatePresent(PresentRequest{Files: []PresentFile{{Path: "report.md", Description: "测试结果"}}}); e != nil {
+	if e := validateSaveArtifacts(SaveArtifactsRequest{Files: []SaveArtifactItem{{Path: "report.md", Description: "测试结果"}}}); e != nil {
 		t.Fatal(e)
 	}
-	for _, w := range []PresentRequest{{}, {Files: make([]PresentFile, 21)}, {Files: []PresentFile{{Path: "a"}, {Path: "a"}}}, {Files: []PresentFile{{Path: "../a"}}}, {Files: []PresentFile{{Path: "a", Description: strings.Repeat("字", 2001)}}}} {
-		if e := validatePresent(w); e == nil {
+	for _, w := range []SaveArtifactsRequest{{}, {Files: make([]SaveArtifactItem, 21)}, {Files: []SaveArtifactItem{{Path: "a"}, {Path: "a"}}}, {Files: []SaveArtifactItem{{Path: "../a"}}}, {Files: []SaveArtifactItem{{Path: "a", Description: strings.Repeat("字", 2001)}}}} {
+		if e := validateSaveArtifacts(w); e == nil {
 			t.Fatal("invalid present request accepted")
 		}
 	}

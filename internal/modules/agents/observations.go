@@ -533,6 +533,7 @@ func (s *Service) Snapshot(ctx context.Context, raw string, id uint64, limit int
 			for _, block := range input.Content {
 				text += block.Text
 			}
+			text = inputPreviewText(text, input.WorkspaceFiles)
 			runes := []rune(text)
 			if len(runes) > 256 {
 				text = string(runes[:256])

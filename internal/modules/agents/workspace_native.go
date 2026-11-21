@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"path"
 	"regexp"
@@ -155,6 +153,10 @@ func readNativeFile(ctx context.Context, a *SandboxAccess, name string, offset, 
 	return data, err
 }
 
+func protectedNativePath(name string) bool {
+	return name == "/data" || name == "/data/agents" || strings.HasPrefix(name, "/data/agents/")
+}
+
 func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspace.Request) (workspace.Response, error) {
 	f, err := nativeFiles(a)
 	if err != nil {
@@ -165,7 +167,7 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspace.Request
 		return workspace.Response{}, err
 	}
 	if q.Operation == "write" || q.Operation == "edit" || q.Operation == "mkdir" || q.Operation == "remove" {
-		if name == "/data" || name == "/data/agents" || strings.HasPrefix(name, "/data/agents/") {
+		if protectedNativePath(name) {
 			return workspace.Response{}, nativeError("WORKSPACE_PATH_PROTECTED")
 		}
 	}
@@ -205,84 +207,10 @@ func runNativeRequest(ctx context.Context, a *SandboxAccess, q workspace.Request
 	case "list":
 		value, err = listNativeDirectory(ctx, f, a.Resource, name, int(q.Offset), q.Limit)
 	case "read":
-		info, e := f.StatFile(ctx, a.Resource, name)
-		if e != nil {
-			err = e
-			break
-		}
-		if !nativeFile(info) {
-			err = nativeError("WORKSPACE_NOT_REGULAR_FILE")
-			break
-		}
-		length := min(max(0, info.Size-q.Offset), int64(q.Limit))
-		data := []byte{}
-		if length > 0 {
-			data, err = readNativeFile(ctx, a, name, q.Offset, length, workspace.MaxReadBytes)
-		}
-		if err == nil {
-			after, e := f.StatFile(ctx, a.Resource, name)
-			err = e
-			if err == nil && nativeIdentity(after) != nativeIdentity(info) {
-				err = nativeError("WORKSPACE_SOURCE_CHANGED")
-			}
-		}
-		value = map[string]any{"path": q.Path, "data_base64": base64.StdEncoding.EncodeToString(data), "offset": q.Offset, "next_offset": q.Offset + int64(len(data)), "size_bytes": fmt.Sprint(info.Size), "has_more": q.Offset+int64(len(data)) < info.Size, "identity": nativeIdentity(info)}
+		value, err = nativeReadLines(ctx, a, f, name, q)
 	case "write", "edit":
-		var data []byte
-		data, err = base64.StdEncoding.DecodeString(q.Data)
-		if err != nil {
-			return workspace.Response{}, nativeError("WORKSPACE_CONTENT_INVALID")
-		}
-		info, statErr := f.StatFile(ctx, a.Resource, name)
-		if statErr != nil && !nativeMissing(statErr) {
-			err = statErr
-			break
-		}
-		if statErr == nil && !nativeFile(info) {
-			err = nativeError("WORKSPACE_NOT_REGULAR_FILE")
-			break
-		}
-		if q.Identity != "" && (statErr != nil || q.Identity != nativeIdentity(info)) {
-			err = nativeError("WORKSPACE_SOURCE_CHANGED")
-			break
-		}
-		if q.Operation == "edit" {
-			if statErr != nil {
-				err = statErr
-				break
-			}
-			var old []byte
-			old, err = readNativeFile(ctx, a, name, 0, 0, workspace.MaxReadBytes)
-			if err != nil {
-				break
-			}
-			if !utf8.Valid(old) || q.Pattern == "" || bytes.Count(old, []byte(q.Pattern)) != 1 {
-				err = nativeError("WORKSPACE_EDIT_NOT_UNIQUE")
-				break
-			}
-			data = bytes.Replace(old, []byte(q.Pattern), data, 1)
-			// Check immediately before upload. The provider does not promise CAS.
-			after, e := f.StatFile(ctx, a.Resource, name)
-			if e != nil {
-				err = e
-				break
-			}
-			if nativeIdentity(after) != nativeIdentity(info) {
-				err = nativeError("WORKSPACE_SOURCE_CHANGED")
-				break
-			}
-		} else if !q.Overwrite && statErr == nil {
-			err = nativeError("WORKSPACE_PATH_EXISTS")
-			break
-		}
-		if len(data) > workspace.MaxReadBytes {
-			err = nativeError("WORKSPACE_FILE_TOO_LARGE")
-			break
-		}
-		err = f.PutFile(ctx, a.Resource, sandboxcore.FileRequest{Path: name, MaxBytes: int64(max(1, len(data)))}, bytes.NewReader(data))
+		value, err = nativeChangeText(ctx, a, f, name, q)
 		changed = err == nil
-		h := sha256.Sum256(data)
-		value = map[string]any{"path": q.Path, "size_bytes": fmt.Sprint(len(data)), "sha256": hex.EncodeToString(h[:])}
 	case "mkdir":
 		err = f.MakeDirectory(ctx, a.Resource, name, 755)
 		changed = err == nil
@@ -385,90 +313,142 @@ func nativeRelative(name string) (string, bool) {
 // needs no grep/python/helper binary. Filename search stays provider-side.
 func nativeSearch(ctx context.Context, a *SandboxAccess, f sandboxcore.Filesystem, name string, q workspace.Request) (any, error) {
 	pattern := q.Pattern
+	maxResults := 200
 	if q.Operation == "grep" {
-		pattern = "**"
+		maxResults = 250
+		pattern = q.Include
+		if pattern == "" {
+			pattern = "**"
+		}
+	}
+	limit := q.Limit
+	if limit == 0 {
+		limit = min(maxResults, 100)
+		if q.Operation == "grep" {
+			limit = maxResults
+		}
+	}
+	limit = min(limit, maxResults)
+	var expression *regexp.Regexp
+	var err error
+	if q.Operation == "grep" {
+		text := q.Pattern
+		if q.Literal {
+			text = regexp.QuoteMeta(text)
+		}
+		if q.CaseFold {
+			text = "(?i)" + text
+		}
+		expression, err = regexp.Compile(text)
+		if err != nil {
+			return nil, nativeError("WORKSPACE_PATTERN_INVALID")
+		}
 	}
 	entries, err := f.SearchFiles(ctx, a.Resource, name, pattern)
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Path < entries[j].Path })
-	limit := q.Limit
-	if limit <= 0 {
-		limit = 100
-	}
-	limit = min(limit, 200)
+	sort.Slice(entries, func(i, j int) bool {
+		if q.Operation == "glob" && !entries[i].ModifiedAt.Equal(entries[j].ModifiedAt) {
+			return entries[i].ModifiedAt.After(entries[j].ModifiedAt)
+		}
+		return entries[i].Path < entries[j].Path
+	})
 	paths := []string{}
-	matches := []workspace.Match{}
-	visited := 0
-	truncated := false
+	groups := []workspace.MatchGroup{}
+	matchCount := 0
+	skipped, visited := 0, 0
+	stop := ""
 	budget := int64(8 << 20)
-	var expression *regexp.Regexp
-	if q.Operation == "grep" {
-		expressionText := q.Pattern
-		if q.Literal {
-			expressionText = regexp.QuoteMeta(expressionText)
-		}
-		if q.CaseFold {
-			expressionText = "(?i)" + expressionText
-		}
-		expression, err = regexp.Compile(expressionText)
-		if err != nil {
-			return nil, nativeError("WORKSPACE_PATTERN_INVALID")
-		}
-	}
+search:
 	for _, entry := range entries {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		visited++
-		if visited > workspace.MaxWalkEntries {
-			truncated = true
+		if visited == workspace.MaxWalkEntries {
+			stop = "scan_limit"
 			break
 		}
+		visited++
 		relative, ok := nativeRelative(entry.Path)
-		if !ok || entry.Path != name && !strings.HasPrefix(entry.Path, name+"/") {
+		if !ok || (entry.Path != name && !strings.HasPrefix(entry.Path, name+"/")) || !nativeFile(entry) {
 			continue
 		}
 		if q.Operation == "glob" {
 			paths = append(paths, relative)
-			if len(paths) >= limit {
-				truncated = visited < len(entries)
-				break
-			}
 			continue
 		}
-		if !nativeFile(entry) {
-			continue
-		}
-		if entry.Size > workspace.MaxReadBytes {
-			truncated = true
+		if entry.Size > 8<<20 {
+			skipped++
 			continue
 		}
 		if entry.Size > budget {
-			truncated = true
+			stop = "byte_budget"
 			break
 		}
-		budget -= entry.Size
-		data, e := readNativeFile(ctx, a, entry.Path, 0, 0, workspace.MaxReadBytes)
+		data, e := readNativeFile(ctx, a, entry.Path, 0, 0, max(1, entry.Size))
 		if e != nil {
 			return nil, e
 		}
+		budget -= int64(len(data))
 		if !utf8.Valid(data) || bytes.IndexByte(data, 0) >= 0 {
 			continue
 		}
-		for line, text := range strings.Split(string(data), "\n") {
-			if expression.MatchString(text) {
-				matches = append(matches, workspace.Match{Path: relative, Line: line + 1, Text: utf8Prefix(text, 2048)})
-				if len(matches) >= limit {
-					truncated = true
-					break
+		line := 0
+		for row := range strings.Lines(string(data)) {
+			line++
+			row = strings.TrimSuffix(strings.TrimSuffix(row, "\n"), "\r")
+			if expression.MatchString(row) {
+				if matchCount == limit {
+					stop = "result_limit"
+					break search
 				}
+				if len(groups) == 0 || groups[len(groups)-1].Path != relative {
+					groups = append(groups, workspace.MatchGroup{Path: relative})
+				}
+				group := &groups[len(groups)-1]
+				group.Lines = append(group.Lines, workspace.Match{Line: line, Text: utf8Prefix(row, 2048)})
+				matchCount++
 			}
 		}
-		if len(matches) >= limit {
-			break
+	}
+	if len(paths) > limit {
+		paths = sampleGlobPaths(paths, strings.TrimPrefix(name, "/data/"), limit)
+		if stop == "" {
+			stop = "result_limit"
 		}
 	}
-	return map[string]any{"paths": paths, "matches": matches, "truncated": truncated, "visited_entries": visited}, nil
+	return map[string]any{"paths": paths, "groups": groups, "truncated": stop != "" || skipped > 0, "visited_entries": visited, "skipped_large_files": skipped, "stop_reason": stop}, nil
+}
+
+// Keep the newest result from each top-level entry before filling remaining
+// slots in modification-time order. The returned page retains that order.
+func sampleGlobPaths(paths []string, root string, limit int) []string {
+	if root == "/data" {
+		root = ""
+	} else {
+		root += "/"
+	}
+	groups := map[string]bool{}
+	selected := make([]bool, len(paths))
+	count := 0
+	for i, name := range paths {
+		group, _, _ := strings.Cut(strings.TrimPrefix(name, root), "/")
+		if !groups[group] && count < limit {
+			groups[group] = true
+			selected[i] = true
+			count++
+		}
+	}
+	page := make([]string, 0, limit)
+	for i, name := range paths {
+		if !selected[i] && count < limit {
+			selected[i] = true
+			count++
+		}
+		if selected[i] {
+			page = append(page, name)
+		}
+	}
+	return page
 }

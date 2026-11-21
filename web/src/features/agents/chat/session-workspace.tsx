@@ -331,7 +331,7 @@ function SessionFileSummary({
     <div className="agent-workspace-sections">
       <section>
         <div className="agent-workspace-section-heading">
-          <h3>已保存成果</h3>
+          <h3>已保存制品</h3>
           {query.data?.pagination && (
             <span className="text-xs text-muted">
               {query.data.pagination.total} 项
@@ -339,7 +339,7 @@ function SessionFileSummary({
           )}
         </div>
         <p className="mb-4 text-xs leading-6 text-muted">
-          已保存在平台，清理工作文件不影响这些成果。
+          已保存在平台，清理工作文件不影响这些制品。
         </p>
         <AsyncBoundary
           loading={query.isPending}
@@ -349,7 +349,7 @@ function SessionFileSummary({
           {query.data?.data.length === 0 && (
             <div className="agent-workspace-empty">
               <FileText />
-              <p>暂无已保存成果</p>
+              <p>暂无已保存制品</p>
               <small>工作目录中的文件需明确保存后才会出现在这里。</small>
             </div>
           )}
@@ -375,7 +375,7 @@ function SessionFileSummary({
         </AsyncBoundary>
         <Button className="mt-5 w-full" variant="outline" onClick={onFiles}>
           <FolderOpen />
-          全部附件与成果
+          全部附件与制品
         </Button>
       </section>
     </div>

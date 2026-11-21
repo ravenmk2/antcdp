@@ -64,7 +64,7 @@ func executionAccount(tx identity.Tx, v *SessionRow, active bool) (*identity.Use
 	return user, nil
 }
 func coreInput(view InputView, row *InputRow) (agentcore.Input, error) {
-	v := agentcore.Input{ID: agentcore.ID(row.ID), SessionID: agentcore.ID(row.SessionID), Kind: row.InputKind, Origin: row.OriginKind, Actor: view.Actor, Source: view.Source, ModifiedBy: view.ModifiedBy, Content: view.Content, Files: view.Files, Answer: view.Answer, Delivery: "next_turn", State: row.Status, Position: row.QueueOrder, AcceptedSeq: agentcore.Seq(row.AcceptedSeq), Revision: agentcore.Version(row.ContentRevision), Version: agentcore.Version(row.RowVersion), QueueDeadline: row.QueueDeadlineAt}
+	v := agentcore.Input{ID: agentcore.ID(row.ID), SessionID: agentcore.ID(row.SessionID), Kind: row.InputKind, Origin: row.OriginKind, Actor: view.Actor, Source: view.Source, ModifiedBy: view.ModifiedBy, WorkspaceFiles: view.WorkspaceFiles, Content: view.Content, Files: view.Files, Answer: view.Answer, Delivery: "next_turn", State: row.Status, Position: row.QueueOrder, AcceptedSeq: agentcore.Seq(row.AcceptedSeq), Revision: agentcore.Version(row.ContentRevision), Version: agentcore.Version(row.RowVersion), QueueDeadline: row.QueueDeadlineAt}
 	if row.ClaimedRunID != nil {
 		id := agentcore.ID(*row.ClaimedRunID)
 		v.ClaimedRunID = &id
@@ -255,7 +255,7 @@ func (s *Service) ClaimRoot(ctx context.Context, request agentcore.ClaimRequest)
 				message.Images = append(message.Images, sourceImagePart(file, ref.SourceSHA256, ""))
 			}
 		}
-		facts := &StoredEvent{Message: &message}
+		facts := &StoredEvent{Message: &message, WorkspaceFiles: view.WorkspaceFiles}
 		if input.InputKind == "continue" {
 			// Persist the retry control without adding a task or an empty wire
 			// message. The existing session surface remains the model's input.

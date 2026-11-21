@@ -402,8 +402,8 @@ func agentSimpleExecution(t *testing.T, f *agentIntegrationFixture, session uint
 	if e != nil {
 		t.Fatal("prepare", e)
 	}
-	if len(step.Request.Messages) < 2 {
-		t.Fatal("missing committed input")
+	if len(step.Request.Messages) != 1 || step.Request.Messages[0].Role != "user" || step.Request.Messages[0].Content != "执行一个完整回合" {
+		t.Fatal("expected only the committed input in this unconfigured session", step.Request.Messages)
 	}
 	hash, e := agentcore.ContentHash(step.Request)
 	if e != nil {

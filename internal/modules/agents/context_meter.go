@@ -112,7 +112,7 @@ func (s *Service) sessionContextRequest(tx identity.Tx, st StateRepository, sess
 			tools = append(tools, tool.Spec)
 		}
 		tools = append(tools, frozen.MCPTools...)
-		step, e := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 1, frozen.Model, agentcore.PromptConfig{Platform: platformPrompt, Administrator: frozen.Row.SystemPrompt}, manifest, nil, tools, frozen.Policy.MaxParallelTools)
+		step, e := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 1, frozen.Model, frozen.Row.SystemPrompt, manifest, nil, tools, frozen.Policy.MaxParallelTools)
 		if e != nil {
 			return request, e
 		}

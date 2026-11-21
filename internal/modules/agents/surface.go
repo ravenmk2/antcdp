@@ -9,6 +9,24 @@ import (
 // Projection is rebuilt only from immutable, checksummed model facts. UI
 // content never substitutes for a native assistant/provider message.
 func loadSurface(st StateRepository, v *SessionRow) (agentcore.SurfaceManifest, map[agentcore.Seq]agentcore.HistoryFact, error) {
+	m, facts, err := loadSurfaceHistory(st, v)
+	if err != nil {
+		return m, nil, err
+	}
+	needed := map[agentcore.Seq]agentcore.HistoryFact{}
+	for _, entry := range m.Entries {
+		for _, seq := range entry.Sequences {
+			f, ok := facts[seq]
+			if !ok {
+				return m, nil, integrity()
+			}
+			needed[seq] = f
+		}
+	}
+	return m, needed, nil
+}
+
+func loadSurfaceHistory(st StateRepository, v *SessionRow) (agentcore.SurfaceManifest, map[agentcore.Seq]agentcore.HistoryFact, error) {
 	m := agentcore.SurfaceManifest{SchemaVersion: 1, Revision: agentcore.Version(v.SurfaceRevision), Entries: []agentcore.SurfaceEntry{}}
 	facts := map[agentcore.Seq]agentcore.HistoryFact{}
 	groups := map[agentcore.ID]int{}
@@ -33,8 +51,16 @@ func loadSurface(st StateRepository, v *SessionRow) (agentcore.SurfaceManifest, 
 			seq := agentcore.Seq(row.Seq)
 			m.ImageOffloads = append(m.ImageOffloads, f.ImageOffloads...)
 			m.ToolOutputPrunes = append(m.ToolOutputPrunes, f.ToolOutputPrunes...)
-			fact := agentcore.HistoryFact{Seq: seq, Kind: row.EventType, SchemaVersion: 1, Message: f.Message, Context: f.Context, ToolCallID: f.ToolCallID, Ordinal: f.Ordinal, ModelCallID: f.ModelCallID, Interrupted: f.Interrupted, PartialReason: f.PartialReason}
-			if f.Message == nil && f.Context == nil {
+			fact := agentcore.HistoryFact{WorkspaceFiles: f.WorkspaceFiles, Seq: seq, Kind: row.EventType, SchemaVersion: 1, Message: f.Message, ToolCallID: f.ToolCallID, Ordinal: f.Ordinal, ModelCallID: f.ModelCallID, Interrupted: f.Interrupted, PartialReason: f.PartialReason}
+			if row.EventType == "context/message" {
+				var msg agentcore.ContextMessage
+				if json.Unmarshal(f.Public, &msg) != nil || msg.Source.Kind == "" || len(msg.Content) != 1 || msg.Content[0].Type != "text" || msg.Content[0].Text == "" {
+					return m, nil, integrity()
+				}
+				fact.Context = &msg.Source
+				fact.ContextText = msg.Content[0].Text
+			}
+			if f.Message == nil && fact.Context == nil {
 				continue
 			}
 			facts[seq] = fact
@@ -45,7 +71,7 @@ func loadSurface(st StateRepository, v *SessionRow) (agentcore.SurfaceManifest, 
 				continue
 			}
 			kind := "message"
-			if f.Context != nil {
+			if fact.Context != nil {
 				kind = "context"
 			} else if row.EventType == "assistant/attempt" && !f.Interrupted {
 				delete(facts, seq)
@@ -64,17 +90,7 @@ func loadSurface(st StateRepository, v *SessionRow) (agentcore.SurfaceManifest, 
 			m.Entries = append(m.Entries, agentcore.SurfaceEntry{Kind: kind, Sequences: []agentcore.Seq{seq}})
 		}
 	}
-	needed := map[agentcore.Seq]agentcore.HistoryFact{}
-	for _, entry := range m.Entries {
-		for _, seq := range entry.Sequences {
-			f, ok := facts[seq]
-			if !ok {
-				return m, nil, integrity()
-			}
-			needed[seq] = f
-		}
-	}
-	return m, needed, nil
+	return m, facts, nil
 }
 
 func surfaceBytes(m agentcore.SurfaceManifest) (json.RawMessage, error) { return json.Marshal(m) }

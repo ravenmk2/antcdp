@@ -176,27 +176,27 @@ describe("agent session observation", () => {
     const draft = state.activeAttempt;
     const event: EventFrame = {
       ...assistant(),
-      event_type: "context/tool_reconciliation",
+      event_type: "context/message",
       data: {
-        source_event_seq: "9007199254740990",
-        tool_call_id: "50",
-        provider_call_id: "provider-call",
-        tool_key: "exec_command",
-        original_result_seq: "9007199254740989",
-        original_status: "outcome_unknown",
-        observed_status: "cancelled",
-        executed: null,
-        reason: "physical_execution_ended",
-        observed_at: "2026-11-09T00:00:00Z",
-        note: "Later verified observation",
+        source: {
+          kind: "tool-reconciliation",
+          form: "notice",
+          source_event_seq: "9007199254740990",
+          tool_call_id: "50",
+          summary: "Updated tool execution result",
+        },
+        content: [
+          {
+            type: "text",
+            text: "<system-reminder>\\nUpdated tool execution result\\n</system-reminder>",
+          },
+        ],
       },
     };
     state = conversationFrame(state, event);
     expect(state.phase).toBe("live");
     expect(state.activeAttempt).toEqual(draft);
-    expect(state.records.at(-1)?.event_type).toBe(
-      "context/tool_reconciliation",
-    );
+    expect(state.records.at(-1)?.event_type).toBe("context/message");
     expect(new ConversationProjector().project(state.records)).toEqual([]);
   });
   it("retains completed reasoning timing through deltas and reconnect snapshots", () => {

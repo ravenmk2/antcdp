@@ -136,6 +136,15 @@ export function Conversation({
     }
     return false;
   }, [state.baselineSeq, state.records]);
+  const hasWorkspaceUploads = useMemo(
+    () =>
+      state.records.some(
+        (record) =>
+          record.event_type === "input/message" &&
+          record.data.workspace_files?.length,
+      ),
+    [state.records],
+  );
   const query = useApiQuery<SessionDetail>(
     ["agent-session", sessionId, "detail"],
     `${agentRoot}/sessions/${sessionId}`,
@@ -143,7 +152,10 @@ export function Conversation({
       enabled: Boolean(
         shown &&
         !revoked &&
-        (workspaceOpen || panel === "settings" || refreshDetails),
+        (workspaceOpen ||
+          panel === "settings" ||
+          refreshDetails ||
+          hasWorkspaceUploads),
       ),
     },
   );
@@ -627,8 +639,8 @@ export function Conversation({
                         className="session-rail-action"
                         variant="ghost"
                         size="icon"
-                        aria-label="附件与成果"
-                        title="附件与成果"
+                        aria-label="附件与制品"
+                        title="附件与制品"
                         onClick={() => setPanel("files")}
                       >
                         <FolderOpen />
@@ -673,7 +685,7 @@ export function Conversation({
                           icon={<FolderOpen />}
                           onSelect={() => setPanel("files")}
                         >
-                          附件与成果
+                          附件与制品
                         </RowAction>
                         <RowAction
                           icon={<History />}
@@ -819,6 +831,9 @@ export function Conversation({
                       <ConversationTimeline
                         records={state.records}
                         submissions={submissions.visible}
+                        computerId={
+                          currentDetail?.state.workspace?.cloud_computer_id
+                        }
                         sessionId={sessionId}
                         attempt={visibleAttempt(state)}
                         service={service}

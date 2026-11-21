@@ -8,7 +8,7 @@ export function turnDeliverables(records: DurableRecord[]) {
   for (const record of records) {
     if (record.event_type === "artifact/deleted")
       deleted.add(record.data.artifact_id);
-    if (record.event_type !== "artifact/retained" || !record.run_id) continue;
+    if (record.event_type !== "artifact/shown" || !record.run_id) continue;
     const files = runs.get(record.run_id) ?? new Map<string, Artifact>();
     for (const file of record.data.artifacts) files.set(file.id, file);
     runs.set(record.run_id, files);

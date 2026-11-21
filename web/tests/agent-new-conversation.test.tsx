@@ -195,35 +195,32 @@ it("still protects navigation while a new conversation submission has failed", a
   expect(screen.getByLabelText("消息内容")).toHaveValue("检查发送跳转");
 });
 
-it("requires a message and shows the actual workspace filename before submitting", async () => {
+it("sends a file-only message with its upload receipt and an empty text body", async () => {
   const { user, input } = setup(true);
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: "图片" })).toBeEnabled(),
+    expect(screen.getByRole("button", { name: "添加消息图片" })).toBeEnabled(),
   );
-  expect(screen.getByRole("button", { name: "附件" })).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "上传文件到工作区" }),
+  ).toBeEnabled();
   await user.upload(
-    screen.getByLabelText("选择附件"),
+    screen.getByLabelText("选择工作区文件"),
     new File(["content"], "notes.txt"),
   );
   const send = screen.getByRole("button", { name: "发送" });
-  expect(send).toBeDisabled();
+  expect(send).toBeEnabled();
   expect(mock.mock.calls.map(([url]) => url)).not.toContain("/agents/sessions");
-  const textbox = screen.getByRole("textbox");
-  await user.type(textbox, "读取 notes.txt");
   await user.click(send);
-  const confirm = await screen.findByRole("button", { name: "确认发送" });
-  expect(screen.getByText("附件已按可用文件名保存")).toBeVisible();
-  expect(mock.mock.calls.map(([url]) => url)).not.toContain(
-    "/agents/sessions/10/inputs",
-  );
-  await user.clear(textbox);
-  await user.type(textbox, "读取 notes (2).txt");
-  await user.click(confirm);
   expect(mock).toHaveBeenCalledWith(
     "/agents/sessions/10/inputs",
     expect.objectContaining({
       body: expect.objectContaining({
-        content: [{ type: "text", text: "读取 notes (2).txt" }],
+        content: [],
+        workspace_upload_keys: [
+          mock.mock.calls.find(([url]) =>
+            url.endsWith("/workspace/file-uploads"),
+          )?.[1]?.idempotencyKey,
+        ],
         file_refs: [],
       }),
     }),

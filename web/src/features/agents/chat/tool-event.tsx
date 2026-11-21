@@ -32,19 +32,21 @@ export const builtinToolNames: Record<string, string> = {
   ask_user_question: "向用户提问",
   update_plan: "更新任务计划",
   delegate: "委派临时子任务",
-  read_file: "读取文件",
+  read: "读取文件",
   read_tool_output: "读取工具输出",
   read_image: "读取图片",
-  write_file: "写入文件",
-  edit_file: "编辑文件",
+  write: "写入文件",
+  edit: "编辑文件",
   glob: "查找文件",
   grep: "检索文件内容",
-  import_file: "导入会话文件",
   exec_command: "执行命令",
   process_status: "查看进程状态",
   process_output: "读取进程输出",
   process_cancel: "停止进程",
-  present: "保存正式成果",
+  save_artifacts: "保存制品",
+  load_artifacts: "载入制品",
+  list_artifacts: "列出制品",
+  show_artifacts: "展示制品",
 };
 export function ToolEvent({
   id,
@@ -92,9 +94,7 @@ export function ToolEvent({
       ? readToolObject(result.data.content)
       : null;
   const file =
-    value &&
-    result?.data.executed === true &&
-    fileResultSupported(name, args, value);
+    value && result?.data.executed === true && fileResultSupported(name, value);
   const search = value ? readSearchResult(name, value) : null;
   const plan =
     name === "update_plan" && builtin && knownSuccess && result
@@ -340,14 +340,19 @@ export function ToolEvent({
                 settled={Boolean(result)}
               />
             )}
-            {file && value && (
-              <FileToolResult name={name} args={args} value={value} />
-            )}
+            {file && value && <FileToolResult name={name} value={value} />}
             {search && (
               <div className="space-y-3">
                 <p className="text-xs text-muted">
                   {search.count ? `${search.count} 项匹配` : "没有找到匹配项"}
                   {search.truncated ? " · 结果已截断" : ""}
+                  {typeof value?.skipped_large_files === "number" &&
+                    value.skipped_large_files > 0 &&
+                    " · 跳过 " + value.skipped_large_files + " 个大文件"}
+                  {value?.stop_reason === "byte_budget" &&
+                    " · 已达到扫描字节上限"}
+                  {value?.stop_reason === "scan_limit" &&
+                    " · 已达到扫描条目上限"}
                 </p>
                 {search.text && (
                   <ToolCode source={search.text} title="匹配结果" />

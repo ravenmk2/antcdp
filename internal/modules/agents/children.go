@@ -30,7 +30,7 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 		if request.SessionID != 0 || request.RunID != 0 {
 			return httpx.Invalid("child", "server_generated_ids")
 		}
-		if e = agentcore.ValidateInput(request.Content, request.Files); e != nil {
+		if e = agentcore.ValidateInput(request.Content, request.Files, nil); e != nil {
 			return coreError(e)
 		}
 		parent, e := st.ToolCall(uint64(request.Parent.ID), true)

@@ -267,7 +267,7 @@ function RunDetailView({
                   {run.data.data.binding.cwd}
                 </p>
                 <p className="text-xs text-muted">
-                  云电脑会保留文件，不同会话或后续轮次可能继续修改。正式成果另存于平台。
+                  云电脑会保留文件，不同会话或后续轮次可能继续修改。制品另存于平台。
                 </p>
                 <Button variant="outline" onClick={() => setFiles(true)}>
                   查看工作文件

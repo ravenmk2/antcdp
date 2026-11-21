@@ -74,7 +74,7 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = host.PutToolBindings(ctx, f.AdminToken, agent.ID, bindings.Tag, a.ToolBindingsWrite{Items: []a.ToolBindingWrite{{ToolKey: "write_file", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "read_file", Policy: "allow", Constraints: json.RawMessage(`{}`)}}}); err != nil {
+	if _, err = host.PutToolBindings(ctx, f.AdminToken, agent.ID, bindings.Tag, a.ToolBindingsWrite{Items: []a.ToolBindingWrite{{ToolKey: "write", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "read", Policy: "allow", Constraints: json.RawMessage(`{}`)}}}); err != nil {
 		t.Fatal(err)
 	}
 	x := runtimeClaim(t, f, runtimeSession(t, f, agent.ID).Configuration.ID, "write and read an authorized work file")
@@ -96,13 +96,13 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if err = f.Store.db.GetContext(ctx, &frozenCWD, "SELECT cwd FROM agent_run_context WHERE root_run_id=?", uint64(x.Ref.RootRunID)); err != nil || frozenCWD != binding.CWD {
 		t.Fatal("binding differs from frozen CWD", frozenCWD, err)
 	}
-	args := json.RawMessage(`{"path":"note.md","content":"controlled contents"}`)
-	call := commandDeclare(t, f, x, 1, "write_file", string(args))
+	args := json.RawMessage(`{"file_path":"note.md","content":"controlled contents"}`)
+	call := commandDeclare(t, f, x, 1, "write", string(args))
 	before := remote.launches
-	if _, err = svc.FileTool(ctx, x.Ref, uint64(call.ID), "write_file", json.RawMessage(`{"path":"other.md","content":"changed"}`)); err == nil || remote.launches != before {
+	if _, err = svc.FileTool(ctx, x.Ref, uint64(call.ID), "write", json.RawMessage(`{"file_path":"other.md","content":"changed"}`)); err == nil || remote.launches != before {
 		t.Fatal("frozen arguments did not protect dispatch")
 	}
-	observation, err := svc.FileTool(ctx, x.Ref, uint64(call.ID), "write_file", args)
+	observation, err := svc.FileTool(ctx, x.Ref, uint64(call.ID), "write", args)
 	if err != nil || observation.Status != "succeeded" || observation.Executed == nil || !*observation.Executed {
 		t.Fatal("write", err)
 	}
@@ -110,12 +110,12 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(err)
 	}
 	before = remote.launches
-	if _, err = svc.FileTool(ctx, x.Ref, uint64(call.ID), "write_file", args); err == nil || remote.launches != before {
+	if _, err = svc.FileTool(ctx, x.Ref, uint64(call.ID), "write", args); err == nil || remote.launches != before {
 		t.Fatal("completed file tool replayed")
 	}
-	readArgs, _ := json.Marshal(map[string]any{"path": binding.CWD + "/note.md"})
-	readCall := commandDeclare(t, f, x, 2, "read_file", string(readArgs))
-	read, err := svc.FileTool(ctx, x.Ref, uint64(readCall.ID), "read_file", readArgs)
+	readArgs, _ := json.Marshal(map[string]any{"file_path": binding.CWD + "/note.md"})
+	readCall := commandDeclare(t, f, x, 2, "read", string(readArgs))
+	read, err := svc.FileTool(ctx, x.Ref, uint64(readCall.ID), "read", readArgs)
 	if err != nil || !strings.Contains(read.Content, "controlled contents") {
 		t.Fatal("read", err)
 	}

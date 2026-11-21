@@ -99,7 +99,7 @@ func TestMCPDiscoveryOmitsFailedServerAndAuthorizesWholeService(t *testing.T) {
 			Available bool `json:"available"`
 		} `json:"mcp_servers"`
 	}
-	if json.Unmarshal(fact.Content, &status) != nil || len(status.Servers) != 2 || status.Servers[0].Available || !status.Servers[1].Available {
-		t.Fatalf("wrong discovery status: %s", fact.Content)
+	if json.Unmarshal(fact, &status) != nil || len(status.Servers) != 2 || status.Servers[0].Available || !status.Servers[1].Available {
+		t.Fatalf("wrong discovery status: %s", fact)
 	}
 }

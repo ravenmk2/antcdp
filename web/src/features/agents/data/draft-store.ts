@@ -3,6 +3,7 @@ import type { FileRef } from "@/types/agents";
 export interface WorkspaceDraftFile {
   file: File;
   savedName?: string;
+  uploadKey?: string;
 }
 
 export interface ConversationDraft {

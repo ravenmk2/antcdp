@@ -128,9 +128,10 @@ type SessionCounts struct {
 	Interactions int
 }
 type InputCreate struct {
-	Content      []agentcore.TextBlock `json:"content"`
-	ExpectedHash string                `json:"expected_model_selection_hash"`
-	Files        []agentcore.FileRef   `json:"file_refs"`
+	WorkspaceUploadKeys []string              `json:"workspace_upload_keys,omitempty"`
+	Content             []agentcore.TextBlock `json:"content"`
+	ExpectedHash        string                `json:"expected_model_selection_hash"`
+	Files               []agentcore.FileRef   `json:"file_refs"`
 }
 type InputEdit struct {
 	Content Field[[]agentcore.TextBlock]    `json:"content"`
@@ -150,6 +151,7 @@ type ApprovalReply struct {
 }
 
 type InputView struct {
+	WorkspaceFiles  []agentcore.WorkspaceFile `json:"workspace_files,omitempty"`
 	QuestionContext *QuestionReplyContext     `json:"question_context,omitempty"`
 	Approval        *ApprovalReply            `json:"approval_reply,omitempty"`
 	ID              uint64                    `json:"id,string"`

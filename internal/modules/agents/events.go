@@ -17,11 +17,11 @@ import (
 // StoredEvent separates public projection from request-compatible native facts.
 // Neither HTTP nor WS serializes this envelope directly.
 type StoredEvent struct {
+	WorkspaceFiles     []agentcore.WorkspaceFile   `json:"workspace_files,omitempty"`
 	Public             json.RawMessage             `json:"public"`
 	Message            *modelcore.Message          `json:"model,omitempty"`
 	ExactToolArguments string                      `json:"exact_tool_arguments,omitempty"`
 	ExactNative        string                      `json:"exact_native,omitempty"`
-	Context            *agentcore.ContextFact      `json:"context,omitempty"`
 	ModelCallID        agentcore.ID                `json:"model_call_id,omitempty"`
 	ToolCallID         string                      `json:"provider_call_id,omitempty"`
 	Ordinal            uint32                      `json:"ordinal,omitempty"`
@@ -74,7 +74,7 @@ func appendEvent(st StateRepository, session *SessionRow, runID *uint64, kind, k
 	session.LastSeq = seq
 	session.ProjectionSeq = seq
 	session.LastActivityAt = now
-	if !stored.ExcludeFromContext && (stored.Message != nil || stored.Context != nil || len(stored.ImageOffloads) > 0 || len(stored.ToolOutputPrunes) > 0) {
+	if !stored.ExcludeFromContext && (stored.Message != nil || kind == "context/message" || len(stored.ImageOffloads) > 0 || len(stored.ToolOutputPrunes) > 0) {
 		session.SurfaceRevision++
 	}
 	return seq, nil
@@ -143,8 +143,8 @@ func projectEvent(v EventRow) (DurableRecord, error) {
 		return DurableRecord{}, e
 	}
 	switch v.EventType {
-	case "session/configured", "session/title", "context/authorization":
-		facts.Public, e = projectEventAgentType(facts.Public, v.EventType != "context/authorization")
+	case "session/configured", "session/title":
+		facts.Public, e = projectEventAgentType(facts.Public)
 		if e != nil {
 			return DurableRecord{}, e
 		}
@@ -199,28 +199,23 @@ func projectEvent(v EventRow) (DurableRecord, error) {
 }
 
 // Normalize the public view while preserving the stored event and model context.
-func projectEventAgentType(data json.RawMessage, nested bool) (json.RawMessage, error) {
+func projectEventAgentType(data json.RawMessage) (json.RawMessage, error) {
 	var public map[string]json.RawMessage
 	if json.Unmarshal(data, &public) != nil {
 		return nil, integrity()
 	}
-	fields := public
-	if nested {
-		fields = nil
-		if json.Unmarshal(public["configuration"], &fields) != nil {
-			return nil, integrity()
-		}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(public["configuration"], &fields) != nil {
+		return nil, integrity()
 	}
 	if string(fields["agent_type"]) != `"`+legacyChatType+`"` {
 		return data, nil
 	}
 	fields["agent_type"] = json.RawMessage(`"chat"`)
-	if nested {
-		var err error
-		public["configuration"], err = json.Marshal(fields)
-		if err != nil {
-			return nil, err
-		}
+	var err error
+	public["configuration"], err = json.Marshal(fields)
+	if err != nil {
+		return nil, err
 	}
 	return json.Marshal(public)
 }
@@ -282,4 +277,10 @@ func corePolicy(v *Definition) agentcore.Policy {
 
 type policySnapshot struct {
 	agentcore.Policy
+}
+
+func appendContextMessage(st StateRepository, session *SessionRow, runID uint64, key string, source agentcore.ContextFact, text string, now time.Time) error {
+	message := agentcore.ContextMessage{Source: source, Content: []agentcore.TextBlock{{Type: "text", Text: agentcore.ReminderText(text)}}}
+	_, err := appendEvent(st, session, &runID, "context/message", key, message, nil, now)
+	return err
 }

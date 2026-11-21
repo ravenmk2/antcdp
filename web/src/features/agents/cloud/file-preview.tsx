@@ -20,7 +20,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { CloudFileEntry } from "@/types/cloud-computer";
-import { agentRoot } from "../data/agent-api";
+import { workspaceFileURL } from "../data/agent-api";
 import { sandboxKeys } from "../sandbox/shared";
 
 const textExtensions = new Set(
@@ -100,10 +100,6 @@ function sourceLanguage(name: string) {
   };
   return aliases[ext] || ext;
 }
-export function fileURL(computerId: string, path: string) {
-  return `/api/v1${agentRoot}/cloud-computers/${computerId}/file-content?${new URLSearchParams({ path, disposition: "attachment" })}`;
-}
-
 // Read incrementally: directory sizes can be unknown or change between reads.
 async function readPreview(url: string, limit: number, signal: AbortSignal) {
   const response = await fetch(url, {
@@ -162,7 +158,7 @@ export function FilePreview({
             <div className="cloud-preview-illustration">
               <FileSearch strokeWidth={1.2} />
             </div>
-            <h2>让工作成果，一目了然</h2>
+            <h2>让工作制品，一目了然</h2>
             <p>从左侧目录选择文件，即可在这里查看内容。</p>
             <div className="cloud-format-chips">
               <span>Markdown</span>
@@ -210,7 +206,7 @@ function SelectedPreview({
     queryFn: async ({ signal }) => {
       try {
         const blob = await readPreview(
-          fileURL(computerId, entry.path),
+          workspaceFileURL(computerId, entry.path),
           limit,
           signal,
         );
@@ -327,7 +323,9 @@ function SelectedPreview({
           <IconButton
             label="下载"
             size="iconSm"
-            render={<a href={fileURL(computerId, entry.path)} download />}
+            render={
+              <a href={workspaceFileURL(computerId, entry.path)} download />
+            }
             nativeButton={false}
             role="link"
           >

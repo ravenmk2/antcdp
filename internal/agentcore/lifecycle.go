@@ -21,7 +21,7 @@ func PlanChild(parentSession Session, parent Run, request ChildRequest, now time
 	if parentSession.ID != parent.Ref.SessionID || parentSession.Model == nil || request.Parent.ID == 0 || request.SessionID == 0 || request.RunID == 0 {
 		return ChildPlan{}, invalid("child")
 	}
-	if err := ValidateInput(request.Content, request.Files); err != nil {
+	if err := ValidateInput(request.Content, request.Files, nil); err != nil {
 		return ChildPlan{}, err
 	}
 	budget, reservation, err := parent.Budget.Reserve(Budget{Children: 1})

@@ -64,6 +64,12 @@ func (d *agentToolDispatcher) Dispatch(ctx context.Context, execution agentcore.
 		return d.dispatchSandbox(ctx, execution, permit)
 	}
 	switch permit.Call.Spec.Key {
+	case "list_artifacts", "show_artifacts":
+		out, err := d.service.SessionArtifactTool(ctx, permit)
+		if err != nil {
+			return sandboxToolFailure(err), nil
+		}
+		return out, nil
 	case "read_tool_output":
 		content, err := d.service.ReadToolOutput(ctx, execution.Ref, args)
 		if err != nil {

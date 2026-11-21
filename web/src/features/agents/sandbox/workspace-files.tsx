@@ -43,7 +43,7 @@ export function WorkspaceFilesDrawer({
       open
       wide
       title="工作文件"
-      description="当前云电脑数据卷内的文件。正式成果另存于平台，清理这里不会删除正式成果。"
+      description="当前云电脑数据卷内的文件。制品另存于平台，清理这里不会删除制品。"
       onClose={onClose}
       footer={<OverlayCancelButton>关闭</OverlayCancelButton>}
     >
@@ -453,7 +453,9 @@ export function WorkspaceMutation({
       description={`将删除 /data/${entry.path}。服务端会再次检查文件是否变化及活动引用；此操作无法撤销。`}
       confirmLabel={reading || action.pending ? "正在删除" : "确认删除"}
       confirmDisabled={Boolean(mutation.result)}
-      pending={reading || action.pending || action.uncertain || mutation.checking}
+      pending={
+        reading || action.pending || action.uncertain || mutation.checking
+      }
       onConfirm={() => void execute()}
       onClose={() => mutation.close(onClose)}
     >

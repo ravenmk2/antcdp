@@ -139,7 +139,7 @@ func (s *Service) prepareMCPBindings(tx identity.Tx, r Repository, agentID uint6
 }
 
 // Discovery runs outside transactions and is persisted once in the root context.
-func (s *Service) discoverMCPBindings(ctx context.Context, prepared []mcpPreparation) ([]agentcore.ToolSpec, agentcore.ContextFact) {
+func (s *Service) discoverMCPBindings(ctx context.Context, prepared []mcpPreparation) ([]agentcore.ToolSpec, json.RawMessage) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	type discovery struct {
@@ -198,5 +198,5 @@ func (s *Service) discoverMCPBindings(ctx context.Context, prepared []mcpPrepara
 		statuses = append(statuses, map[string]any{"server_id": strconv.FormatUint(p.Binding.ServerID, 10), "available": reason == "", "reason": reason})
 	}
 	raw, _ := json.Marshal(map[string]any{"mcp_servers": statuses})
-	return tools, agentcore.ContextFact{Kind: "context/mcp", Content: raw}
+	return tools, raw
 }

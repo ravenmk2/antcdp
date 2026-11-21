@@ -85,7 +85,7 @@ func TestCompactionKeepsSurfaceOnInvalidSummaryAndRechecksRevision(t *testing.T)
 	code(t, err, "COMPACTION_SOURCE_CHANGED")
 }
 
-func TestOrdinaryPromptClearAndInterruptedProjection(t *testing.T) {
+func TestConfiguredPromptAndInterruptedProjection(t *testing.T) {
 	locked := LockedModel{RemoteModelID: "model", Protocol: modelcore.ChatCompletions, Parameters: map[string]json.RawMessage{"max_output_tokens": json.RawMessage(`100`)}}
 	partial := modelcore.Message{Role: "assistant", Content: "partial", Reasoning: "incomplete signature", NativeProtocol: modelcore.ChatCompletions, Native: json.RawMessage(`{"incomplete":true}`)}
 	facts := map[Seq]HistoryFact{1: {Seq: 1, SchemaVersion: 1, Kind: "assistant/attempt", Message: &partial, Interrupted: true}}
@@ -98,12 +98,12 @@ func TestOrdinaryPromptClearAndInterruptedProjection(t *testing.T) {
 		t.Fatal("partial native was replayed")
 	}
 	spec := ToolSpec{Key: "b", Policy: "allow", Definition: modelcore.Tool{Name: "tool", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`)}}
-	prepared, err := BuildPreparedStep(ExecutionRef{}, 1, locked, PromptConfig{Platform: "stable platform", Administrator: ""}, manifest, messages, []ToolSpec{spec}, 1)
+	prepared, err := BuildPreparedStep(ExecutionRef{}, 1, locked, "configured system", manifest, messages, []ToolSpec{spec}, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(prepared.Request.Messages) != 2 || prepared.Request.Messages[0].Content != "stable platform" {
-		t.Fatal("cleared administrator prompt leaked")
+	if len(prepared.Request.Messages) != 2 || prepared.Request.Messages[0].Content != "configured system" {
+		t.Fatal("configured prompt changed")
 	}
 	prepared.Request.Parameters["max_output_tokens"][0] = '9'
 	if string(locked.Parameters["max_output_tokens"]) != "100" {

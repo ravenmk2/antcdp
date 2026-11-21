@@ -47,15 +47,15 @@ func (s *Service) CompactOverflow(ctx context.Context, execution agentcore.Execu
 	if err != nil {
 		return step, false, err
 	}
-	var prompt agentcore.PromptConfig
+	var prompt string
 	for _, message := range step.Request.Messages {
 		if message.Role != "system" {
 			break
 		}
-		if prompt.Platform != "" {
-			prompt.Platform += "\n\n"
+		if prompt != "" {
+			prompt += "\n\n"
 		}
-		prompt.Platform += message.Content
+		prompt += message.Content
 	}
 	var contextFacts []agentcore.ContextFact
 	for _, entry := range step.Manifest.Entries {
@@ -114,7 +114,7 @@ func latestContextFacts(facts []agentcore.ContextFact) []agentcore.ContextFact {
 	seen := map[string]bool{}
 	var latest []agentcore.ContextFact
 	for i := len(facts) - 1; i >= 0; i-- {
-		if !seen[facts[i].Kind] && facts[i].Kind != "context/tool_reconciliation" {
+		if !seen[facts[i].Kind] && facts[i].Form != "notice" {
 			latest = append(latest, facts[i])
 			seen[facts[i].Kind] = true
 		}
@@ -122,7 +122,7 @@ func latestContextFacts(facts []agentcore.ContextFact) []agentcore.ContextFact {
 	return latest
 }
 
-func (s *Service) maybeCompact(ctx context.Context, execution agentcore.ExecutionContext, step agentcore.PreparedStep, prompt agentcore.PromptConfig, tools []agentcore.ToolSpec, contextFacts []agentcore.ContextFact) (agentcore.PreparedStep, error) {
+func (s *Service) maybeCompact(ctx context.Context, execution agentcore.ExecutionContext, step agentcore.PreparedStep, prompt string, tools []agentcore.ToolSpec, contextFacts []agentcore.ContextFact) (agentcore.PreparedStep, error) {
 	if s.Tokens == nil {
 		return step, nil
 	}
@@ -183,7 +183,7 @@ func (s *Service) maybeCompact(ctx context.Context, execution agentcore.Executio
 	return step, nil
 }
 
-func (s *Service) rebuildCompactedStep(ctx context.Context, execution agentcore.ExecutionContext, step agentcore.PreparedStep, prompt agentcore.PromptConfig, tools []agentcore.ToolSpec, contextFacts []agentcore.ContextFact) (agentcore.PreparedStep, error) {
+func (s *Service) rebuildCompactedStep(ctx context.Context, execution agentcore.ExecutionContext, step agentcore.PreparedStep, prompt string, tools []agentcore.ToolSpec, contextFacts []agentcore.ContextFact) (agentcore.PreparedStep, error) {
 	var revision agentcore.Version
 	err := s.background(ctx, func(tx identity.Tx, r Repository, st StateRepository) error {
 		x, err := s.lockExecution(tx, r, st, execution.Ref, true)

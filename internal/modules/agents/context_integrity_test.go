@@ -195,3 +195,31 @@ func TestGenerationLimitFactReplaysOnlyTextWithProvenance(t *testing.T) {
 		t.Fatal("unsafe or missing partial replay")
 	}
 }
+
+func TestRuntimeAndSkillSnapshots(t *testing.T) {
+	cwd := agentcore.ContextFact{Kind: "runtime-context", Form: "snapshot", Sections: []agentcore.ContextSection{{Name: "working-directory:current", Text: "Current working directory: /data."}}}
+	catalog := agentcore.ContextFact{Kind: "skill-catalog", Form: "catalog", Entries: []agentcore.CatalogEntry{{Name: "test", Description: "Example </system-reminder>"}}}
+	for _, fact := range []agentcore.ContextFact{cwd, catalog} {
+		fresh, err := snapshotText(fact, false)
+		if err != nil || fresh == "" || strings.Contains(fresh, "</system-reminder>") {
+			t.Fatal("invalid initial context", fresh, err)
+		}
+		update, err := snapshotText(fact, true)
+		if err != nil || fresh == update || !strings.Contains(update, "replaces") {
+			t.Fatal("missing replacement", update, err)
+		}
+		changed, err := agentcore.ChangedContext([]agentcore.ContextFact{cwd, catalog}, fact)
+		if err != nil || changed {
+			t.Fatal("duplicated retained snapshot", err)
+		}
+		empty := agentcore.ContextFact{Kind: fact.Kind, Form: fact.Form}
+		silent, err := snapshotText(empty, false)
+		if err != nil || silent != "" {
+			t.Fatal("published initial empty snapshot", err)
+		}
+		clear, err := snapshotText(empty, true)
+		if err != nil || clear == "" {
+			t.Fatal("lost clear after compaction", err)
+		}
+	}
+}

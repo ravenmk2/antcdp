@@ -88,7 +88,7 @@ func (s *Service) prepareSessionTitle(st StateRepository, v *SessionRow, input *
 	if row == nil && v.Title != "新会话" {
 		return nil
 	}
-	text := inputText(view)
+	text := inputPreviewText(inputText(view), view.WorkspaceFiles)
 	title := fallbackTitle(text)
 	if title == "" {
 		return nil
@@ -325,7 +325,7 @@ func (s *Service) startSessionTitle(ctx context.Context, id uint64) (titleWork, 
 		if stored.Message == nil || event.EventType != "input/message" {
 			return integrity()
 		}
-		request, err := titleRequest(model, stored.Message.Content)
+		request, err := titleRequest(model, inputPreviewText(stored.Message.Content, stored.WorkspaceFiles))
 		if err != nil {
 			return err
 		}

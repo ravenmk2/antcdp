@@ -40,7 +40,6 @@ func (m *conversationMemory) SurfaceEvents(id, after, through uint64, limit int)
 func TestLegacyEventExposesChatType(t *testing.T) {
 	for _, test := range []struct{ kind, stored, projected string }{
 		{"session/title", `{"configuration":{"agent_type":"interactive","title":"interactive"}}`, `{"configuration":{"agent_type":"chat","title":"interactive"}}`},
-		{"context/authorization", `{"agent_type":"interactive","reason":"root_admission"}`, `{"agent_type":"chat","reason":"root_admission"}`},
 	} {
 		t.Run(test.kind, func(t *testing.T) {
 			m := &conversationMemory{}
@@ -131,7 +130,7 @@ func TestDisplayEventsAndNamingLeaveModelRequestPrefixUnchanged(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		prepared, err := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 1, agentcore.LockedModel{RemoteModelID: "test", Protocol: modelcore.ChatCompletions}, agentcore.PromptConfig{Platform: "stable system"}, manifest, messages, nil, 1)
+		prepared, err := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 1, agentcore.LockedModel{RemoteModelID: "test", Protocol: modelcore.ChatCompletions}, "stable system", manifest, messages, nil, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -212,12 +211,12 @@ func TestSummaryRequestPreservesSystemToolsAndNativePrefix(t *testing.T) {
 	facts := map[agentcore.Seq]agentcore.HistoryFact{1: {Seq: 1, SchemaVersion: 1, Kind: "input/message", Message: &user}, 2: {Seq: 2, SchemaVersion: 1, Kind: "assistant/message", Message: &assistant}}
 	tools := []agentcore.ToolSpec{{Key: "z", Policy: "allow", Definition: modelcore.Tool{Name: "z", InputSchema: json.RawMessage(`{"properties":{},"type":"object"}`)}}, {Key: "a", Policy: "allow", Definition: modelcore.Tool{Name: "a", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`)}}}
 	locked := agentcore.LockedModel{RemoteModelID: "test", Protocol: modelcore.AnthropicMessages}
-	step, err := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 1, locked, agentcore.PromptConfig{Platform: "stable system"}, m, []modelcore.Message{user, assistant}, tools, 1)
+	step, err := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 1, locked, "stable system", m, []modelcore.Message{user, assistant}, tools, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	tools[0], tools[1] = tools[1], tools[0]
-	reordered, err := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 2, locked, agentcore.PromptConfig{Platform: "stable system"}, m, []modelcore.Message{user, assistant}, tools, 1)
+	reordered, err := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 2, locked, "stable system", m, []modelcore.Message{user, assistant}, tools, 1)
 	if err != nil || !reflect.DeepEqual(step.Request, reordered.Request) {
 		t.Fatal("tool discovery order changed prefix", err)
 	}

@@ -301,6 +301,7 @@ export class ConversationProjector {
         "assistant/attempt",
         "run/ended",
         "artifact/retained",
+        "artifact/shown",
         "compaction/summary",
       ].includes(record.event_type)
     ) {

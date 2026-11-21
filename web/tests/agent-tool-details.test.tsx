@@ -117,7 +117,7 @@ it("uses distinct static icons for PAPI listing and description", () => {
 });
 
 it("opens a failure hint independently from the tool disclosure", async () => {
-  const node = tool("read_file", { path: "missing.txt" }, "file unavailable");
+  const node = tool("read", { path: "missing.txt" }, "file unavailable");
   node.result!.data.status = "failed";
   node.result!.data.outcome.reason = "FILE_NOT_FOUND";
   const user = userEvent.setup();
@@ -145,29 +145,31 @@ it("shows recorded file content, copies exact text and preserves it across foldi
   const user = userEvent.setup();
   const content = "<script>literal</script>\nalpha=1\n";
   const node = tool(
-    "write_file",
+    "write",
     { path: "example.txt", content },
     {
       path: "/data/workspace/example.txt",
-      size_bytes: "32",
+      diff: "+<script>literal</script>\n+alpha=1\n",
       sha256: "receipt-sha",
     },
   );
   const { container } = render(<ToolEvent {...node} sessionId="1" />);
-  expect(screen.queryByLabelText("写入内容")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("文件差异")).not.toBeInTheDocument();
   await user.click(screen.getByText("写入文件"));
-  expect(screen.getByLabelText("写入内容")).toHaveTextContent(
+  expect(screen.getByLabelText("文件差异")).toHaveTextContent(
     "<script>literal</script>",
   );
   expect(container.querySelector("script")).toBeNull();
   expect(screen.queryByLabelText("调用参数")).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "复制写入内容" }));
-  expect(await navigator.clipboard.readText()).toBe(content);
-  const output = screen.getByLabelText("写入内容");
+  await user.click(screen.getByRole("button", { name: "复制文件差异" }));
+  expect(await navigator.clipboard.readText()).toBe(
+    "+<script>literal</script>\n+alpha=1\n",
+  );
+  const output = screen.getByLabelText("文件差异");
   await user.click(screen.getByText("写入文件"));
   expect(output).not.toBeVisible();
   await user.click(screen.getByText("写入文件"));
-  expect(screen.getByLabelText("写入内容")).toBe(output);
+  expect(screen.getByLabelText("文件差异")).toBe(output);
 });
 
 it("updates a reconciled tool in place without reopening it or showing the stale unknown warning", async () => {
@@ -206,7 +208,7 @@ it.each(["failed", "outcome_unknown", "truncated", "mcp"] as const)(
   "does not present %s file input as a successful write",
   async (kind) => {
     const node = tool(
-      "write_file",
+      "write",
       { path: "example.txt", content: "unconfirmed" },
       { path: "/data/workspace/example.txt", error: "unconfirmed" },
     );
@@ -218,39 +220,39 @@ it.each(["failed", "outcome_unknown", "truncated", "mcp"] as const)(
     if (kind === "mcp") node.call!.data.mcp_server_id = "99";
     render(<ToolEvent {...node} sessionId="1" />);
     await userEvent.setup().click(screen.getByText("写入文件"));
-    expect(screen.queryByLabelText("写入内容")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("文件差异")).not.toBeInTheDocument();
     expect(screen.getByLabelText("返回内容")).toHaveTextContent("unconfirmed");
   },
 );
 
-it("shows replacement fragments without claiming a full-file diff", async () => {
+it("highlights removed and added lines from the recorded diff", async () => {
   render(
     <ToolEvent
       {...tool(
-        "edit_file",
+        "edit",
         { path: "example.txt", old_text: "alpha=1", new_text: "alpha=3" },
-        { path: "/data/workspace/example.txt", size_bytes: "15" },
+        {
+          path: "/data/workspace/example.txt",
+          diff: "@@ -1 +1 @@\n-alpha=1\n+alpha=3",
+        },
       )}
       sessionId="1"
     />,
   );
   await userEvent.setup().click(screen.getByText("编辑文件"));
-  expect(screen.getByLabelText("替换前片段")).toHaveTextContent("alpha=1");
-  expect(screen.getByLabelText("替换后片段")).toHaveTextContent("alpha=3");
+  expect(screen.getByText("-alpha=1")).toHaveClass("text-destructive");
+  expect(screen.getByText("+alpha=3")).toHaveClass("text-success");
 });
 
 it("keeps partial read bounds and remaining-content notice visible", async () => {
   render(
     <ToolEvent
       {...tool(
-        "read_file",
+        "read",
         { path: "example.txt", offset: 10 },
         {
           path: "/data/workspace/example.txt",
-          text: "partial",
-          offset: 10,
-          next_offset: 17,
-          size_bytes: "50",
+          text: "10 | partial",
           has_more: true,
         },
       )}
@@ -259,9 +261,7 @@ it("keeps partial read bounds and remaining-content notice visible", async () =>
   );
   await userEvent.setup().click(screen.getByText("读取文件"));
   expect(screen.getByLabelText("读取内容")).toHaveTextContent("partial");
-  expect(screen.getByText(/字节范围 10–17/)).toHaveTextContent(
-    "尚有未读取内容",
-  );
+  expect(screen.getByText("尚有未读取内容")).toBeVisible();
 });
 
 it("shows readable grep matches with truncation and preserves unsupported result shapes", async () => {
@@ -269,8 +269,11 @@ it("shows readable grep matches with truncation and preserves unsupported result
     "grep",
     { pattern: "alpha", path: "." },
     {
-      matches: [
-        { path: "/data/workspace/example.txt", line: 2, text: "alpha=3" },
+      groups: [
+        {
+          path: "/data/workspace/example.txt",
+          lines: [{ line: 2, text: "alpha=3" }],
+        },
       ],
       truncated: true,
     },
@@ -278,7 +281,7 @@ it("shows readable grep matches with truncation and preserves unsupported result
   const { rerender } = render(<ToolEvent {...node} sessionId="1" />);
   await userEvent.setup().click(screen.getByText("检索文件内容"));
   expect(screen.getByLabelText("匹配结果")).toHaveTextContent(
-    "/data/workspace/example.txt:2: alpha=3",
+    "/data/workspace/example.txt 2: alpha=3",
   );
   expect(screen.getByText(/1 项匹配/)).toHaveTextContent("结果已截断");
   rerender(
@@ -286,7 +289,7 @@ it("shows readable grep matches with truncation and preserves unsupported result
       {...tool(
         "grep",
         { pattern: "alpha" },
-        { matches: [{ unexpected: "payload" }] },
+        { groups: [{ unexpected: "payload" }] },
       )}
       sessionId="1"
     />,
@@ -353,4 +356,19 @@ it("shows question and answer pairs for waiting, multiple selections, late answe
   expect(
     screen.queryByText("测试环境、生产环境、都需要检查"),
   ).not.toBeInTheDocument();
+});
+
+it("highlights applied file changes from the tool result", async () => {
+  const node = tool(
+    "edit",
+    { file_path: "a", old_string: "old", new_string: "new" },
+    { path: "/data/home/a", diff: "@@ -1 +1 @@\n-old\n+new" },
+  );
+  render(<ToolEvent {...node} sessionId="1" />);
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: /编辑文件/ }));
+  expect(screen.getByLabelText("文件差异")).toHaveTextContent("+new");
+  expect(screen.getByText("-old")).toHaveClass("text-destructive");
+  expect(screen.getByText("+new")).toHaveClass("text-success");
 });
