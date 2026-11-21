@@ -159,6 +159,18 @@ func ValidateSkillLoadMetadata(load SkillLoadMetadata, agentID uint64) error {
 }
 
 func validateToolMetadata(tx identity.Tx, x executionRows, call *ToolCallRow, raw json.RawMessage, extra map[string]any) error {
+	if call.ToolKey == "write" && call.MCPBindingID == nil && call.MCPServerID == nil {
+		fields, err := metadataObject(raw, "file_write")
+		if err != nil {
+			return err
+		}
+		write, err := decodeWorkspaceWriteResult(fields["file_write"])
+		if err != nil {
+			return err
+		}
+		extra["file_write"] = write
+		return nil
+	}
 	if call.ToolKey == "skill" {
 		fields, err := metadataObject(raw, "skill_load")
 		if err != nil {
@@ -243,6 +255,20 @@ func validateToolMetadata(tx identity.Tx, x executionRows, call *ToolCallRow, ra
 	}
 	extra["sandbox_execution"] = meta
 	return nil
+}
+
+func decodeWorkspaceWriteResult(raw []byte) (workspaceWriteResult, error) {
+	var write workspaceWriteResult
+	if err := decodeMetadata(raw, &write, "", "path", "operation", "diff"); err != nil {
+		return write, err
+	}
+	if _, ok := nativeRelative(write.Path); !ok || protectedNativePath(write.Path) {
+		return write, integrity()
+	}
+	if write.Operation != "update" && (write.Operation != "create" || write.Diff != "") {
+		return write, integrity()
+	}
+	return write, nil
 }
 
 func validExecutionMetadata(meta SandboxExecutionMetadata) error {

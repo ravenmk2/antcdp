@@ -21,6 +21,7 @@ import {
   fileResultSupported,
   readToolObject,
   readSearchResult,
+  writeDiffFromContent,
 } from "./tool-content";
 export const builtinToolNames: Record<string, string> = {
   papi_list: "列出平台 API",
@@ -93,8 +94,23 @@ export function ToolEvent({
     builtin && !papi && knownSuccess && result
       ? readToolObject(result.data.content)
       : null;
-  const file =
-    value && result?.data.executed === true && fileResultSupported(name, value);
+  const write =
+    builtin &&
+    name === "write" &&
+    knownSuccess &&
+    result?.data.executed === true
+      ? result.data.file_write
+      : undefined;
+  const file = write
+    ? {
+        path: write.path,
+        diff: write.diff || writeDiffFromContent(args.content),
+      }
+    : value &&
+        result?.data.executed === true &&
+        fileResultSupported(name, value)
+      ? value
+      : null;
   const search = value ? readSearchResult(name, value) : null;
   const plan =
     name === "update_plan" && builtin && knownSuccess && result
@@ -340,7 +356,7 @@ export function ToolEvent({
                 settled={Boolean(result)}
               />
             )}
-            {file && value && <FileToolResult name={name} value={value} />}
+            {file && <FileToolResult name={name} value={file} />}
             {search && (
               <div className="space-y-3">
                 <p className="text-xs text-muted">

@@ -54,8 +54,8 @@ export function ToolCode({
               .split("\n")
               .map((line, index) => {
                 const marker =
-                  (index === 1 && line.startsWith("+++ ")) ||
-                  (index === 0 && line.startsWith("--- "))
+                  source.startsWith("--- ") &&
+                  (index === 0 || (index === 1 && line.startsWith("+++ ")))
                     ? "font-semibold text-muted"
                     : line.startsWith("@@")
                       ? "bg-primary/10 text-primary"
@@ -137,8 +137,18 @@ export function fileResultSupported(name: string, value: JsonObject): boolean {
   return (
     typeof value.path === "string" &&
     ((name === "read" && typeof value.text === "string") ||
-      ((name === "write" || name === "edit") && typeof value.diff === "string"))
+      (name === "edit" && typeof value.diff === "string"))
   );
+}
+
+export function writeDiffFromContent(content: unknown): string {
+  if (typeof content !== "string" || content === "") return "";
+  return content
+    .replace(/\r\n/g, "\n")
+    .replace(/\n$/, "")
+    .split("\n")
+    .map((line) => `+${line}\n`)
+    .join("");
 }
 
 export function ToolTextResult({

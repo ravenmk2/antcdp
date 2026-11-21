@@ -102,6 +102,40 @@ func TestNativeReadRangeAndSearchScope(t *testing.T) {
 	}
 }
 
+func TestNativeWriteDistinguishesMissingAndEmptyFiles(t *testing.T) {
+	const path = "/data/workspace/a.txt"
+	for _, tc := range []struct {
+		name      string
+		old       []byte
+		content   string
+		operation string
+		diff      string
+		writes    int
+	}{
+		{name: "create", content: "hello\n", operation: "create", writes: 1},
+		{name: "create_empty", operation: "create", writes: 1},
+		{name: "overwrite_empty", old: []byte{}, content: "hello\n", operation: "update", diff: "--- " + path + "\n+++ " + path + "\n@@ -0,0 +1 @@\n+hello\n", writes: 1},
+		{name: "overwrite_empty_with_empty", old: []byte{}, operation: "update"},
+		{name: "overwrite_identical", old: []byte("hello\n"), content: "hello\n", operation: "update"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &nativeTestProvider{data: tc.old}
+			q := workspace.Request{Operation: "write", Path: "workspace/a.txt", Data: base64.StdEncoding.EncodeToString([]byte(tc.content))}
+			response, err := runNativeRequest(t.Context(), &SandboxAccess{Provider: p}, q)
+			if err != nil {
+				t.Fatal(err)
+			}
+			write, err := decodeWorkspaceWriteResult(response.Result)
+			if err != nil || write != (workspaceWriteResult{Path: path, Operation: tc.operation, Diff: tc.diff}) {
+				t.Fatalf("unexpected write result %s: %v", response.Result, err)
+			}
+			if p.data == nil || string(p.data) != tc.content || p.writes != tc.writes {
+				t.Fatalf("unexpected file %q after %d writes", p.data, p.writes)
+			}
+		})
+	}
+}
+
 func TestNativeUnknownWritesAreNeverReplayed(t *testing.T) {
 	s, m, a := workspaceWorkerFixture()
 	m.op.DeadlineAt = time.Now().Add(time.Minute)

@@ -6,6 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"html"
 	"io"
 	"strings"
 
@@ -168,7 +170,7 @@ func (s *CloudService) FileTool(ctx context.Context, ref agentcore.ExecutionRef,
 		}
 		return observation, err
 	}
-	content, err := workspaceToolContent(key, response.Result)
+	observation, err = workspaceToolObservation(key, response.Result)
 	if err != nil {
 		yes := true
 		reason := "WORKSPACE_RESULT_INVALID"
@@ -179,8 +181,28 @@ func (s *CloudService) FileTool(ctx context.Context, ref agentcore.ExecutionRef,
 		observation = agentcore.DispatchObservation{Status: "failed", Executed: &yes, Reason: reason, Content: "The file operation completed but its result could not be used: " + reason}
 		return observation, err
 	}
+	return observation, nil
+}
+
+func workspaceToolObservation(key string, raw json.RawMessage) (agentcore.DispatchObservation, error) {
 	yes := true
-	return agentcore.DispatchObservation{Status: "succeeded", Executed: &yes, Content: content}, nil
+	observation := agentcore.DispatchObservation{Status: "succeeded", Executed: &yes}
+	if key != "write" {
+		content, err := workspaceToolContent(key, raw)
+		observation.Content = content
+		return observation, err
+	}
+	write, err := decodeWorkspaceWriteResult(raw)
+	if err != nil {
+		return agentcore.DispatchObservation{}, err
+	}
+	verb := "Updated"
+	if write.Operation == "create" {
+		verb = "Created"
+	}
+	observation.Content = fmt.Sprintf("<path>%s</path>\n<type>file</type>\n<content>\n%s file\n</content>", html.EscapeString(write.Path), verb)
+	observation.Metadata, err = json.Marshal(map[string]workspaceWriteResult{"file_write": write})
+	return observation, err
 }
 
 func workspaceToolContent(key string, raw json.RawMessage) (string, error) {

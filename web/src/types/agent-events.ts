@@ -197,6 +197,7 @@ export interface EventPayloads {
     truncated: boolean;
     outcome: ToolCall["outcome"];
     sandbox_execution?: SandboxExecution;
+    file_write?: { path: string; operation: "create" | "update"; diff: string };
     output_file?: { file_id: string; size_bytes: string; sha256: string };
     source_truncated?: boolean;
     artifacts?: {

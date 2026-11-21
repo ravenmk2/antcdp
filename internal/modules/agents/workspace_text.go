@@ -155,6 +155,12 @@ func diffPreview(s string) string {
 	return utf8Prefix(s, limit) + "\n… [diff clipped]"
 }
 
+type workspaceWriteResult struct {
+	Path      string `json:"path"`
+	Operation string `json:"operation"`
+	Diff      string `json:"diff"`
+}
+
 func nativeChangeText(ctx context.Context, a *SandboxAccess, f sandboxcore.Filesystem, name string, q workspace.Request) (any, error) {
 	old, err := loadTextSnapshot(ctx, a, f, name)
 	if err != nil {
@@ -181,15 +187,17 @@ func nativeChangeText(ctx context.Context, a *SandboxAccess, f sandboxcore.Files
 	if err = verifyTextSnapshot(ctx, a, f, name, old); err != nil {
 		return nil, err
 	}
-	from := name
-	if old.identity == "" {
-		from = "/dev/null"
-	}
 	if old.identity == "" || after != old.text {
 		err = f.PutFile(ctx, a.Resource, sandboxcore.FileRequest{Path: name, Mode: old.mode, MaxBytes: int64(max(1, len(after)))}, strings.NewReader(after))
 		if err != nil {
 			return nil, err
 		}
 	}
-	return map[string]any{"path": q.Path, "size_bytes": fmt.Sprint(len(after)), "diff": diffPreview(textDiff(from, name, old.text, after))}, nil
+	if q.Operation == "write" {
+		if old.identity == "" {
+			return workspaceWriteResult{Path: name, Operation: "create"}, nil
+		}
+		return workspaceWriteResult{Path: name, Operation: "update", Diff: diffPreview(textDiff(name, name, old.text, after))}, nil
+	}
+	return map[string]any{"path": q.Path, "size_bytes": fmt.Sprint(len(after)), "diff": diffPreview(textDiff(name, name, old.text, after))}, nil
 }

@@ -141,18 +141,19 @@ it("opens a failure hint independently from the tool disclosure", async () => {
   );
 });
 
-it("shows recorded file content, copies exact text and preserves it across folding", async () => {
+it("shows a new file from the write arguments and preserves its preview across folding", async () => {
   const user = userEvent.setup();
   const content = "<script>literal</script>\nalpha=1\n";
   const node = tool(
     "write",
-    { path: "example.txt", content },
-    {
-      path: "/data/workspace/example.txt",
-      diff: "+<script>literal</script>\n+alpha=1\n",
-      sha256: "receipt-sha",
-    },
+    { file_path: "example.txt", content },
+    "Created file",
   );
+  node.result!.data.file_write = {
+    path: "/data/workspace/example.txt",
+    operation: "create",
+    diff: "",
+  };
   const { container } = render(<ToolEvent {...node} sessionId="1" />);
   expect(screen.queryByLabelText("文件差异")).not.toBeInTheDocument();
   await user.click(screen.getByText("写入文件"));
@@ -170,6 +171,24 @@ it("shows recorded file content, copies exact text and preserves it across foldi
   expect(output).not.toBeVisible();
   await user.click(screen.getByText("写入文件"));
   expect(screen.getByLabelText("文件差异")).toBe(output);
+});
+
+it("uses the applied overwrite diff from the result event", async () => {
+  const node = tool(
+    "write",
+    { file_path: "example.txt", content: "new\n" },
+    "Updated file",
+  );
+  const path = "/data/workspace/example.txt";
+  node.result!.data.file_write = {
+    path,
+    operation: "update",
+    diff: `--- ${path}\n+++ ${path}\n@@ -0,0 +1 @@\n+new\n`,
+  };
+  render(<ToolEvent {...node} sessionId="1" />);
+  await userEvent.setup().click(screen.getByText("写入文件"));
+  expect(screen.getByLabelText("文件差异")).toHaveTextContent("@@ -0,0 +1 @@");
+  expect(screen.getByLabelText("文件差异")).toHaveTextContent("+new");
 });
 
 it("updates a reconciled tool in place without reopening it or showing the stale unknown warning", async () => {
@@ -209,9 +228,14 @@ it.each(["failed", "outcome_unknown", "truncated", "mcp"] as const)(
   async (kind) => {
     const node = tool(
       "write",
-      { path: "example.txt", content: "unconfirmed" },
+      { file_path: "example.txt", content: "unconfirmed" },
       { path: "/data/workspace/example.txt", error: "unconfirmed" },
     );
+    node.result!.data.file_write = {
+      path: "/data/workspace/example.txt",
+      operation: "create",
+      diff: "",
+    };
     if (kind === "failed" || kind === "outcome_unknown")
       node.result!.data.status = kind;
     if (kind === "outcome_unknown")

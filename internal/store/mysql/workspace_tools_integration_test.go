@@ -96,7 +96,7 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if err = f.Store.db.GetContext(ctx, &frozenCWD, "SELECT cwd FROM agent_run_context WHERE root_run_id=?", uint64(x.Ref.RootRunID)); err != nil || frozenCWD != binding.CWD {
 		t.Fatal("binding differs from frozen CWD", frozenCWD, err)
 	}
-	args := json.RawMessage(`{"file_path":"note.md","content":"controlled contents"}`)
+	args := json.RawMessage(`{"file_path":"note.md","content":""}`)
 	call := commandDeclare(t, f, x, 1, "write", string(args))
 	before := remote.launches
 	if _, err = svc.FileTool(ctx, x.Ref, uint64(call.ID), "write", json.RawMessage(`{"file_path":"other.md","content":"changed"}`)); err == nil || remote.launches != before {
@@ -106,15 +106,21 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil || observation.Status != "succeeded" || observation.Executed == nil || !*observation.Executed {
 		t.Fatal("write", err)
 	}
-	if _, err = host.CompleteTool(ctx, x.Ref, core.ToolResult{Call: call, Observation: observation}); err != nil {
-		t.Fatal(err)
-	}
+	assertWorkspaceWriteResult(t, f, x, call, observation, binding.CWD+"/note.md", "create", "Created", "")
 	before = remote.launches
 	if _, err = svc.FileTool(ctx, x.Ref, uint64(call.ID), "write", args); err == nil || remote.launches != before {
 		t.Fatal("completed file tool replayed")
 	}
+	args = json.RawMessage(`{"file_path":"note.md","content":"controlled contents\n"}`)
+	call = commandDeclare(t, f, x, 2, "write", string(args))
+	observation, err = svc.FileTool(ctx, x.Ref, uint64(call.ID), "write", args)
+	if err != nil || observation.Status != "succeeded" || observation.Executed == nil || !*observation.Executed {
+		t.Fatal("overwrite empty file", err)
+	}
+	name := binding.CWD + "/note.md"
+	assertWorkspaceWriteResult(t, f, x, call, observation, name, "update", "Updated", "--- "+name+"\n+++ "+name+"\n@@ -0,0 +1 @@\n+controlled contents\n")
 	readArgs, _ := json.Marshal(map[string]any{"file_path": binding.CWD + "/note.md"})
-	readCall := commandDeclare(t, f, x, 2, "read", string(readArgs))
+	readCall := commandDeclare(t, f, x, 3, "read", string(readArgs))
 	read, err := svc.FileTool(ctx, x.Ref, uint64(readCall.ID), "read", readArgs)
 	if err != nil || !strings.Contains(read.Content, "controlled contents") {
 		t.Fatal("read", err)
@@ -184,5 +190,36 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	}
 	if err = f.Store.db.GetContext(ctx, &held, "SELECT COUNT(*) FROM agent_resource_reference WHERE holder_kind='cloud_file_operation' AND resource_kind='cloud_computer' AND resource_id=? AND state IN ('active','unknown')", uint64(binding.ComputerID)); err != nil || held != 0 {
 		t.Fatal("home preparation leaked references", held, err)
+	}
+}
+
+func assertWorkspaceWriteResult(t *testing.T, f *agentIntegrationFixture, x core.ExecutionContext, call core.PreparedToolCall, observation core.DispatchObservation, name, operation, verb, diff string) {
+	t.Helper()
+	commit, err := f.Agents.CompleteTool(f.Context, x.Ref, core.ToolResult{Call: call, Observation: observation})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload []byte
+	if err = f.Store.db.GetContext(f.Context, &payload, "SELECT payload FROM agent_event WHERE session_id=? AND seq=?", uint64(x.Ref.SessionID), uint64(commit.Receipt.ToolResultSeq)); err != nil {
+		t.Fatal(err)
+	}
+	var event struct {
+		Model  modelcore.Message `json:"model"`
+		Public struct {
+			Content   []core.ContentBlock `json:"content"`
+			FileWrite *struct {
+				Path      string `json:"path"`
+				Operation string `json:"operation"`
+				Diff      string `json:"diff"`
+			} `json:"file_write"`
+		} `json:"public"`
+	}
+	if err = json.Unmarshal(payload, &event); err != nil {
+		t.Fatal(err)
+	}
+	want := "<path>" + name + "</path>\n<type>file</type>\n<content>\n" + verb + " file\n</content>"
+	write := event.Public.FileWrite
+	if commit.Result.Content != want || event.Model.Content != want || len(event.Public.Content) != 1 || event.Public.Content[0].Text != want || write == nil || write.Path != name || write.Operation != operation || write.Diff != diff {
+		t.Fatalf("unexpected persisted write result: %s", payload)
 	}
 }
