@@ -11,8 +11,8 @@ import (
 )
 
 type Instance struct {
-	ID                uint64          `db:"id"`
-	ConnectionID      uint64          `db:"connection_id"`
+	ID uint64 `db:"id"`
+
 	BackendGeneration uint64          `db:"backend_generation"`
 	RemoteID          *string         `db:"remote_id"`
 	CreationToken     string          `db:"creation_token"`
@@ -121,7 +121,7 @@ type Transaction func(context.Context, func(Repository) error) error
 
 // Open resolves the exact connection generation. An old instance must never be
 // operated through a replacement backend, even if a remote ID happens to match.
-type Open func(context.Context, uint64, uint64) (sandboxcore.Provider, error)
+type Open func(context.Context, uint64) (sandboxcore.Provider, error)
 
 type Service struct {
 	Transact       Transaction

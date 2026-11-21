@@ -150,62 +150,14 @@ it("limits administrators to human computer maintenance without file access", as
     false,
   );
 });
-it("requires a preview and second confirmation before changing the endpoint", async () => {
-  override = async (path, options) => {
-    if (path.endsWith("/preview"))
-      return response({
-        confirmation_token: "confirmed-target",
-        affected_computers: 2,
-        busy_activities: 0,
-        resets_storage: true,
-        expires_at: "2099-01-01T00:00:00Z",
-      });
-    if (options.method === "PUT")
-      return response(
-        {
-          ...sandboxConnection,
-          endpoint: "https://new.example.com",
-          version: "v2",
-        },
-        '"v2"',
-      );
-  };
-  const { user } = mount("/admin/sandboxes");
-  const endpoint = await screen.findByLabelText("服务地址");
-  expect(endpoint).toBeDisabled();
-  await user.click(
-    screen.getByRole("button", { name: "修改连接（极度危险）" }),
-  );
-  await user.clear(endpoint);
-  await user.type(endpoint, "https://new.example.com");
-  await user.click(screen.getByRole("button", { name: "预览连接变更" }));
-  expect(
-    await screen.findByRole("dialog", { name: "确认修改沙箱连接？" }),
-  ).toBeVisible();
-  expect(
-    mocked.mock.calls.some(([, options]) => options?.method === "PUT"),
-  ).toBe(false);
-  expect(screen.getByRole("button", { name: "确认提交" })).toBeDisabled();
-  await user.type(
-    screen.getByLabelText("输入「确认修改沙箱连接」"),
-    "确认修改沙箱连接",
-  );
-  await user.click(screen.getByRole("button", { name: "确认提交" }));
-  await waitFor(() =>
-    expect(mocked).toHaveBeenCalledWith(
-      "/admin/sandboxes/connection",
-      expect.objectContaining({
-        method: "PUT",
-        etag: '"v1"',
-        idempotencyKey: expect.any(String),
-        body: expect.objectContaining({
-          endpoint: "https://new.example.com",
-          confirmation_token: "confirmed-target",
-        }),
-      }),
-    ),
-  );
+it("reports the deployment connection without offering edits", async () => {
+  mount("/admin/sandboxes");
+  expect(await screen.findByText("https://sandbox.example.com")).toBeVisible();
+  expect(screen.getByText("opensandbox")).toBeVisible();
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "检查连接" })).toBeEnabled();
 });
+
 it("disables file mutations when the directory could not be read", async () => {
   override = async (path) => {
     if (path.includes("/entries?"))

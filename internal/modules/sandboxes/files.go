@@ -62,7 +62,7 @@ func (s *Service) File(ctx context.Context, lease Lease, token string, intent js
 	dispatched := false
 	if cause == nil {
 		var p sandboxcore.Provider
-		p, cause = s.Open(ctx, instance.ConnectionID, instance.BackendGeneration)
+		p, cause = s.Open(ctx, instance.BackendGeneration)
 		if cause == nil {
 			fs, ok := p.(sandboxcore.Filesystem)
 			if !ok {
@@ -155,7 +155,7 @@ func (s *Service) reconcileFiles(ctx context.Context, limit int, cursor *Recover
 		if !confirmed && instance != nil {
 			ref, e := s.Resource(instance)
 			if e == nil {
-				p, e := s.Open(ctx, instance.ConnectionID, instance.BackendGeneration)
+				p, e := s.Open(ctx, instance.BackendGeneration)
 				if e == nil {
 					actual, e := p.Inspect(ctx, ref)
 					confirmed = e == nil && (actual.State == "absent" || actual.State == "terminated")

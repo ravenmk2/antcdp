@@ -65,7 +65,7 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		return json.RawMessage(`{}`), nil
 	}}
 	remote := &workspaceToolProvider{environmentMemoryProvider: &environmentMemoryProvider{sandboxMemoryProvider: &sandboxMemoryProvider{resources: map[string]sb.Observation{}}, executions: map[string]sb.ExecResult{}, outputs: map[string]string{}, files: map[string][]byte{}}}
-	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Factory: workspaceToolFactory{remote}, Cipher: f.Models.Cipher, InstallationID: func() (string, error) { return f.Installation, nil }, EndpointTargets: func(string) ([]string, error) { return []string{"192.0.2.21"}, nil }}
+	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Factory: workspaceToolFactory{remote}, Connection: fixtureConnection, InstallationID: func() (string, error) { return f.Installation, nil }, EndpointTargets: func(string) ([]string, error) { return []string{"192.0.2.21"}, nil }}
 	svc.PrepareWorkspace, svc.VerifyEnvironment = svc.InitializeComputer, svc.VerifyWorkspaceEnvironment
 	host.Sandboxes = svc
 	configureTestCloud(t, f, svc)

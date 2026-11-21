@@ -13,30 +13,19 @@ type CloudQuery struct {
 	State                    string
 }
 
-type ConnectionWrite struct {
-	Endpoint          string                      `json:"endpoint"`
-	AccessMode        string                      `json:"access_mode"`
-	ConnectTimeout    int                         `json:"connect_timeout_seconds"`
-	OperationTimeout  int                         `json:"operation_timeout_seconds"`
-	Authentication    *models.AuthenticationWrite `json:"authentication"`
-	ConfirmationText  string                      `json:"confirmation_text,omitempty"`
-	ConfirmationToken string                      `json:"confirmation_token,omitempty"`
-}
-
 type ConnectionView struct {
-	RequiresConfirmation bool                  `json:"requires_confirmation"`
-	ConfigVersion        uint64                `json:"config_version,string"`
-	Endpoint             *string               `json:"endpoint"`
-	AccessMode           string                `json:"access_mode"`
-	ConnectTimeout       int                   `json:"connect_timeout_seconds"`
-	OperationTimeout     int                   `json:"operation_timeout_seconds"`
-	Authentication       models.Authentication `json:"authentication"`
-	BackendGeneration    uint64                `json:"backend_generation,string"`
-	MaintenanceState     string                `json:"maintenance_state"`
-	Capabilities         SandboxCapabilities   `json:"capabilities"`
-	LastDiagnostic       json.RawMessage       `json:"last_diagnostic"`
-	LastDiagnosticAt     *time.Time            `json:"last_diagnostic_at"`
-	Version              string                `json:"version"`
+	Configured        bool                  `json:"configured"`
+	Type              string                `json:"type"`
+	Endpoint          *string               `json:"endpoint"`
+	AccessMode        string                `json:"access_mode"`
+	ConnectTimeout    int                   `json:"connect_timeout_seconds"`
+	OperationTimeout  int                   `json:"operation_timeout_seconds"`
+	Authentication    models.Authentication `json:"authentication"`
+	BackendGeneration uint64                `json:"backend_generation,string"`
+	MaintenanceState  string                `json:"maintenance_state"`
+	Capabilities      SandboxCapabilities   `json:"capabilities"`
+	LastDiagnostic    json.RawMessage       `json:"last_diagnostic"`
+	LastDiagnosticAt  *time.Time            `json:"last_diagnostic_at"`
 }
 
 type CloudEnvironment struct {

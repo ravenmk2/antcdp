@@ -245,14 +245,8 @@ func modelsHTTPLifecycle(t *testing.T, ctx context.Context, database config.Data
 	if err := filestore.EnsurePrivateDir(runtime.DataDir); err != nil {
 		t.Fatal(err)
 	}
-	encrypted, err := cryptox.Encrypt(key, installation, "database.password", database.Password)
-	if err != nil {
-		t.Fatal(err)
-	}
-	database.Password = encrypted
-	if err = config.Write(filepath.Join(runtime.DataDir, "config.yaml"), config.File{SchemaVersion: 1, InstallationID: installation, Server: runtime.Server, Database: database}); err != nil {
-		t.Fatal(err)
-	}
+	runtime.Database = database
+	var err error
 	if err = filestore.AtomicWrite(filepath.Join(runtime.DataDir, "master.key"), key); err != nil {
 		t.Fatal(err)
 	}

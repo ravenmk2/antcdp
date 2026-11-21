@@ -10,7 +10,7 @@ import (
 )
 
 func cloudCommandKind(command string) bool {
-	return strings.HasPrefix(command, "cloud_") || strings.HasPrefix(command, "sandbox_connection.") || strings.HasPrefix(command, "sandbox_spec.") || strings.HasPrefix(command, "workspace.")
+	return strings.HasPrefix(command, "cloud_") || strings.HasPrefix(command, "sandbox_spec.") || strings.HasPrefix(command, "workspace.")
 }
 
 func (s *CloudService) getReceipt(ctx context.Context, raw, key, command, scope string, admin bool) (*Result, error) {
@@ -101,7 +101,7 @@ func workspaceResponseStatus(op *CloudOperationRow) int {
 }
 
 func (s *CloudService) GetSandboxReceipt(ctx context.Context, raw, key, command, scope string) (*Result, error) {
-	if !strings.HasPrefix(command, "sandbox_spec.") && !strings.HasPrefix(command, "sandbox_connection.") {
+	if !strings.HasPrefix(command, "sandbox_spec.") {
 		return nil, missing()
 	}
 	return s.getReceipt(ctx, raw, key, command, scope, true)

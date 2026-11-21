@@ -5,8 +5,8 @@
 ## 安装与运行
 
 1. 准备获准的专用空 MySQL 数据库、账号和应用持久化目录。确认目标归属，避免混用旧安装配置、主密钥和业务数据。
-2. 使用目标二进制或容器配置可信公开来源、数据目录及网络访问，启动安装流程。不要从任意请求 Host 或转发头推断可信来源。
-3. 完成安装后核对应用就绪、持久化和重启行为。存活检查仅证明进程可响应，不等于数据库或业务可用；就绪探针定义查对应实现。
+2. 将数据库、可选沙箱连接和可信公开来源写入 `conf/config.toml`。配置目录及可选 CA 可只读挂载，`data/` 需要可写并持久化。不要从任意请求 Host 或转发头推断可信来源。
+3. 首次启动后，从 `data/install-password` 读取安装口令，进入向导创建创始人账号。完成安装后核对应用就绪、持久化和重启行为。存活检查仅证明进程可响应，不等于数据库或业务可用；就绪探针定义查对应实现。
 
 应用只使用已提供的数据库，不安装数据库服务或自动清空已有环境。配置优先级和校验以源码为准；部署配置与业务设置分别管理，秘密不通过命令行参数、普通响应或日志暴露。
 
@@ -25,9 +25,9 @@
 维护前停止服务并独占数据目录，使用目标版本提供的命令：
 
 ```text
-antcdp serve --data-dir <data-directory>
-antcdp db migrate --data-dir <data-directory>
-antcdp setup recover --data-dir <data-directory>
+antcdp serve --config-dir <config-directory> --data-dir <data-directory>
+antcdp db migrate --config-dir <config-directory> --data-dir <data-directory>
+antcdp setup recover --config-dir <config-directory> --data-dir <data-directory>
 ```
 
 迁移和中断安装恢复是不同操作。恢复依据安装身份、数据库及本地记录核实可继续的步骤；部分 DDL 已提交时不能盲目重放整份 SQL。恢复命令不是已安装账号的密码找回入口，详细参数查 CLI。

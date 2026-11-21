@@ -124,8 +124,6 @@ type Access struct {
 	CWD                                                          string
 }
 type Repository interface {
-	Connection(bool) (*sandboxes.Connection, error)
-	BumpConnectionTopology() error
 	Computer(uint64, bool) (*Computer, error)
 	SaveComputer(*Computer) error
 	CloudOperation(uint64, bool) (*Operation, error)
@@ -133,6 +131,7 @@ type Repository interface {
 	CloudActivity(uint64) (Activity, error)
 }
 type Service struct {
+	Connection         func() (*sandboxes.Connection, error)
 	Transact           func(context.Context, func(Repository) error) error
 	Sandboxes          *sandboxes.Service
 	Epoch              string

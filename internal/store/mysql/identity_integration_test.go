@@ -130,7 +130,8 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	if dataDir == "" {
 		dataDir = t.TempDir()
 	}
-	runtime := config.Runtime{DataDir: dataDir, Server: config.Server{Listen: "127.0.0.1:0", PublicURL: "http://antcdp.test", TrustedProxies: []string{}}}
+	runtime := config.Runtime{Database: database, DataDir: dataDir, Server: config.Server{Listen: "127.0.0.1:0", PublicURL: "http://antcdp.test", TrustedProxies: []string{}}}
+	runtime.Install.Password = new("fixture-install")
 	installer, err := install.New(context.Background(), runtime, Open)
 	if err != nil {
 		t.Fatal(err)
@@ -143,8 +144,8 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	h := server.New(server.Options{Runtime: runtime, Installer: installer, Jobs: jobService, Static: web.DistFS(), Version: "integration-test"})
 	founder := clientFor(h, 1)
 	expectCode(t, founder.call(t, "GET", "/admin/overview", nil, 503, nil), "INSTANCE_NOT_READY")
-	founder.call(t, "POST", "/setup/database-check", database, 200, nil)
-	installed := testData(founder.call(t, "POST", "/setup/install", install.Request{Database: database, Site: install.Site{Name: "协作测试", Timezone: "Asia/Shanghai"}, Founder: install.Founder{Username: "founder", DisplayName: "创始人", Password: "founder-password"}}, 201, nil))
+
+	installed := testData(founder.call(t, "POST", "/setup/install", install.Request{InstallPassword: "fixture-install", Site: install.Site{Name: "协作测试", Timezone: "Asia/Shanghai"}, Founder: install.Founder{Username: "founder", DisplayName: "创始人", Password: "founder-password"}}, 201, nil))
 	if installed["authenticated"] != true {
 		t.Fatal("installation did not authenticate its founder")
 	}

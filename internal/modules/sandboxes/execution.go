@@ -100,7 +100,7 @@ func (s *Service) Dispatch(ctx context.Context, expected Execution, spec sandbox
 	if err != nil {
 		return sandboxcore.ExecResult{}, err
 	}
-	p, err := s.Open(ctx, instance.ConnectionID, instance.BackendGeneration)
+	p, err := s.Open(ctx, instance.BackendGeneration)
 	if err != nil {
 		return sandboxcore.ExecResult{}, errors.Join(err, s.finishExecution(ctx, expected, sandboxcore.ExecResult{}, err, false))
 	}
@@ -210,7 +210,7 @@ func (s *Service) ObserveExecution(ctx context.Context, id uint64) (*Execution, 
 	if err != nil {
 		return row, err
 	}
-	p, err := s.Open(ctx, instance.ConnectionID, instance.BackendGeneration)
+	p, err := s.Open(ctx, instance.BackendGeneration)
 	if err != nil {
 		return row, err
 	}
@@ -289,7 +289,7 @@ func (s *Service) CancelExecution(ctx context.Context, lease Lease, id uint64) e
 	if err != nil {
 		return err
 	}
-	p, err := s.Open(ctx, instance.ConnectionID, instance.BackendGeneration)
+	p, err := s.Open(ctx, instance.BackendGeneration)
 	if err != nil {
 		return err
 	}

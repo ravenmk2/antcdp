@@ -12,23 +12,15 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	a "github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
-	m "github.com/ravenmk2/antcdp/internal/modules/models"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	sb "github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
+func fixtureConnection() (*a.SandboxConnection, error) {
+	return &a.SandboxConnection{BackendType: "opensandbox", Endpoint: new("https://cloud.invalid"), AccessMode: "direct", APIKey: "fixture", ConnectTimeout: 10, OperationTimeout: 300, BackendGeneration: 1, MaintenanceState: "normal"}, nil
+}
 func configureTestCloud(t *testing.T, f *agentIntegrationFixture, svc *a.CloudService) {
 	t.Helper()
-	connection, err := svc.GetConnection(f.Context, f.AdminToken)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if connection.Data.(a.ConnectionView).Endpoint == nil {
-		_, err = svc.SaveConnection(f.Context, f.AdminToken, connection.Tag, cryptox.ID(), a.ConnectionWrite{Endpoint: "https://cloud.invalid", Authentication: &m.AuthenticationWrite{Method: "api_key", Secret: m.SecretWrite{Operation: "replace", Value: new("cloud-fixture-secret")}}})
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 	binding, err := svc.GetBinding(f.Context, f.AdminToken, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -66,7 +58,7 @@ func cloudLifecycleIntegration(t *testing.T, f *agentIntegrationFixture) {
 		return &a.ToolDescriptor{Key: key, Name: key, Source: a.ToolSource{Kind: "builtin"}, ExecutionClass: "sandbox", RequiresSandbox: true, SupportedPolicies: []string{"allow", "deny", "confirm"}, Availability: a.Availability{Available: true}, Definition: modelcore.Tool{Name: key, Description: "Cloud fixture", InputSchema: json.RawMessage(`{"type":"object"}`)}}, nil
 	}}
 	remote := &sandboxMemoryProvider{resources: map[string]sb.Observation{}}
-	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Cipher: f.Models.Cipher, InstallationID: func() (string, error) { return f.Installation, nil }, Factory: sandboxMemoryFactory{remote}, EndpointTargets: func(string) ([]string, error) { return []string{"192.0.2.20"}, nil }, PrepareWorkspace: func(context.Context, *a.SandboxAccess, uint64) error { return nil }, VerifyEnvironment: func(context.Context, *a.SandboxAccess) (a.SandboxCapabilities, []a.DiagnosticCheck, error) {
+	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Connection: fixtureConnection, InstallationID: func() (string, error) { return f.Installation, nil }, Factory: sandboxMemoryFactory{remote}, EndpointTargets: func(string) ([]string, error) { return []string{"192.0.2.20"}, nil }, PrepareWorkspace: func(context.Context, *a.SandboxAccess, uint64) error { return nil }, VerifyEnvironment: func(context.Context, *a.SandboxAccess) (a.SandboxCapabilities, []a.DiagnosticCheck, error) {
 		return a.SandboxCapabilities{Execution: "supported"}, nil, nil
 	}}
 	host.Sandboxes = svc

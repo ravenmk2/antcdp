@@ -1,8 +1,7 @@
 package mysql
 
 var cloudSchemaColumns = map[string]string{
-	"sandbox_connection":               "`backend_type`,`id`,`endpoint`,`access_mode`,`connect_timeout_seconds`,`operation_timeout_seconds`,`secret_ciphertext`,`secret_format_version`,`secret_key_version`,`secret_revision`,`config_version`,`row_version`,`backend_generation`,`topology_version`,`maintenance_state`,`verified_capabilities`,`last_diagnostic`,`last_diagnostic_at`,`updated_by_user_id`,`created_at`,`updated_at`",
-	"sandbox_instance":                 "`id`,`connection_id`,`backend_generation`,`remote_id`,`creation_token`,`state`,`effective_config`,`verified_capabilities`,`expires_at`,`last_observed_at`,`error_code`,`executor_epoch`,`fence_version`,`row_version`,`created_at`,`updated_at`,`finished_at`",
+	"sandbox_instance":                 "`id`,`backend_generation`,`remote_id`,`creation_token`,`state`,`effective_config`,`verified_capabilities`,`expires_at`,`last_observed_at`,`error_code`,`executor_epoch`,`fence_version`,`row_version`,`created_at`,`updated_at`,`finished_at`",
 	"sandbox_lease":                    "`id`,`sandbox_instance_id`,`consumer_kind`,`consumer_id`,`mode`,`state`,`executor_epoch`,`fence_version`,`acquired_at`,`lease_expires_at`,`released_at`,`release_reason`,`updated_at`,`active_consumer`",
 	"sandbox_execution":                "`id`,`sandbox_instance_id`,`lease_id`,`execution_token`,`remote_execution_id`,`is_background`,`status`,`cwd`,`execution_spec_hash`,`executor_epoch`,`fence_version`,`exit_code`,`output_cursor`,`last_observation`,`error_code`,`created_at`,`started_at`,`deadline_at`,`cancel_requested_at`,`last_observed_at`,`finished_at`",
 	"sandbox_operation":                "`id`,`sandbox_instance_id`,`lease_id`,`operation_token`,`kind`,`status`,`request_hash`,`intent`,`observation`,`executor_epoch`,`fence_version`,`error_code`,`created_at`,`started_at`,`deadline_at`,`cancel_requested_at`,`finished_at`,`updated_at`,`active_instance_id`",
@@ -16,10 +15,9 @@ var cloudSchemaColumns = map[string]string{
 	"cloud_computer_operation":         "`request_scope_kind`,`request_scope_id`,`request_command`,`request_key`,`request_hash`,`response_status`,`response_result`,`request_operation_id`,`request_target_kind`,`request_target_id`,`sandbox_operation_id`,`id`,`cloud_computer_id`,`root_run_id`,`kind`,`status`,`operation_token`,`command_receipt_id`,`backend_generation`,`sandbox_instance_id`,`storage_generation`,`target_environment`,`target_spec_id`,`target_spec_version`,`intent`,`observation`,`actor_kind`,`actor_id`,`executor_epoch`,`fence_version`,`error_code`,`created_at`,`started_at`,`deadline_at`,`cancel_requested_at`,`finished_at`,`updated_at`,`active_computer_id`",
 }
 var cloudSchemaIndexes = []agentSchemaIndex{
-	{"sandbox_connection", "PRIMARY", 0, "id"},
 	{"sandbox_instance", "PRIMARY", 0, "id"},
 	{"sandbox_instance", "uq_sandbox_instance_creation", 0, "creation_token"},
-	{"sandbox_instance", "uq_sandbox_instance_remote", 0, "connection_id,backend_generation,remote_id"},
+	{"sandbox_instance", "uq_sandbox_instance_remote", 0, "backend_generation,remote_id"},
 	{"sandbox_instance", "idx_sandbox_instance_state", 1, "state,updated_at,id"},
 	{"sandbox_lease", "PRIMARY", 0, "id"},
 	{"sandbox_lease", "uq_sandbox_lease_consumer", 0, "sandbox_instance_id,active_consumer"},

@@ -53,13 +53,14 @@ func TestAgentApplicationIntegration(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Minute)
 	defer cancel()
-	runtimeConfig := config.Runtime{DataDir: t.TempDir(), Server: config.Server{Listen: "127.0.0.1:8080", PublicURL: "http://127.0.0.1:8080"}}
+	runtimeConfig := config.Runtime{Database: config.Database{Host: host, Port: portNumber, Name: cfg.DBName, Username: cfg.User, Password: cfg.Passwd, TLSMode: "disabled"}, Sandbox: &config.Sandbox{Type: "opensandbox", Endpoint: endpoint, AccessMode: "server_proxy", APIKey: os.Getenv("ANTCDP_TEST_OPENSANDBOX_API_KEY"), ConnectTimeout: 10, OperationTimeout: 300}, DataDir: t.TempDir(), Server: config.Server{Listen: "127.0.0.1:8080", PublicURL: "http://127.0.0.1:8080"}}
+	runtimeConfig.Install.Password = new("fixture-install")
 	installer, err := install.New(ctx, runtimeConfig, mysql.Open)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = installer.Close() })
-	_, err = installer.Install(ctx, install.Request{Database: config.Database{Host: host, Port: portNumber, Name: cfg.DBName, Username: cfg.User, Password: cfg.Passwd, TLSMode: "disabled"}, Site: install.Site{Name: "Agent integration", Timezone: "Asia/Shanghai"}, Founder: install.Founder{Username: "founder", DisplayName: "Integration", Password: "application-integration-password"}})
+	_, err = installer.Install(ctx, install.Request{InstallPassword: "fixture-install", Site: install.Site{Name: "Agent integration", Timezone: "Asia/Shanghai"}, Founder: install.Founder{Username: "founder", DisplayName: "Integration", Password: "application-integration-password"}})
 	if err != nil {
 		t.Fatal("install:", err)
 	}
@@ -135,14 +136,6 @@ func TestAgentApplicationIntegration(t *testing.T) {
 	definition, err := models.CreateDefinition(ctx, raw, m.DefinitionCreate{ProviderID: strconv.FormatUint(provider.Data.(*m.Provider).ID, 10), RemoteModelID: remoteModel, Name: "Application fixture", Protocol: "chat_completions", Capabilities: m.Capabilities{Text: "supported", Tools: "supported", Image: "unsupported", Thinking: "supported", Streaming: "supported"}, ContextWindow: 131072, MaxOutput: 4096, ThinkingLevels: levels})
 	if err != nil {
 		t.Fatal("model:", err)
-	}
-	connection, err := app.Sandboxes.GetConnection(ctx, raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = app.Sandboxes.SaveConnection(ctx, raw, connection.Tag, cryptox.ID(), a.ConnectionWrite{Endpoint: endpoint, AccessMode: "server_proxy", Authentication: &m.AuthenticationWrite{Method: "api_key", Secret: m.SecretWrite{Operation: "replace", Value: new(os.Getenv("ANTCDP_TEST_OPENSANDBOX_API_KEY"))}}})
-	if err != nil {
-		t.Fatal("connection:", err)
 	}
 	spec, err := app.Sandboxes.SaveSpec(ctx, raw, "", cryptox.ID(), 0, a.SpecWrite{Name: "Integration", CloudEnvironment: a.CloudEnvironment{Image: os.Getenv("ANTCDP_TEST_OPENSANDBOX_IMAGE"), CPU: 1000, Memory: 1024, Network: a.NetworkPolicy{DefaultAction: "allow"}}})
 	if err != nil {

@@ -27,7 +27,7 @@ func (t *sandboxTx) named(q string, v any) (sql.Result, error) {
 	return t.tx.NamedExecContext(t.ctx, q, v)
 }
 
-const sandboxInstanceColumns = "`id`,`connection_id`,`backend_generation`,`remote_id`,`creation_token`,`state`,`effective_config`,`verified_capabilities`,`expires_at`,`last_observed_at`,`error_code`,`executor_epoch`,`fence_version`,`row_version`,`created_at`,`updated_at`,`finished_at`"
+const sandboxInstanceColumns = "`id`,`backend_generation`,`remote_id`,`creation_token`,`state`,`effective_config`,`verified_capabilities`,`expires_at`,`last_observed_at`,`error_code`,`executor_epoch`,`fence_version`,`row_version`,`created_at`,`updated_at`,`finished_at`"
 
 func (t *sandboxTx) Instance(id uint64, lock bool) (*s.Instance, error) {
 	q := "SELECT " + sandboxInstanceColumns + " FROM sandbox_instance WHERE id=?"
@@ -50,11 +50,11 @@ func (t *sandboxTx) InstanceByToken(token string) (*s.Instance, error) {
 	return v, err
 }
 func (t *sandboxTx) InsertInstance(v *s.Instance) error {
-	r, e := t.named("INSERT INTO sandbox_instance(`connection_id`,`backend_generation`,`remote_id`,`creation_token`,`state`,`effective_config`,`verified_capabilities`,`expires_at`,`last_observed_at`,`error_code`,`executor_epoch`,`fence_version`,`row_version`,`created_at`,`updated_at`,`finished_at`) VALUES(:connection_id,:backend_generation,:remote_id,:creation_token,:state,:effective_config,:verified_capabilities,:expires_at,:last_observed_at,:error_code,:executor_epoch,:fence_version,:row_version,:created_at,:updated_at,:finished_at)", v)
+	r, e := t.named("INSERT INTO sandbox_instance(`backend_generation`,`remote_id`,`creation_token`,`state`,`effective_config`,`verified_capabilities`,`expires_at`,`last_observed_at`,`error_code`,`executor_epoch`,`fence_version`,`row_version`,`created_at`,`updated_at`,`finished_at`) VALUES(:backend_generation,:remote_id,:creation_token,:state,:effective_config,:verified_capabilities,:expires_at,:last_observed_at,:error_code,:executor_epoch,:fence_version,:row_version,:created_at,:updated_at,:finished_at)", v)
 	return modelID(r, e, &v.ID)
 }
 func (t *sandboxTx) SaveInstance(v *s.Instance) error {
-	_, e := t.named("UPDATE sandbox_instance SET `connection_id`=:connection_id,`backend_generation`=:backend_generation,`remote_id`=:remote_id,`creation_token`=:creation_token,`state`=:state,`effective_config`=:effective_config,`verified_capabilities`=:verified_capabilities,`expires_at`=:expires_at,`last_observed_at`=:last_observed_at,`error_code`=:error_code,`executor_epoch`=:executor_epoch,`fence_version`=:fence_version,`row_version`=:row_version,`created_at`=:created_at,`updated_at`=:updated_at,`finished_at`=:finished_at WHERE id=:id", v)
+	_, e := t.named("UPDATE sandbox_instance SET `backend_generation`=:backend_generation,`remote_id`=:remote_id,`creation_token`=:creation_token,`state`=:state,`effective_config`=:effective_config,`verified_capabilities`=:verified_capabilities,`expires_at`=:expires_at,`last_observed_at`=:last_observed_at,`error_code`=:error_code,`executor_epoch`=:executor_epoch,`fence_version`=:fence_version,`row_version`=:row_version,`created_at`=:created_at,`updated_at`=:updated_at,`finished_at`=:finished_at WHERE id=:id", v)
 	return e
 }
 

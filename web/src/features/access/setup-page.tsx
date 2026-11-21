@@ -3,13 +3,7 @@ import { z } from "zod";
 import { api, isUncertain, resetCSRF, type ApiError } from "@/api/client";
 import { Button } from "@/components/button";
 import { ErrorNotice, Notice } from "@/components/feedback";
-import {
-  Field,
-  Input,
-  NumberInput,
-  PopupSelect,
-  SearchableSelect,
-} from "@/components/fields";
+import { Field, Input, SearchableSelect } from "@/components/fields";
 import { WizardSteps } from "@/components/wizard";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
 import { useApiQuery } from "@/hooks/use-api";
@@ -21,20 +15,6 @@ import {
   usernameSchema,
 } from "@/domain/validation";
 
-const databaseSchema = z.object({
-  host: z.string().trim().min(1, "请输入数据库主机"),
-  port: z
-    .string()
-    .regex(/^\d+$/, "端口须为数字")
-    .refine(
-      (value) => Number(value) >= 1 && Number(value) <= 65535,
-      "端口范围为 1–65535",
-    ),
-  name: z.string().trim().min(1, "请输入数据库名"),
-  username: z.string().trim().min(1, "请输入数据库用户"),
-  password: z.string(),
-  tls_mode: z.enum(["disabled", "verify_identity"]),
-});
 const founderSchema = z
   .object({
     username: usernameSchema,
@@ -47,7 +27,6 @@ const founderSchema = z
     message: "两次输入的密码不一致",
   });
 
-type DatabaseDraft = z.infer<typeof databaseSchema>;
 type FounderDraft = z.infer<typeof founderSchema>;
 interface InstallationSummary {
   authenticated: boolean;
@@ -56,9 +35,8 @@ interface InstallationSummary {
   timezone: string;
   username: string;
   displayName: string;
-  databaseName: string;
 }
-const steps = ["连接数据库", "系统信息", "创始人账号", "完成"];
+const steps = ["系统信息", "创始人账号", "完成"];
 const timezones = [
   ...new Set(["Asia/Shanghai", "UTC", ...Intl.supportedValuesOf("timeZone")]),
 ];
@@ -78,14 +56,7 @@ export function SetupPage({
     if (previousStep.current !== step) title.current?.focus();
     previousStep.current = step;
   }, [step]);
-  const [database, setDatabase] = useState<DatabaseDraft>({
-    host: "",
-    port: "3306",
-    name: "antcdp",
-    username: "antcdp",
-    password: "",
-    tls_mode: "disabled",
-  });
+  const [installPassword, setInstallPassword] = useState("");
   const [site, setSite] = useState({
     site_name: "",
     timezone: "Asia/Shanghai",
@@ -96,20 +67,12 @@ export function SetupPage({
     password: "",
     confirm: "",
   });
-  const [checked, setChecked] = useState(false);
   const [completed, setCompleted] = useState<InstallationSummary | null>(null);
   const [unknown, setUnknown] = useState(false);
   const [status, setStatus] = useState("");
   const errors = useFormErrors();
   const submission = useSubmission();
 
-  function updateDatabase(key: keyof DatabaseDraft, value: string) {
-    setDatabase((current) => ({ ...current, [key]: value }));
-    setChecked(false);
-    setStatus("");
-    errors.setError("");
-    errors.change(key);
-  }
   function updateSite(key: keyof typeof site, value: string) {
     setSite((current) => ({ ...current, [key]: value }));
     errors.change(key);
@@ -127,21 +90,11 @@ export function SetupPage({
     setStep(nextStep);
   }
   function validateCurrent() {
-    if (step === 0) {
-      const result = databaseSchema.safeParse(database);
-      if (!result.success)
-        return errors.validate(
-          Object.fromEntries(
-            result.error.issues.map((issue) => [
-              String(issue.path[0]),
-              issue.message,
-            ]),
-          ),
-        );
-    }
-    if (step === 1 && Array.from(site.site_name.trim()).length > 40)
+    if (step === 0 && Array.from(site.site_name.trim()).length > 40)
       return errors.validate({ site_name: "系统名称最多 40 个字符" });
-    if (step === 2) {
+    if (step === 1) {
+      if (!installPassword)
+        return errors.validate({ install_password: "请输入安装口令" });
       const result = founderSchema.safeParse(founder);
       if (!result.success)
         return errors.validate(
@@ -155,53 +108,13 @@ export function SetupPage({
     }
     return true;
   }
-  async function checkDatabase() {
-    if (submission.pending || unknown) return;
-    errors.clear();
-    setStatus("");
-    setChecked(false);
-    const result = databaseSchema.safeParse(database);
-    if (!result.success) {
-      errors.validate(
-        Object.fromEntries(
-          result.error.issues.map((issue) => [
-            String(issue.path[0]),
-            issue.message,
-          ]),
-        ),
-      );
-      return;
-    }
-    await submission.run(
-      async () => {
-        await api("/setup/database-check", {
-          ...database,
-          port: Number(database.port),
-        });
-        setChecked(true);
-        setStatus("数据库连接、版本与空库检查已通过。");
-      },
-      (error) =>
-        errors.show(
-          error,
-          Object.keys(database),
-          Object.fromEntries(
-            Object.keys(database).map((key) => [`database.${key}`, key]),
-          ),
-        ),
-    );
-  }
   async function next(event: FormEvent) {
     event.preventDefault();
     if (submission.pending || unknown) return;
     errors.clear();
     setStatus("");
     if (!validateCurrent()) return;
-    if (step === 0 && !checked) {
-      setStatus("请先完成数据库连接检查，再继续。");
-      return;
-    }
-    if (step < 2) {
+    if (step < 1) {
       changeStep(step + 1);
       return;
     }
@@ -211,7 +124,7 @@ export function SetupPage({
           const result = await api<{ authenticated: boolean }>(
             "/setup/install",
             {
-              database: { ...database, port: Number(database.port) },
+              install_password: installPassword,
               site,
               founder: {
                 username: founder.username,
@@ -228,12 +141,11 @@ export function SetupPage({
             timezone: site.timezone,
             username: founder.username,
             displayName: founder.display_name.trim(),
-            databaseName: database.name.trim(),
           });
-          setDatabase((current) => ({ ...current, password: "" }));
+          setInstallPassword("");
           setFounder((current) => ({ ...current, password: "", confirm: "" }));
           holdCompletion?.();
-          changeStep(3);
+          changeStep(2);
         } catch (error) {
           if (isUncertain(error)) setUnknown(true);
           try {
@@ -252,15 +164,12 @@ export function SetupPage({
         errors.show(
           error,
           [
-            ...Object.keys(database),
+            "install_password",
             ...Object.keys(founder),
             "site_name",
             "timezone",
           ],
           {
-            ...Object.fromEntries(
-              Object.keys(database).map((key) => [`database.${key}`, key]),
-            ),
             ...Object.fromEntries(
               Object.keys(founder).map((key) => [`founder.${key}`, key]),
             ),
@@ -299,10 +208,8 @@ export function SetupPage({
               {completed
                 ? "系统已完成初始化，可以开始使用。"
                 : step === 0
-                  ? "准备专用的空 MySQL 数据库，并通过检查后继续。"
-                  : step === 1
-                    ? "设置系统名称和默认时区。"
-                    : "创建首个系统管理员账号。"}
+                  ? "设置系统名称和默认时区。"
+                  : "创建首个系统管理员账号。"}
             </p>
             {completed ? (
               <Completion summary={completed} />
@@ -331,97 +238,6 @@ export function SetupPage({
                     </div>
                   )}
                   {step === 0 && (
-                    <div className="form-grid">
-                      <Field
-                        label="数据库主机"
-                        required
-                        error={errors.fields.host}
-                      >
-                        <Input
-                          name="host"
-                          autoComplete="off"
-                          value={database.host}
-                          onChange={(event) =>
-                            updateDatabase("host", event.target.value)
-                          }
-                        />
-                      </Field>
-                      <Field label="端口" required error={errors.fields.port}>
-                        <NumberInput
-                          name="port"
-                          label="端口"
-                          disabled={submission.pending || unknown}
-                          min={1}
-                          max={65535}
-                          value={database.port}
-                          onValueChange={(value) =>
-                            updateDatabase("port", value)
-                          }
-                        />
-                      </Field>
-                      <Field
-                        label="数据库名"
-                        required
-                        error={errors.fields.name}
-                      >
-                        <Input
-                          name="name"
-                          autoComplete="off"
-                          value={database.name}
-                          onChange={(event) =>
-                            updateDatabase("name", event.target.value)
-                          }
-                        />
-                      </Field>
-                      <Field
-                        label="数据库用户"
-                        required
-                        error={errors.fields.username}
-                      >
-                        <Input
-                          name="username"
-                          autoComplete="off"
-                          value={database.username}
-                          onChange={(event) =>
-                            updateDatabase("username", event.target.value)
-                          }
-                        />
-                      </Field>
-                      <Field label="数据库密码" error={errors.fields.password}>
-                        <Input
-                          name="password"
-                          type="password"
-                          autoComplete="off"
-                          value={database.password}
-                          onChange={(event) =>
-                            updateDatabase("password", event.target.value)
-                          }
-                        />
-                      </Field>
-                      <Field
-                        label="传输加密"
-                        required
-                        error={errors.fields.tls_mode}
-                      >
-                        <PopupSelect
-                          name="tls_mode"
-                          value={database.tls_mode}
-                          disabled={submission.pending || unknown}
-                          onValueChange={(value) =>
-                            updateDatabase("tls_mode", value)
-                          }
-                          options={[
-                            { value: "disabled", label: "不启用 TLS" },
-                            {
-                              value: "verify_identity",
-                              label: "验证服务器身份",
-                            },
-                          ]}
-                        />
-                      </Field>
-                    </div>
-                  )}
-                  {step === 1 && (
                     <div className="form-grid">
                       <Field
                         label="系统名称"
@@ -462,8 +278,25 @@ export function SetupPage({
                       </Field>
                     </div>
                   )}
-                  {step === 2 && (
+                  {step === 1 && (
                     <div className="form-grid">
+                      <Field
+                        label="安装口令"
+                        required
+                        hint="由部署维护者提供"
+                        error={errors.fields.install_password}
+                      >
+                        <Input
+                          name="install_password"
+                          type="password"
+                          autoComplete="off"
+                          value={installPassword}
+                          onChange={(event) => {
+                            setInstallPassword(event.target.value);
+                            errors.change("install_password");
+                          }}
+                        />
+                      </Field>
                       <Field
                         label="用户名"
                         required
@@ -540,20 +373,11 @@ export function SetupPage({
                         上一步
                       </Button>
                     )}
-                    {step === 0 && (
-                      <Button
-                        variant="outline"
-                        pending={submission.pending}
-                        onClick={() => void checkDatabase()}
-                      >
-                        检查连接
-                      </Button>
-                    )}
                     <Button
                       type="submit"
-                      pending={step === 2 && submission.pending}
+                      pending={step === 1 && submission.pending}
                     >
-                      {step === 2 ? "确认并安装" : "下一步"}
+                      {step === 1 ? "确认并安装" : "下一步"}
                     </Button>
                   </div>
                 </fieldset>
@@ -572,7 +396,6 @@ function Completion({ summary }: { summary: InstallationSummary }) {
     ["系统时区", summary.timezone],
     ["创始人账号", summary.username],
     ["显示名称", summary.displayName],
-    ["数据库名", summary.databaseName],
     ["公开访问地址", summary.publicUrl],
   ];
   return (
@@ -591,22 +414,6 @@ function Completion({ summary }: { summary: InstallationSummary }) {
         ))}
       </dl>
       <div className="form-actions">
-        <Button
-          render={
-            <a
-              href={
-                summary.authenticated
-                  ? "/admin/sandboxes"
-                  : "/login?return_to=%2Fadmin%2Fsandboxes"
-              }
-            >
-              配置沙箱连接（可稍后）
-            </a>
-          }
-          nativeButton={false}
-          role="link"
-          variant="outline"
-        />
         <Button
           render={
             <a href={summary.authenticated ? "/home" : "/login"}>进入系统</a>

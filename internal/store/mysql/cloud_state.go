@@ -10,26 +10,6 @@ import (
 
 func (t *identityTx) CloudState() a.CloudRepository { return &agentsTx{t.ctx, t.tx} }
 
-const cloudConnectionColumns = "`backend_type`,`id`,`endpoint`,`access_mode`,`connect_timeout_seconds`,`operation_timeout_seconds`,`secret_ciphertext`,`secret_format_version`,`secret_key_version`,`secret_revision`,`config_version`,`row_version`,`backend_generation`,`topology_version`,`maintenance_state`,COALESCE(`verified_capabilities`,CAST('null' AS JSON)) AS `verified_capabilities`,COALESCE(`last_diagnostic`,CAST('null' AS JSON)) AS `last_diagnostic`,`last_diagnostic_at`,`updated_by_user_id`,`created_at`,`updated_at`"
-
-func (t *agentsTx) Connection(lock bool) (*a.SandboxConnectionRow, error) {
-	q := "SELECT " + cloudConnectionColumns + " FROM sandbox_connection WHERE id=1"
-	if lock {
-		q += " FOR UPDATE"
-	}
-	v := &a.SandboxConnectionRow{}
-	e := t.tx.GetContext(t.ctx, v, q)
-	if errors.Is(e, sql.ErrNoRows) {
-		return nil, nil
-	}
-	return v, e
-}
-
-func (t *agentsTx) SaveConnection(v *a.SandboxConnectionRow) error {
-	_, e := t.named("UPDATE sandbox_connection SET `endpoint`=:endpoint,`access_mode`=:access_mode,`connect_timeout_seconds`=:connect_timeout_seconds,`operation_timeout_seconds`=:operation_timeout_seconds,`secret_ciphertext`=:secret_ciphertext,`secret_format_version`=:secret_format_version,`secret_key_version`=:secret_key_version,`secret_revision`=:secret_revision,`config_version`=:config_version,`row_version`=:row_version,`backend_generation`=:backend_generation,`maintenance_state`=:maintenance_state,`updated_by_user_id`=:updated_by_user_id,`updated_at`=:updated_at WHERE id=:id", v)
-	return e
-}
-
 const computerColumns = "`id`,`owner_user_id`,`pool_agent_id`,`state`,`backend_generation`,COALESCE(sandbox_instance_id,0) AS sandbox_instance_id,`storage_generation`,`volume_id`,`volume_name`,`volume_state`,`volume_cleanup_state`,`applied_spec_id`,`applied_spec_version`,`idle_since`,`last_activity_at`,`error_code`,`fence_version`,`row_version`,`deleted_at`,`created_at`,`updated_at`"
 
 func (t *agentsTx) hydrateComputer(v *a.CloudComputerRow, lock bool) error {

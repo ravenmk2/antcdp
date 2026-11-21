@@ -992,7 +992,7 @@ func (s *CloudService) reconcileCommand(ctx context.Context, initial CloudExecut
 			}
 		}
 		observeRuntime = true
-		provider, err := repo.Connection(false)
+		provider, err := s.Connection()
 		if err != nil {
 			return err
 		}

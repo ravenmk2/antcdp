@@ -19,6 +19,7 @@ type fakeDB struct {
 	mu                             sync.Mutex
 	instance                       *Instance
 	seed                           *Seed
+	sandboxUsed                    bool
 	schema, tables, emptyOnFailure bool
 	failMigrate, failSeed, offline bool
 	migrations, seeds, opens       int
@@ -99,6 +100,7 @@ func (f *fakeHandle) Seed(_ context.Context, s Seed) error {
 	}
 	return nil
 }
+func (f *fakeHandle) SandboxInUse(context.Context) (bool, error) { return f.db.sandboxUsed, nil }
 func (f *fakeHandle) Instance(context.Context) (*Instance, error) {
 	f.db.mu.Lock()
 	defer f.db.mu.Unlock()
@@ -115,7 +117,9 @@ func (f *fakeHandle) Close() error { return nil }
 
 func runtime(t *testing.T) config.Runtime {
 	t.Helper()
-	return config.Runtime{DataDir: t.TempDir(), Server: config.Server{Listen: "127.0.0.1:0", PublicURL: "http://localhost:8080", TrustedProxies: []string{}}}
+	r := config.Runtime{DataDir: t.TempDir(), Server: config.Server{Listen: "127.0.0.1:0", PublicURL: "http://localhost:8080", TrustedProxies: []string{}}}
+	r.Install.Password = new("install-secret")
+	return r
 }
 func newService(t *testing.T, r config.Runtime, db *fakeDB) *Service {
 	t.Helper()
@@ -127,18 +131,18 @@ func newService(t *testing.T, r config.Runtime, db *fakeDB) *Service {
 	return s
 }
 func validRequest() Request {
-	return Request{Database: config.Database{Host: "mysql", Port: 3306, Name: "antcdp", Username: "antcdp", Password: "database-secret", TLSMode: "disabled"}, Site: Site{"开发协作", "Asia/Shanghai"}, Founder: Founder{"founder", "创始人", "founder-password"}}
+	return Request{InstallPassword: "install-secret", Site: Site{"开发协作", "Asia/Shanghai"}, Founder: Founder{"founder", "创始人", "founder-password"}}
 }
 
-func TestFreshInstallNeedsNoTokenAndOwnsDataDirectory(t *testing.T) {
+func TestFreshInstallPreparesPasswordAndOwnsDataDirectory(t *testing.T) {
 	r := runtime(t)
 	db := &fakeDB{}
 	s := newService(t, r, db)
-	if s.Status(context.Background()).State != SetupRequired || db.opens != 0 {
-		t.Fatal("fresh boot must not connect to an unknown database")
+	if s.Status(context.Background()).State != SetupRequired || db.opens != 1 {
+		t.Fatal("fresh boot must check the configured database")
 	}
-	if exists(filepath.Join(r.DataDir, "setup.token")) || exists(filepath.Join(r.DataDir, "install.lock")) {
-		t.Fatal("fresh boot must not create a token or installation lock")
+	if !exists(filepath.Join(r.DataDir, "install-password")) || exists(filepath.Join(r.DataDir, "install.lock")) {
+		t.Fatal("fresh boot must prepare the password and leave the installation unsealed")
 	}
 	if _, err := New(context.Background(), r, db.connect); err == nil {
 		t.Fatal("second process acquired same data directory")
@@ -164,18 +168,11 @@ func TestInstallationSeedsOnceAndUsesRuntimeConnection(t *testing.T) {
 	if !password.Verify(db.seed.PasswordHash, "founder-password") {
 		t.Fatal("founder password was not hashed")
 	}
-	b, err := os.ReadFile(filepath.Join(r.DataDir, "config.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(b), "database-secret") || !strings.Contains(string(b), "enc:v1:") {
-		t.Fatal("database password was saved in plaintext")
-	}
 	if db.instance.InstallationID != id || db.instance.FounderID != 42 {
 		t.Fatal("incorrect installation identity")
 	}
-	if exists(filepath.Join(r.DataDir, "setup.token")) {
-		t.Fatal("obsolete owner token exists")
+	if exists(filepath.Join(r.DataDir, "install-password")) {
+		t.Fatal("password survived installation")
 	}
 	lock, err := os.ReadFile(filepath.Join(r.DataDir, "install.lock"))
 	if err != nil || strings.TrimSpace(string(lock)) != id {
@@ -210,32 +207,37 @@ func TestPartialFilesNeverBecomeSetupRequired(t *testing.T) {
 				t.Fatal(err)
 			}
 			s := newService(t, r, &fakeDB{})
-			if s.Status(context.Background()).State != RecoveryRequired || exists(filepath.Join(r.DataDir, "setup.token")) {
+			if s.Status(context.Background()).State != RecoveryRequired || exists(filepath.Join(r.DataDir, "install-password")) {
 				t.Fatal("partial installation enabled fresh setup")
 			}
 		})
 	}
 }
 
-func TestEmptyConfigurationAllowsFirstInstallation(t *testing.T) {
-	for _, content := range []string{"", " \n\t"} {
-		t.Run(content, func(t *testing.T) {
-			r := runtime(t)
-			if err := os.WriteFile(filepath.Join(r.DataDir, "config.yaml"), []byte(content), 0600); err != nil {
-				t.Fatal(err)
-			}
-			db := &fakeDB{}
-			s := newService(t, r, db)
-			if s.Status(context.Background()).State != SetupRequired {
-				t.Fatal("blank configuration blocked first installation")
-			}
-			if _, err := s.Install(context.Background(), validRequest()); err != nil {
-				t.Fatal(err)
-			}
-		})
+func TestRandomPasswordSurvivesRestart(t *testing.T) {
+	r := runtime(t)
+	r.Install.Password = nil
+	db := &fakeDB{}
+	first := newService(t, r, db)
+	p, err := first.installPassword()
+	if err != nil || len(p) < 32 {
+		t.Fatal("missing random password")
+	}
+	_ = first.Close()
+	r.Install.Password = new("changed")
+	next := newService(t, r, db)
+	if saved, err := next.installPassword(); err != nil || saved != p {
+		t.Fatal("existing password was replaced")
+	}
+	req := validRequest()
+	if _, err = next.Install(context.Background(), req); err == nil || db.seeds != 0 {
+		t.Fatal("incorrect password accepted")
+	}
+	req.InstallPassword = p
+	if _, err = next.Install(context.Background(), req); err != nil {
+		t.Fatal(err)
 	}
 }
-
 func TestEmptyInstallationLockStillBlocksWizard(t *testing.T) {
 	r := runtime(t)
 	if err := os.WriteFile(filepath.Join(r.DataDir, "install.lock"), nil, 0600); err != nil {
@@ -251,28 +253,14 @@ func TestEmptyInstallationLockStillBlocksWizard(t *testing.T) {
 	}
 }
 
-func TestObsoletePreinstallTokenIsRemoved(t *testing.T) {
-	r := runtime(t)
-	if err := os.WriteFile(filepath.Join(r.DataDir, "setup.token"), []byte("obsolete"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	s := newService(t, r, &fakeDB{})
-	if s.Status(context.Background()).State != SetupRequired || exists(filepath.Join(r.DataDir, "setup.token")) {
-		t.Fatal("obsolete token blocked upgrade to tokenless setup")
-	}
-}
-
 func TestNonemptyDatabaseCannotInitializeLocalFiles(t *testing.T) {
 	r := runtime(t)
 	db := &fakeDB{tables: true}
 	s := newService(t, r, db)
-	if err := s.CheckDatabase(context.Background(), validRequest().Database); err == nil {
-		t.Fatal("nonempty database check passed")
-	}
 	if _, err := s.Install(context.Background(), validRequest()); err == nil {
 		t.Fatal("nonempty database was initialized")
 	}
-	if db.migrations != 0 || db.seeds != 0 || s.Status(context.Background()).State != SetupRequired {
+	if db.migrations != 0 || db.seeds != 0 || s.Status(context.Background()).State == SetupRequired {
 		t.Fatal("failed database check modified installation")
 	}
 	for _, name := range []string{"config.yaml", "master.key", "installation.json", "install.lock"} {
@@ -291,10 +279,7 @@ func TestNewLocalInstallationArtifactsBlockSetupImmediately(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(r.DataDir, name), []byte("existing"), 0600); err != nil {
 				t.Fatal(err)
 			}
-			if err := s.CheckDatabase(context.Background(), validRequest().Database); err == nil {
-				t.Fatal("local state change did not block database check")
-			}
-			if _, err := s.Install(context.Background(), validRequest()); err == nil || db.opens != 0 {
+			if _, err := s.Install(context.Background(), validRequest()); err == nil || db.opens != 1 {
 				t.Fatal("local state change allowed installation")
 			}
 			if s.Status(context.Background()).State != RecoveryRequired {
@@ -348,7 +333,7 @@ func TestLockWriteFailureRetainsCommittedInstallationForRecovery(t *testing.T) {
 	if _, err := s.Install(context.Background(), validRequest()); err == nil {
 		t.Fatal("expected installation lock failure")
 	}
-	if s.Status(context.Background()).State != RecoveryRequired || db.seeds != 1 || !exists(filepath.Join(r.DataDir, "config.yaml")) || !exists(filepath.Join(r.DataDir, "installation.json")) {
+	if s.Status(context.Background()).State != RecoveryRequired || db.seeds != 1 || !exists(filepath.Join(r.DataDir, "installation.json")) {
 		t.Fatal("lock was written before installation data or failure reopened wizard")
 	}
 	if err := os.Remove(filepath.Join(r.DataDir, "install.lock")); err != nil {
@@ -444,7 +429,7 @@ func TestRecoverCommittedSeedWithoutDuplicatingFounder(t *testing.T) {
 	db := &fakeDB{}
 	s := newService(t, r, db)
 	db.afterSeed = func() {
-		if err := os.Mkdir(filepath.Join(r.DataDir, "config.yaml"), 0700); err != nil {
+		if err := os.Mkdir(filepath.Join(r.DataDir, "installation.json"), 0700); err != nil {
 			t.Error(err)
 		}
 	}
@@ -454,7 +439,7 @@ func TestRecoverCommittedSeedWithoutDuplicatingFounder(t *testing.T) {
 	if db.seeds != 1 {
 		t.Fatal("seed was not committed before injected failure")
 	}
-	if err := os.Remove(filepath.Join(r.DataDir, "config.yaml")); err != nil {
+	if err := os.Remove(filepath.Join(r.DataDir, "installation.json")); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.Recover(context.Background(), ""); err != nil {
@@ -568,5 +553,38 @@ func TestConcurrentInstallRefused(t *testing.T) {
 	close(db.wait)
 	if err := <-finished; err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBackendOwnershipAcrossRestarts(t *testing.T) {
+	r := runtime(t)
+	r.Sandbox = &config.Sandbox{Type: "opensandbox", Endpoint: "https://first", APIKey: "old"}
+	db := &fakeDB{}
+	svc := newService(t, r, db)
+	if _, err := svc.Install(context.Background(), validRequest()); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		endpoint, key, state string
+		inUse                bool
+		generation           uint64
+	}{
+		{"https://first", "rotated", "normal", true, 1},
+		{"https://second", "second", "blocked", true, 1},
+		{"", "", "unconfigured", true, 1},
+		{"https://first", "rotated", "normal", true, 1},
+		{"https://second", "second", "normal", false, 2},
+	} {
+		_ = svc.Close()
+		r.Sandbox = nil
+		if tc.endpoint != "" {
+			r.Sandbox = &config.Sandbox{Type: "opensandbox", Endpoint: tc.endpoint, APIKey: tc.key}
+		}
+		db.sandboxUsed = tc.inUse
+		svc = newService(t, r, db)
+		c, err := svc.SandboxConnection()
+		if err != nil || c.MaintenanceState != tc.state || c.BackendGeneration != tc.generation || c.APIKey != tc.key {
+			t.Fatal("unexpected backend ownership", tc.state, err)
+		}
 	}
 }

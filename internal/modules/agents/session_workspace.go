@@ -20,7 +20,7 @@ type workspacePreparation struct {
 	ErrorCode *string `json:"error_code,omitempty"`
 }
 
-func (s *CloudService) lockWorkspaceSession(tx identity.Tx, r Repository, st StateRepository, repo CloudRepository, auth *identity.Auth, id uint64, prepare bool) (*SessionRow, *Definition, *SandboxConnectionRow, error) {
+func (s *CloudService) lockWorkspaceSession(tx identity.Tx, r Repository, st StateRepository, auth *identity.Auth, id uint64, prepare bool) (*SessionRow, *Definition, *SandboxConnection, error) {
 	initial, err := s.Host.sessionAccess(st, id, auth, true, false)
 	if err != nil {
 		return nil, nil, nil, err
@@ -45,8 +45,7 @@ func (s *CloudService) lockWorkspaceSession(tx identity.Tx, r Repository, st Sta
 	if err = requireSessionAgent(r, agent, owner); err != nil {
 		return nil, nil, nil, err
 	}
-	// Match turn admission's lock order when reserving a computer.
-	connection, err := repo.Connection(prepare)
+	connection, err := s.Connection()
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -68,7 +67,7 @@ func (s *CloudService) lockWorkspaceSession(tx identity.Tx, r Repository, st Sta
 
 func (s *CloudService) PrepareSessionWorkspace(ctx context.Context, raw string, id uint64) (*Result, error) {
 	return s.cloudAccess(ctx, raw, false, func(tx identity.Tx, r Repository, st StateRepository, repo CloudRepository, auth *identity.Auth, out *Result) error {
-		session, agent, connection, err := s.lockWorkspaceSession(tx, r, st, repo, auth, id, true)
+		session, agent, connection, err := s.lockWorkspaceSession(tx, r, st, auth, id, true)
 		if err != nil {
 			return err
 		}
@@ -91,7 +90,7 @@ func (s *CloudService) PrepareSessionWorkspace(ctx context.Context, raw string, 
 	})
 }
 
-func (s *CloudService) prepareWorkspaceComputer(repo CloudRepository, connection *SandboxConnectionRow, computer *CloudComputerRow, actor uint64, now time.Time, out *Result) error {
+func (s *CloudService) prepareWorkspaceComputer(repo CloudRepository, connection *SandboxConnection, computer *CloudComputerRow, actor uint64, now time.Time, out *Result) error {
 	op, err := repo.ActiveCloudOperation(computer.ID)
 	if err != nil {
 		return err
@@ -155,7 +154,7 @@ func (s *CloudService) UploadSessionWorkspaceFile(ctx context.Context, raw strin
 	}
 	var claim *workspaceClaim
 	out, err := s.cloudAccess(ctx, raw, false, func(tx identity.Tx, r Repository, st StateRepository, repo CloudRepository, auth *identity.Auth, out *Result) error {
-		session, _, connection, e := s.lockWorkspaceSession(tx, r, st, repo, auth, id, false)
+		session, _, connection, e := s.lockWorkspaceSession(tx, r, st, auth, id, false)
 		if e != nil {
 			return e
 		}
@@ -190,7 +189,7 @@ func (s *CloudService) UploadSessionWorkspaceFile(ctx context.Context, raw strin
 	})
 }
 
-func (s *CloudService) reserveSessionUpload(st StateRepository, repo CloudRepository, session *SessionRow, connection *SandboxConnectionRow, auth *identity.Auth, receipt *Receipt, filename string) (*workspaceClaim, error) {
+func (s *CloudService) reserveSessionUpload(st StateRepository, repo CloudRepository, session *SessionRow, connection *SandboxConnection, auth *identity.Auth, receipt *Receipt, filename string) (*workspaceClaim, error) {
 	if session.CloudComputerID == nil {
 		return nil, workspacePreparationRequired()
 	}

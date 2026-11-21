@@ -34,10 +34,10 @@ func standaloneSandboxIntegration(t *testing.T, f *agentIntegrationFixture) {
 	}
 	before := counts()
 	remote := &environmentMemoryProvider{sandboxMemoryProvider: &sandboxMemoryProvider{resources: map[string]sb.Observation{}}, executions: map[string]sb.ExecResult{}, outputs: map[string]string{}, files: map[string][]byte{}}
-	service := &s.Service{Epoch: "script-worker", InstallationID: func() (string, error) { return f.Installation, nil }, Open: func(context.Context, uint64, uint64) (sb.Provider, error) { return remote, nil }, Transact: func(ctx context.Context, fn func(s.Repository) error) error {
+	service := &s.Service{Epoch: "script-worker", InstallationID: func() (string, error) { return f.Installation, nil }, Open: func(context.Context, uint64) (sb.Provider, error) { return remote, nil }, Transact: func(ctx context.Context, fn func(s.Repository) error) error {
 		return f.Store.Transact(ctx, func(tx identity.Tx) error { return fn(tx.(interface{ SandboxState() s.Repository }).SandboxState()) })
 	}}
-	v, err := service.Reserve(ctx, 1, 1, cryptox.ID(), json.RawMessage(`{"image":"test:1","purpose":"script"}`))
+	v, err := service.Reserve(ctx, 1, cryptox.ID(), json.RawMessage(`{"image":"test:1","purpose":"script"}`))
 	if err != nil {
 		t.Fatal(err)
 	}

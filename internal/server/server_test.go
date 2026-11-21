@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +15,10 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/config"
 )
 
+type emptyDatabase struct{ install.Backend }
+
+func (emptyDatabase) Check(context.Context, bool) error { return nil }
+func (emptyDatabase) Close() error                      { return nil }
 func testHandler(t *testing.T) http.Handler {
 	t.Helper()
 	return testHandlerForOrigin(t, "http://antcdp.test")
@@ -25,7 +28,7 @@ func testHandlerForOrigin(t *testing.T, origin string) http.Handler {
 	t.Helper()
 	r := config.Runtime{DataDir: t.TempDir(), Server: config.Server{Listen: "127.0.0.1:0", PublicURL: origin, TrustedProxies: []string{}}}
 	s, err := install.New(context.Background(), r, func(config.Database, bool) (install.Backend, error) {
-		return nil, errors.New("test connector should not be called")
+		return emptyDatabase{}, nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -113,7 +116,7 @@ func TestSetupNeedsCSRFButNoOwnerSession(t *testing.T) {
 	assertError(t, request(h, "POST", "/api/v1/setup/install", `{}`, "", nil, "http://antcdp.test"), 403, "CSRF_INVALID")
 	token, cookies := csrfState(t, h)
 	assertError(t, request(h, "POST", "/api/v1/setup/install", `{}`, token, cookies, "https://evil.test"), 403, "CSRF_INVALID")
-	assertError(t, request(h, "POST", "/api/v1/setup/database-check", `{}`, token, cookies, "http://antcdp.test"), 422, "VALIDATION_FAILED")
+	assertError(t, request(h, "POST", "/api/v1/setup/database-check", `{}`, token, cookies, "http://antcdp.test"), 404, "NOT_FOUND")
 	assertError(t, request(h, "POST", "/api/v1/setup/install", `{}`, token, cookies, "http://antcdp.test"), 422, "VALIDATION_FAILED")
 	assertError(t, request(h, "POST", "/api/v1/setup/session", `{}`, token, cookies, "http://antcdp.test"), 404, "NOT_FOUND")
 	w := request(h, "GET", "/api/v1/setup/status", "", "", cookies, "")

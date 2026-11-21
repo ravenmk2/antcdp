@@ -1,0 +1,23 @@
+[server]
+listen = "0.0.0.0:8080"
+public_url = "https://antcdp.example.com"
+
+[database]
+host = "mysql.example.internal"
+port = 3306
+name = "antcdp"
+username = "antcdp"
+password = "<database-password>"
+tls_mode = "verify_identity"
+ca_file = "certs/mysql-ca.pem"
+
+# [sandbox]
+# type = "opensandbox"
+# endpoint = "https://sandbox.example.internal"
+# api_key = "<sandbox-api-key>"
+# access_mode = "direct"
+# connect_timeout_seconds = 10
+# operation_timeout_seconds = 300
+
+# [install]
+# password = "<initial-install-password>"

@@ -182,7 +182,7 @@ func (s *CloudService) GetContentComputer(ctx context.Context, raw string, id ui
 }
 func (s *CloudService) ActivatePersonal(ctx context.Context, raw string) (*Result, error) {
 	return s.cloudAccess(ctx, raw, false, func(_ identity.Tx, _ Repository, _ StateRepository, cr CloudRepository, a *identity.Auth, out *Result) error {
-		c, e := cr.Connection(true)
+		c, e := s.Connection()
 		if e != nil {
 			return e
 		}
@@ -238,7 +238,7 @@ func (s *CloudService) MaintainComputer(ctx context.Context, raw string, id uint
 		return nil, httpx.Invalid("confirm_delete", "required")
 	}
 	return s.cloudCommand(ctx, raw, key, "cloud_computer."+w.Action, "cloud_computer:"+idString(id), w, func(_ identity.Tx, _ Repository, st StateRepository, cr CloudRepository, a *identity.Auth, out *Result, receipt *Receipt) error {
-		c, e := cr.Connection(true)
+		c, e := s.Connection()
 		if e != nil {
 			return e
 		}

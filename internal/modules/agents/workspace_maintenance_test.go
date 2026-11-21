@@ -22,7 +22,7 @@ type workspaceWorkerMemory struct {
 	public   PublicOperationRow
 	refs     []ResourceReferenceRow
 	w        CloudComputerRow
-	provider SandboxConnectionRow
+	provider SandboxConnection
 	actor    identity.User
 	txRuns   int
 }
@@ -50,9 +50,6 @@ func (m workspaceWorkerTx) LockUsers(ids []uint64) (map[uint64]*identity.User, e
 }
 func (m *workspaceWorkerMemory) Computer(uint64, bool) (*CloudComputerRow, error) {
 	return &m.w, nil
-}
-func (m *workspaceWorkerMemory) Connection(bool) (*SandboxConnectionRow, error) {
-	return &m.provider, nil
 }
 func (m *workspaceWorkerMemory) CloudActivity(uint64) (CloudActivity, error) {
 	return CloudActivity{Operations: 1}, nil
@@ -114,7 +111,7 @@ func workspaceWorkerFixture() (*CloudService, *workspaceWorkerMemory, *SandboxAc
 		refs:   []ResourceReferenceRow{{ID: 1, HolderKind: "cloud_file_operation", HolderID: "2", ResourceKind: "cloud_computer", ResourceID: 4, State: "active", FenceVersion: 1}},
 		w:      CloudComputerRow{ID: 4},
 	}
-	s := &CloudService{Epoch: "current", InstallationID: func() (string, error) { return strings.Repeat("a", 32), nil }, Host: &Service{Store: func() (identity.Store, error) { return m, nil }}}
+	s := &CloudService{Connection: func() (*SandboxConnection, error) { return &m.provider, nil }, Epoch: "current", InstallationID: func() (string, error) { return strings.Repeat("a", 32), nil }, Host: &Service{Store: func() (identity.Store, error) { return m, nil }}}
 	access := &SandboxAccess{ComputerID: 4, InstanceID: 1, WorkspaceOperationID: 2, WorkspaceOperationFence: 7}
 	return s, m, access
 }
@@ -276,9 +273,7 @@ func TestWorkspaceQueuedMutationDispatchesOnceAndSettlesBothRecords(t *testing.T
 	m.w.InstanceID = 1
 	m.op.InstanceID = 1
 	m.op.BackendGeneration = 1
-	format, key := uint64(2), "v1"
-	m.provider = SandboxConnectionRow{ID: 1, BackendType: "opensandbox", Endpoint: new("http://localhost:8080"), AccessMode: "direct", BackendGeneration: 1, MaintenanceState: "normal", SecretCiphertext: []byte("fixture"), SecretFormatVersion: &format, SecretKeyVersion: &key}
-	s.Cipher = func(string, string, bool) (string, error) { return "fixture", nil }
+	m.provider = SandboxConnection{BackendType: "opensandbox", Endpoint: new("http://localhost:8080"), AccessMode: "direct", BackendGeneration: 1, MaintenanceState: "normal", APIKey: "fixture"}
 	p := &workspaceDispatchProvider{workspaceRecoveryProvider: workspaceRecoveryProvider{state: "ready", output: `{"version":1,"ok":true,"changed":true,"result":{"path":"storage/new-directory"}}`}}
 	s.Factory = workspaceRecoveryFactory{p}
 	if err := s.processWorkspaceOperation(context.Background(), 2); err != nil {

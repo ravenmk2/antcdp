@@ -131,15 +131,6 @@ func (s *Service) ClaimRoot(ctx context.Context, request agentcore.ClaimRequest)
 		if e = s.definition(agent); e != nil {
 			return e
 		}
-		if s.Sandboxes != nil {
-			cr, e := CloudStateFor(tx)
-			if e != nil {
-				return e
-			}
-			if _, e = cr.Connection(true); e != nil {
-				return e
-			}
-		}
 		v, e := st.Session(initial.ID, true)
 		if e != nil {
 			return e

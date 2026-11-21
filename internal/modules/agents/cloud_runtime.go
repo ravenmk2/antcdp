@@ -23,7 +23,10 @@ type DiagnosticCheck = cloudcomputers.DiagnosticCheck
 
 type CloudService struct {
 	Host                *Service
-	Cipher              func(purpose, value string, seal bool) (string, error)
+	Connection          func() (*SandboxConnection, error)
+	diagnosticMu        sync.Mutex
+	lastDiagnostic      json.RawMessage
+	lastDiagnosticAt    *time.Time
 	ControlKey          func() ([]byte, error)
 	InstallationID      func() (string, error)
 	Epoch               string
@@ -98,20 +101,17 @@ func remoteSandboxError(e error) string {
 func (s *CloudService) tag(kind string, id, version uint64) string {
 	return s.Host.tag("cloud/"+kind, id, version)
 }
-func (s *CloudService) runtimeConnection(row *SandboxConnectionRow) (CloudConnection, error) {
-	if row == nil || row.ID != 1 || row.BackendType != "opensandbox" {
+func (s *CloudService) runtimeConnection(row *SandboxConnection) (CloudConnection, error) {
+	if row == nil || row.Endpoint == nil {
+		return CloudConnection{}, httpx.E(409, "SANDBOX_NOT_CONFIGURED", "请在部署配置中设置沙箱连接")
+	}
+	if row.MaintenanceState != "normal" {
+		return CloudConnection{}, httpx.E(409, "SANDBOX_BACKEND_FENCED", "现有资源仍绑定到先前的沙箱服务")
+	}
+	if row.BackendType != "opensandbox" || row.APIKey == "" {
 		return CloudConnection{}, integrity()
 	}
-	if row.Endpoint == nil {
-		return CloudConnection{}, httpx.E(409, "SANDBOX_NOT_CONFIGURED", "请管理员配置沙箱服务连接")
-	}
-	c := CloudConnection{BackendGeneration: row.BackendGeneration, Endpoint: *row.Endpoint, AccessMode: row.AccessMode, ConnectTimeout: time.Duration(row.ConnectTimeout) * time.Second, OperationTimeout: time.Duration(row.OperationTimeout) * time.Second}
-	if len(row.SecretCiphertext) == 0 || row.SecretFormatVersion == nil || *row.SecretFormatVersion != 2 || row.SecretKeyVersion == nil || *row.SecretKeyVersion != "v1" || s.Cipher == nil {
-		return c, httpx.E(409, "CREDENTIAL_MISSING", "沙箱服务凭据不可用")
-	}
-	var e error
-	c.APIKey, e = s.Cipher("sandboxes/connection/authentication", string(row.SecretCiphertext), false)
-	return c, e
+	return CloudConnection{BackendGeneration: row.BackendGeneration, Endpoint: *row.Endpoint, AccessMode: row.AccessMode, APIKey: row.APIKey, ConnectTimeout: time.Duration(row.ConnectTimeout) * time.Second, OperationTimeout: time.Duration(row.OperationTimeout) * time.Second}, nil
 }
 func (s *CloudService) openProvider(ctx context.Context, c CloudConnection) (sandboxcore.Provider, error) {
 	if s.Factory == nil {
@@ -162,7 +162,7 @@ func workspaceContentAccess(v *CloudComputerRow, a *identity.Auth) error {
 	return nil
 }
 func (s *CloudService) accessRows(repo CloudRepository, computerID uint64, lease *CloudLeaseRow) (*SandboxAccess, CloudConnection, error) {
-	p, e := repo.Connection(false)
+	p, e := s.Connection()
 	if e != nil {
 		return nil, CloudConnection{}, e
 	}
@@ -183,7 +183,7 @@ func (s *CloudService) accessRows(repo CloudRepository, computerID uint64, lease
 	return access, c, nil
 }
 
-func (s *CloudService) accessFromRows(p *SandboxConnectionRow, w *CloudComputerRow) (*SandboxAccess, CloudConnection, error) {
+func (s *CloudService) accessFromRows(p *SandboxConnection, w *CloudComputerRow) (*SandboxAccess, CloudConnection, error) {
 	if p == nil || p.MaintenanceState != "normal" || w == nil || w.State != "ready" || w.DeletedAt != nil || w.BackendGeneration != p.BackendGeneration {
 		return nil, CloudConnection{}, httpx.E(409, "CLOUD_NOT_READY", "云电脑暂不可用")
 	}

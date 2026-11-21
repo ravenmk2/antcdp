@@ -46,27 +46,13 @@ func testAdminConnection(t *testing.T, f *agentIntegrationFixture, s *a.CloudSer
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := a.ConnectionWrite{Endpoint: *c.Data.(a.ConnectionView).Endpoint, ConnectTimeout: 11}
-	_, err = s.SaveConnection(ctx, raw, c.Tag, cryptox.ID(), target)
-	modelsExpectCode(t, err, "CONNECTION_CONFIRMATION_REQUIRED")
-	preview, err := s.PreviewConnection(ctx, raw, target)
-	if err != nil {
-		t.Fatal(err)
+	if view := c.Data.(a.ConnectionView); !view.Configured || view.Type != "opensandbox" || !view.Authentication.HasSecret {
+		t.Fatal("missing deployment connection")
 	}
-	if preview.Data.(map[string]any)["affected_computers"] != 0 {
-		t.Fatal("same-address edit enumerated topology")
-	}
-	target.ConfirmationToken = preview.Data.(map[string]any)["confirmation_token"].(string)
-	target.ConfirmationText = "确认修改沙箱连接"
-	altered := target
-	altered.ConnectTimeout++
-	_, err = s.SaveConnection(ctx, raw, c.Tag, cryptox.ID(), altered)
-	modelsExpectCode(t, err, "CONNECTION_CONFIRMATION_INVALID")
-
 	p := &delayedHealthProvider{volumeMemoryProvider: remote, started: make(chan struct{}), release: make(chan struct{})}
-	probeService := &a.CloudService{Host: s.Host, Cipher: s.Cipher, Factory: healthFactory{p}, Epoch: s.Epoch}
+	probeService := &a.CloudService{Host: s.Host, Connection: s.Connection, Factory: healthFactory{p}, Epoch: s.Epoch}
 	session := runtimeSession(t, f, runtimeTestAgent(t, f).ID)
-	fileService := &a.CloudService{Host: s.Host, Cipher: s.Cipher, Factory: artifactMemoryFactory{&artifactMemoryProvider{sandboxMemoryProvider: remote.sandboxMemoryProvider, files: map[string][]byte{"health.txt": []byte("ok")}}}, InstallationID: s.InstallationID}
+	fileService := &a.CloudService{Host: s.Host, Connection: s.Connection, Factory: artifactMemoryFactory{&artifactMemoryProvider{sandboxMemoryProvider: remote.sandboxMemoryProvider, files: map[string][]byte{"health.txt": []byte("ok")}}}, InstallationID: s.InstallationID}
 	done := make(chan error, 1)
 	go func() { _, e := probeService.CheckConnection(ctx, raw); done <- e }()
 	select {
@@ -87,20 +73,13 @@ func testAdminConnection(t *testing.T, f *agentIntegrationFixture, s *a.CloudSer
 	runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", Content: "ok"})
 	runtimeEnd(t, f, x)
 	t.Logf("While remote probe was suspended: list=%s ordinary turn=%s", listed, time.Since(begin)-listed)
-	changed, err := s.SaveConnection(bounded, raw, c.Tag, cryptox.ID(), target)
 	close(p.release)
-	if err != nil {
-		t.Fatal("slow probe held a database lock", err)
-	}
 	if err = <-done; err != nil {
 		t.Fatal(err)
 	}
 	c, err = s.GetConnection(ctx, raw)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if changed.Tag != c.Tag || c.Data.(a.ConnectionView).LastDiagnosticAt != nil {
-		t.Fatal("old probe overwrote current status")
 	}
 	checked, err := s.CheckConnection(ctx, raw)
 	if err != nil {
@@ -112,15 +91,7 @@ func testAdminConnection(t *testing.T, f *agentIntegrationFixture, s *a.CloudSer
 	if checked.Tag != c.Tag || json.Unmarshal(checked.Data.(a.ConnectionView).LastDiagnostic, &diag) != nil || !diag.Healthy {
 		t.Fatal("health did not persist independently of config version")
 	}
-	_, err = s.PreviewConnection(ctx, raw, a.ConnectionWrite{Endpoint: "https://another.invalid"})
-	modelsExpectCode(t, err, "VALIDATION_FAILED")
 
-	clearPreview, err := s.PreviewConnection(ctx, raw, a.ConnectionWrite{})
-	if err != nil || clearPreview.Data.(map[string]any)["affected_computers"] != 1 {
-		t.Fatal("missing clear impact", err)
-	}
-	_, err = s.SaveConnection(ctx, raw, c.Tag, cryptox.ID(), a.ConnectionWrite{ConfirmationText: "确认修改沙箱连接", ConfirmationToken: clearPreview.Data.(map[string]any)["confirmation_token"].(string)})
-	modelsExpectCode(t, err, "CLOUD_RESOURCES_EXIST")
 }
 func testAdminSpecBindings(t *testing.T, f *agentIntegrationFixture, s *a.CloudService, remote *volumeMemoryProvider, id uint64, member string) {
 	ctx, raw := f.Context, f.AdminToken

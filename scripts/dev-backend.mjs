@@ -2,12 +2,20 @@ import { spawn } from "node:child_process";
 import { watch, mkdirSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { once } from "node:events";
-import { root, paths, prepare, environment, writeJSON } from "./dev-lib.mjs";
+import {
+  root,
+  paths,
+  prepare,
+  prepareDevConfig,
+  environment,
+  writeJSON,
+} from "./dev-lib.mjs";
 
 prepare();
 const output = resolve(paths.runtime, "backend");
 mkdirSync(output, { recursive: true });
 const args = process.argv.slice(2);
+if (!args.length) prepareDevConfig();
 const serveArgs = args.length
   ? args
   : [
@@ -15,6 +23,8 @@ const serveArgs = args.length
       "127.0.0.1:8080",
       "--public-url",
       "http://127.0.0.1:5173",
+      "--config-dir",
+      paths.conf,
       "--data-dir",
       paths.app,
     ];

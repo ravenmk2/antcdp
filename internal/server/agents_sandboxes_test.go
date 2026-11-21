@@ -15,7 +15,7 @@ func TestSandboxUnavailableAndCSRFBoundary(t *testing.T) {
 		w := request(h, "GET", "/api/v1"+path, "", "", nil, "")
 		assertError(t, w, 503, "INSTANCE_NOT_READY")
 	}
-	w := request(h, "POST", "/api/v1/admin/sandboxes/connection/preview", `{}`, "", nil, "http://antcdp.test")
+	w := request(h, "POST", "/api/v1/admin/sandboxes/connection/health-check", `{}`, "", nil, "http://antcdp.test")
 	assertError(t, w, 403, "CSRF_INVALID")
 }
 
@@ -43,7 +43,7 @@ func TestSandboxStrictConfigurationRejectsUntrustedDerivedFields(t *testing.T) {
 		{`{"config":{"network":{"user_default":{"default_action":"allow","default_action":"deny"}}}}`, "BAD_REQUEST", 400},
 	} {
 		t.Run(tc.body, func(t *testing.T) {
-			w := request(router, "POST", "/api/v1/admin/sandboxes/connection/preview", tc.body, "", nil, "")
+			w := request(router, "POST", "/api/v1/admin/sandboxes/connection/health-check", tc.body, "", nil, "")
 			assertError(t, w, tc.status, tc.code)
 		})
 	}

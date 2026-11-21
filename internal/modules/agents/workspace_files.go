@@ -142,7 +142,7 @@ func (s *CloudService) workspaceReadAccess(ctx context.Context, raw string, id u
 		if e = workspaceContentAccess(computer, auth); e != nil {
 			return e
 		}
-		provider, e := repo.Connection(false)
+		provider, e := s.Connection()
 		if e != nil {
 			return e
 		}

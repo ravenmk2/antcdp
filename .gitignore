@@ -15,3 +15,6 @@
 /web/.vitest/
 /web/coverage/
 /web/test-results/
+
+/conf/*
+!/conf/config.example.toml

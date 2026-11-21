@@ -91,7 +91,7 @@ func (s *Service) Transition(ctx context.Context, id uint64, kind, token string,
 	if err != nil {
 		return err
 	}
-	p, err := s.Open(ctx, instance.ConnectionID, instance.BackendGeneration)
+	p, err := s.Open(ctx, instance.BackendGeneration)
 	if err != nil {
 		return err
 	}

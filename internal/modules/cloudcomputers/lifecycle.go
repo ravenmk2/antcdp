@@ -53,7 +53,7 @@ func (s *Service) claimCloudOperation(ctx context.Context, id uint64) (*cloudCla
 		if e != nil || initial == nil || initial.FinishedAt != nil {
 			return e
 		}
-		connection, e := cr.Connection(true)
+		connection, e := s.Connection()
 		if e != nil {
 			return e
 		}
@@ -304,7 +304,7 @@ func (s *Service) deleteCloud(ctx context.Context, c *cloudClaim, p sandboxcore.
 func (s *Service) finishCloudOperation(ctx context.Context, c *cloudClaim, cause error) error {
 	cause = diagnostic.With(cause, diagnostic.Detail{Source: "sandbox", Stage: c.Operation.Kind, Code: remoteSandboxError(cause), OperationID: idString(c.Operation.ID), InstanceID: idString(c.Operation.InstanceID)})
 	return s.Transact(ctx, func(cr Repository) error {
-		connection, e := cr.Connection(true)
+		connection, e := s.Connection()
 		if e != nil {
 			return e
 		}
@@ -369,9 +369,6 @@ func (s *Service) finishCloudOperation(ctx context.Context, c *cloudClaim, cause
 				v.RuntimeCreationToken = nil
 				v.VolumeState = "deleted"
 				v.VolumeCleanupState = "completed"
-				if e = cr.BumpConnectionTopology(); e != nil {
-					return e
-				}
 			}
 		case "failed":
 			if op.Kind == "delete" {

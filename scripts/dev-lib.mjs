@@ -13,7 +13,7 @@ import { createServer } from "node:net";
 
 export const root = fileURLToPath(new URL("../", import.meta.url));
 export const paths = Object.fromEntries(
-  ["app", "runtime", "logs", "tmp"].map((name) => [
+  ["app", "conf", "runtime", "logs", "tmp"].map((name) => [
     name,
     resolve(root, ".data", name),
   ]),
@@ -221,11 +221,7 @@ export async function initialize() {
     profile,
     `SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='${name}';`,
   );
-  if (!present)
-    await mysql(
-      profile,
-      `CREATE DATABASE \`${name}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;`,
-    );
+  if (!present) throw new Error("Configured development database is missing.");
   const tables = await mysql(
     profile,
     `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='${name}';`,
@@ -244,19 +240,10 @@ export async function initialize() {
       .map((cookie) => cookie.split(";", 1)[0])
       .join("; "),
   };
-  const database = {
-    host: profile.host,
-    port: profile.port,
-    name,
-    username: profile.username,
-    password: profile.password,
-    tls_mode: profile.tls_mode || "disabled",
-  };
-  await api("/setup/database-check", {
-    method: "POST",
-    headers,
-    body: JSON.stringify(database),
-  });
+  const installPassword = readFileSync(
+    resolve(paths.app, "install-password"),
+    "utf8",
+  ).replace(/\r?\n$/, "");
   const loginPath = resolve(paths.runtime, "login.json");
   const { randomBytes } = await import("node:crypto");
   const founder = readJSON(loginPath) || {
@@ -274,7 +261,7 @@ export async function initialize() {
       headers,
       signal: AbortSignal.timeout(130000),
       body: JSON.stringify({
-        database,
+        install_password: installPassword,
         site: { site_name: "AntCDP Dev", timezone: "Asia/Shanghai" },
         founder,
       }),
@@ -286,4 +273,27 @@ export async function initialize() {
         `${error.message}; inspect setup/status before retrying. No database was reset.`,
       );
   }
+}
+
+export function prepareDevConfig() {
+  const path = resolve(paths.conf, "config.toml");
+  if (existsSync(path)) return;
+  const { database } = loadProfile();
+  const fields = [
+    "host",
+    "port",
+    "name",
+    "username",
+    "password",
+    "tls_mode",
+    "ca_file",
+  ];
+  const values = { ...database, tls_mode: database.tls_mode || "disabled" };
+  const lines = fields
+    .filter((key) => values[key] !== undefined)
+    .map((key) => key + " = " + JSON.stringify(values[key]));
+  writeFileSync(path, ["[database]", ...lines, ""].join("\n"), {
+    mode: 0o600,
+    flag: "wx",
+  });
 }

@@ -34,9 +34,9 @@ type Founder struct {
 	Password    string `json:"password"`
 }
 type Request struct {
-	Database config.Database `json:"database"`
-	Site     Site            `json:"site"`
-	Founder  Founder         `json:"founder"`
+	InstallPassword string  `json:"install_password"`
+	Site            Site    `json:"site"`
+	Founder         Founder `json:"founder"`
 }
 type Seed struct {
 	InstallationID                      string
@@ -57,6 +57,7 @@ type Backend interface {
 	Lock(context.Context) (func(), error)
 	Migrate(context.Context) error
 	SchemaReady(context.Context) error
+	SandboxInUse(context.Context) (bool, error)
 	Seed(context.Context, Seed) error
 	Instance(context.Context) (*Instance, error)
 	Close() error

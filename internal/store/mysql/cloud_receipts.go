@@ -46,5 +46,5 @@ func (t *agentsTx) SaveCloudReceipt(v *commandstate.Receipt) error {
 }
 
 func sandboxAdminCommand(command string) bool {
-	return strings.HasPrefix(command, "sandbox_connection.") || strings.HasPrefix(command, "sandbox_spec.")
+	return strings.HasPrefix(command, "sandbox_spec.")
 }

@@ -148,7 +148,7 @@ func (s *CloudService) claimWorkspaceOperation(ctx context.Context, id uint64) (
 			if err != nil {
 				c.cause = err
 			}
-			p, err := repo.Connection(false)
+			p, err := s.Connection()
 			if err != nil || p == nil {
 				return errors.Join(err, integrity())
 			}

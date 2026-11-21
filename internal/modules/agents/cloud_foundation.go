@@ -28,19 +28,15 @@ func (s *CloudService) foundation() *sandboxes.Service {
 			}
 			return fn(provider.SandboxState())
 		})
-	}, Open: func(ctx context.Context, connection, generation uint64) (sandboxcore.Provider, error) {
-		var config CloudConnection
-		err := s.cloudBackground(ctx, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository) error {
-			row, err := repo.Connection(false)
-			if err != nil {
-				return err
-			}
-			if row == nil || row.ID != connection || row.BackendGeneration != generation {
-				return &sandboxcore.Error{Code: "SANDBOX_BACKEND_FENCED"}
-			}
-			config, err = s.runtimeConnection(row)
-			return err
-		})
+	}, Open: func(ctx context.Context, generation uint64) (sandboxcore.Provider, error) {
+		row, err := s.Connection()
+		if err != nil {
+			return nil, err
+		}
+		if row == nil || row.BackendGeneration != generation {
+			return nil, &sandboxcore.Error{Code: "SANDBOX_BACKEND_FENCED"}
+		}
+		config, err := s.runtimeConnection(row)
 		if err != nil {
 			return nil, err
 		}
@@ -49,7 +45,7 @@ func (s *CloudService) foundation() *sandboxes.Service {
 }
 
 func (s *CloudService) product() *cloudcomputers.Service {
-	return &cloudcomputers.Service{Epoch: s.Epoch, Sandboxes: s.foundation(), InstallationID: s.InstallationID, DecodeConnection: s.runtimeConnection, OpenProvider: s.openProvider, ProtectedTargets: s.ProtectedTargets, EndpointProtection: s.endpointProtection,
+	return &cloudcomputers.Service{Epoch: s.Epoch, Sandboxes: s.foundation(), InstallationID: s.InstallationID, Connection: s.Connection, DecodeConnection: s.runtimeConnection, OpenProvider: s.openProvider, ProtectedTargets: s.ProtectedTargets, EndpointProtection: s.endpointProtection,
 		Transact: func(ctx context.Context, fn func(cloudcomputers.Repository) error) error {
 			return s.cloudBackground(ctx, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository) error { return fn(repo) })
 		},

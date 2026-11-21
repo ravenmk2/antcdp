@@ -2,7 +2,6 @@
 
 CREATE TABLE `sandbox_instance` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `connection_id` BIGINT UNSIGNED NOT NULL,
     `backend_generation` BIGINT UNSIGNED NOT NULL,
     `remote_id` VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL,
     `creation_token` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -20,6 +19,6 @@ CREATE TABLE `sandbox_instance` (
     `finished_at` DATETIME(3) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_sandbox_instance_creation (creation_token),
-    UNIQUE KEY uq_sandbox_instance_remote (connection_id,backend_generation,remote_id),
+    UNIQUE KEY uq_sandbox_instance_remote (backend_generation,remote_id),
     KEY idx_sandbox_instance_state (state,updated_at,id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

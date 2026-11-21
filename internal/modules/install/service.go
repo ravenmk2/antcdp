@@ -8,7 +8,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -28,12 +30,18 @@ import (
 var usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{2,29}$`)
 var ErrFounderPasswordRequired = errors.New("a new founder password is required to complete initialization")
 
+type backendMarker struct {
+	Generation        uint64 `json:"generation"`
+	TargetFingerprint string `json:"target_fingerprint"`
+}
 type marker struct {
-	Version        int       `json:"version"`
-	InstallationID string    `json:"installation_id"`
-	CompletedAt    time.Time `json:"completed_at"`
+	SandboxBackend *backendMarker `json:"sandbox_backend,omitempty"`
+	Version        int            `json:"version"`
+	InstallationID string         `json:"installation_id"`
+	CompletedAt    time.Time      `json:"completed_at"`
 }
 type checkpoint struct {
+	DatabaseTarget string `json:"database_target"`
 	Version        int    `json:"version"`
 	InstallationID string `json:"installation_id"`
 	Stage          string `json:"stage"`
@@ -42,15 +50,18 @@ type checkpoint struct {
 	DisplayName    string `json:"display_name"`
 }
 type Service struct {
-	mu           sync.RWMutex
-	runtime      config.Runtime
-	state        State
-	backend      Backend
-	connect      Connector
-	key          []byte
-	csrfKey      []byte
-	instanceLock *flock.Flock
-	lastProbe    time.Time
+	installationID    string
+	sandboxGeneration uint64
+	sandboxBlocked    bool
+	mu                sync.RWMutex
+	runtime           config.Runtime
+	state             State
+	backend           Backend
+	connect           Connector
+	key               []byte
+	csrfKey           []byte
+	instanceLock      *flock.Flock
+	lastProbe         time.Time
 }
 
 func New(ctx context.Context, r config.Runtime, connect Connector) (*Service, error) {
@@ -82,38 +93,25 @@ func (s *Service) path(p string) string {
 func exists(path string) bool { _, err := os.Lstat(path); return err == nil }
 
 func (s *Service) load(ctx context.Context) error {
-	full := exists(s.path("config.yaml")) && exists(s.path("master.key")) && exists(s.path("installation.json"))
+	full := exists(s.path("master.key")) && exists(s.path("installation.json"))
 	if exists(s.path("install.lock")) && !full {
 		s.state = RecoveryRequired
 		return nil
 	}
 	if full {
-		f, err := config.Read(s.path("config.yaml"))
-		if err != nil {
-			s.state = RecoveryRequired
-			return nil
-		}
 		key, err := filestore.ReadPrivate(s.path("master.key"), 32)
 		if err != nil || len(key) != 32 {
 			s.state = RecoveryRequired
 			return nil
 		}
 		var m marker
-		if err := readJSON(s.path("installation.json"), &m); err != nil || m.Version != 1 || m.InstallationID != f.InstallationID {
+		if err := readJSON(s.path("installation.json"), &m); err != nil || m.Version != 1 || len(m.InstallationID) != 32 {
 			s.state = RecoveryRequired
 			return nil
 		}
 		s.key = key
 		s.csrfKey = cryptox.Derive(key, "csrf")
-		plain, err := cryptox.Decrypt(key, f.InstallationID, "database.password", f.Database.Password)
-		if err != nil {
-			s.state = RecoveryRequired
-			return nil
-		}
-		db := f.Database
-		db.Password = plain
-		db.CAFile = s.runtime.DatabaseCA
-		b, err := s.connect(db, false)
+		b, err := s.connect(s.runtime.Database, false)
 		if err != nil {
 			s.state = Unavailable
 			return nil
@@ -137,19 +135,25 @@ func (s *Service) load(ctx context.Context) error {
 			s.state = Unavailable
 			return nil
 		}
-		if i == nil || i.InstallationID != f.InstallationID || subtle.ConstantTimeCompare(i.KeyFingerprint, cryptox.Fingerprint(key)) != 1 {
+		if i == nil || i.InstallationID != m.InstallationID || subtle.ConstantTimeCompare(i.KeyFingerprint, cryptox.Fingerprint(key)) != 1 {
 			_ = b.Close()
 			s.state = RecoveryRequired
 			return nil
 		}
-		if err = s.sealInstallation(f.InstallationID); err != nil {
+		if err = s.sealInstallation(m.InstallationID); err != nil {
 			_ = b.Close()
 			s.state = RecoveryRequired
 			return nil
+		}
+		if err = s.bindSandbox(ctx, b, &m); err != nil {
+			_ = b.Close()
+			return err
 		}
 		if s.backend != nil {
 			_ = s.backend.Close()
 		}
+		s.installationID = m.InstallationID
+		s.cleanupPassword()
 		s.backend = b
 		s.state = Ready
 		return nil
@@ -162,8 +166,38 @@ func (s *Service) load(ctx context.Context) error {
 		s.state = RecoveryRequired
 		return nil
 	}
-	// Discard the obsolete pre-install token from earlier development versions.
-	_ = os.Remove(s.path("setup.token"))
+	b, err := s.connect(s.runtime.Database, false)
+	if err != nil {
+		s.state = Unavailable
+		return nil
+	}
+	defer func() { _ = b.Close() }()
+	if err = b.Check(ctx, true); err != nil {
+		s.state = Unavailable
+		var problem *httpx.Error
+		reason := "DATABASE_CHECK_FAILED"
+		if errors.As(err, &problem) {
+			reason = problem.Code
+			if reason == "DATABASE_NOT_EMPTY" {
+				s.state = RecoveryRequired
+			}
+		}
+		slog.Warn("installation database preflight failed", "reason", reason)
+		return nil
+	}
+	if _, err = s.installPassword(); errors.Is(err, os.ErrNotExist) {
+		var value string
+		if s.runtime.Install.Password != nil {
+			value = *s.runtime.Install.Password
+		} else {
+			value = cryptox.Token()
+		}
+		err = filestore.CreatePrivate(s.path("install-password"), []byte(value+"\n"))
+	}
+	if err != nil {
+		return fmt.Errorf("prepare install-password: %w", err)
+	}
+	slog.Info("installation password available", "path", s.path("install-password"))
 	s.state = SetupRequired
 	return nil
 }
@@ -186,16 +220,8 @@ func (s *Service) freshData() (bool, error) {
 		if rel == "locks" && d.IsDir() {
 			return filepath.SkipDir
 		}
-		if rel == "setup.token" && d.Type().IsRegular() {
+		if rel == "install-password" && d.Type().IsRegular() {
 			return nil
-		}
-		if rel == "config.yaml" {
-			_, configErr := config.Read(path)
-			if errors.Is(configErr, config.ErrEmptyFile) {
-				return nil
-			}
-			clean = false
-			return fs.SkipAll
 		}
 		if !d.IsDir() {
 			clean = false
@@ -271,32 +297,27 @@ func (s *Service) Close() error {
 	return s.instanceLock.Close()
 }
 
-func (s *Service) CheckDatabase(ctx context.Context, d config.Database) error {
-	s.mu.Lock()
-	stateErr := s.checkSetup()
-	s.mu.Unlock()
-	if stateErr != nil {
-		return stateErr
-	}
-	if err := d.Validate(); err != nil {
-		return httpx.Invalid("database", "invalid_connection")
-	}
-	d.CAFile = s.runtime.DatabaseCA
-	b, err := s.connect(d, false)
+func (s *Service) installPassword() (string, error) {
+	b, err := filestore.ReadPrivate(s.path("install-password"), 4098)
 	if err != nil {
-		return httpx.E(422, "DATABASE_CHECK_FAILED", "数据库连接配置无效")
+		return "", err
 	}
-	defer func() { _ = b.Close() }()
-	if err := b.Check(ctx, true); err != nil {
-		return err
+	value := strings.TrimSuffix(strings.TrimSuffix(string(b), "\n"), "\r")
+	if !config.ValidInstallPassword(value) {
+		return "", errors.New("invalid install-password file")
 	}
-	return nil
+	return value, nil
 }
-
-func Validate(r *Request) error {
-	if err := r.Database.Validate(); err != nil {
-		return httpx.Invalid("database", "invalid_connection")
+func (s *Service) cleanupPassword() {
+	if err := os.Remove(s.path("install-password")); err != nil && !errors.Is(err, os.ErrNotExist) {
+		slog.Warn("could not remove install-password file")
 	}
+}
+func (s *Service) databaseTarget() string {
+	d := s.runtime.Database
+	return hex.EncodeToString(cryptox.Digest(fmt.Sprintf("%s:%d/%s", d.Host, d.Port, d.Name)))
+}
+func Validate(r *Request) error {
 	r.Site.Name = strings.TrimSpace(r.Site.Name)
 	r.Founder.DisplayName = strings.TrimSpace(r.Founder.DisplayName)
 	if utf8.RuneCountInString(r.Site.Name) > 40 {
@@ -326,6 +347,16 @@ func (s *Service) Install(ctx context.Context, r Request) (string, error) {
 		s.mu.Unlock()
 		return "", stateErr
 	}
+	expected, err := s.installPassword()
+	if err != nil {
+		s.state = RecoveryRequired
+		s.mu.Unlock()
+		return "", errors.New("installation password file unavailable")
+	}
+	if !hmac.Equal(cryptox.Digest(expected), cryptox.Digest(r.InstallPassword)) {
+		s.mu.Unlock()
+		return "", httpx.E(403, "INSTALL_PASSWORD_INVALID", "安装口令错误")
+	}
 	s.state = Initializing
 	s.mu.Unlock()
 	durable := false
@@ -340,8 +371,7 @@ func (s *Service) Install(ctx context.Context, r Request) (string, error) {
 			}
 		}
 	}()
-	r.Database.CAFile = s.runtime.DatabaseCA
-	b, err := s.connect(r.Database, true)
+	b, err := s.connect(s.runtime.Database, true)
 	if err != nil {
 		return "", httpx.E(422, "DATABASE_CHECK_FAILED", "数据库配置无效")
 	}
@@ -369,21 +399,12 @@ func (s *Service) Install(ctx context.Context, r Request) (string, error) {
 	if err = filestore.EnsurePrivateDir(s.path(".install")); err != nil {
 		return "", err
 	}
-	j := checkpoint{1, id, "prepared", r.Site, r.Founder.Username, r.Founder.DisplayName}
+	j := checkpoint{s.databaseTarget(), 1, id, "prepared", r.Site, r.Founder.Username, r.Founder.DisplayName}
 	durable = true
 	if err = writeJSON(s.path(".install/staging.json"), j); err != nil {
 		return "", err
 	}
 	if err = filestore.CreatePrivate(s.path("master.key"), key); err != nil {
-		return "", err
-	}
-	encrypted, err := cryptox.Encrypt(key, id, "database.password", r.Database.Password)
-	if err != nil {
-		return "", err
-	}
-	f := config.File{SchemaVersion: 1, InstallationID: id, Server: s.runtime.Server, Database: r.Database}
-	f.Database.Password = encrypted
-	if err = config.Write(s.path(".install/config.pending.yaml"), f); err != nil {
 		return "", err
 	}
 	if err = b.Migrate(ctx); err != nil {
@@ -396,21 +417,14 @@ func (s *Service) Install(ctx context.Context, r Request) (string, error) {
 	if err = b.Seed(ctx, Seed{id, cryptox.Fingerprint(key), r.Site, r.Founder.Username, r.Founder.DisplayName, hash, time.Now().UTC()}); err != nil {
 		return "", err
 	}
-	if err = s.finish(ctx, f, key); err != nil {
+	if err = s.finish(ctx, id, key); err != nil {
 		return "", err
 	}
 	return id, nil
 }
 
-func (s *Service) finish(ctx context.Context, f config.File, key []byte) error {
-	d := f.Database
-	plain, err := cryptox.Decrypt(key, f.InstallationID, "database.password", d.Password)
-	if err != nil {
-		return err
-	}
-	d.Password = plain
-	d.CAFile = s.runtime.DatabaseCA
-	b, err := s.connect(d, false)
+func (s *Service) finish(ctx context.Context, id string, key []byte) error {
+	b, err := s.connect(s.runtime.Database, false)
 	if err != nil {
 		return err
 	}
@@ -427,36 +441,31 @@ func (s *Service) finish(ctx context.Context, f config.File, key []byte) error {
 		return err
 	}
 	instance, err := b.Instance(ctx)
-	if err != nil || instance == nil || instance.InstallationID != f.InstallationID || subtle.ConstantTimeCompare(instance.KeyFingerprint, cryptox.Fingerprint(key)) != 1 {
+	if err != nil || instance == nil || instance.InstallationID != id || subtle.ConstantTimeCompare(instance.KeyFingerprint, cryptox.Fingerprint(key)) != 1 {
 		return errors.New("runtime database identity does not match installation")
 	}
 
-	if current, err := config.Read(s.path("config.yaml")); err == nil {
-		if current.InstallationID != f.InstallationID {
-			return errors.New("configuration belongs to a different installation")
-		}
-	} else if !errors.Is(err, os.ErrNotExist) && !errors.Is(err, config.ErrEmptyFile) {
+	m := marker{Version: 1, InstallationID: id, CompletedAt: time.Now().UTC()}
+	if err := writeJSON(s.path("installation.json"), m); err != nil {
 		return err
 	}
-	if err := config.Write(s.path("config.yaml"), f); err != nil {
-		return err
-	}
-	if err := writeJSON(s.path("installation.json"), marker{1, f.InstallationID, time.Now().UTC()}); err != nil {
-		return err
-	}
-	if err := s.sealInstallation(f.InstallationID); err != nil {
+	if err := s.sealInstallation(id); err != nil {
 		return err
 	}
 	s.mu.Lock()
+	if err = s.bindSandbox(ctx, b, &m); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.installationID = id
 	keep = true
 	s.backend = b
 	s.key = key
 	s.csrfKey = cryptox.Derive(key, "csrf")
 	s.state = Ready
 	s.mu.Unlock()
-	_ = os.Remove(s.path("setup.token"))
+	s.cleanupPassword()
 	_ = os.Remove(s.path(".install/staging.json"))
-	_ = os.Remove(s.path(".install/config.pending.yaml"))
 	return nil
 }
 
@@ -473,24 +482,14 @@ func (s *Service) Recover(ctx context.Context, newPassword string) error {
 	if err := readJSON(s.path(".install/staging.json"), &j); err != nil || j.Version != 1 {
 		return errors.New("no valid installation checkpoint")
 	}
-	f, err := config.Read(s.path(".install/config.pending.yaml"))
-	if errors.Is(err, os.ErrNotExist) {
-		f, err = config.Read(s.path("config.yaml"))
-	}
-	if err != nil || f.InstallationID != j.InstallationID {
-		return errors.New("configuration does not match checkpoint")
+	if j.DatabaseTarget != s.databaseTarget() {
+		return errors.New("database target differs from installation checkpoint")
 	}
 	key, err := filestore.ReadPrivate(s.path("master.key"), 32)
 	if err != nil || len(key) != 32 {
 		return errors.New("original master key is required")
 	}
-	d := f.Database
-	d.Password, err = cryptox.Decrypt(key, f.InstallationID, "database.password", d.Password)
-	if err != nil {
-		return err
-	}
-	d.CAFile = s.runtime.DatabaseCA
-	b, err := s.connect(d, true)
+	b, err := s.connect(s.runtime.Database, true)
 	if err != nil {
 		return err
 	}
@@ -533,7 +532,7 @@ func (s *Service) Recover(ctx context.Context, newPassword string) error {
 	} else if i.InstallationID != j.InstallationID || subtle.ConstantTimeCompare(i.KeyFingerprint, cryptox.Fingerprint(key)) != 1 {
 		return errors.New("database belongs to a different installation")
 	}
-	if err = s.finish(ctx, *f, key); err != nil {
+	if err = s.finish(ctx, j.InstallationID, key); err != nil {
 		return err
 	}
 	return nil
@@ -554,26 +553,18 @@ func writeJSON(path string, v any) error {
 }
 
 func (s *Service) Migrate(ctx context.Context, username, secret string) error {
-	f, err := config.Read(s.path("config.yaml"))
-	if err != nil {
-		return errors.New("an installed configuration is required")
-	}
 	if !exists(s.path("installation.json")) {
 		return errors.New("incomplete installations must use setup recover")
 	}
 	var m marker
-	if err := readJSON(s.path("installation.json"), &m); err != nil || m.Version != 1 || m.InstallationID != f.InstallationID {
+	if err := readJSON(s.path("installation.json"), &m); err != nil || m.Version != 1 || len(m.InstallationID) != 32 {
 		return errors.New("local installation identity does not match configuration")
 	}
 	key, err := filestore.ReadPrivate(s.path("master.key"), 32)
 	if err != nil {
 		return err
 	}
-	d := f.Database
-	d.Password, err = cryptox.Decrypt(key, f.InstallationID, "database.password", d.Password)
-	if err != nil {
-		return err
-	}
+	d := s.runtime.Database
 	if username != "" || secret != "" {
 		if username == "" || secret == "" {
 			return errors.New("both migration username and password are required")
@@ -581,7 +572,7 @@ func (s *Service) Migrate(ctx context.Context, username, secret string) error {
 		d.Username = username
 		d.Password = secret
 	}
-	d.CAFile = s.runtime.DatabaseCA
+
 	b, err := s.connect(d, true)
 	if err != nil {
 		return err
@@ -593,7 +584,7 @@ func (s *Service) Migrate(ctx context.Context, username, secret string) error {
 	}
 	defer unlock()
 	i, err := b.Instance(ctx)
-	if err != nil || i == nil || i.InstallationID != f.InstallationID || subtle.ConstantTimeCompare(i.KeyFingerprint, cryptox.Fingerprint(key)) != 1 {
+	if err != nil || i == nil || i.InstallationID != m.InstallationID || subtle.ConstantTimeCompare(i.KeyFingerprint, cryptox.Fingerprint(key)) != 1 {
 		return errors.New("database identity does not match installation")
 	}
 	if err = b.Migrate(ctx); err != nil {
@@ -627,15 +618,11 @@ func (s *Service) resourceSecret(namespace, purpose, value string, seal bool) (s
 	if s.state != Ready || len(s.key) != 32 {
 		return "", errors.New("installation is not ready")
 	}
-	f, err := config.Read(s.path("config.yaml"))
-	if err != nil {
-		return "", err
-	}
 	key := cryptox.Derive(s.key, namespace)
 	if seal {
-		return cryptox.Encrypt(key, f.InstallationID, purpose, value)
+		return cryptox.Encrypt(key, s.installationID, purpose, value)
 	}
-	return cryptox.Decrypt(key, f.InstallationID, purpose, value)
+	return cryptox.Decrypt(key, s.installationID, purpose, value)
 }
 
 // IntegrationETag derives opaque scoped versions without exposing cross-owner counters.

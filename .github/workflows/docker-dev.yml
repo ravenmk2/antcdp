@@ -26,6 +26,19 @@ jobs:
     permissions:
       contents: read
       packages: write
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: smoke-root
+          MYSQL_DATABASE: antcdp_smoke
+          MYSQL_USER: smoke
+          MYSQL_PASSWORD: smoke-only
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=5s --health-timeout=5s --health-retries=25
     steps:
       - uses: actions/checkout@v7
         with:
@@ -77,6 +90,34 @@ jobs:
           EXPECTED=$(./antcdp version)
           ACTUAL=$(docker run --rm "$IMAGE" version)
           test "$ACTUAL" = "$EXPECTED"
+          CONF=$(mktemp -d)
+          chmod 755 "$CONF"
+          cat > "$CONF/config.toml" <<'TOML'
+          [database]
+          host = "127.0.0.1"
+          port = 3306
+          name = "antcdp_smoke"
+          username = "smoke"
+          password = "smoke-only"
+          tls_mode = "disabled"
+          TOML
+          docker run -d --name antcdp-smoke --network host \
+            --mount "type=bind,src=$CONF,dst=/app/conf,readonly" \
+            --mount type=volume,src=antcdp-smoke-data,dst=/app/data "$IMAGE"
+          wait_for_setup() {
+            for attempt in {1..45}; do
+              if curl -fsS http://127.0.0.1:8080/api/v1/setup/status | jq -e '.data.state == "setup_required"' >/dev/null; then return 0; fi
+              sleep 1
+            done
+            docker logs antcdp-smoke
+            return 1
+          }
+          wait_for_setup
+          BEFORE=$(docker exec antcdp-smoke sha256sum /app/data/install-password)
+          docker restart antcdp-smoke
+          wait_for_setup
+          test "$BEFORE" = "$(docker exec antcdp-smoke sha256sum /app/data/install-password)"
+
 
       - name: Push tested dev image
         id: publish

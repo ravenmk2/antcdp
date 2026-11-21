@@ -48,12 +48,6 @@ func registerAgentSandboxes(user, admin, infra *gin.RouterGroup, o Options) {
 		}
 		return s.GetConnection(c.Request.Context(), rawSession(c))
 	}))
-	infra.POST("/connection/preview", agentJSON[agents.ConnectionWrite](o, 64<<10, func(c *gin.Context, w agents.ConnectionWrite) (*agents.Result, error) {
-		return s.PreviewConnection(c.Request.Context(), rawSession(c), w)
-	}))
-	infra.PUT("/connection", agentJSON[agents.ConnectionWrite](o, 64<<10, func(c *gin.Context, w agents.ConnectionWrite) (*agents.Result, error) {
-		return s.SaveConnection(c.Request.Context(), rawSession(c), c.GetHeader("If-Match"), c.GetHeader("Idempotency-Key"), w)
-	}))
 	registerSandboxSpecs(infra, o)
 	infra.POST("/connection/health-check", agentJSON[struct{}](o, 1024, func(c *gin.Context, _ struct{}) (*agents.Result, error) {
 		return s.CheckConnection(c.Request.Context(), rawSession(c))

@@ -35,7 +35,7 @@ func (s *Store) sandboxSchemaReady(ctx context.Context) error {
 		}
 	}
 	var ready bool
-	if err := s.db.GetContext(ctx, &ready, "SELECT EXISTS(SELECT 1 FROM sandbox_connection WHERE id=1) AND EXISTS(SELECT 1 FROM cloud_computer_spec_binding WHERE owner_key=0)"); err != nil {
+	if err := s.db.GetContext(ctx, &ready, "SELECT EXISTS(SELECT 1 FROM cloud_computer_spec_binding WHERE owner_key=0)"); err != nil {
 		return err
 	}
 	if !ready {

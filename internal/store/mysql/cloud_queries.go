@@ -1,6 +1,7 @@
 package mysql
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"time"
@@ -25,12 +26,6 @@ func (t *agentsTx) CloudRootWorkPending(root uint64) (bool, error) {
  OR EXISTS(SELECT 1 FROM cloud_computer_operation WHERE root_run_id=? AND finished_at IS NULL)
  OR EXISTS(SELECT 1 FROM agent_resource_reference WHERE resource_kind IN ('cloud_lease','local_worker') AND resource_id=? AND released_at IS NULL)`, root, root, root, root, root, root)
 	return busy, e
-}
-
-func (t *agentsTx) CloudResetSessions() ([]a.SessionRow, error) {
-	rows := []a.SessionRow{}
-	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentSessionColumns+" FROM agent_session WHERE session_kind='root' AND (EXISTS(SELECT 1 FROM agent_input i WHERE i.session_id=agent_session.id AND i.status='pending') OR EXISTS(SELECT 1 FROM agent_interaction q WHERE q.session_id=agent_session.id AND q.status IN ('pending','waiting','continued','reply_queued','approved_once') AND q.approval_consumed_at IS NULL)) ORDER BY id FOR UPDATE")
-	return rows, e
 }
 
 func (t *agentsTx) PersonalComputer(owner uint64, lock bool) (*a.CloudComputerRow, error) {
@@ -144,31 +139,17 @@ func (t *agentsTx) SessionUploadBlocked(computerID, sessionID uint64) (bool, err
  OR EXISTS(SELECT 1 FROM agent_cloud_computer_lease l JOIN agent_run r ON r.id=l.root_run_id WHERE l.cloud_computer_id=? AND l.released_at IS NULL AND l.mode='exclusive' AND r.session_id<>?)`, computerID, computerID, computerID, computerID, computerID, sessionID)
 	return blocked, err
 }
-func (t *agentsTx) CloudTopology() (int, int, error) {
-	var v struct {
-		Count int `db:"count"`
-		Busy  int `db:"busy"`
-	}
-	e := t.tx.GetContext(t.ctx, &v, `SELECT
- (SELECT COUNT(*) FROM cloud_computer WHERE deleted_at IS NULL) AS count,
- (SELECT COUNT(*) FROM agent_cloud_computer_lease WHERE released_at IS NULL)
- +(SELECT COUNT(*) FROM cloud_computer_operation WHERE finished_at IS NULL AND kind<>'command')
- +(SELECT COUNT(*) FROM sandbox_lease WHERE released_at IS NULL)
- +(SELECT COUNT(*) FROM sandbox_operation WHERE finished_at IS NULL)
- +(SELECT COUNT(*) FROM sandbox_instance i WHERE i.finished_at IS NULL AND i.backend_generation=(SELECT backend_generation FROM sandbox_connection WHERE id=1) AND NOT EXISTS(SELECT 1 FROM cloud_computer c WHERE c.sandbox_instance_id=i.id))
- +(SELECT COUNT(*) FROM sandbox_execution WHERE finished_at IS NULL)
- +(SELECT COUNT(*) FROM agent_resource_reference WHERE resource_kind IN ('cloud_computer','cloud_lease') AND released_at IS NULL)
- +(SELECT COUNT(*) FROM agent_run WHERE settled_at IS NULL)
- +(SELECT COUNT(*) FROM agent_file_operation WHERE finished_at IS NULL) AS busy`)
-	return v.Count, v.Busy, e
-}
-func (t *agentsTx) ResetCloudResources(generation uint64, now time.Time) error {
-	_, e := t.tx.ExecContext(t.ctx, `UPDATE cloud_computer SET state='uninitialized',backend_generation=?,sandbox_instance_id=NULL,storage_generation=storage_generation+1,volume_id=NULL,volume_name=NULL,volume_state='absent',volume_cleanup_state='not_requested',applied_spec_id=NULL,applied_spec_version=NULL,error_code=NULL,fence_version=fence_version+1,row_version=row_version+1,idle_since=?,updated_at=? WHERE deleted_at IS NULL`, generation, now, now)
-	if e != nil {
-		return e
-	}
-	_, e = t.tx.ExecContext(t.ctx, "DELETE FROM agent_cloud_computer_skill_state")
-	return e
+func (s *Store) SandboxInUse(ctx context.Context) (bool, error) {
+	var busy bool
+	err := s.db.GetContext(ctx, &busy, `SELECT EXISTS(SELECT 1 FROM cloud_computer WHERE deleted_at IS NULL)
+ OR EXISTS(SELECT 1 FROM sandbox_instance WHERE finished_at IS NULL)
+ OR EXISTS(SELECT 1 FROM sandbox_lease WHERE released_at IS NULL)
+ OR EXISTS(SELECT 1 FROM sandbox_operation WHERE finished_at IS NULL)
+ OR EXISTS(SELECT 1 FROM sandbox_execution WHERE finished_at IS NULL)
+ OR EXISTS(SELECT 1 FROM agent_cloud_computer_lease WHERE released_at IS NULL)
+ OR EXISTS(SELECT 1 FROM cloud_computer_operation WHERE finished_at IS NULL AND kind<>'command')
+ OR EXISTS(SELECT 1 FROM agent_file_operation WHERE finished_at IS NULL)`)
+	return busy, err
 }
 func (t *agentsTx) cloudOperationQuery(where string, args ...any) (*a.CloudOperationRow, error) {
 	v := &a.CloudOperationRow{}

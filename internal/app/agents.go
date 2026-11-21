@@ -68,7 +68,7 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 		}
 		return client.Open(ctx)
 	}
-	sandboxes := &agents.CloudService{Host: service, Cipher: installer.SandboxSecret, ControlKey: installer.SandboxControlKey, InstallationID: installer.SandboxInstallationID, Epoch: epoch, Factory: opensandbox.NewFactory(), ProtectedTargets: func() ([]string, error) { return agentSandboxProtectedTargets(installer) }}
+	sandboxes := &agents.CloudService{Host: service, Connection: installer.SandboxConnection, ControlKey: installer.SandboxControlKey, InstallationID: installer.SandboxInstallationID, Epoch: epoch, Factory: opensandbox.NewFactory(), ProtectedTargets: func() ([]string, error) { return agentSandboxProtectedTargets(installer) }}
 	sandboxes.PrepareWorkspace = sandboxes.InitializeComputer
 	sandboxes.VerifyEnvironment = sandboxes.VerifyWorkspaceEnvironment
 	sandboxes.ExecutionReconciler = sandboxes.ReconcileExecutions
@@ -203,16 +203,28 @@ func maintainAgentResources(ctx context.Context, installer *install.Service, app
 	// Slow MCP endpoints cannot delay skill validation, file cleanup or timed
 	// interactions. Each queue has one bounded worker, never overlapping itself.
 	var workers sync.WaitGroup
+	sandboxWorker := func(work func(context.Context, int) error, limit int) func(context.Context) error {
+		return func(ctx context.Context) error {
+			connection, err := installer.SandboxConnection()
+			if err != nil {
+				return err
+			}
+			if connection.MaintenanceState != "normal" {
+				return nil
+			}
+			return work(ctx, limit)
+		}
+	}
 	for _, process := range []func(context.Context) error{
 		func(c context.Context) error { return app.Resources.ProcessSkills(c, 4) },
 		func(c context.Context) error { return app.Resources.CleanupMCPDebug(c) },
 		func(c context.Context) error { return app.Resources.CleanupSkills(c, 20) },
 		func(c context.Context) error { return app.Service.ProcessFileMaintenance(c, 20) },
 		func(c context.Context) error { return app.Service.ProcessPendingCompactions(c, 4) },
-		func(c context.Context) error { return app.Sandboxes.ReconcileResources(c, 32) },
-		func(c context.Context) error { return app.Sandboxes.ProcessPending(c, 8) },
-		func(c context.Context) error { return app.Sandboxes.ProcessWorkspaceOperations(c, 8) },
-		func(c context.Context) error { return app.Sandboxes.ProcessFileOperations(c, 8) },
+		sandboxWorker(app.Sandboxes.ReconcileResources, 32),
+		sandboxWorker(app.Sandboxes.ProcessPending, 8),
+		sandboxWorker(app.Sandboxes.ProcessWorkspaceOperations, 8),
+		sandboxWorker(app.Sandboxes.ProcessFileOperations, 8),
 	} {
 		workers.Go(func() {
 			poll := time.NewTicker(time.Second)

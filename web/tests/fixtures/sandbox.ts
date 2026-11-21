@@ -14,8 +14,8 @@ export const sandboxCapabilities: CloudCapabilities = {
   volume_deletion: "unsupported",
 };
 export const sandboxConnection: SandboxConnection = {
-  requires_confirmation: true,
-  config_version: "2",
+  configured: true,
+  type: "opensandbox",
   endpoint: "https://sandbox.example.com",
   access_mode: "direct",
   connect_timeout_seconds: 10,
@@ -26,7 +26,6 @@ export const sandboxConnection: SandboxConnection = {
   capabilities: sandboxCapabilities,
   last_diagnostic: null,
   last_diagnostic_at: null,
-  version: "v1",
 };
 export const computer: CloudComputer = {
   id: "9",

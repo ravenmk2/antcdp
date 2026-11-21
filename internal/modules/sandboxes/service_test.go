@@ -93,8 +93,8 @@ func fixture(t *testing.T) (*Service, *memory, *remote, *Instance) {
 	t.Helper()
 	m := newMemory()
 	p := &remote{}
-	s := &Service{Epoch: "worker", Transact: m.transact, InstallationID: func() (string, error) { return "installation", nil }, Open: func(context.Context, uint64, uint64) (sandboxcore.Provider, error) { return p, nil }}
-	v, err := s.Reserve(context.Background(), 1, 1, "create-token", json.RawMessage(`{"image":"test:1"}`))
+	s := &Service{Epoch: "worker", Transact: m.transact, InstallationID: func() (string, error) { return "installation", nil }, Open: func(context.Context, uint64) (sandboxcore.Provider, error) { return p, nil }}
+	v, err := s.Reserve(context.Background(), 1, "create-token", json.RawMessage(`{"image":"test:1"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +127,7 @@ func TestCreateLostAcknowledgementFindsOriginalWithoutReplay(t *testing.T) {
 	if err != nil || v.State != "ready" || p.creates != 1 {
 		t.Fatal(v, err, p.creates)
 	}
-	if _, err = s.Reserve(context.Background(), 1, 1, "create-token", json.RawMessage(`{"image":"different:1"}`)); err == nil {
+	if _, err = s.Reserve(context.Background(), 1, "create-token", json.RawMessage(`{"image":"different:1"}`)); err == nil {
 		t.Fatal("token accepted changed configuration")
 	}
 	for _, op := range m.operations {

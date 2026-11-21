@@ -9,7 +9,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/sandboxes"
 )
 
-type SandboxConnectionRow = sandboxes.Connection
+type SandboxConnection = sandboxes.Connection
 
 // A computer keeps one current runtime and volume; replacement never creates a
 // second logical computer or changes a session's binding.
@@ -85,10 +85,7 @@ type CloudRepository interface {
 	InsertCloudReceipt(*Receipt) error
 	SaveCloudReceipt(*Receipt) error
 	Sandbox() sandboxes.Repository
-	Connection(bool) (*SandboxConnectionRow, error)
-	SaveConnection(*SandboxConnectionRow) error
-	BumpConnectionTopology() error
-	SaveConnectionDiagnostic(uint64, time.Time, json.RawMessage) error
+
 	SandboxSpecs() ([]SandboxSpec, error)
 	SandboxSpec(uint64, bool) (*SandboxSpec, error)
 	InsertSandboxSpec(*SandboxSpec, uint64) error
@@ -113,9 +110,7 @@ type CloudRepository interface {
 	SaveLease(*CloudLeaseRow) error
 	CloudActivity(uint64) (CloudActivity, error)
 	SessionUploadBlocked(computerID, sessionID uint64) (bool, error)
-	ResetCloudResources(uint64, time.Time) error
-	CloudTopology() (int, int, error)
-	CloudResetSessions() ([]SessionRow, error)
+
 	ComputerSessions(uint64) ([]SessionRow, error)
 	CloudRootWorkPending(uint64) (bool, error)
 	SkillState(uint64, uint64, bool) (*CloudSkillStateRow, error)

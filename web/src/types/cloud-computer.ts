@@ -34,7 +34,9 @@ export interface SpecReference {
   agent_id: string | null;
   name: string;
 }
-export interface SandboxConnection extends Versioned {
+export interface SandboxConnection {
+  configured: boolean;
+  type: string;
   endpoint: string | null;
   access_mode: "direct" | "server_proxy";
   connect_timeout_seconds: number;
@@ -43,33 +45,12 @@ export interface SandboxConnection extends Versioned {
   backend_generation: string;
   maintenance_state: string;
   capabilities: CloudCapabilities;
-  requires_confirmation: boolean;
-  config_version: string;
   last_diagnostic: {
-    config_version: string;
     healthy: boolean;
     elapsed_ms: number;
     error_code: string;
   } | null;
   last_diagnostic_at: string | null;
-}
-export interface CloudConnectionWrite {
-  endpoint: string;
-  access_mode: "direct" | "server_proxy";
-  connect_timeout_seconds: number;
-  operation_timeout_seconds: number;
-  authentication?: {
-    auth_method: "api_key";
-    secret: { operation: "keep" | "replace" | "clear"; value?: string };
-  };
-  confirmation_token?: string;
-}
-export interface ConnectionPreview {
-  confirmation_token: string;
-  affected_computers: number;
-  busy_activities: number;
-  resets_storage: boolean;
-  expires_at: string;
 }
 export type CloudState =
   | "uninitialized"

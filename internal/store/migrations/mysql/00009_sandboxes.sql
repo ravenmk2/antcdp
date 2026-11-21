@@ -1,31 +1,6 @@
 -- +goose NO TRANSACTION
 -- +goose Up
 
-CREATE TABLE `sandbox_connection` (
-    backend_type VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'opensandbox',
-    `id` BIGINT UNSIGNED NOT NULL,
-    `endpoint` VARCHAR(2048) CHARACTER SET ascii COLLATE ascii_bin NULL,
-    `access_mode` VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    `connect_timeout_seconds` INT UNSIGNED NOT NULL,
-    `operation_timeout_seconds` INT UNSIGNED NOT NULL,
-    `secret_ciphertext` MEDIUMBLOB NULL,
-    `secret_format_version` BIGINT UNSIGNED NULL,
-    `secret_key_version` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL,
-    `secret_revision` BIGINT UNSIGNED NOT NULL,
-    `config_version` BIGINT UNSIGNED NOT NULL,
-    `row_version` BIGINT UNSIGNED NOT NULL,
-    `backend_generation` BIGINT UNSIGNED NOT NULL,
-    `topology_version` BIGINT UNSIGNED NOT NULL,
-    `maintenance_state` VARCHAR(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-    `verified_capabilities` JSON NULL,
-    `last_diagnostic` JSON NULL,
-    `last_diagnostic_at` DATETIME(3) NULL,
-    `updated_by_user_id` BIGINT UNSIGNED NULL,
-    `created_at` DATETIME(3) NOT NULL,
-    `updated_at` DATETIME(3) NOT NULL,
-    PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
 CREATE TABLE `sandbox_spec` (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     name VARCHAR(128) NOT NULL,
@@ -61,7 +36,6 @@ CREATE TABLE `sandbox_admin_command_receipt` (
 
 CREATE TABLE `sandbox_instance` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `connection_id` BIGINT UNSIGNED NOT NULL,
     `backend_generation` BIGINT UNSIGNED NOT NULL,
     `remote_id` VARCHAR(255) CHARACTER SET ascii COLLATE ascii_bin NULL,
     `creation_token` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -79,7 +53,7 @@ CREATE TABLE `sandbox_instance` (
     `finished_at` DATETIME(3) NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uq_sandbox_instance_creation (creation_token),
-    UNIQUE KEY uq_sandbox_instance_remote (connection_id,backend_generation,remote_id),
+    UNIQUE KEY uq_sandbox_instance_remote (backend_generation,remote_id),
     KEY idx_sandbox_instance_state (state,updated_at,id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -161,7 +135,6 @@ CREATE TABLE `sandbox_operation` (
     KEY idx_sandbox_operation_due (status,updated_at,id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-INSERT INTO sandbox_connection(id,access_mode,connect_timeout_seconds,operation_timeout_seconds,secret_revision,config_version,row_version,backend_generation,topology_version,maintenance_state,created_at,updated_at) VALUES(1,'direct',10,300,1,1,1,1,1,'normal',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3));
 
 -- +goose Down
 SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Restore matching database and data backups to downgrade';

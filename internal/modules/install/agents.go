@@ -1,6 +1,7 @@
 package install
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,7 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ravenmk2/antcdp/internal/platform/config"
+	"github.com/ravenmk2/antcdp/internal/modules/sandboxes"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 )
 
@@ -17,13 +18,6 @@ func (s *Service) AgentResourceSecret(purpose, value string, seal bool) (string,
 		return "", errors.New("invalid agent resource secret purpose")
 	}
 	return s.resourceSecret("agentresources", purpose, value, seal)
-}
-
-func (s *Service) SandboxSecret(purpose, value string, seal bool) (string, error) {
-	if !strings.HasPrefix(purpose, "sandboxes/") {
-		return "", errors.New("invalid sandbox secret purpose")
-	}
-	return s.resourceSecret("sandboxes", purpose, value, seal)
 }
 
 // SandboxControlKey is installation-scoped infrastructure key material. It is
@@ -47,14 +41,7 @@ func (s *Service) SandboxInstallationID() (string, error) {
 	if s.state != Ready || len(s.key) != 32 {
 		return "", errors.New("installation is not ready")
 	}
-	f, err := config.Read(s.path("config.yaml"))
-	if err != nil || len(f.InstallationID) != 32 {
-		return "", errors.New("installation identity unavailable")
-	}
-	if _, err = hex.DecodeString(f.InstallationID); err != nil || strings.ToLower(f.InstallationID) != f.InstallationID {
-		return "", errors.New("installation identity unavailable")
-	}
-	return f.InstallationID, nil
+	return s.installationID, nil
 }
 
 func (s *Service) AgentETag(value string) string {
@@ -70,13 +57,63 @@ func (s *Service) AgentETag(value string) string {
 func (s *Service) OutboundProtectedHosts() ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	f, err := config.Read(s.path("config.yaml"))
-	if err != nil {
-		return nil, errors.New("outbound protection unavailable")
-	}
 	u, err := url.Parse(s.runtime.Server.PublicURL)
 	if err != nil {
 		return nil, errors.New("outbound protection unavailable")
 	}
-	return []string{f.Database.Host, u.Hostname()}, nil
+	return []string{s.runtime.Database.Host, u.Hostname()}, nil
+}
+
+func (s *Service) bindSandbox(ctx context.Context, b Backend, m *marker) error {
+	cfg := s.runtime.Sandbox
+	s.sandboxBlocked = false
+	s.sandboxGeneration = 1
+	if m.SandboxBackend != nil {
+		if m.SandboxBackend.Generation == 0 || len(m.SandboxBackend.TargetFingerprint) != 64 {
+			return errors.New("invalid sandbox backend marker")
+		}
+		s.sandboxGeneration = m.SandboxBackend.Generation
+	}
+	if cfg == nil {
+		return nil
+	}
+	target := cfg.TargetFingerprint()
+	if m.SandboxBackend != nil && m.SandboxBackend.TargetFingerprint == target {
+		return nil
+	}
+	used, err := b.SandboxInUse(ctx)
+	if err != nil {
+		return err
+	}
+	if used {
+		s.sandboxBlocked = true
+		return nil
+	}
+	if m.SandboxBackend != nil {
+		s.sandboxGeneration++
+	}
+	m.SandboxBackend = &backendMarker{Generation: s.sandboxGeneration, TargetFingerprint: target}
+	return writeJSON(s.path("installation.json"), m)
+}
+
+func (s *Service) SandboxConnection() (*sandboxes.Connection, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.state != Ready {
+		return nil, errors.New("installation is not ready")
+	}
+	c := &sandboxes.Connection{BackendGeneration: s.sandboxGeneration, MaintenanceState: "unconfigured"}
+	if cfg := s.runtime.Sandbox; cfg != nil {
+		c.BackendType = cfg.Type
+		c.Endpoint = &cfg.Endpoint
+		c.APIKey = cfg.APIKey
+		c.AccessMode = cfg.AccessMode
+		c.ConnectTimeout = cfg.ConnectTimeout
+		c.OperationTimeout = cfg.OperationTimeout
+		c.MaintenanceState = "normal"
+		if s.sandboxBlocked {
+			c.MaintenanceState = "blocked"
+		}
+	}
+	return c, nil
 }

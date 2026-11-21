@@ -49,6 +49,7 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)
 	flags.SetOutput(errOut)
 	var overrides config.Overrides
+	flags.StringVar(&overrides.ConfigDir, "config-dir", "", "deployment configuration directory (default: <cwd>/conf)")
 	flags.StringVar(&overrides.DataDir, "data-dir", "", "persistent data directory (default: <cwd>/data)")
 	flags.StringVar(&overrides.Listen, "listen", "", "HTTP listen address")
 	flags.StringVar(&overrides.PublicURL, "public-url", "", "public HTTP(S) origin")
@@ -61,9 +62,8 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
 	}
-	r, _, err := config.Load(overrides)
-	var fileErr *config.FileError
-	if err != nil && !errors.As(err, &fileErr) {
+	r, err := config.Load(overrides)
+	if err != nil {
 		return err
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)

@@ -2,9 +2,7 @@ package mysql
 
 import (
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"time"
 
 	driver "github.com/go-sql-driver/mysql"
 	a "github.com/ravenmk2/antcdp/internal/modules/agents"
@@ -78,15 +76,6 @@ func (t *agentsTx) DeleteSpecBinding(agent uint64) error {
 	_, err := t.tx.ExecContext(t.ctx, "DELETE FROM cloud_computer_spec_binding WHERE owner_key=?", agent)
 	return err
 }
-func (t *agentsTx) BumpConnectionTopology() error {
-	_, err := t.tx.ExecContext(t.ctx, "UPDATE sandbox_connection SET topology_version=topology_version+1 WHERE id=1")
-	return err
-}
-func (t *agentsTx) SaveConnectionDiagnostic(version uint64, start time.Time, data json.RawMessage) error {
-	_, err := t.tx.ExecContext(t.ctx, "UPDATE sandbox_connection SET last_diagnostic=?,last_diagnostic_at=? WHERE id=1 AND config_version=? AND COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(last_diagnostic,'$.started_ns')) AS UNSIGNED),0) < ?", data, start, version, start.UnixNano())
-	return err
-}
-
 func specNameError(err error) error {
 	var dbErr *driver.MySQLError
 	if errors.As(err, &dbErr) && dbErr.Number == 1062 {

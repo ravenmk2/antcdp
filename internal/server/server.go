@@ -120,19 +120,6 @@ func New(o Options) http.Handler {
 		}
 		c.Next()
 	})
-	setup.POST("/database-check", func(c *gin.Context) {
-		var d config.Database
-		if !httpx.Decode(c, &d) {
-			return
-		}
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
-		defer cancel()
-		if err := o.Installer.CheckDatabase(ctx, d); err != nil {
-			httpx.Write(c, err)
-			return
-		}
-		httpx.Data(c, 200, gin.H{"reachable": true, "compatible": true, "empty_schema": true})
-	})
 	setup.POST("/install", func(c *gin.Context) {
 		var req install.Request
 		if !httpx.Decode(c, &req) {

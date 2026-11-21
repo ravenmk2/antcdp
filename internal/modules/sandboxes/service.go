@@ -16,8 +16,8 @@ import (
 
 // Reserve records an immutable instance identity before any remote creation.
 // A token identifies the same request, never a request to repeat a side effect.
-func (s *Service) Reserve(ctx context.Context, connection, generation uint64, token string, config json.RawMessage) (*Instance, error) {
-	if connection == 0 || generation == 0 || token == "" || !json.Valid(config) {
+func (s *Service) Reserve(ctx context.Context, generation uint64, token string, config json.RawMessage) (*Instance, error) {
+	if generation == 0 || token == "" || !json.Valid(config) {
 		return nil, fail("SANDBOX_REQUEST_INVALID")
 	}
 	var out *Instance
@@ -27,14 +27,14 @@ func (s *Service) Reserve(ctx context.Context, connection, generation uint64, to
 			return err
 		}
 		if previous != nil {
-			if previous.ConnectionID != connection || previous.BackendGeneration != generation || !sameJSON(previous.EffectiveConfig, config) {
+			if previous.BackendGeneration != generation || !sameJSON(previous.EffectiveConfig, config) {
 				return fail("SANDBOX_TOKEN_CONFLICT")
 			}
 			out = previous
 			return nil
 		}
 		now := nowUTC()
-		out = &Instance{ConnectionID: connection, BackendGeneration: generation, CreationToken: token, State: "reserved", EffectiveConfig: config, Capabilities: json.RawMessage(`{}`), ExecutorEpoch: s.Epoch, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
+		out = &Instance{BackendGeneration: generation, CreationToken: token, State: "reserved", EffectiveConfig: config, Capabilities: json.RawMessage(`{}`), ExecutorEpoch: s.Epoch, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
 		return r.InsertInstance(out)
 	})
 	return out, err
@@ -187,7 +187,7 @@ func (s *Service) Create(ctx context.Context, id uint64, spec sandboxcore.Create
 		}
 		return v, nil
 	}
-	p, err := s.Open(ctx, v.ConnectionID, v.BackendGeneration)
+	p, err := s.Open(ctx, v.BackendGeneration)
 	if err != nil {
 		return v, err
 	}

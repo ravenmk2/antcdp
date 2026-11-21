@@ -56,7 +56,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 		return json.RawMessage(`{}`), nil
 	}}
 	remote := &artifactMemoryProvider{sandboxMemoryProvider: &sandboxMemoryProvider{resources: map[string]sb.Observation{}}, files: map[string][]byte{}}
-	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Cipher: f.Models.Cipher, InstallationID: func() (string, error) { return f.Installation, nil }, Factory: artifactMemoryFactory{remote}, PrepareWorkspace: func(context.Context, *a.SandboxAccess, uint64) error { return nil }, VerifyEnvironment: func(context.Context, *a.SandboxAccess) (a.SandboxCapabilities, []a.DiagnosticCheck, error) {
+	svc := &a.CloudService{Host: host, Epoch: host.Epoch, Connection: fixtureConnection, InstallationID: func() (string, error) { return f.Installation, nil }, Factory: artifactMemoryFactory{remote}, PrepareWorkspace: func(context.Context, *a.SandboxAccess, uint64) error { return nil }, VerifyEnvironment: func(context.Context, *a.SandboxAccess) (a.SandboxCapabilities, []a.DiagnosticCheck, error) {
 		return a.SandboxCapabilities{Execution: "supported", FileTransfer: "supported"}, []a.DiagnosticCheck{{Name: "fixture", Status: "succeeded"}}, nil
 	}}
 	svc.EndpointTargets = func(string) ([]string, error) { return []string{"192.0.2.19"}, nil }
@@ -241,7 +241,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	runtimeEnd(t, f, x)
 	before = remote.requests
 	// A replacement worker has only durable intent, never the original claim.
-	recovery := &a.CloudService{Host: host, Epoch: "artifact-transfer-recovery", Cipher: svc.Cipher, InstallationID: svc.InstallationID, Factory: svc.Factory}
+	recovery := &a.CloudService{Host: host, Epoch: "artifact-transfer-recovery", Connection: svc.Connection, InstallationID: svc.InstallationID, Factory: svc.Factory}
 	if e = recovery.ProcessFileOperations(ctx, 25); e != nil {
 		t.Fatal("file reconciliation", e)
 	}

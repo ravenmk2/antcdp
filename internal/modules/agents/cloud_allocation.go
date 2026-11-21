@@ -27,20 +27,17 @@ func sessionCWD(session *SessionRow) (string, error) {
 	}
 	return "/data/sessions/" + idString(id), nil
 }
-func newComputer(cr CloudRepository, connection *SandboxConnectionRow, owner uint64, agent *uint64, now time.Time) (*CloudComputerRow, error) {
+func newComputer(cr CloudRepository, connection *SandboxConnection, owner uint64, agent *uint64, now time.Time) (*CloudComputerRow, error) {
 	v := &CloudComputerRow{OwnerUserID: owner, PoolAgentID: agent, State: "uninitialized", BackendGeneration: connection.BackendGeneration, StorageGeneration: 1, VolumeState: "absent", VolumeCleanupState: "not_requested", EffectiveEnvironment: json.RawMessage(`null`), Capabilities: json.RawMessage(`null`), IdleSince: now, LastActivityAt: now, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
 	if e := cr.InsertComputer(v); e != nil {
-		return nil, e
-	}
-	if e := cr.BumpConnectionTopology(); e != nil {
 		return nil, e
 	}
 	return v, nil
 }
 
-// Allocation runs under the owner/Agent and singleton connection locks. A full
+// Allocation runs under the owner and Agent locks. A full
 // robot pool leaves the input queued, without reserving a root worker or budget.
-func (s *CloudService) allocateSession(cr CloudRepository, st StateRepository, c *SandboxConnectionRow, agent *Definition, session *SessionRow, now time.Time) (*CloudComputerRow, error) {
+func (s *CloudService) allocateSession(cr CloudRepository, st StateRepository, c *SandboxConnection, agent *Definition, session *SessionRow, now time.Time) (*CloudComputerRow, error) {
 	var computer *CloudComputerRow
 	var e error
 	if session.CloudComputerID != nil {
@@ -137,7 +134,7 @@ func (s *CloudService) prepareCloudAdmission(ctx context.Context, tx identity.Tx
 	if e != nil {
 		return nil, false, e
 	}
-	c, e := cr.Connection(true)
+	c, e := s.Connection()
 	if e != nil {
 		return nil, false, e
 	}
@@ -295,7 +292,7 @@ func (s *CloudService) createCloudLease(tx identity.Tx, computer *CloudComputerR
 
 type cloudOperationIntent = cloudcomputers.OperationIntent
 
-func (s *CloudService) queueCloudOperation(cr CloudRepository, connection *SandboxConnectionRow, v *CloudComputerRow, kind, actorKind, actorID string, receipt, _ *uint64, now time.Time) (*CloudOperationRow, error) {
+func (s *CloudService) queueCloudOperation(cr CloudRepository, connection *SandboxConnection, v *CloudComputerRow, kind, actorKind, actorID string, receipt, _ *uint64, now time.Time) (*CloudOperationRow, error) {
 	if connection.Endpoint == nil && (kind != "delete" || v.RuntimeID != nil || v.VolumeID != nil) {
 		return nil, httpx.E(409, "SANDBOX_NOT_CONFIGURED", "请管理员配置沙箱服务连接")
 	}
@@ -363,7 +360,7 @@ func (s *CloudService) queueCloudOperation(cr CloudRepository, connection *Sandb
 			intent.VolumeNew = kind == "create" && v.AppliedSpecVersion == nil && v.VolumeState != "ready"
 		}
 		token := cryptox.ID()
-		instance := &sandboxes.Instance{ConnectionID: 1, BackendGeneration: v.BackendGeneration, CreationToken: token, State: "reserved", EffectiveConfig: v.EffectiveEnvironment, Capabilities: json.RawMessage(`{}`), ExecutorEpoch: s.Epoch, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
+		instance := &sandboxes.Instance{BackendGeneration: v.BackendGeneration, CreationToken: token, State: "reserved", EffectiveConfig: v.EffectiveEnvironment, Capabilities: json.RawMessage(`{}`), ExecutorEpoch: s.Epoch, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
 		if e = cr.Sandbox().InsertInstance(instance); e != nil {
 			return nil, e
 		}
