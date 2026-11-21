@@ -1,79 +1,264 @@
 @layer components {
   .scope:global(.page.page-wide) {
-    --console-list-inset: 24px;
+    --console-list-inset: 28px;
     display: flex;
-    min-height: calc(100dvh - var(--console-topbar-height));
-    flex-direction: column;
-    padding-block: 24px;
+    height: calc(100dvh - var(--console-topbar-height));
+    min-height: 360px;
+    padding-block: 24px 28px;
   }
   .scope .panel {
-    display: flex;
-    flex: 1 0 auto;
-    flex-direction: column;
-    overflow: clip;
+    display: grid;
+    flex: 1;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     border-radius: 16px;
   }
-  .scope .panel > :global(.page-header) {
+  .scope .header:global(.page-header) {
     align-items: center;
     margin: 0;
-    padding: 22px var(--console-list-inset) 18px;
+    padding: 22px var(--console-list-inset);
     border-bottom: 1px solid var(--border-subtle);
-    scroll-margin-top: calc(var(--console-topbar-height) + 24px);
-    outline: none;
+    background: linear-gradient(
+      106deg,
+      color-mix(in srgb, var(--primary) 7%, var(--surface)),
+      var(--surface) 48%
+    );
   }
-  .scope .panel > :global(.page-header .page-title) {
-    margin-bottom: 4px;
-    font-size: 26px;
-  }
-  .scope .panel :global(.table-toolbar > .toolbar) {
+  .scope .heading,
+  .scope .headerActions {
+    display: flex;
     align-items: center;
+  }
+  .scope .heading {
+    min-width: 0;
+    gap: 14px;
+  }
+  .scope .heading :global(.page-title) {
+    margin: 0;
+    font-size: 28px;
+  }
+  .scope .headingIcon,
+  .scope .agentIcon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+  }
+  .scope .headingIcon {
+    width: 46px;
+    height: 46px;
+    border: 1px solid
+      color-mix(in srgb, var(--primary) 21%, var(--border-subtle));
+    border-radius: 13px;
+    background: var(--surface);
+    color: var(--primary);
+  }
+  .scope .headingIcon svg {
+    width: 24px;
+    height: 24px;
+  }
+  .scope .headerActions {
+    flex-shrink: 0;
+  }
+  .scope .toolbar,
+  .scope .filters,
+  .scope .toolbarActions,
+  .scope .typeFilter {
+    display: flex;
+    align-items: center;
+  }
+  .scope .toolbar {
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 16px;
     padding: 14px var(--console-list-inset);
   }
-  .scope .panel :global(.table-scroll .data-table :is(th, td)) {
-    padding-inline: var(--console-list-inset);
+  .scope .typeFilter {
+    flex: none;
+    gap: 2px;
+    padding: 3px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--control-radius);
+    background: var(--surface-subtle);
   }
-  .scope .panel :global(.table-scroll .data-table td) {
-    height: 52px;
-    padding-block: 9px;
+  .scope .typeFilter button {
+    min-height: 32px;
+    padding: 0 14px;
+    border-radius: calc(var(--control-radius) - 2px);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
   }
-  .scope .panel :global(.data-table) {
-    table-layout: fixed;
+  .scope .typeFilter button[aria-pressed="true"] {
+    background: var(--surface);
+    box-shadow: 0 0 0 1px var(--border-subtle);
+    color: var(--primary);
   }
-  .scope .panel :global(.data-table th:first-child) {
-    width: 34%;
+  .scope .filters {
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    gap: 10px;
   }
-  .scope .panel :global(.data-table th:nth-child(3)) {
-    width: 18%;
+  .scope .filters :global([data-slot="select-trigger"]) {
+    width: 136px;
   }
-  .scope
-    .panel
-    :global(.data-table :is(td, th):nth-child(n + 4):nth-child(-n + 6)) {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
+  .scope .toolbarActions {
+    min-width: 86px;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-left: auto;
   }
-  .scope .panel :global(.data-table td:last-child),
-  .scope .panel :global(.data-table th:last-child) {
-    text-align: center;
-  }
-  .scope .panel :global(.data-table td p) {
+  .scope .search {
+    position: relative;
+    width: clamp(230px, 24vw, 340px);
     max-width: 100%;
   }
-  .scope .panel :global(.empty-state) {
+  .scope .searchIcon {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 12px;
+    width: 16px;
+    height: 16px;
+    translate: 0 -50%;
+    color: var(--muted);
+    pointer-events: none;
+  }
+  .scope .clearSearch {
+    inset-block-start: 50%;
+    inset-inline-end: 5px;
+    translate: 0 -50%;
+  }
+  .scope .body {
+    min-width: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .scope .body:focus-visible {
+    outline-offset: -2px;
+  }
+  .scope .body > :global(.table-scroll) {
+    overflow: visible;
+  }
+  .scope .table:global(.data-table) {
+    min-width: 880px;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .scope .table th {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+  }
+  .scope .table :is(th, td) {
+    padding-inline: 14px;
+  }
+  .scope .table :is(th, td):first-child {
+    padding-inline-start: var(--console-list-inset);
+  }
+  .scope .table td {
+    height: 60px;
+    padding-block: 8px;
+    font-size: 14px;
+  }
+  .scope .table th:first-child {
+    width: 39%;
+  }
+  .scope .table th:nth-child(2) {
+    width: 12%;
+  }
+  .scope .table th:nth-child(3) {
+    width: 15%;
+  }
+  .scope .table th:nth-child(n + 4):nth-child(-n + 6) {
+    width: 8%;
+  }
+  .scope .table :is(td, th):nth-child(n + 4) {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .scope .table td:nth-child(n + 4):nth-child(-n + 6) {
+    color: var(--text);
+  }
+  .scope .table tbody tr:focus-within {
+    background: var(--table-row-hover);
+  }
+  .scope .identity,
+  .scope .identityLink,
+  .scope .scopeValue {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+  }
+  .scope .identity {
+    gap: 4px;
+  }
+  .scope .identityLink {
     flex: 1;
+    gap: 12px;
+    border-radius: var(--control-radius);
+    color: var(--text);
+  }
+  .scope .agentIcon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--surface-subtle);
+    color: var(--muted);
+  }
+  .scope .agentIcon[data-agent-type="service"] {
+    background: color-mix(in srgb, var(--primary) 10%, var(--surface));
+    color: var(--primary);
+  }
+  .scope .agentIcon svg,
+  .scope .openIndicator,
+  .scope .scopeValue svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+  .scope .identityText {
+    display: grid;
+    min-width: 0;
+    flex: 1;
+    gap: 2px;
+  }
+  .scope .agentName,
+  .scope .agentDescription {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .scope .agentName {
+    font-weight: 600;
+  }
+  .scope .agentDescription,
+  .scope .scopeDetail,
+  .scope .scopeValue svg,
+  .scope .openIndicator {
+    color: var(--muted);
+  }
+  .scope .agentDescription,
+  .scope .scopeDetail {
+    font-size: 12px;
+  }
+  .scope .identityLink:is(:hover, :focus-visible) :is(.agentName, .openIndicator) {
+    color: var(--primary);
+  }
+  .scope .scopeValue {
+    gap: 7px;
+  }
+  .scope .scopeDetail {
+    margin-inline-start: 7px;
+    white-space: nowrap;
+  }
+  .scope .body :global(.empty-state) {
+    min-height: min(100%, 360px);
+    gap: 12px;
     align-content: center;
   }
-  .scope .panel :global(nav[aria-label="分页导航"]) {
-    margin-top: auto;
-  }
-  @container (width >= 1400px) {
-    .scope .panel > :global(.table-scroll) {
-      overflow: visible;
-    }
-    .scope .panel > :global(.table-scroll .data-table th) {
-      position: sticky;
-      z-index: 1;
-      top: var(--console-topbar-height);
-    }
+  .scope .body :global(.empty-state) button {
+    margin-top: 4px;
   }
 }
 

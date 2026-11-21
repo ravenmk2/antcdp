@@ -19,7 +19,9 @@ vi.mock("@/api/client", async (original) => ({
   request: vi.fn(),
 }));
 vi.mock("@/app/auth", () => ({
-  useSession: () => ({ user: { id: "1", role: "admin" } }),
+  useSession: () => ({
+    user: { id: "1", role: "admin", display_name: "张三" },
+  }),
 }));
 const mock = vi.mocked(request);
 const agent: CatalogAgent = {
@@ -79,7 +81,15 @@ beforeEach(() => {
     if (url.startsWith("/agents/catalog?"))
       return response([{ ...agent, favorited }]);
     if (url.startsWith("/agents/catalog/"))
-      return response({ ...agent, id: url.split("/").at(-1), favorited });
+      return response({
+        ...agent,
+        id: url.split("/").at(-1),
+        favorited,
+        greeting:
+          url === "/agents/catalog/1"
+            ? "你好，{user}！\n我是{assistant}。{unknown}"
+            : undefined,
+      });
     if (url.startsWith("/agents/sessions?")) {
       const params = new URL(url, "http://local").searchParams;
       const page = Number(params.get("page"));
@@ -294,8 +304,12 @@ it("offers a dedicated new conversation view with inline model selection", async
       { name: "消息内容" },
     ),
   ).toBe(input);
-  expect(screen.getByRole("heading", { name: "项目协作助手" })).toBeVisible();
-  expect(screen.getByText("公开测试助手")).toBeVisible();
+  expect(
+    screen.getByRole("heading", {
+      name: "你好，张三！\n我是项目协作助手。{unknown}",
+    }),
+  ).toBeVisible();
+  expect(screen.queryByText("公开测试助手")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
   expect(
     mock.mock.calls.some(([url]) => url.startsWith("/agents/catalog?")),
@@ -311,6 +325,14 @@ it("offers a dedicated new conversation view with inline model selection", async
   expect(mock.mock.calls.some(([url]) => url === "/agents/sessions")).toBe(
     false,
   );
+});
+
+it("leaves the new-conversation heading blank when the selected assistant has no greeting", async () => {
+  mount("/chats?agent=2");
+  await screen.findByRole("textbox", { name: "消息内容" });
+  const conversation = within(screen.getByRole("region", { name: "新对话" }));
+  expect(conversation.queryByRole("heading")).not.toBeInTheDocument();
+  expect(conversation.queryByText("公开测试助手")).not.toBeInTheDocument();
 });
 
 it("shows an empty favorite hint and removes favorites through the item menu", async () => {

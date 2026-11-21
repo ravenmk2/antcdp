@@ -268,9 +268,17 @@ it.each(["chat", "service"] as const)(
     if (agentType === "service") {
       const drawer = screen.getByRole("dialog", { name: "新建助手" });
       await user.click(within(drawer).getByRole("radio", { name: /服务型/ }));
+      expect(
+        within(drawer).queryByRole("textbox", { name: "欢迎语" }),
+      ).not.toBeInTheDocument();
       await user.click(screen.getByRole("combobox", { name: "执行机器人" }));
       await user.click(
         await screen.findByRole("option", { name: "审查机器人 (review_bot)" }),
+      );
+    } else {
+      await user.type(
+        screen.getByRole("textbox", { name: "欢迎语" }),
+        "欢迎开启对话",
       );
     }
     await user.type(
@@ -294,8 +302,34 @@ it.each(["chat", "service"] as const)(
       agent_type: agentType,
       scope_kind: "platform",
     });
+    if (agentType === "chat")
+      expect(first?.body).toHaveProperty("greeting", "欢迎开启对话");
   },
 );
+it("combines type and keyboard search filters and clears them from the empty state", async () => {
+  const { router, user } = mount("/admin/agents?page=2");
+  await user.click(screen.getByRole("button", { name: "服务型" }));
+  expect(screen.getByRole("button", { name: "服务型" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await user.type(
+    screen.getByRole("textbox", { name: "搜索助手" }),
+    "核查{Enter}",
+  );
+  const query = new URLSearchParams(router.state.location.search);
+  expect(query.get("agent_type")).toBe("service");
+  expect(query.get("q")).toBe("核查");
+  expect(query.get("page")).toBe("1");
+  await user.click(await screen.findByRole("button", { name: "重置筛选条件" }));
+  expect(screen.getByRole("textbox", { name: "搜索助手" })).toHaveValue("");
+  expect(screen.getByRole("button", { name: "全部助手" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(await screen.findByText("尚未创建助手")).toBeVisible();
+});
+
 it("closes the create drawer after one discard confirmation without a second navigation prompt", async () => {
   const { user, router } = mount("/admin/agents/new");
   await user.type(

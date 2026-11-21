@@ -16,7 +16,7 @@ var agentSchemaColumns = map[string]string{
 	"agent_skill_binding":       skillBindingColumns,
 	"agent_run_context":         "root_run_id,agent_id,executor_user_id,agent_config_version,schema_version,cloud_computer_id,cwd,system_prompt,model_snapshot,runtime_policy,builtin_tools,mcp_bindings,resource_grants,skill_manifest,mcp_surface,mcp_prepared_at,created_at",
 	"agent_mcp_binding":         "`id`,`agent_id`,`mcp_server_id`,`enabled`,`sort_order`,`created_at`,`updated_at`,`removed_at`",
-	"agent":                     "`id`,`code`,`name`,`description`,`agent_type`,`scope_kind`,`scope_id`,`scope_key`,`robot_user_id`,`enabled`,`system_prompt`,`config_schema_version`,`default_model_binding_id`,`runtime_policy`,`pool_capacity`,`config_version`,`row_version`,`created_by_user_id`,`created_at`,`updated_at`,`deleted_at`",
+	"agent":                     "`id`,`code`,`name`,`description`,`greeting`,`agent_type`,`scope_kind`,`scope_id`,`scope_key`,`robot_user_id`,`enabled`,`system_prompt`,`config_schema_version`,`default_model_binding_id`,`runtime_policy`,`pool_capacity`,`config_version`,`row_version`,`created_by_user_id`,`created_at`,`updated_at`,`deleted_at`",
 	"agent_model_binding":       "`id`,`agent_id`,`model_definition_id`,`thinking_options`,`default_thinking`,`generation_parameters`,`sort_order`,`created_at`,`updated_at`,`removed_at`",
 	"agent_tool_binding":        "`id`,`agent_id`,`tool_kind`,`tool_key`,`policy`,`parameter_constraints`,`config`,`config_schema_version`,`sort_order`,`created_at`,`updated_at`,`removed_at`",
 	"agent_papi_grant":          "agent_id,api_code,parameter_constraints,created_at,updated_at",

@@ -6,6 +6,7 @@ CREATE TABLE `agent` (
     code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     name VARCHAR(100) NOT NULL,
     description VARCHAR(1000) NOT NULL DEFAULT '',
+    greeting VARCHAR(1000) NOT NULL DEFAULT '',
     agent_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'interactive | service',
     scope_kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     scope_id BIGINT UNSIGNED NULL,

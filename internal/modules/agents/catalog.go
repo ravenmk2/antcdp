@@ -33,6 +33,7 @@ type CatalogAgent struct {
 	ID              uint64        `json:"id,string"`
 	Name            string        `json:"name"`
 	Description     string        `json:"description"`
+	Greeting        string        `json:"greeting,omitempty"`
 	Models          []ModelOption `json:"model_options"`
 	DefaultModelID  *uint64       `json:"default_model_binding_id,string"`
 	DefaultThinking *string       `json:"default_thinking_option_key"`
@@ -244,6 +245,7 @@ func (s *Service) GetCatalog(ctx context.Context, raw string, id uint64) (*Resul
 			return e
 		}
 		value.Favorited = favorites[id]
+		value.Greeting = v.Greeting
 		out.Data = value
 		return nil
 	})

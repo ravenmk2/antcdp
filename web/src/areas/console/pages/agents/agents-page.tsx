@@ -1,6 +1,6 @@
 import { resourceCodeSchema } from "@/domain/validation";
 import type { User } from "@/types/auth";
-import { useState, type FormEvent } from "react";
+import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import {
   Link,
   Navigate,
@@ -25,8 +25,15 @@ import {
   UserRound,
   Plug,
   LayoutDashboard,
+  ChevronRight,
+  Globe2,
+  MessageSquare,
+  Search,
+  Workflow,
+  UsersRound,
+  X,
 } from "lucide-react";
-import { Button } from "@/components/button";
+import { Button, IconButton } from "@/components/button";
 import { DescriptionPreview } from "@/components/description-preview";
 import {
   DropdownMenu,
@@ -59,6 +66,7 @@ import {
   useAgentListReturn,
 } from "./management/list-navigation";
 import styles from "./management/management.module.css";
+import listStyles from "./management/list-page.module.css";
 import { useApiQuery } from "@/hooks/use-api";
 import { useFormErrors } from "@/hooks/use-form";
 import { useUnsaved } from "@/hooks/use-unsaved";
@@ -104,6 +112,8 @@ import {
 import { AgentOverview, AgentActivation } from "./agent-overview";
 import { AgentListPage } from "./management/list-page";
 
+const agentScopeIcons = { platform: Globe2, team: UsersRound, project: Folder };
+
 export function AgentsPage() {
   const { params, page, size, change } = useListParams();
   const requestedType = params.get("agent_type");
@@ -126,12 +136,29 @@ export function AgentsPage() {
     [...agentKeys, "definitions", query],
     `${agentAdminRoot}/definitions?${query}`,
   );
-  const rememberList = useAgentListPosition(agents.isSuccess);
+  const listBody = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (listBody.current) listBody.current.scrollTop = 0;
+  }, [query]);
+  const rememberList = useAgentListPosition(agents.isSuccess, listBody);
+  const filtered =
+    !!q || mode !== "all" || scope !== "all" || enabled !== "all";
+  const filter = (key: string, value: string) =>
+    change({ [key]: value, q: search.value.trim(), page: "1" });
+  const reset = () => {
+    search.setValue("");
+    change({ q: "", agent_type: "", scope_kind: "", enabled: "", page: "1" });
+  };
   return (
     <AgentListPage>
-      <PageHeader
-        title="助手管理"
-        actions={
+      <PageHeader className={listStyles.header}>
+        <div className={listStyles.heading}>
+          <span className={listStyles.headingIcon}>
+            <Bot aria-hidden />
+          </span>
+          <h1 className="page-title">助手管理</h1>
+        </div>
+        <div className={listStyles.headerActions}>
           <Button
             render={
               <Link
@@ -149,41 +176,80 @@ export function AgentsPage() {
             nativeButton={false}
             role="link"
           />
-        }
-      />
+        </div>
+      </PageHeader>
       <TableToolbar
         onRefresh={() => agents.refetch()}
         refreshing={agents.isFetching}
-        onReset={() =>
-          change({
-            q: "",
-            agent_type: "",
-            scope_kind: "",
-            enabled: "",
-            page: "1",
-          })
-        }
+        onReset={filtered || search.value ? reset : undefined}
+        renderToolbar={({ filters, controls }) => (
+          <div className={listStyles.toolbar}>
+            <div
+              className={listStyles.typeFilter}
+              role="group"
+              aria-label="类型"
+            >
+              {[
+                { value: "all", label: "全部助手" },
+                { value: "chat", label: "对话型" },
+                { value: "service", label: "服务型" },
+              ].map(({ value, label }) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-pressed={mode === value}
+                  onClick={() => filter("agent_type", value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            <div className={listStyles.filters}>{filters}</div>
+            <div className={listStyles.toolbarActions}>{controls}</div>
+          </div>
+        )}
       >
-        <StandaloneInput
-          aria-label="搜索助手"
-          placeholder="搜索名称或说明"
-          value={search.value}
-          onChange={(event) => search.setValue(event.target.value)}
-          className="w-64"
-        />
-        <StandaloneSelect
-          aria-label="类型"
-          value={mode}
-          onValueChange={(value) => change({ agent_type: value, page: "1" })}
+        <form
+          role="search"
+          className={listStyles.search}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!search.composing.current) search.submit();
+          }}
         >
-          <option value="all">全部类型</option>
-          <option value="chat">对话型</option>
-          <option value="service">服务型</option>
-        </StandaloneSelect>
+          <Search className={listStyles.searchIcon} aria-hidden />
+          <StandaloneInput
+            aria-label="搜索助手"
+            placeholder="搜索名称或说明"
+            value={search.value}
+            onChange={(event) => search.setValue(event.target.value)}
+            onCompositionStart={() => {
+              search.composing.current = true;
+            }}
+            onCompositionEnd={search.compositionEnd}
+            className="w-full ps-9 pe-10"
+          />
+          {search.value && (
+            <IconButton
+              type="button"
+              label="清除搜索"
+              size="iconSm"
+              className={`absolute ${listStyles.clearSearch}`}
+              onClick={() => {
+                search.setValue("");
+                change({ q: "", page: "1" });
+              }}
+            >
+              <X aria-hidden />
+            </IconButton>
+          )}
+        </form>
         <StandaloneSelect
           aria-label="归属"
           value={scope}
-          onValueChange={(value) => change({ scope_kind: value, page: "1" })}
+          onValueChange={(value) => filter("scope_kind", value)}
         >
           <option value="all">全部归属</option>
           <option value="platform">平台</option>
@@ -193,99 +259,139 @@ export function AgentsPage() {
         <StandaloneSelect
           aria-label="启用状态"
           value={enabled}
-          onValueChange={(value) => change({ enabled: value, page: "1" })}
+          onValueChange={(value) => filter("enabled", value)}
         >
           <option value="all">全部状态</option>
           <option value="true">已启用</option>
           <option value="false">已停用</option>
         </StandaloneSelect>
       </TableToolbar>
-      <AsyncBoundary
-        loading={agents.isPending}
-        error={agents.error}
-        onRetry={() => agents.refetch()}
+      <div
+        className={listStyles.body}
+        ref={listBody}
+        tabIndex={0}
+        role="region"
+        aria-label="助手列表区域"
+        aria-busy={agents.isFetching}
       >
-        {agents.data?.data.length ? (
-          <SimpleTable
-            label="助手列表"
-            headers={[
-              "助手",
-              "类型",
-              "归属",
-              "模型",
-              "内置工具",
-              "MCP 服务",
-              "状态",
-            ]}
-          >
-            {agents.data.data.map((agent) => (
-              <tr key={agent.id}>
-                <td>
-                  <div className="flex items-center gap-2">
-                    <Link
-                      to={`/admin/agents/${agent.id}`}
-                      onClick={rememberList}
-                      className="max-w-lg truncate font-medium text-primary"
-                      title={agent.name}
-                    >
-                      {agent.name}
-                    </Link>
-                    {agent.description && (
-                      <DescriptionPreview
-                        name={agent.name}
-                        description={agent.description}
-                      />
-                    )}
-                  </div>
-                  <p
-                    className="mt-1 max-w-xl truncate text-xs text-muted"
-                    title={agent.description}
-                  >
-                    {agent.description || "暂无说明"}
-                  </p>
-                </td>
-                <td>
-                  <IdentityBadge mode={agent.agent_type} />
-                </td>
-                <td>
-                  {scopeLabel(agent.scope_kind)}
-                  <p className="mt-1 text-xs text-muted">
-                    {agent.scope_id ? `ID ${agent.scope_id}` : "所有登录用户"}
-                  </p>
-                </td>
-                <td>{agent.model_binding_count}</td>
-                <td>{agent.tool_binding_count}</td>
-                <td>{agent.mcp_binding_count}</td>
-                <td>
-                  <EnabledState enabled={agent.enabled} />
-                </td>
-              </tr>
-            ))}
-          </SimpleTable>
-        ) : (
-          <EmptyState
-            title={
-              q || mode !== "all" || scope !== "all" || enabled !== "all"
-                ? "暂无匹配的助手"
-                : "尚未创建助手"
-            }
-            description={
-              q || mode !== "all" || scope !== "all" || enabled !== "all"
-                ? "调整搜索词或筛选条件后重试。"
-                : "新建助手后即可配置模型与能力。"
-            }
-          />
-        )}
-        <Pagination
-          page={page}
-          size={size}
-          total={agents.data?.pagination?.total}
-          pending={agents.isFetching}
-          onChange={(next, count) =>
-            change({ page: String(next), page_size: String(count) })
-          }
-        />
-      </AsyncBoundary>
+        <AsyncBoundary
+          loading={agents.isPending}
+          error={agents.error}
+          onRetry={() => agents.refetch()}
+        >
+          {agents.data?.data.length ? (
+            <SimpleTable
+              label="助手列表"
+              headers={[
+                "助手",
+                "类型",
+                "归属",
+                "模型",
+                "内置工具",
+                "MCP 服务",
+                "状态",
+              ]}
+              className={listStyles.table}
+            >
+              {agents.data.data.map((agent) => {
+                const AgentIcon =
+                  agent.agent_type === "service" ? Workflow : MessageSquare;
+                const ScopeIcon = agentScopeIcons[agent.scope_kind];
+                return (
+                  <tr key={agent.id}>
+                    <td>
+                      <div className={listStyles.identity}>
+                        <Link
+                          to={`/admin/agents/${agent.id}`}
+                          onClick={rememberList}
+                          className={listStyles.identityLink}
+                          aria-label={agent.name}
+                          title={agent.name}
+                        >
+                          <span
+                            className={listStyles.agentIcon}
+                            data-agent-type={agent.agent_type}
+                          >
+                            <AgentIcon aria-hidden />
+                          </span>
+                          <span className={listStyles.identityText}>
+                            <span className={listStyles.agentName}>
+                              {agent.name}
+                            </span>
+                            {agent.description && (
+                              <span className={listStyles.agentDescription}>
+                                {agent.description}
+                              </span>
+                            )}
+                          </span>
+                          <ChevronRight
+                            className={listStyles.openIndicator}
+                            aria-hidden
+                          />
+                        </Link>
+                        {agent.description && (
+                          <DescriptionPreview
+                            name={agent.name}
+                            description={agent.description}
+                          />
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <IdentityBadge mode={agent.agent_type} />
+                    </td>
+                    <td>
+                      <div className={listStyles.scopeValue}>
+                        <ScopeIcon aria-hidden />
+                        <span>
+                          {scopeLabel(agent.scope_kind)}
+                          <span className={listStyles.scopeDetail}>
+                            {agent.scope_id
+                              ? `ID ${agent.scope_id}`
+                              : "所有登录用户"}
+                          </span>
+                        </span>
+                      </div>
+                    </td>
+                    <td>{agent.model_binding_count}</td>
+                    <td>{agent.tool_binding_count}</td>
+                    <td>{agent.mcp_binding_count}</td>
+                    <td>
+                      <EnabledState enabled={agent.enabled} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </SimpleTable>
+          ) : (
+            <EmptyState
+              icon={filtered ? Search : Bot}
+              title={filtered ? "暂无匹配的助手" : "尚未创建助手"}
+              description={
+                filtered
+                  ? "调整搜索词或筛选条件后重试。"
+                  : "新建助手后即可配置模型与能力。"
+              }
+              action={
+                filtered && (
+                  <Button variant="outline" onClick={reset}>
+                    重置筛选条件
+                  </Button>
+                )
+              }
+            />
+          )}
+        </AsyncBoundary>
+      </div>
+      <Pagination
+        page={page}
+        size={size}
+        total={agents.data?.pagination?.total}
+        pending={agents.isFetching || !agents.data}
+        onChange={(next, count) =>
+          change({ page: String(next), page_size: String(count) })
+        }
+      />
     </AgentListPage>
   );
 }
@@ -304,6 +410,7 @@ export function AgentCreatePage() {
     robot_user_id: null as string | null,
     name: "",
     description: "",
+    greeting: "",
     agent_type: "chat" as AgentType,
     scope_kind: "platform" as AgentScope,
     scope_id: null as string | null,
@@ -316,6 +423,7 @@ export function AgentCreatePage() {
     draft.code ||
     draft.name ||
     draft.description ||
+    (draft.agent_type === "chat" && draft.greeting) ||
     draft.agent_type !== "chat" ||
     draft.scope_kind !== "platform",
   );
@@ -354,6 +462,7 @@ export function AgentCreatePage() {
         method: "POST",
         body: {
           ...draft,
+          greeting: draft.agent_type === "chat" ? draft.greeting : undefined,
           ...(draft.agent_type === "service" && specID
             ? { sandbox_spec_id: specID }
             : {}),
@@ -369,6 +478,7 @@ export function AgentCreatePage() {
         "robot_user_id",
         "name",
         "description",
+        "greeting",
         "scope_id",
         "scope_kind",
       ]);
@@ -550,6 +660,13 @@ export function AgentCreatePage() {
                 }
               />
             </Field>
+            {draft.agent_type === "chat" && (
+              <AgentGreetingField
+                value={draft.greeting}
+                error={errors.fields.greeting}
+                onChange={(greeting) => setDraft({ ...draft, greeting })}
+              />
+            )}
           </fieldset>
         </form>
         {picking && (
@@ -835,7 +952,14 @@ export function AgentDetailPage() {
                     <AgentBasicEditor
                       key={agentId}
                       initial={agent.data}
-                      onSaved={refresh}
+                      onSaved={async () => {
+                        await Promise.all([
+                          refresh(),
+                          cache.invalidateQueries({
+                            queryKey: ["agent-start-detail", false, agentId],
+                          }),
+                        ]);
+                      }}
                     />
                   ) : (
                     <AgentBasicRead agent={agent.data.data} />
@@ -984,6 +1108,14 @@ function AgentBasicRead({ agent }: { agent: AgentDefinition }) {
             {agent.description || "尚未填写说明"}
           </dd>
         </div>
+        {agent.agent_type === "chat" && (
+          <div>
+            <dt>欢迎语</dt>
+            <dd className="whitespace-pre-wrap wrap-break-word">
+              {agent.greeting || "尚未配置欢迎语"}
+            </dd>
+          </div>
+        )}
         <div>
           <dt>状态</dt>
           <dd>
@@ -1017,6 +1149,7 @@ function AgentBasicEditor({
   const fields = (agent: AgentDefinition) => ({
     name: agent.name,
     description: agent.description,
+    ...(agent.agent_type === "chat" ? { greeting: agent.greeting ?? "" } : {}),
   });
   const [draft, setDraft] = useState(() => fields(initial.data));
   const [baseline, setBaseline] = useState(() => JSON.stringify(draft));
@@ -1031,7 +1164,8 @@ function AgentBasicEditor({
       setBaseline(JSON.stringify(next));
     },
     complete: onSaved,
-    showError: (error) => errors.show(error, ["name", "description"]),
+    showError: (error) =>
+      errors.show(error, ["name", "description", "greeting"]),
   });
   return (
     <form
@@ -1071,6 +1205,13 @@ function AgentBasicEditor({
                 }
               />
             </Field>
+            {draft.greeting !== undefined && (
+              <AgentGreetingField
+                value={draft.greeting}
+                error={errors.fields.greeting}
+                onChange={(greeting) => setDraft({ ...draft, greeting })}
+              />
+            )}
           </ResourceSection>
         </Panel>
       </fieldset>
@@ -1095,6 +1236,32 @@ function AgentBasicEditor({
         </Button>
       </ConfigActions>
     </form>
+  );
+}
+
+function AgentGreetingField({
+  value,
+  error,
+  onChange,
+}: {
+  value: string;
+  error?: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <Field
+      label="欢迎语"
+      error={error}
+      hint="仅在新对话展示。{user} 为当前用户的显示名称，{assistant} 为助手名称。"
+    >
+      <Textarea
+        name="greeting"
+        rows={3}
+        maxLength={1000}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </Field>
   );
 }
 

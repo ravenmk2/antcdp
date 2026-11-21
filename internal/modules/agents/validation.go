@@ -167,11 +167,18 @@ func validateDefinition(v *Definition) error {
 	if utf8.RuneCountInString(v.Description) > 1000 {
 		return httpx.Invalid("description", "invalid_length")
 	}
+	v.Greeting = strings.TrimSpace(v.Greeting)
+	if utf8.RuneCountInString(v.Greeting) > 1000 {
+		return httpx.Invalid("greeting", "invalid_length")
+	}
 	if len(v.SystemPrompt) > 128*1024 {
 		return httpx.Invalid("system_prompt", "invalid_length")
 	}
 	if v.Mode != "chat" && v.Mode != "service" {
 		return httpx.Invalid("agent_type", "unsupported")
+	}
+	if v.Mode == "service" && v.Greeting != "" {
+		return httpx.Invalid("greeting", "chat_agent_required")
 	}
 	if v.ScopeKind != "platform" && v.ScopeKind != "team" && v.ScopeKind != "project" {
 		return httpx.Invalid("scope_kind", "unsupported")

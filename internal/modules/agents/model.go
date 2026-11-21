@@ -62,6 +62,7 @@ type Definition struct {
 	Code                  string          `db:"code" json:"code"`
 	Name                  string          `db:"name" json:"name"`
 	Description           string          `db:"description" json:"description"`
+	Greeting              string          `db:"greeting" json:"greeting"`
 	Mode                  string          `db:"agent_type" json:"agent_type"`
 	Enabled               bool            `db:"enabled" json:"enabled"`
 	SystemPrompt          string          `db:"system_prompt" json:"system_prompt"`
@@ -111,6 +112,7 @@ type DefinitionCreate struct {
 	ScopeID       *string        `json:"scope_id"`
 	PoolCapacity  *int           `json:"pool_capacity"`
 	Description   string         `json:"description"`
+	Greeting      string         `json:"greeting,omitempty"`
 	SystemPrompt  string         `json:"system_prompt"`
 	Enabled       Field[bool]    `json:"enabled"`
 	RuntimePolicy *RuntimePolicy `json:"runtime_policy"`
@@ -118,6 +120,7 @@ type DefinitionCreate struct {
 type DefinitionPatch struct {
 	Name          Field[string]        `json:"name"`
 	Description   Field[string]        `json:"description"`
+	Greeting      Field[string]        `json:"greeting"`
 	SystemPrompt  Field[string]        `json:"system_prompt"`
 	Enabled       Field[bool]          `json:"enabled"`
 	RuntimePolicy Field[RuntimePolicy] `json:"runtime_policy"`

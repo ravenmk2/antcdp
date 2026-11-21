@@ -265,6 +265,7 @@ type robotBindingKey struct{}
 
 func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w DefinitionCreate) (*Result, error) {
 	w.Mode = normalizeAgentType(w.Mode)
+	w.Greeting = strings.TrimSpace(w.Greeting)
 	if !resourcecode.Valid(w.Code) {
 		return nil, httpx.Invalid("code", "invalid_format")
 	}
@@ -289,7 +290,7 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 		}
 		code := w.Code
 		var e error
-		v := &Definition{Code: code, Name: w.Name, Description: w.Description, Mode: w.Mode, SystemPrompt: w.SystemPrompt, RuntimePolicy: defaultRuntimePolicy(), SchemaVersion: 1, RowVersion: 1, Creator: a.User.ID, ScopeKind: w.ScopeKind, PoolCapacity: w.PoolCapacity}
+		v := &Definition{Code: code, Name: w.Name, Description: w.Description, Greeting: w.Greeting, Mode: w.Mode, SystemPrompt: w.SystemPrompt, RuntimePolicy: defaultRuntimePolicy(), SchemaVersion: 1, RowVersion: 1, Creator: a.User.ID, ScopeKind: w.ScopeKind, PoolCapacity: w.PoolCapacity}
 		if w.RuntimePolicy != nil {
 			v.RuntimePolicy = *w.RuntimePolicy
 		}
@@ -346,10 +347,10 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 }
 func (s *Service) PatchDefinition(ctx context.Context, raw string, id uint64, tag string, w DefinitionPatch) (*Result, error) {
 	return s.agentAccess(ctx, raw, id, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
-		if !w.Name.Set && !w.Description.Set && !w.SystemPrompt.Set && !w.Enabled.Set && !w.RuntimePolicy.Set && !w.PoolCapacity.Set {
+		if !w.Name.Set && !w.Description.Set && !w.Greeting.Set && !w.SystemPrompt.Set && !w.Enabled.Set && !w.RuntimePolicy.Set && !w.PoolCapacity.Set {
 			return httpx.Invalid("body", "empty_patch")
 		}
-		if w.Name.Null || w.Description.Null || w.SystemPrompt.Null || w.Enabled.Null || w.RuntimePolicy.Null || w.PoolCapacity.Null {
+		if w.Name.Null || w.Description.Null || w.Greeting.Null || w.SystemPrompt.Null || w.Enabled.Null || w.RuntimePolicy.Null || w.PoolCapacity.Null {
 			return httpx.Invalid("body", "null_not_allowed")
 		}
 		// The parent/model locks precede the Agent lock when enabling execution.
@@ -377,6 +378,9 @@ func (s *Service) PatchDefinition(ctx context.Context, raw string, id uint64, ta
 		}
 		if w.Description.Set {
 			v.Description = w.Description.Value
+		}
+		if w.Greeting.Set {
+			v.Greeting = w.Greeting.Value
 		}
 		if w.SystemPrompt.Set {
 			v.SystemPrompt = w.SystemPrompt.Value

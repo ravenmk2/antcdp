@@ -21,7 +21,7 @@ type agentsTx struct {
 
 func (t *identityTx) Agents() a.Repository { return &agentsTx{t.ctx, t.tx} }
 
-const agentDefinitionColumns = "id,code,name,description,agent_type,scope_kind,scope_id,robot_user_id,enabled,system_prompt,config_schema_version,default_model_binding_id,runtime_policy,pool_capacity,config_version,row_version,created_by_user_id,created_at,updated_at,deleted_at"
+const agentDefinitionColumns = "id,code,name,description,greeting,agent_type,scope_kind,scope_id,robot_user_id,enabled,system_prompt,config_schema_version,default_model_binding_id,runtime_policy,pool_capacity,config_version,row_version,created_by_user_id,created_at,updated_at,deleted_at"
 const agentModelBindingColumns = "id,agent_id,model_definition_id,thinking_options,COALESCE(default_thinking,'') AS default_thinking,generation_parameters,sort_order,created_at,updated_at,removed_at"
 
 func (t *agentsTx) DefinitionByPath(project uint64, path resourcecode.Locator) (*a.Definition, error) {
@@ -141,12 +141,12 @@ func (t *agentsTx) Definition(id uint64, lock bool) (*a.Definition, error) {
 func (t *agentsTx) InsertDefinition(v *a.Definition) error {
 	v.CreatedAt = time.Now().UTC().Truncate(time.Millisecond)
 	v.UpdatedAt = v.CreatedAt
-	r, e := t.named("INSERT INTO agent(code,name,description,agent_type,scope_kind,scope_id,robot_user_id,enabled,system_prompt,config_schema_version,default_model_binding_id,runtime_policy,pool_capacity,config_version,row_version,created_by_user_id,created_at,updated_at,deleted_at) VALUES(:code,:name,:description,:agent_type,:scope_kind,:scope_id,:robot_user_id,:enabled,:system_prompt,:config_schema_version,:default_model_binding_id,:runtime_policy,:pool_capacity,:config_version,:row_version,:created_by_user_id,:created_at,:updated_at,:deleted_at)", v)
+	r, e := t.named("INSERT INTO agent(code,name,description,greeting,agent_type,scope_kind,scope_id,robot_user_id,enabled,system_prompt,config_schema_version,default_model_binding_id,runtime_policy,pool_capacity,config_version,row_version,created_by_user_id,created_at,updated_at,deleted_at) VALUES(:code,:name,:description,:greeting,:agent_type,:scope_kind,:scope_id,:robot_user_id,:enabled,:system_prompt,:config_schema_version,:default_model_binding_id,:runtime_policy,:pool_capacity,:config_version,:row_version,:created_by_user_id,:created_at,:updated_at,:deleted_at)", v)
 	return modelID(r, e, &v.ID)
 }
 func (t *agentsTx) SaveDefinition(v *a.Definition) error {
 	v.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
-	_, e := t.named("UPDATE agent SET name=:name,description=:description,enabled=:enabled,system_prompt=:system_prompt,default_model_binding_id=:default_model_binding_id,runtime_policy=:runtime_policy,pool_capacity=:pool_capacity,config_version=:config_version,row_version=:row_version,updated_at=:updated_at,deleted_at=:deleted_at WHERE id=:id", v)
+	_, e := t.named("UPDATE agent SET name=:name,description=:description,greeting=:greeting,enabled=:enabled,system_prompt=:system_prompt,default_model_binding_id=:default_model_binding_id,runtime_policy=:runtime_policy,pool_capacity=:pool_capacity,config_version=:config_version,row_version=:row_version,updated_at=:updated_at,deleted_at=:deleted_at WHERE id=:id", v)
 	return e
 }
 func (t *agentsTx) DefinitionReferenced(id uint64) (bool, error) {

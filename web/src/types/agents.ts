@@ -44,6 +44,7 @@ export interface AgentDefinition extends Versioned, Timestamped {
   code: string;
   name: string;
   description: string;
+  greeting?: string;
   agent_type: AgentType;
   scope_kind: AgentScope;
   scope_id: string | null;
@@ -57,7 +58,7 @@ export interface AgentDefinition extends Versioned, Timestamped {
 }
 export interface AgentSummary extends Omit<
   AgentDefinition,
-  "system_prompt" | "runtime_policy" | "deleted_at"
+  "greeting" | "system_prompt" | "runtime_policy" | "deleted_at"
 > {
   model_binding_count: number;
   tool_binding_count: number;
@@ -70,6 +71,7 @@ export interface AgentCreate {
   scope_id?: string | null;
   pool_capacity?: number;
   description?: string;
+  greeting?: string;
   enabled?: boolean;
   system_prompt?: string;
   runtime_policy?: RuntimePolicy;
@@ -79,6 +81,7 @@ export type AgentPatch = Partial<
     AgentDefinition,
     | "name"
     | "description"
+    | "greeting"
     | "enabled"
     | "system_prompt"
     | "runtime_policy"
@@ -157,6 +160,7 @@ export interface CatalogAgent {
   id: string;
   name: string;
   description: string;
+  greeting?: string;
   model_options: ModelOption[];
   default_model_binding_id: string;
   default_thinking_option_key: string | null;

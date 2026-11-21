@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router";
 import { Bot, ChevronDown, LockKeyhole, Sparkles } from "lucide-react";
+import { useSession } from "@/app/auth";
 import { Button } from "@/components/button";
 import {
   AsyncBoundary,
@@ -32,6 +33,7 @@ export function NewConversation({
   service?: boolean;
   agentId?: string;
 }) {
+  const { user } = useSession();
   const cache = useQueryClient();
   const [params] = useSearchParams(),
     navigate = useNavigate();
@@ -86,6 +88,13 @@ export function NewConversation({
     selected?.thinking_options[0]?.key ??
     "";
   const value = agent.data?.data;
+  const greeting = service
+    ? undefined
+    : value?.greeting
+        ?.trim()
+        .replace(/\{user\}|\{assistant\}/g, (token) =>
+          token === "{user}" ? user.display_name : value.name,
+        );
   const locked = send.state.phase !== "idle";
   const available =
     value &&
@@ -140,10 +149,13 @@ export function NewConversation({
         aria-label="新对话"
       >
         <div className="agent-new-conversation-content">
-          <header className="agent-new-conversation-heading">
-            <h1>{value?.name ?? "新对话"}</h1>
-            <p>{value?.description || "今天想一起完成什么？"}</p>
-          </header>
+          {greeting && (
+            <header className="agent-new-conversation-heading">
+              <h1 className="whitespace-pre-wrap wrap-break-word">
+                {greeting}
+              </h1>
+            </header>
+          )}
           <AsyncBoundary
             loading={agent.isPending}
             error={agent.error}
@@ -167,23 +179,21 @@ export function NewConversation({
     );
   return (
     <section className="agent-start-panel" aria-label="开始新对话">
-      <header className="agent-start-heading">
-        <span className="agent-start-mark">
-          <Sparkles className="size-5" />
-        </span>
-        <div>
-          {service ? (
-            <h1>调试服务型助手</h1>
-          ) : (
-            <h1>{value?.name ?? "新对话"}</h1>
-          )}
-          <p>
-            {service
-              ? "使用专属机器人和其云电脑池执行，权限来自机器人账号。"
-              : value?.description || "描述这次需要完成的工作。"}
-          </p>
-        </div>
-      </header>
+      {(service || greeting) && (
+        <header className="agent-start-heading">
+          <span className="agent-start-mark">
+            <Sparkles className="size-5" />
+          </span>
+          <div>
+            <h1 className="whitespace-pre-wrap wrap-break-word">
+              {service ? "调试服务型助手" : greeting}
+            </h1>
+            {service && (
+              <p>使用专属机器人和其云电脑池执行，权限来自机器人账号。</p>
+            )}
+          </div>
+        </header>
+      )}
       <AsyncBoundary
         loading={catalog.isPending}
         error={catalog.error}

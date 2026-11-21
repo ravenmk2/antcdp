@@ -180,6 +180,27 @@ func agentManagementLifecycle(t *testing.T, f *agentIntegrationFixture) {
 	}
 	_, e = svc.PutModelBindings(ctx, raw, agent.ID, bound.Tag, a.ModelBindingsWrite{})
 	modelsExpectCode(t, e, "VERSION_CONFLICT")
+	const greeting = "你好，{user}！\n我是{assistant}。"
+	configured, e := svc.PatchDefinition(ctx, raw, agent.ID, enabled.Tag, a.DefinitionPatch{
+		Greeting: a.Field[string]{Set: true, Value: "  " + greeting + "\n"},
+	})
+	if e != nil || configured.Data.(*a.Definition).Greeting != greeting {
+		t.Fatal("saving a multiline greeting", e)
+	}
+	catalog, e := svc.GetCatalog(ctx, raw, agent.ID)
+	if e != nil || catalog.Data.(a.CatalogAgent).Greeting != greeting {
+		t.Fatal("reading the greeting from catalog detail", e)
+	}
+	enabled, e = svc.PatchDefinition(ctx, raw, agent.ID, configured.Tag, a.DefinitionPatch{
+		Greeting: a.Field[string]{Set: true},
+	})
+	if e != nil {
+		t.Fatal("clearing the greeting", e)
+	}
+	catalog, e = svc.GetCatalog(ctx, raw, agent.ID)
+	if e != nil || catalog.Data.(a.CatalogAgent).Greeting != "" {
+		t.Fatal("reading the cleared greeting from catalog detail", e)
+	}
 	options, e := svc.StartOptions(ctx, raw, agent.ID)
 	if e != nil {
 		t.Fatal(e)

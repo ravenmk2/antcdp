@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type RefObject,
 } from "react";
 import { Outlet, useLocation, useNavigationType } from "react-router";
 
@@ -24,7 +25,10 @@ export function useAgentListReturn() {
   return "/admin/agents" + (memory?.current?.search ?? "");
 }
 
-export function useAgentListPosition(loaded: boolean) {
+export function useAgentListPosition(
+  loaded: boolean,
+  listBody: RefObject<HTMLDivElement | null>,
+) {
   const memory = useContext(ListMemory);
   const location = useLocation();
   const navigation = useNavigationType();
@@ -44,17 +48,17 @@ export function useAgentListPosition(loaded: boolean) {
   useLayoutEffect(() => {
     if (!loaded || restored.current) return;
     restored.current = true;
-    if (restore) window.scrollTo(0, restore);
+    if (restore && listBody.current) listBody.current.scrollTop = restore;
     if (location.state?.focusCreate)
       document
         .getElementById("agent-new-trigger")
         ?.focus({ preventScroll: true });
-  }, [loaded, restore, location.state]);
+  }, [loaded, restore, location.state, listBody]);
   return () => {
     if (memory)
       memory.current = {
         search: location.search,
-        scroll: window.scrollY,
+        scroll: listBody.current?.scrollTop ?? 0,
         key: location.key,
       };
   };

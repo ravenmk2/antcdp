@@ -2297,10 +2297,7 @@
 .root :global(.agent-new-conversation-heading h1) {
   font-size: 24px;
   font-weight: 600;
-}
-.root :global(.agent-new-conversation-heading p) {
-  margin-top: 10px;
-  color: var(--chat-process);
+  line-height: 1.5;
 }
 .root :global(.agent-model-controls) {
   display: flex;

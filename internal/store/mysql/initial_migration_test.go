@@ -156,6 +156,10 @@ func TestInitialMigration(t *testing.T) {
 			t.Fatalf("%s: got %q, want %q", query, got, want)
 		}
 	}
+	var noGreeting int
+	if err = s.db.GetContext(ctx, &noGreeting, "SELECT COUNT(*) FROM agent WHERE greeting=''"); err != nil || noGreeting != 2 {
+		t.Fatal("expected an empty greeting for definitions created without one", noGreeting, err)
+	}
 	expectedVersions := make([]int64, len(sources))
 	for i, source := range sources {
 		expectedVersions[i] = source.Version
