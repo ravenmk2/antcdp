@@ -58,12 +58,12 @@ func TestManagedCommandArgumentsAreBounded(t *testing.T) {
 }
 
 func TestProcessArgumentsCannotChangeAfterAuthorization(t *testing.T) {
-	raw := `{"task_id":"42","cursor":"8","wait_seconds":4096}`
-	valid := processArguments{ExecutionID: 42, Cursor: "8", WaitSeconds: 4096}
+	raw := `{"task_id":"42","cursor":"8","wait_ms":4096}`
+	valid := processArguments{ExecutionID: 42, Cursor: "8", WaitMS: 4096}
 	if !matchesProcessArguments(raw, valid) {
 		t.Fatal("frozen arguments rejected")
 	}
-	for _, changed := range []processArguments{{ExecutionID: 43, Cursor: "8", WaitSeconds: 4096}, {ExecutionID: 42, Cursor: "9", WaitSeconds: 4096}, {ExecutionID: 42, Cursor: "8", WaitSeconds: 8192}} {
+	for _, changed := range []processArguments{{ExecutionID: 43, Cursor: "8", WaitMS: 4096}, {ExecutionID: 42, Cursor: "9", WaitMS: 4096}, {ExecutionID: 42, Cursor: "8", WaitMS: 8192}} {
 		if matchesProcessArguments(raw, changed) {
 			t.Fatal("authorized process request changed")
 		}

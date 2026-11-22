@@ -120,12 +120,16 @@ func TestAgentApplicationIntegration(t *testing.T) {
 				t.Errorf("waited split result: %s", last)
 			}
 		}
-		if step == 10 {
+		if step == 9 || step == 11 {
 			var v struct {
 				Execution a.SandboxExecutionMetadata `json:"sandbox_execution"`
 			}
 			last := request.Messages[len(request.Messages)-1].Content
-			if err := json.Unmarshal([]byte(last), &v); err != nil || v.Execution.State != "completed" || v.Execution.ExitCode == nil || *v.Execution.ExitCode == 0 {
+			if err := json.Unmarshal([]byte(last), &v); err != nil {
+				t.Error(err)
+			} else if step == 9 && (v.Execution.State != "running" || v.Execution.ExitCode != nil) {
+				t.Errorf("expected a running task after a short wait: %s", last)
+			} else if step == 11 && (v.Execution.State != "completed" || v.Execution.ExitCode == nil || *v.Execution.ExitCode == 0) {
 				t.Errorf("expected interrupted command to have exited: %s", last)
 			}
 		}
@@ -136,10 +140,11 @@ func TestAgentApplicationIntegration(t *testing.T) {
 			{"exec", `{"description":"Read verification file","command":"mkdir subdir && cat verification.txt"}`},
 			{"exec", `{"description":"Collect output after the default wait","command":"sleep 65; printf 'from subdirectory'; printf 'final diagnostic' >&2; exit 7","workdir":"subdir"}`},
 			{"task_list", `{}`},
-			{"task_output", fmt.Sprintf(`{"task_id":%q,"wait_seconds":30}`, currentTask)},
+			{"task_output", fmt.Sprintf(`{"task_id":%q,"wait_ms":30000}`, currentTask)},
 			{"exec", `{"description":"Start cancellable command","command":"sleep 60","wait_ms":0}`},
+			{"task_output", fmt.Sprintf(`{"task_id":%q,"wait_ms":125}`, currentTask)},
 			{"task_kill", fmt.Sprintf(`{"task_id":%q}`, currentTask)},
-			{"task_output", fmt.Sprintf(`{"task_id":%q,"wait_seconds":10}`, currentTask)},
+			{"task_output", fmt.Sprintf(`{"task_id":%q,"wait_ms":10000}`, currentTask)},
 			{"save_artifacts", `{"files":[{"path":"verification.txt","description":"Integration result"}]}`},
 		}
 		if step <= int32(len(tools)) {
@@ -255,8 +260,8 @@ func TestAgentApplicationIntegration(t *testing.T) {
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
-	if !realModel && calls.Load() != 11 {
-		t.Fatalf("expected eleven model steps, got %d", calls.Load())
+	if !realModel && calls.Load() != 12 {
+		t.Fatalf("expected twelve model steps, got %d", calls.Load())
 	}
 	var artifacts int
 	if err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_artifact WHERE content_session_id=?", session.Configuration.ID).Scan(&artifacts); err != nil || artifacts != 1 {

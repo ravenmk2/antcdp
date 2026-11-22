@@ -155,8 +155,8 @@ func (s *CloudService) waitCommand(ctx context.Context, row CloudExecutionRow, a
 	}
 }
 
-func (s *CloudService) TaskOutput(ctx context.Context, ref agentcore.ExecutionRef, callID, id uint64, cursor string, waitSeconds int) (CommandResult, error) {
-	args := processArguments{ExecutionID: id, Cursor: cursor, WaitSeconds: waitSeconds}
+func (s *CloudService) TaskOutput(ctx context.Context, ref agentcore.ExecutionRef, callID, id uint64, cursor string, waitMS int) (CommandResult, error) {
+	args := processArguments{ExecutionID: id, Cursor: cursor, WaitMS: waitMS}
 	if cursor == "" {
 		cursor = "0"
 	}
@@ -164,8 +164,8 @@ func (s *CloudService) TaskOutput(ctx context.Context, ref agentcore.ExecutionRe
 	if err != nil || start < 0 {
 		return CommandResult{}, httpx.Invalid("cursor", "invalid")
 	}
-	if waitSeconds < 0 || waitSeconds > 600 {
-		return CommandResult{}, httpx.Invalid("wait_seconds", "invalid")
+	if waitMS < 0 || waitMS > maxCommandWaitMS {
+		return CommandResult{}, httpx.Invalid("wait_ms", "invalid")
 	}
 	access, row, err := s.commandAccess(ctx, ref, callID, id, "task_output", args)
 	if err != nil {
@@ -183,7 +183,7 @@ func (s *CloudService) TaskOutput(ctx context.Context, ref agentcore.ExecutionRe
 		}
 		return observedCommand(meta), nil
 	}
-	if err = s.waitCommand(ctx, *row, access, &meta, time.Duration(waitSeconds)*time.Second); err != nil {
+	if err = s.waitCommand(ctx, *row, access, &meta, time.Duration(waitMS)*time.Millisecond); err != nil {
 		return CommandResult{}, err
 	}
 	log, err := access.Provider.ReadExecutionOutput(ctx, sandboxcore.ExecutionHandle{Resource: access.Resource, ID: *row.RemoteExecutionID}, start, 8192)

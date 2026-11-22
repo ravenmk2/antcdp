@@ -85,6 +85,32 @@ func TestAgentBuiltinSchemasSupportControlAndRejectExtraArguments(t *testing.T) 
 	}
 }
 
+func TestTaskOutputWaitSchema(t *testing.T) {
+	for _, tool := range sandboxAgentTools() {
+		if tool.key != "task_output" {
+			continue
+		}
+		for _, tc := range []struct {
+			args      string
+			wantValid bool
+		}{
+			{`{"task_id":"1"}`, true},
+			{`{"task_id":"1","wait_ms":0}`, true},
+			{`{"task_id":"1","wait_ms":600000}`, true},
+			{`{"task_id":"1","wait_ms":600001}`, false},
+			{`{"task_id":"1","wait_ms":-1}`, false},
+			{`{"task_id":"1","wait_seconds":1}`, false},
+		} {
+			err := mcp.ValidateArguments(json.RawMessage(tool.schema), json.RawMessage(tc.args))
+			if (err == nil) != tc.wantValid {
+				t.Errorf("valid(%s) = %t, want %t", tc.args, err == nil, tc.wantValid)
+			}
+		}
+		return
+	}
+	t.Fatal("missing task_output tool")
+}
+
 func TestQuestionSchemaAcceptsOptionalRecommendationBoolean(t *testing.T) {
 	for _, tool := range builtinAgentTools() {
 		if tool.Key != "ask_question" {

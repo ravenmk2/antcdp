@@ -18,6 +18,8 @@ import (
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
 
+const maxCommandWaitMS = 600_000
+
 type CommandRequest struct {
 	Description string `json:"description"`
 	Workdir     string `json:"workdir,omitempty"`
@@ -50,7 +52,7 @@ type CommandResult struct {
 type processArguments struct {
 	ExecutionID uint64 `json:"task_id,string"`
 	Cursor      string `json:"cursor"`
-	WaitSeconds int    `json:"wait_seconds,omitempty"`
+	WaitMS      int    `json:"wait_ms,omitempty"`
 }
 
 func matchesProcessArguments(raw string, expected processArguments) bool {
@@ -84,7 +86,7 @@ func normalizeCommandRequest(w CommandRequest) (CommandRequest, error) {
 	if strings.TrimSpace(w.Description) == "" || strings.ContainsAny(w.Description, "\r\n\x00") || utf8.RuneCountInString(w.Description) > 160 || !utf8.ValidString(w.Description) {
 		return w, httpx.Invalid("description", "invalid")
 	}
-	if *w.WaitMS < 0 || *w.WaitMS > 600_000 {
+	if *w.WaitMS < 0 || *w.WaitMS > maxCommandWaitMS {
 		return w, httpx.Invalid("wait_ms", "out_of_range")
 	}
 	return w, nil

@@ -81,16 +81,16 @@ func (d *agentToolDispatcher) dispatchSandbox(ctx context.Context, execution age
 			result, err = s.ExecuteCommand(ctx, execution.Ref, callID, input)
 		} else {
 			var input struct {
-				ID          uint64 `json:"task_id,string"`
-				Cursor      string `json:"cursor"`
-				WaitSeconds int    `json:"wait_seconds"`
+				ID     uint64 `json:"task_id,string"`
+				Cursor string `json:"cursor"`
+				WaitMS int    `json:"wait_ms"`
 			}
 			if json.Unmarshal(args, &input) != nil || input.ID == 0 {
 				return sandboxToolFailure(httpx.Invalid("arguments", "invalid_format")), nil
 			}
 			switch key {
 			case "task_output":
-				result, err = s.TaskOutput(ctx, execution.Ref, callID, input.ID, input.Cursor, input.WaitSeconds)
+				result, err = s.TaskOutput(ctx, execution.Ref, callID, input.ID, input.Cursor, input.WaitMS)
 			case "task_kill":
 				result, err = s.TaskKill(ctx, execution.Ref, callID, input.ID)
 			default:
