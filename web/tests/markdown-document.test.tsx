@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { parseMarkdown } from "@/lib/markdown-document";
 import { MarkdownView } from "@/components/markdown";
-import { normalizeDiagram } from "@/components/mermaid-block";
+import { normalizeDiagram } from "@/hooks/use-mermaid-diagram";
 import { ChatMarkdown } from "@/features/agents/chat/markdown";
 
 const diagram = vi.hoisted(() => vi.fn());
@@ -209,6 +209,18 @@ it("renders Mermaid only on request, supports the image viewer and restores trig
   });
   await user.click(within(viewer).getByRole("button", { name: "实际大小" }));
   expect(within(viewer).getByRole("img").style.transform).toContain("scale(1)");
+  const formats = within(viewer).getByRole("button", { name: "选择下载格式" });
+  expect(
+    within(viewer).getByRole("button", { name: "下载 SVG" }),
+  ).toBeEnabled();
+  formats.focus();
+  await user.keyboard("{ArrowDown}");
+  const menu = await screen.findByRole("menu");
+  expect(within(menu).getByRole("menuitem", { name: "SVG" })).toBeVisible();
+  expect(within(menu).getByRole("menuitem", { name: "PNG" })).toBeVisible();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(formats).toHaveFocus();
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(trigger).toHaveFocus();

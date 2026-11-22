@@ -1943,13 +1943,31 @@
   min-height: 22px;
 }
 .root :global(.agent-markdown-diagram) {
-  height: 320px;
-  overflow: auto;
+  display: block;
+  width: 100%;
   padding: 12px;
+  cursor: zoom-in;
+}
+.root :global(.agent-markdown-diagram:focus-visible) {
+  outline: 2px solid var(--chat-primary);
+  outline-offset: -2px;
 }
 .root :global(.agent-markdown-diagram img) {
+  display: block;
   max-width: 100%;
+  max-height: 320px;
   height: auto;
+  margin-inline: auto;
+  object-fit: contain;
+}
+.root :global(.agent-markdown-diagram-status) {
+  padding: 4px 12px 12px;
+  font-size: 12px;
+  color: var(--chat-muted);
+}
+.root :global(.agent-markdown-code-heading .agent-chat-icon-button:disabled) {
+  opacity: 0.5;
+  cursor: default;
 }
 .root :global(.agent-chat-icon-button) {
   display: inline-flex;

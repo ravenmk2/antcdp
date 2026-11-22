@@ -7,8 +7,13 @@ import {
   type ReactNode,
 } from "react";
 import DOMPurify from "dompurify";
-import { Download, WrapText } from "lucide-react";
+import { CodeXml, Download, Workflow, WrapText } from "lucide-react";
 import { useTheme } from "@/app/theme";
+import { DiagramViewer } from "@/components/diagram-viewer";
+import {
+  type MermaidDiagram,
+  useMermaidDiagram,
+} from "@/hooks/use-mermaid-diagram";
 import {
   collectMarkdownTables,
   createMarkdownParser,
@@ -179,23 +184,34 @@ function ChatCode({
   streaming: boolean;
 }) {
   const [wrap, setWrap] = useState(false);
+  const [viewCode, setViewCode] = useState(false);
+  const [preview, setPreview] = useState<{
+    diagram: MermaidDiagram;
+    trigger: HTMLButtonElement;
+  }>();
   const { resolved } = useTheme();
+  const mermaid = language.toLowerCase() === "mermaid";
+  const wantsGraph = mermaid && !streaming && !viewCode;
+  const { result, retry } = useMermaidDiagram(source, resolved, wantsGraph);
+  const diagram = result?.diagram;
+  const graphError = wantsGraph && result?.error !== undefined;
+  const showGraph = wantsGraph && !graphError;
   const [highlight, setHighlight] = useState<{
     source: string;
     language: string;
     theme: string;
     lines: string[];
   }>();
-  const [graph, setGraph] = useState(false);
-  const [diagram, setDiagram] = useState<{
-    source: string;
-    theme: string;
-    svg?: string;
-    error?: string;
-  }>();
   const display = source.replace(/\n$/, "");
+  const lines =
+    !streaming &&
+    highlight?.source === source &&
+    highlight.language === language &&
+    highlight.theme === resolved
+      ? highlight.lines
+      : undefined;
   useEffect(() => {
-    if (streaming) return;
+    if (streaming || showGraph || lines) return;
     let active = true;
     void import("shiki")
       .then(({ codeToHtml }) =>
@@ -223,78 +239,35 @@ function ChatCode({
     return () => {
       active = false;
     };
-  }, [source, display, language, streaming, resolved]);
-  useEffect(() => {
-    if (!graph || streaming) return;
-    let active = true;
-    diagramQueue = diagramQueue
-      .catch(() => {})
-      .then(async () => {
-        if (!active) return;
-        try {
-          const { default: mermaid } = await import("mermaid");
-          mermaid.initialize({
-            startOnLoad: false,
-            securityLevel: "strict",
-            suppressErrorRendering: true,
-            theme: resolved === "dark" ? "dark" : "default",
-            htmlLabels: false,
-          });
-          const result = await mermaid.render(
-            `chat-diagram-${++diagramID}`,
-            source,
-          );
-          const svg = DOMPurify.sanitize(result.svg, {
-            USE_PROFILES: { svg: true, svgFilters: true },
-            FORBID_TAGS: ["foreignObject", "image", "a"],
-            FORBID_ATTR: ["href", "xlink:href"],
-          });
-          if (active) setDiagram({ source, theme: resolved, svg });
-        } catch {
-          if (active)
-            setDiagram({
-              source,
-              theme: resolved,
-              error: "图表语法无法解析，请查看源代码。",
-            });
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, [source, streaming, graph, resolved]);
-  const lines =
-    !streaming &&
-    highlight?.source === source &&
-    highlight.language === language &&
-    highlight.theme === resolved
-      ? highlight.lines
-      : undefined;
-  const current =
-    diagram?.source === source && diagram.theme === resolved
-      ? diagram
-      : undefined;
+  }, [source, display, language, streaming, resolved, showGraph, lines]);
   return (
     <section className="agent-markdown-code">
       <div className="agent-markdown-code-heading">
         <span>{language}</span>
         <div>
-          {language === "mermaid" && (
-            <button
-              type="button"
+          {mermaid && (
+            <ChatIconButton
+              label={
+                showGraph ? "查看代码" : graphError ? "重试图形" : "查看图形"
+              }
               disabled={streaming}
-              onClick={() => setGraph(!graph)}
+              onClick={() => {
+                if (result?.error !== undefined) retry();
+                setViewCode(showGraph);
+              }}
             >
-              {graph ? "代码" : "图形"}
-            </button>
+              {showGraph ? <CodeXml /> : <Workflow />}
+            </ChatIconButton>
           )}
-          <ChatIconButton
-            label="自动换行"
-            aria-pressed={wrap}
-            onClick={() => setWrap(!wrap)}
-          >
-            <WrapText />
-          </ChatIconButton>
+          {!showGraph && (
+            <ChatIconButton
+              label="自动换行"
+              aria-pressed={wrap}
+              onClick={() => setWrap(!wrap)}
+            >
+              <WrapText />
+            </ChatIconButton>
+          )}
           <ChatIconButton
             label="下载代码"
             onClick={() => {
@@ -313,34 +286,52 @@ function ChatCode({
           <ChatCopyButton value={source} label="复制代码" />
         </div>
       </div>
-      {graph && !streaming ? (
-        <div className="agent-markdown-diagram">
-          {current?.svg ? (
-            <img
-              alt="Mermaid 图表"
-              src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(current.svg)}`}
-            />
-          ) : (
-            <p role="status">{current?.error ?? "正在渲染图表…"}</p>
-          )}
-        </div>
+      {showGraph ? (
+        diagram ? (
+          <button
+            type="button"
+            className="agent-markdown-diagram"
+            aria-label="查看完整图表"
+            onClick={(event) =>
+              setPreview({ diagram, trigger: event.currentTarget })
+            }
+          >
+            <img src={diagram.image} alt="Mermaid 图表" draggable={false} />
+          </button>
+        ) : (
+          <p className="agent-markdown-diagram-status" role="status">
+            正在渲染图表…
+          </p>
+        )
       ) : (
-        <pre data-wrapped={wrap}>
-          <code>
-            {display.split("\n").map((line, index) => (
-              <span className="agent-markdown-code-line" key={index}>
-                {lines?.[index] ? (
-                  <span dangerouslySetInnerHTML={{ __html: lines[index] }} />
-                ) : (
-                  line || "\n"
-                )}
-              </span>
-            ))}
-          </code>
-        </pre>
+        <>
+          {graphError && (
+            <p className="agent-markdown-diagram-status" role="status">
+              无法渲染 Mermaid 图表，已显示源码。
+            </p>
+          )}
+          <pre data-wrapped={wrap}>
+            <code>
+              {display.split("\n").map((line, index) => (
+                <span className="agent-markdown-code-line" key={index}>
+                  {lines?.[index] ? (
+                    <span dangerouslySetInnerHTML={{ __html: lines[index] }} />
+                  ) : (
+                    line || "\n"
+                  )}
+                </span>
+              ))}
+            </code>
+          </pre>
+        </>
+      )}
+      {preview && (
+        <DiagramViewer
+          diagram={preview.diagram}
+          returnFocus={preview.trigger}
+          onClose={() => setPreview(undefined)}
+        />
       )}
     </section>
   );
 }
-let diagramQueue: Promise<unknown> = Promise.resolve();
-let diagramID = 0;

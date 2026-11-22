@@ -1,10 +1,78 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { ChatMarkdown } from "@/features/agents/chat/markdown";
 
 vi.mock("@/app/theme", () => ({ useTheme: () => ({ resolved: "light" }) }));
 vi.mock("shiki", () => ({ codeToHtml: vi.fn(async () => "") }));
+const renderDiagram = vi.hoisted(() => vi.fn());
+vi.mock("mermaid", () => ({
+  default: { initialize: vi.fn(), render: renderDiagram },
+}));
+
+afterEach(() => {
+  renderDiagram.mockReset();
+  vi.unstubAllGlobals();
+});
+
+it("shows a Mermaid graph after streaming and reuses it across mode changes", async () => {
+  renderDiagram.mockResolvedValue({
+    svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 200"><text>Graph</text></svg>',
+  });
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const user = userEvent.setup();
+  const write = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue();
+  const diagram = "flowchart LR\nA --> B\n";
+  const source = "```mermaid\n" + diagram;
+  const { rerender } = render(<ChatMarkdown source={source} streaming />);
+  const toggle = screen.getByRole("button", { name: "查看图形" });
+  expect(toggle).toBeDisabled();
+  expect(screen.getByText("A --> B")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "自动换行" }));
+  expect(renderDiagram).not.toHaveBeenCalled();
+
+  rerender(<ChatMarkdown source={source + "```"} />);
+  await screen.findByRole("button", { name: "查看完整图表" });
+  expect(screen.getByRole("button", { name: "查看代码" })).toBe(toggle);
+  expect(screen.queryByText("A --> B")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "复制代码" }));
+  expect(write).toHaveBeenLastCalledWith(diagram);
+  await user.click(toggle);
+  expect(screen.getByText("A --> B")).toBeVisible();
+  expect(screen.getByRole("button", { name: "自动换行" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await user.click(toggle);
+  expect(renderDiagram).toHaveBeenCalledTimes(1);
+
+  const preview = screen.getByRole("button", { name: "查看完整图表" });
+  await user.click(preview);
+  const viewer = screen.getByRole("dialog", { name: "图表查看" });
+  expect(within(viewer).getByRole("button", { name: "放大" })).toBeVisible();
+  await user.keyboard("{Escape}");
+  expect(viewer).not.toBeInTheDocument();
+  expect(preview).toHaveFocus();
+});
+
+it("keeps malformed Mermaid source visible and navigable", async () => {
+  renderDiagram.mockRejectedValue(new Error("Invalid Mermaid"));
+  render(<ChatMarkdown source={"```mermaid\ninvalid graph\n```"} />);
+  expect(await screen.findByText(/已显示源码/)).toHaveAttribute(
+    "role",
+    "status",
+  );
+  expect(screen.getByText("invalid graph")).toBeVisible();
+  expect(screen.getByRole("button", { name: "复制代码" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "重试图形" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: "查看完整图表" })).toBeNull();
+});
 
 it("keeps completed blocks and code controls mounted while the tail grows", () => {
   const source = "段落。\n\n```typescript\nconst a = 1;\n```\n\n";
