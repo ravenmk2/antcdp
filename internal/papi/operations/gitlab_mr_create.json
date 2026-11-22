@@ -1,0 +1,74 @@
+{
+  "api_code": "gitlab.mr.create",
+  "title": "创建 GitLab 合并请求",
+  "summary": "在一个 GitLab 项目内创建合并请求。",
+  "description": "Use project_repo_id returned by git_repo_list. Only merge requests whose source and target are in this GitLab project are supported. Use a Draft: prefix in title to create a draft. Description lines containing GitLab quick actions are rejected. If the result is unknown, list MRs by source and target branch before retrying.",
+  "effect": "write",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "project_repo_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 20
+      },
+      "source_branch": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "target_branch": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "description": {
+        "type": "string",
+        "maxLength": 8192
+      },
+      "assignee_ids": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "reviewer_ids": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "squash": {
+        "type": "boolean"
+      },
+      "remove_source_branch": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "project_repo_id",
+      "source_branch",
+      "target_branch",
+      "title"
+    ],
+    "additionalProperties": false
+  },
+  "example_args": {
+    "project_repo_id": "17",
+    "source_branch": "feature/change",
+    "target_branch": "main",
+    "title": "Add validation"
+  },
+  "result_description": "The MR with iid, title, state, draft, source_branch, target_branch, sha, web_url and detailed_merge_status."
+}

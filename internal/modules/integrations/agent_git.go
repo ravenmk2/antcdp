@@ -145,40 +145,9 @@ func gitOrigin(base *url.URL, raw *string) (*url.URL, error) {
 
 func (s *Service) AgentGitRemote(ctx context.Context, auth agentcore.Authorization, id uint64) (out AgentGitRemote, err error) {
 	err = s.agentAccess(ctx, auth, func(tx identity.Tx, user *identity.User, r Repository) error {
-		pr, ok := tx.(agentRepoStore)
-		if !ok {
-			return integrity()
-		}
-		pid, err := pr.ProjectIDForRepository(id)
+		row, conn, err := agentRepoConnection(tx, user, r, auth, id)
 		if err != nil {
 			return err
-		}
-		if err = agentProjectAccess(tx, user, auth, pid); err != nil {
-			return err
-		}
-		row, err := pr.ProjectRepo(pid, id)
-		if err != nil {
-			return err
-		}
-		if row == nil {
-			return fail()
-		}
-		conn, err := r.Connection(row.ConnectionID)
-		if err != nil {
-			return err
-		}
-		if conn == nil || conn.Type != "gitlab" {
-			return fail()
-		}
-		allowed, err := ConnectionAllowed(r, conn, CredentialOwnership{Type: "project", Owner: pid})
-		if err != nil {
-			return err
-		}
-		if !allowed {
-			return fail()
-		}
-		if !conn.Enabled {
-			return httpx.E(409, "RESOURCE_DISABLED", "服务连接已停用")
 		}
 		cfg, err := config(r, conn)
 		if err != nil {
@@ -200,6 +169,45 @@ func (s *Service) AgentGitRemote(ctx context.Context, auth agentcore.Authorizati
 		return nil
 	})
 	return out, err
+}
+
+func agentRepoConnection(tx identity.Tx, user *identity.User, r Repository, auth agentcore.Authorization, id uint64) (*ProjectRepo, *ServiceConnection, error) {
+	pr, ok := tx.(agentRepoStore)
+	if !ok {
+		return nil, nil, integrity()
+	}
+	pid, err := pr.ProjectIDForRepository(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err = agentProjectAccess(tx, user, auth, pid); err != nil {
+		return nil, nil, err
+	}
+	row, err := pr.ProjectRepo(pid, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if row == nil {
+		return nil, nil, fail()
+	}
+	conn, err := r.Connection(row.ConnectionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if conn == nil || conn.Type != "gitlab" {
+		return nil, nil, fail()
+	}
+	allowed, err := ConnectionAllowed(r, conn, CredentialOwnership{Type: "project", Owner: pid})
+	if err != nil {
+		return nil, nil, err
+	}
+	if !allowed {
+		return nil, nil, fail()
+	}
+	if !conn.Enabled {
+		return nil, nil, httpx.E(409, "RESOURCE_DISABLED", "服务连接已停用")
+	}
+	return row, conn, nil
 }
 
 // GitMaterial is passed directly to the private sandbox writer. It must never be serialized.

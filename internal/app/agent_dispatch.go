@@ -12,6 +12,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/agentresources"
 	"github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/modules/integrations"
 	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/webaccess"
 )
@@ -161,6 +162,16 @@ func (d *agentToolDispatcher) dispatchPlatformAPI(ctx context.Context, ref agent
 	var failure *papi.Failure
 	if errors.As(err, &failure) {
 		return toolObservation("failed", failure.Code, failure.Content(), &no), nil
+	}
+	var mrFailure *integrations.GitLabMRFailure
+	if errors.As(err, &mrFailure) {
+		executed := &no
+		if mrFailure.Unknown {
+			executed = nil
+		}
+		observation := toolFailure(mrFailure.Code, executed)
+		observation.Content = mrFailure.Code + "\n" + mrFailure.Message
+		return observation, nil
 	}
 	if err != nil {
 		return sandboxToolFailure(err), nil

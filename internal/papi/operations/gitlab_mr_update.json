@@ -1,0 +1,78 @@
+{
+  "api_code": "gitlab.mr.update",
+  "title": "更新 GitLab 合并请求",
+  "summary": "修改合并请求字段，或关闭、重新打开合并请求。",
+  "description": "Use project_repo_id returned by git_repo_list. Only merge requests whose source and target are in this GitLab project are supported. Provide at least one update field. Omitted fields keep their values. An empty description or user list clears that field. Use a Draft: prefix in the supplied title to mark a draft. Description lines containing GitLab quick actions are rejected.",
+  "effect": "write",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "project_repo_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 20
+      },
+      "iid": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 9007199254740991
+      },
+      "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "target_branch": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "state_event": {
+        "type": "string",
+        "enum": [
+          "close",
+          "reopen"
+        ]
+      },
+      "description": {
+        "type": "string",
+        "maxLength": 8192
+      },
+      "assignee_ids": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "reviewer_ids": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      },
+      "squash": {
+        "type": "boolean"
+      },
+      "remove_source_branch": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "project_repo_id",
+      "iid"
+    ],
+    "additionalProperties": false
+  },
+  "example_args": {
+    "project_repo_id": "17",
+    "iid": 42,
+    "title": "Improve validation"
+  },
+  "result_description": "The MR with iid, title, state, draft, source_branch, target_branch, sha, web_url and detailed_merge_status."
+}

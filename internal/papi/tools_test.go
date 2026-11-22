@@ -16,7 +16,10 @@ func TestGitAPIsUseGrantedOperationAndOriginalCall(t *testing.T) {
 		received = id
 		return args, nil
 	}
-	r, err := NewWithGit(GitOperations{List: handler, Init: handler, Ensure: handler})
+	r, err := NewWithGit(GitOperations{
+		List: handler, Init: handler, Ensure: handler,
+		MergeRequests: GitLabMROperations{Create: handler, List: handler, Get: handler, Update: handler, Merge: handler},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,6 +30,11 @@ func TestGitAPIsUseGrantedOperationAndOriginalCall(t *testing.T) {
 		{"git_repo_list", `{"project_code":"123"}`, "read", false},
 		{"git_repo_init", `{"project_repo_id":"1","path":"repo one"}`, "write", true},
 		{"svc_cred_ensure", `{"conn_id":"1"}`, "write", true},
+		{"gitlab.mr.create", `{"project_repo_id":"1","source_branch":"feature","target_branch":"main","title":"Test"}`, "write", false},
+		{"gitlab.mr.list", `{"project_repo_id":"1"}`, "read", false},
+		{"gitlab.mr.get", `{"project_repo_id":"1","iid":2}`, "read", false},
+		{"gitlab.mr.update", `{"project_repo_id":"1","iid":2,"description":""}`, "write", false},
+		{"gitlab.mr.merge", `{"project_repo_id":"1","iid":2,"sha":"0123456789abcdef0123456789abcdef01234567"}`, "write", false},
 	} {
 		op := r.Operation(test.code)
 		if op == nil || op.Effect != test.effect || op.RequiresSandbox() != test.sandbox {

@@ -205,12 +205,17 @@ func (s *Service) ownedRepoSnapshot(r Repository, id uint64, decrypt bool, owner
 	if !v.Enabled {
 		return snap, httpx.E(409, "RESOURCE_DISABLED", "服务连接已停用")
 	}
+	return s.preferredRepoSnapshot(r, v, decrypt, owner)
+}
+
+func (s *Service) preferredRepoSnapshot(r Repository, v *ServiceConnection, decrypt bool, owner CredentialOwnership) (repoSnapshot, error) {
+	var snap repoSnapshot
 	g, e := config(r, v)
 	if e != nil {
 		return snap, e
 	}
 	v.Config = *g
-	creds, e := r.Credentials(id, owner)
+	creds, e := r.Credentials(v.ID, owner)
 	if e != nil {
 		return snap, e
 	}
@@ -239,7 +244,7 @@ func (s *Service) ownedRepoSnapshot(r Repository, id uint64, decrypt bool, owner
 		if e != nil {
 			return snap, e
 		}
-		snap.Token, e = s.Cipher(credentialPurpose(v.Type, "credential", id, selected.ID, selected.AuthMethod), sealed, false)
+		snap.Token, e = s.Cipher(credentialPurpose(v.Type, "credential", v.ID, selected.ID, selected.AuthMethod), sealed, false)
 		if e != nil {
 			return snap, e
 		}
