@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ravenmk2/antcdp/internal/modules/settings"
+	"github.com/ravenmk2/antcdp/internal/platform/emailaddress"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/platform/password"
 )
@@ -102,7 +103,7 @@ func (s *Service) UpdateAccount(ctx context.Context, raw, etag string, patch Pro
 	return result, a, err
 }
 func (s *Service) updateProfile(tx Tx, a *Auth, u *User, patch ProfilePatch, meta Metadata) error {
-	if patch.Username == nil && patch.DisplayName == nil && !patch.Avatar.Present {
+	if patch.Username == nil && patch.DisplayName == nil && patch.Email == nil && !patch.Avatar.Present {
 		return httpx.Invalid("body", "empty_patch")
 	}
 	changes := map[string]any{}
@@ -123,6 +124,26 @@ func (s *Service) updateProfile(tx Tx, a *Auth, u *User, patch ProfilePatch, met
 		if u.DisplayName != name {
 			changes["display_name"] = map[string]string{"before": u.DisplayName, "after": name}
 			u.DisplayName = name
+		}
+	}
+	if patch.Email != nil {
+		email, ok := emailaddress.Normalize(*patch.Email)
+		if !ok {
+			return httpx.Invalid("email", "invalid_format")
+		}
+		previous := ""
+		if u.Email != nil {
+			previous = *u.Email
+		}
+		if email != previous {
+			changes["email"] = true
+			if !strings.EqualFold(email, previous) {
+				u.EmailVerifiedAt = nil
+			}
+			u.Email = nil
+			if email != "" {
+				u.Email = &email
+			}
 		}
 	}
 	avatarChanged, err := s.bindAvatar(tx, a.User, u, patch.Avatar)

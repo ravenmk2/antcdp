@@ -11,6 +11,7 @@ import { useSetupCompletion } from "@/hooks/use-setup-completion";
 import type { SetupStatus } from "@/types/auth";
 import {
   displayNameSchema,
+  emailSchema,
   passwordSchema,
   usernameSchema,
 } from "@/domain/validation";
@@ -19,6 +20,7 @@ const founderSchema = z
   .object({
     username: usernameSchema,
     display_name: displayNameSchema,
+    email: emailSchema,
     password: passwordSchema,
     confirm: z.string(),
   })
@@ -64,6 +66,7 @@ export function SetupPage({
   const [founder, setFounder] = useState<FounderDraft>({
     username: "",
     display_name: "",
+    email: "",
     password: "",
     confirm: "",
   });
@@ -129,6 +132,7 @@ export function SetupPage({
               founder: {
                 username: founder.username,
                 display_name: founder.display_name.trim(),
+                email: founder.email.trim(),
                 password: founder.password,
               },
             },
@@ -285,7 +289,6 @@ export function SetupPage({
                         required
                         hint="由部署维护者提供"
                         error={errors.fields.install_password}
-                        className="form-full"
                       >
                         <Input
                           name="install_password"
@@ -296,6 +299,21 @@ export function SetupPage({
                             setInstallPassword(event.target.value);
                             errors.change("install_password");
                           }}
+                        />
+                      </Field>
+                      <Field
+                        label="创始人邮箱"
+                        required
+                        error={errors.fields.email}
+                      >
+                        <Input
+                          name="email"
+                          type="email"
+                          autoComplete="email"
+                          value={founder.email}
+                          onChange={(event) =>
+                            updateFounder("email", event.target.value)
+                          }
                         />
                       </Field>
                       <Field

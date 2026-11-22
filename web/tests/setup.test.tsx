@@ -45,6 +45,7 @@ describe("installation wizard", () => {
         if (path.endsWith("/setup/install")) {
           const body = JSON.parse(String(init?.body));
           expect(body.install_password).toBe("install-secret");
+          expect(body.founder.email).toBe("founder@example.test");
           expect(body).not.toHaveProperty("database");
           installed = true;
           return json({ authenticated });
@@ -93,6 +94,10 @@ describe("installation wizard", () => {
       await user.type(await screen.findByLabelText("系统名称"), "Example");
       await user.click(screen.getByRole("button", { name: "下一步" }));
       await user.type(screen.getByLabelText(/^安装口令/), "install-secret");
+      await user.type(
+        screen.getByLabelText(/^创始人邮箱/),
+        "founder@example.test",
+      );
       await user.type(screen.getByLabelText(/用户名/), "founder");
       await user.type(screen.getByLabelText(/显示名称/), "创始人");
       await user.type(screen.getByLabelText(/^密码/), "password123");
@@ -179,6 +184,12 @@ describe("installation wizard", () => {
     await user.type(screen.getByLabelText(/^密码/), "password123");
     await user.type(screen.getByLabelText(/^确认密码/), "password123");
     await user.click(screen.getByRole("button", { name: "确认并安装" }));
+    expect(screen.getByText("请输入邮箱")).toBeVisible();
+    await user.type(
+      screen.getByLabelText(/^创始人邮箱/),
+      "founder@example.test",
+    );
+    await user.click(screen.getByRole("button", { name: "确认并安装" }));
     await waitFor(() =>
       expect(screen.getByText("安装结果未知")).toBeInTheDocument(),
     );
@@ -234,6 +245,10 @@ describe("installation wizard", () => {
     expect(screen.getByLabelText(/系统时区/)).toHaveTextContent("UTC");
     await user.click(screen.getByRole("button", { name: "下一步" }));
     await user.type(screen.getByLabelText(/^安装口令/), "fixture-password");
+    await user.type(
+      screen.getByLabelText(/^创始人邮箱/),
+      "founder@example.test",
+    );
     await user.type(screen.getByLabelText(/用户名/), "founder");
     await user.type(screen.getByLabelText(/显示名称/), "创始人");
     await user.type(screen.getByLabelText(/^密码/), "password123");

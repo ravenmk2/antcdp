@@ -53,6 +53,10 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 	flags.StringVar(&overrides.DataDir, "data-dir", "", "persistent data directory (default: <cwd>/data)")
 	flags.StringVar(&overrides.Listen, "listen", "", "HTTP listen address")
 	flags.StringVar(&overrides.PublicURL, "public-url", "", "public HTTP(S) origin")
+	var recovery install.RecoveryInput
+	if command == "setup recover" {
+		flags.StringVar(&recovery.Email, "founder-email", "", "founder email for an older installation checkpoint")
+	}
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -77,13 +81,14 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 		return installer.Migrate(ctx, os.Getenv("ANTCDP_MIGRATION_USERNAME"), os.Getenv("ANTCDP_MIGRATION_PASSWORD"))
 	}
 	if command == "setup recover" {
-		err := installer.Recover(ctx, "")
+		err := installer.Recover(ctx, recovery)
 		if errors.Is(err, install.ErrFounderPasswordRequired) {
 			secret, readErr := readPassword(errOut)
 			if readErr != nil {
 				return readErr
 			}
-			return installer.Recover(ctx, secret)
+			recovery.Password = secret
+			return installer.Recover(ctx, recovery)
 		}
 		return err
 	}

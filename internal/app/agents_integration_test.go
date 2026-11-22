@@ -60,7 +60,7 @@ func TestAgentApplicationIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = installer.Close() })
-	_, err = installer.Install(ctx, install.Request{InstallPassword: "fixture-install", Site: install.Site{Name: "Agent integration", Timezone: "Asia/Shanghai"}, Founder: install.Founder{Username: "founder", DisplayName: "Integration", Password: "application-integration-password"}})
+	_, err = installer.Install(ctx, install.Request{InstallPassword: "fixture-install", Site: install.Site{Name: "Agent integration", Timezone: "Asia/Shanghai"}, Founder: install.Founder{Username: "founder", DisplayName: "Integration", Email: "founder@example.test", Password: "application-integration-password"}})
 	if err != nil {
 		t.Fatal("install:", err)
 	}

@@ -83,7 +83,7 @@ func newAgentIntegrationFixtureFor(t *testing.T, variable string) *agentIntegrat
 	if e != nil {
 		t.Fatal(e)
 	}
-	if e = store.Seed(ctx, install.Seed{InstallationID: installation, Fingerprint: cryptox.Fingerprint(key), Site: install.Site{Name: "助手测试", Timezone: "Asia/Shanghai"}, Username: "founder", DisplayName: "管理员", PasswordHash: hash, Now: time.Now().UTC()}); e != nil {
+	if e = store.Seed(ctx, install.Seed{InstallationID: installation, Fingerprint: cryptox.Fingerprint(key), Site: install.Site{Name: "助手测试", Timezone: "Asia/Shanghai"}, Username: "founder", DisplayName: "管理员", Email: "founder@example.test", PasswordHash: hash, Now: time.Now().UTC()}); e != nil {
 		t.Fatal(e)
 	}
 	if e = store.Migrate(ctx); e != nil {

@@ -5,12 +5,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ravenmk2/antcdp/internal/platform/emailaddress"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
 type RobotCreate struct {
 	Username    string `json:"username"`
 	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
 }
 
 func (s *Service) CreateRobot(ctx context.Context, raw string, w RobotCreate, meta Metadata) (*User, *Auth, error) {
@@ -21,10 +23,17 @@ func (s *Service) CreateRobot(ctx context.Context, raw string, w RobotCreate, me
 	if err := validateName(w.DisplayName, "display_name", 30); err != nil {
 		return nil, nil, err
 	}
+	email, ok := emailaddress.Normalize(w.Email)
+	if !ok {
+		return nil, nil, httpx.Invalid("email", "invalid_format")
+	}
 	var robot *User
 	a, err := s.execute(ctx, raw, policy{admin: true, renew: true}, 0, func(tx Tx, a *Auth, _ *User) error {
 		now := s.now()
 		robot = &User{AccountType: "robot", Username: w.Username, DisplayName: w.DisplayName, Role: "user", Status: "active", CreatedAt: now, UpdatedAt: now}
+		if email != "" {
+			robot.Email = &email
+		}
 		if err := tx.InsertUser(robot); err != nil {
 			return err
 		}

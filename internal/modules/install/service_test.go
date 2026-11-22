@@ -131,7 +131,7 @@ func newService(t *testing.T, r config.Runtime, db *fakeDB) *Service {
 	return s
 }
 func validRequest() Request {
-	return Request{InstallPassword: "install-secret", Site: Site{"开发协作", "Asia/Shanghai"}, Founder: Founder{"founder", "创始人", "founder-password"}}
+	return Request{InstallPassword: "install-secret", Site: Site{"开发协作", "Asia/Shanghai"}, Founder: Founder{Username: "founder", DisplayName: "创始人", Email: "founder@example.test", Password: "founder-password"}}
 }
 
 func TestFreshInstallPreparesPasswordAndOwnsDataDirectory(t *testing.T) {
@@ -155,6 +155,7 @@ func TestInstallationSeedsOnceAndUsesRuntimeConnection(t *testing.T) {
 	s := newService(t, r, db)
 	req := validRequest()
 	req.Site.Name = "　 "
+	req.Founder.Email = " founder@example.test "
 	id, err := s.Install(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
@@ -164,6 +165,9 @@ func TestInstallationSeedsOnceAndUsesRuntimeConnection(t *testing.T) {
 	}
 	if db.seed.Site.Name != "" {
 		t.Fatal("blank site name was not normalized before seeding")
+	}
+	if db.seed.Email != "founder@example.test" {
+		t.Fatal("founder email was not normalized before seeding")
 	}
 	if !password.Verify(db.seed.PasswordHash, "founder-password") {
 		t.Fatal("founder password was not hashed")
@@ -339,7 +343,7 @@ func TestLockWriteFailureRetainsCommittedInstallationForRecovery(t *testing.T) {
 	if err := os.Remove(filepath.Join(r.DataDir, "install.lock")); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Recover(context.Background(), ""); err != nil {
+	if err := s.Recover(context.Background(), RecoveryInput{}); err != nil {
 		t.Fatal(err)
 	}
 	if s.Status(context.Background()).State != Ready || !exists(filepath.Join(r.DataDir, "install.lock")) || db.seeds != 1 {
@@ -361,7 +365,7 @@ func TestFailedDDLRetainsOriginalKeyAndRefusesBlindRecovery(t *testing.T) {
 	if s.Status(context.Background()).State != RecoveryRequired {
 		t.Fatal("failure returned to fresh setup")
 	}
-	if err = s.Recover(context.Background(), "new-password"); err == nil {
+	if err = s.Recover(context.Background(), RecoveryInput{Password: "new-password"}); err == nil {
 		t.Fatal("partial DDL was replayed")
 	}
 	after, _ := os.ReadFile(filepath.Join(r.DataDir, "master.key"))
@@ -379,15 +383,45 @@ func TestRecoverMigratedButUnseeded(t *testing.T) {
 	}
 	key, _ := os.ReadFile(filepath.Join(r.DataDir, "master.key"))
 	db.failSeed = false
-	if err := s.Recover(context.Background(), ""); !errors.Is(err, ErrFounderPasswordRequired) {
+	if err := s.Recover(context.Background(), RecoveryInput{}); !errors.Is(err, ErrFounderPasswordRequired) {
 		t.Fatal("recovery should require a new password", err)
 	}
-	if err := s.Recover(context.Background(), "replacement-password"); err != nil {
+	if err := s.Recover(context.Background(), RecoveryInput{Email: "other@example.test", Password: "replacement-password"}); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := os.ReadFile(filepath.Join(r.DataDir, "master.key"))
-	if string(key) != string(after) || db.migrations != 1 || db.seeds != 1 || !password.Verify(db.seed.PasswordHash, "replacement-password") {
+	if string(key) != string(after) || db.migrations != 1 || db.seeds != 1 || db.seed.Email != "founder@example.test" || !password.Verify(db.seed.PasswordHash, "replacement-password") {
 		t.Fatal("recovery changed identity or failed to resume")
+	}
+}
+
+func TestRecoverWithLegacyCheckpoint(t *testing.T) {
+	r := runtime(t)
+	db := &fakeDB{failSeed: true}
+	s := newService(t, r, db)
+	ctx := t.Context()
+	if _, err := s.Install(ctx, validRequest()); err == nil {
+		t.Fatal("expected seed failure")
+	}
+	path := filepath.Join(r.DataDir, ".install", "staging.json")
+	var j checkpoint
+	if err := readJSON(path, &j); err != nil {
+		t.Fatal(err)
+	}
+	j.Email = ""
+	if err := writeJSON(path, j); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Recover(ctx, RecoveryInput{}); !errors.Is(err, ErrFounderEmailRequired) {
+		t.Fatal("recovery should require an email for a legacy checkpoint", err)
+	}
+	input := RecoveryInput{Email: " legacy@example.test ", Password: "replacement-password"}
+	if err := s.Recover(ctx, input); err == nil {
+		t.Fatal("expected retryable seed failure")
+	}
+	db.failSeed = false
+	if err := s.Recover(ctx, RecoveryInput{Password: input.Password}); err != nil || db.seeds != 1 || db.seed.Email != "legacy@example.test" {
+		t.Fatal("recovery did not reuse the persisted email", err)
 	}
 }
 
@@ -400,7 +434,7 @@ func TestRecoveryMayMigrateOnlyWhenDatabaseIsStillEmpty(t *testing.T) {
 	}
 	key, _ := os.ReadFile(filepath.Join(r.DataDir, "master.key"))
 	db.failMigrate = false
-	if err := s.Recover(context.Background(), "replacement-password"); err != nil {
+	if err := s.Recover(context.Background(), RecoveryInput{Password: "replacement-password"}); err != nil {
 		t.Fatal(err)
 	}
 	after, _ := os.ReadFile(filepath.Join(r.DataDir, "master.key"))
@@ -442,7 +476,7 @@ func TestRecoverCommittedSeedWithoutDuplicatingFounder(t *testing.T) {
 	if err := os.Remove(filepath.Join(r.DataDir, "installation.json")); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Recover(context.Background(), ""); err != nil {
+	if err := s.Recover(context.Background(), RecoveryInput{}); err != nil {
 		t.Fatal(err)
 	}
 	if db.seeds != 1 || s.Status(context.Background()).State != Ready {

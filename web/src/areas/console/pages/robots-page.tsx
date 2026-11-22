@@ -6,8 +6,13 @@ import { ConsoleListPage } from "@/areas/console/components/list-page";
 import { Drawer } from "@/components/overlays";
 import { ErrorNotice } from "@/components/feedback";
 import { Field, Input } from "@/components/fields";
+import { AccountEmailField } from "@/features/access/account-email-field";
 import { RobotResources } from "@/features/agents/resources/robot-resources";
-import { usernameSchema, displayNameSchema } from "@/domain/validation";
+import {
+  usernameSchema,
+  displayNameSchema,
+  optionalEmailSchema,
+} from "@/domain/validation";
 import { Button } from "@/components/button";
 import { AsyncBoundary, StatusBadge } from "@/components/feedback";
 import { StandaloneInput } from "@/components/fields";
@@ -206,6 +211,7 @@ function RobotProfile({
 }) {
   const [username, setUsername] = useState(user?.username ?? "");
   const [name, setName] = useState(user?.display_name ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
   const [error, setError] = useState<unknown>();
   const [pending, setPending] = useState(false);
   async function save(event: FormEvent) {
@@ -217,14 +223,23 @@ function RobotProfile({
       setError(new Error("请填写有效的账号和显示名称"));
       return;
     }
+    const parsedEmail = optionalEmailSchema.safeParse(email);
+    if (!parsedEmail.success) {
+      setError(new Error(parsedEmail.error.issues[0].message));
+      return;
+    }
     setPending(true);
     try {
       await request(user ? `/admin/users/${user.id}` : "/admin/robots", {
         method: user ? "PATCH" : "POST",
         etag,
-        body: user
-          ? { display_name: parsedName.data }
-          : { username: parsedUser.data, display_name: parsedName.data },
+        body: {
+          ...(!user ? { username: parsedUser.data } : {}),
+          display_name: parsedName.data,
+          ...(parsedEmail.data !== (user?.email ?? "")
+            ? { email: parsedEmail.data }
+            : {}),
+        },
       });
       onSaved();
       if (!user) onClose();
@@ -252,21 +267,30 @@ function RobotProfile({
     }
   }
   return (
-    <form onSubmit={(e) => void save(e)} className="mb-6 space-y-4">
+    <form noValidate onSubmit={(e) => void save(e)} className="mb-6 space-y-4">
       <ErrorNotice error={error} />
-      <Field label="机器人账号" required>
-        <Input
-          value={username}
-          disabled={Boolean(user)}
-          onChange={(e) => setUsername(e.target.value)}
+      <fieldset disabled={pending} className="grid gap-4 sm:grid-cols-2">
+        <Field label="机器人账号" required>
+          <Input
+            value={username}
+            disabled={Boolean(user)}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </Field>
+        <Field label="显示名称" required>
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <AccountEmailField
+          className="sm:col-span-2"
+          value={email}
+          savedEmail={user?.email}
+          verified={user?.email_verified}
+          onChange={setEmail}
         />
-      </Field>
-      <Field label="显示名称" required>
-        <Input value={name} onChange={(e) => setName(e.target.value)} />
-      </Field>
+      </fieldset>
       <div className="flex gap-2">
         <Button type="submit" pending={pending}>
-          {user ? "保存名称" : "创建"}
+          {user ? "保存资料" : "创建"}
         </Button>
         {user && (
           <Button

@@ -246,10 +246,13 @@ export async function initialize() {
   ).replace(/\r?\n$/, "");
   const loginPath = resolve(paths.runtime, "login.json");
   const { randomBytes } = await import("node:crypto");
-  const founder = readJSON(loginPath) || {
-    username: "devadmin",
-    display_name: "开发管理员",
-    password: randomBytes(18).toString("base64url"),
+  const founder = {
+    email: "devadmin@antcdp.invalid",
+    ...(readJSON(loginPath) || {
+      username: "devadmin",
+      display_name: "开发管理员",
+      password: randomBytes(18).toString("base64url"),
+    }),
   };
   writeJSON(loginPath, founder);
   // Write the connection fingerprint before installation so a lost HTTP response

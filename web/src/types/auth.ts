@@ -2,6 +2,8 @@ export interface User {
   id: string;
   username: string;
   display_name: string;
+  email: string | null;
+  email_verified: boolean;
   role: "admin" | "user";
   is_founder: boolean;
   status: "active" | "disabled";

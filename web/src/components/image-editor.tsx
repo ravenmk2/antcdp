@@ -1,8 +1,10 @@
 import { RotateCw, Upload } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { cn } from "@/lib/utils";
 import { Button } from "./button";
 import { ErrorNotice, Notice } from "./feedback";
 import { Modal } from "./overlays";
+import { Avatar } from "./resource-icon";
 
 export interface ImageValue {
   id: string;
@@ -15,6 +17,7 @@ export function ImageEditor({
   onChange,
   disabled,
   compact = false,
+  avatarName,
   onEditingChange,
 }: {
   upload: (blob: Blob) => Promise<ImageValue>;
@@ -23,15 +26,41 @@ export function ImageEditor({
   onChange: (value: ImageValue | null | undefined) => void;
   disabled?: boolean;
   compact?: boolean;
+  avatarName?: string;
   onEditingChange?: (editing: boolean) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState<string>();
   const [error, setError] = useState("");
   const preview = value === undefined ? current : value?.preview;
+  const isAvatar = avatarName !== undefined;
+  const canRemove = isAvatar
+    ? Boolean(preview)
+    : !compact && (value !== undefined || current);
+  let uploadLabel = compact ? "上传图片" : "选择并裁剪图片";
+  if (isAvatar) uploadLabel = preview ? "更换头像" : "上传头像";
   return (
-    <div className="flex flex-wrap items-center gap-3">
-      {!compact &&
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-3",
+        isAvatar &&
+          "rounded-lg border border-border-subtle bg-surface-subtle px-4 py-3",
+      )}
+    >
+      {isAvatar ? (
+        <>
+          <Avatar
+            url={preview}
+            name={avatarName || "用户"}
+            className="size-12"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">头像</div>
+            <div className="mt-0.5 text-xs text-muted">JPG、PNG 或 WebP</div>
+          </div>
+        </>
+      ) : (
+        !compact &&
         (preview ? (
           <img
             src={preview}
@@ -42,7 +71,8 @@ export function ImageEditor({
           <span className="grid size-16 place-items-center rounded-xl bg-surface-subtle text-muted">
             <Upload className="size-5" />
           </span>
-        ))}
+        ))
+      )}
       <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
@@ -50,16 +80,16 @@ export function ImageEditor({
           disabled={disabled}
           onClick={() => input.current?.click()}
         >
-          {compact ? "上传图片" : "选择并裁剪图片"}
+          {uploadLabel}
         </Button>
-        {!compact && (value !== undefined || current) && (
+        {canRemove && (
           <Button
             variant="ghost"
             size="sm"
             disabled={disabled}
             onClick={() => onChange(null)}
           >
-            移除图片
+            {isAvatar ? "移除头像" : "移除图片"}
           </Button>
         )}
       </div>

@@ -141,19 +141,20 @@
   .scope .fullField {
     grid-column: 1 / -1;
   }
-  .scope .profileFields {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 132px;
-    align-items: start;
-    gap: 18px;
+  .scope .userFormSection {
+    min-width: 0;
   }
-  .scope .avatarEditor {
-    display: grid;
-    gap: 6px;
+  .scope.userForm .formGrid {
+    gap: 16px;
   }
-  .scope .avatarEditor > div {
-    align-items: flex-start;
-    gap: 8px;
+  .scope .credentialsHeading {
+    width: 100%;
+    margin-bottom: 12px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-subtle);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 650;
   }
   .scope .fieldLabel {
     color: var(--text-soft);
@@ -264,8 +265,12 @@
     border-bottom: 1px solid var(--border);
   }
   @media (max-width: 700px) {
-    .scope .memberFields,
-    .scope .profileFields {
+    .scope .memberFields {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  @media (max-width: 480px) {
+    .scope.userForm .formGrid {
       grid-template-columns: minmax(0, 1fr);
     }
   }

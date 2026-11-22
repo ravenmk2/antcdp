@@ -65,7 +65,7 @@ func TestModelsLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = s.Seed(ctx, install.Seed{InstallationID: installation, Fingerprint: cryptox.Fingerprint(key), Site: install.Site{Name: "模型测试", Timezone: "Asia/Shanghai"}, Username: "founder", DisplayName: "管理员", PasswordHash: hash, Now: time.Now().UTC()}); err != nil {
+	if err = s.Seed(ctx, install.Seed{InstallationID: installation, Fingerprint: cryptox.Fingerprint(key), Site: install.Site{Name: "模型测试", Timezone: "Asia/Shanghai"}, Username: "founder", DisplayName: "管理员", Email: "founder@example.test", PasswordHash: hash, Now: time.Now().UTC()}); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.Migrate(ctx); err != nil {

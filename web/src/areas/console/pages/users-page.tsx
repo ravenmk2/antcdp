@@ -31,9 +31,11 @@ import { DataTable, type DataColumn } from "@/components/table";
 import { TableToolbar } from "@/components/table-toolbar";
 import {
   displayNameSchema,
+  optionalEmailSchema,
   passwordSchema,
   usernameSchema,
 } from "@/domain/validation";
+import { AccountEmailField } from "@/features/access/account-email-field";
 import { ImageEditor, type ImageValue } from "@/features/media/image-editor";
 import { useApiQuery } from "@/hooks/use-api";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
@@ -407,6 +409,7 @@ const userSchema = z
   .object({
     username: usernameSchema,
     display_name: displayNameSchema,
+    email: optionalEmailSchema,
     role: z.enum(["user", "admin"]),
     password: passwordSchema,
     confirm: z.string(),
@@ -426,6 +429,7 @@ function UserEditor({
   const [form, setForm] = useState({
     username: "",
     display_name: "",
+    email: "",
     role: "user" as "user" | "admin",
     password: "",
     confirm: "",
@@ -455,6 +459,7 @@ function UserEditor({
           body: {
             username: form.username,
             display_name: form.display_name.trim(),
+            ...(result.data.email ? { email: result.data.email } : {}),
             role: form.role,
             password: form.password,
             ...(avatar ? { avatar_upload_id: avatar.id } : {}),
@@ -463,9 +468,11 @@ function UserEditor({
         await onSaved();
       },
       (error) =>
-        errors.show(error, ["username", "display_name", "role", "password"], {
-          new_password: "password",
-        }),
+        errors.show(
+          error,
+          ["username", "display_name", "email", "role", "password"],
+          { new_password: "password" },
+        ),
     );
   }
   return (
@@ -477,7 +484,11 @@ function UserEditor({
       pending={submission.pending}
       dirty={
         Boolean(
-          form.username || form.display_name || form.password || form.confirm,
+          form.username ||
+          form.display_name ||
+          form.email ||
+          form.password ||
+          form.confirm,
         ) ||
         form.role !== "user" ||
         avatar !== undefined
@@ -500,7 +511,7 @@ function UserEditor({
       <form
         id={formId}
         ref={errors.formRef}
-        className={`${styles.scope} ${styles.form}`}
+        className={`${styles.scope} ${styles.form} ${styles.userForm}`}
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
@@ -508,64 +519,68 @@ function UserEditor({
         }}
       >
         <ErrorNotice error={errors.error || submission.error} />
-        <fieldset disabled={submission.pending} className={styles.formSection}>
-          <legend>账号资料</legend>
-          <div className={styles.profileFields}>
-            <div className={styles.formGrid}>
-              <Field label="用户名" required error={errors.fields.username}>
-                <Input
-                  name="username"
-                  data-console-initial-focus
-                  autoComplete="off"
-                  value={form.username}
-                  onChange={(event) =>
-                    setForm({ ...form, username: event.target.value })
-                  }
-                />
-              </Field>
-              <Field
-                label="显示名称"
-                required
-                error={errors.fields.display_name}
-              >
-                <Input
-                  name="display_name"
-                  autoComplete="off"
-                  value={form.display_name}
-                  onChange={(event) =>
-                    setForm({ ...form, display_name: event.target.value })
-                  }
-                />
-              </Field>
-              <Field
-                label="系统身份"
-                required
-                className={styles.fullField}
-                error={errors.fields.role}
-              >
-                <Select
-                  name="role"
-                  value={form.role}
-                  onValueChange={(value) =>
-                    setForm({
-                      ...form,
-                      role: value as "user" | "admin",
-                    })
-                  }
-                >
-                  <option value="user">普通用户</option>
-                  <option value="admin">管理员</option>
-                </Select>
-              </Field>
+        <fieldset
+          disabled={submission.pending}
+          className={styles.userFormSection}
+        >
+          <legend className="sr-only">账号资料</legend>
+          <div className={styles.formGrid}>
+            <div className={styles.fullField}>
+              <ImageEditor
+                kind="avatar"
+                avatarName={form.display_name}
+                value={avatar}
+                onChange={setAvatar}
+              />
             </div>
-            <div className={styles.avatarEditor}>
-              <span className={styles.fieldLabel}>头像（可选）</span>
-              <ImageEditor kind="avatar" value={avatar} onChange={setAvatar} />
-            </div>
+            <Field label="用户名" required error={errors.fields.username}>
+              <Input
+                name="username"
+                data-console-initial-focus
+                autoComplete="off"
+                value={form.username}
+                onChange={(event) =>
+                  setForm({ ...form, username: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="显示名称" required error={errors.fields.display_name}>
+              <Input
+                name="display_name"
+                autoComplete="off"
+                value={form.display_name}
+                onChange={(event) =>
+                  setForm({ ...form, display_name: event.target.value })
+                }
+              />
+            </Field>
+            <AccountEmailField
+              value={form.email}
+              error={errors.fields.email}
+              onChange={(email) => setForm({ ...form, email })}
+            />
+            <Field label="系统身份" required error={errors.fields.role}>
+              <Select
+                name="role"
+                value={form.role}
+                onValueChange={(value) =>
+                  setForm({
+                    ...form,
+                    role: value as "user" | "admin",
+                  })
+                }
+              >
+                <option value="user">普通用户</option>
+                <option value="admin">管理员</option>
+              </Select>
+            </Field>
           </div>
         </fieldset>
-        <fieldset disabled={submission.pending} className={styles.formSection}>
-          <legend>登录凭证</legend>
+        <fieldset
+          disabled={submission.pending}
+          className={styles.userFormSection}
+        >
+          <legend className={styles.credentialsHeading}>登录凭证</legend>
           <div className={styles.formGrid}>
             <Field label="初始密码" required error={errors.fields.password}>
               <Input
@@ -680,6 +695,7 @@ function EditUser({
   const [form, setForm] = useState({
     username: user.username,
     display_name: user.display_name,
+    email: user.email ?? "",
   });
   const [avatar, setAvatar] = useState<ImageValue | null | undefined>(
     undefined,
@@ -687,20 +703,25 @@ function EditUser({
   const errors = useFormErrors();
   const submission = useSubmission();
   const dirty =
-    JSON.stringify(form) !==
-      JSON.stringify({
-        username: user.username,
-        display_name: user.display_name,
-      }) || avatar !== undefined;
+    form.username !== user.username ||
+    form.display_name !== user.display_name ||
+    form.email !== (user.email ?? "") ||
+    avatar !== undefined;
   async function save() {
+    const email = optionalEmailSchema.safeParse(form.email);
+    if (!email.success) {
+      errors.validate({ email: email.error.issues[0].message });
+      return;
+    }
     await submission.run(
       async () => {
         await request(`/admin/users/${user.id}`, {
           method: "PATCH",
           etag,
           body: {
-            ...form,
+            username: form.username,
             display_name: form.display_name.trim(),
+            ...(email.data !== (user.email ?? "") ? { email: email.data } : {}),
             ...(avatar === undefined
               ? {}
               : { avatar_upload_id: avatar?.id ?? null }),
@@ -708,7 +729,13 @@ function EditUser({
         });
         await onSaved();
       },
-      (error) => errors.show(error, ["username", "display_name"]),
+      (error) =>
+        errors.show(error, [
+          "username",
+          "display_name",
+          "email",
+          "avatar_upload_id",
+        ]),
     );
   }
   return (
@@ -738,50 +765,56 @@ function EditUser({
       <form
         id={formId}
         ref={errors.formRef}
-        className={`${styles.scope} ${styles.form}`}
+        className={`${styles.scope} ${styles.form} ${styles.userForm}`}
+        noValidate
         onSubmit={(event) => {
           event.preventDefault();
           void save();
         }}
       >
         <ErrorNotice error={errors.error || submission.error} />
-        <fieldset disabled={submission.pending} className={styles.formSection}>
-          <legend>账号资料</legend>
-          <div className={styles.profileFields}>
-            <div className={styles.formGrid}>
-              <Field label="用户名" required error={errors.fields.username}>
-                <Input
-                  name="username"
-                  data-console-initial-focus
-                  value={form.username}
-                  onChange={(event) =>
-                    setForm({ ...form, username: event.target.value })
-                  }
-                />
-              </Field>
-              <Field
-                label="显示名称"
-                required
-                error={errors.fields.display_name}
-              >
-                <Input
-                  name="display_name"
-                  value={form.display_name}
-                  onChange={(event) =>
-                    setForm({ ...form, display_name: event.target.value })
-                  }
-                />
-              </Field>
-            </div>
-            <div className={styles.avatarEditor}>
-              <span className={styles.fieldLabel}>头像</span>
+        <fieldset
+          disabled={submission.pending}
+          className={styles.userFormSection}
+        >
+          <legend className="sr-only">账号资料</legend>
+          <div className={styles.formGrid}>
+            <div className={styles.fullField}>
               <ImageEditor
                 kind="avatar"
+                avatarName={form.display_name}
                 current={user.avatar?.url}
                 value={avatar}
                 onChange={setAvatar}
               />
             </div>
+            <Field label="用户名" required error={errors.fields.username}>
+              <Input
+                name="username"
+                data-console-initial-focus
+                value={form.username}
+                onChange={(event) =>
+                  setForm({ ...form, username: event.target.value })
+                }
+              />
+            </Field>
+            <Field label="显示名称" required error={errors.fields.display_name}>
+              <Input
+                name="display_name"
+                value={form.display_name}
+                onChange={(event) =>
+                  setForm({ ...form, display_name: event.target.value })
+                }
+              />
+            </Field>
+            <AccountEmailField
+              value={form.email}
+              savedEmail={user.email}
+              verified={user.email_verified}
+              error={errors.fields.email}
+              className={styles.fullField}
+              onChange={(email) => setForm({ ...form, email })}
+            />
           </div>
         </fieldset>
       </form>

@@ -122,6 +122,8 @@ func gitExit(status int) error {
 		return httpx.E(409, "SANDBOX_GIT_UNAVAILABLE", "沙箱中没有 Git")
 	case 45:
 		return httpx.E(409, "CREDENTIAL_STATE_CHANGED", "凭证投递状态已变化")
+	case 47:
+		return httpx.E(409, "GIT_CONFIG_BUSY", "仓库 Git 配置正在修改，请稍后重试")
 	default:
 		return httpx.E(409, "SANDBOX_GIT_OPERATION_FAILED", "沙箱 Git 操作失败")
 	}
@@ -143,12 +145,18 @@ func (g *gitPlatformAPI) initRepo(ctx context.Context, x agentcore.ExecutionCont
 	if err != nil {
 		return nil, err
 	}
+	if remote.Email == "" {
+		return nil, httpx.E(409, "GIT_EMAIL_REQUIRED", "请先在个人资料或机器人管理中填写执行账号的邮箱")
+	}
+	if strings.ContainsFunc(remote.DisplayName, unicode.IsControl) {
+		return nil, httpx.E(409, "GIT_IDENTITY_INVALID", "请移除执行账号显示名称中的控制字符")
+	}
 	return g.withComputer(ctx, x, call, func(a *gitSandbox) (json.RawMessage, error) {
 		target := args.Path
 		if !path.IsAbs(target) {
 			target = path.Join(a.CWD, target)
 		}
-		status, target, err := gitProcess(ctx, a, false, "/bin/sh", "-c", initGitScript, "git-init", target, remote.Origin, remote.Base, strconv.FormatUint(remote.Connection, 10))
+		status, target, err := gitProcess(ctx, a, false, "/bin/sh", "-c", initGitScript, "git-init", target, remote.Origin, remote.Base, strconv.FormatUint(remote.Connection, 10), remote.DisplayName, remote.Email)
 		if err != nil {
 			return nil, err
 		}

@@ -4,8 +4,14 @@ target=$1
 origin=$2
 host=$3
 conn=$4
+name=$5
+email=$6
 root=/run/platform/svc-creds/$conn
 helper="!f() { if test \"\$1\" = get; then git credential-store --file=$root/credentials get; fi; }; f"
+write_identity() {
+    git config --file "$1" --replace-all -- user.name "$name"
+    git config --file "$1" --replace-all -- user.email "$email"
+}
 command -v git >/dev/null || exit 44
 target=$(realpath -m -- "$target")
 case "$target/" in /run/platform/*|/dev/shm/platform-svc-creds/*) exit 41;; esac
@@ -18,12 +24,23 @@ exec 9<.
 flock -x 9
 if [ -e .git ] || [ -L .git ]; then
     [ -d .git ] && [ ! -L .git ] || exit 41
-    [ "$(git rev-parse --show-toplevel 2>/dev/null)" = "$target" ] || exit 41
+    worktree=$(git rev-parse --show-toplevel 2>/dev/null) || exit 41
+    [ "$(cd -- "$worktree" && pwd -P)" = "$target" ] || exit 41
     config=.git/config
+    [ -f "$config" ] && [ ! -L "$config" ] || exit 41
+    lock=$config.lock
+    (set -C; : > "$lock") 2>/dev/null || exit 47
+    stage=
+    trap 'if [ -n "$stage" ]; then rm -rf -- "$stage"; fi; rm -f -- "$lock"' EXIT
     [ "$(git config --file "$config" --get-all remote.origin.url)" = "$origin" ] || exit 41
     [ "$(git config --file "$config" --get platform.connection)" = "$conn" ] || exit 41
     [ "$(git config --file "$config" --get-all "credential.$host.helper")" = "$(printf '\n%s' "$helper")" ] || exit 41
     git config --file "$config" --get-all include.path | grep -Fxq -- "$root/gitconfig" || exit 41
+    # Publish both identity fields together while holding Git's config lock.
+    stage=$(mktemp -d .git/.config-init.XXXXXXXX)
+    cp -p -- "$config" "$stage/config"
+    write_identity "$stage/config"
+    mv -T -- "$stage/config" "$config"
     printf '%s\n' "$target"
     exit 0
 fi
@@ -45,5 +62,6 @@ git config --file "$config" platform.connection "$conn"
 git config --file "$config" --add "credential.$host.helper" ''
 git config --file "$config" --add "credential.$host.helper" "$helper"
 git config --file "$config" --add include.path "$root/gitconfig"
+write_identity "$config"
 mv -T -- "$stage/.git" .git
 printf '%s\n' "$target"

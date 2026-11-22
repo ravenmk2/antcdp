@@ -145,7 +145,10 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	founder := clientFor(h, 1)
 	expectCode(t, founder.call(t, "GET", "/admin/overview", nil, 503, nil), "INSTANCE_NOT_READY")
 
-	installed := testData(founder.call(t, "POST", "/setup/install", install.Request{InstallPassword: "fixture-install", Site: install.Site{Name: "协作测试", Timezone: "Asia/Shanghai"}, Founder: install.Founder{Username: "founder", DisplayName: "创始人", Password: "founder-password"}}, 201, nil))
+	setup := install.Request{InstallPassword: "fixture-install", Site: install.Site{Name: "协作测试", Timezone: "Asia/Shanghai"}, Founder: install.Founder{Username: "founder", DisplayName: "创始人", Password: "founder-password"}}
+	expectCode(t, founder.call(t, "POST", "/setup/install", setup, 422, nil), "VALIDATION_FAILED")
+	setup.Founder.Email = " Founder@example.test "
+	installed := testData(founder.call(t, "POST", "/setup/install", setup, 201, nil))
 	if installed["authenticated"] != true {
 		t.Fatal("installation did not authenticate its founder")
 	}
@@ -159,6 +162,16 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	if founderUser["is_founder"] != true || founderUser["role"] != "admin" || ss["require_password_change"] != false || ss["session_ttl_days"] != float64(30) {
 		t.Fatal("incorrect founder session")
 	}
+	if founderUser["email"] != "Founder@example.test" || founderUser["email_verified"] != true {
+		t.Fatal("missing verified founder email")
+	}
+	_, profileTag := founder.user(t, founderID)
+	profile := testData(founder.call(t, "PATCH", "/account", map[string]any{"email": "founder@example.test"}, 200, map[string]string{"If-Match": profileTag}))
+	if profile["email"] != "founder@example.test" || profile["email_verified"] != true {
+		t.Fatal("changing only case lost verification")
+	}
+	_, profileTag = founder.user(t, founderID)
+	expectCode(t, founder.call(t, "PATCH", "/account", map[string]any{"email_verified": true}, 422, map[string]string{"If-Match": profileTag}), "VALIDATION_FAILED")
 	founder.call(t, "GET", "/admin/overview", nil, 200, nil)
 	verifySidebarHTTP(t, installer.Backend().(*Store), founder, founderID)
 	founder.call(t, "POST", "/setup/install", map[string]any{}, 409, nil)
@@ -177,7 +190,10 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	expectCode(t, founder.call(t, "PUT", "/admin/users/"+founderID+"/status", map[string]any{"status": "disabled"}, 403, map[string]string{"If-Match": tag}), "FOUNDER_PROTECTED")
 	expectCode(t, founder.call(t, "DELETE", "/admin/users/"+founderID, nil, 403, map[string]string{"If-Match": tag, "X-Confirm-Username": "founder"}), "FOUNDER_PROTECTED")
 	create := func(name, role string) string {
-		data := testData(founder.call(t, "POST", "/admin/users", map[string]any{"username": name, "display_name": name, "role": role, "password": "initial-password"}, 201, nil))
+		data := testData(founder.call(t, "POST", "/admin/users", map[string]any{"username": name, "display_name": name, "role": role, "password": "initial-password", "email": "founder@example.test"}, 201, nil))
+		if data["email"] != "founder@example.test" || data["email_verified"] != false {
+			t.Fatal("creation did not preserve an unverified duplicate email")
+		}
 		return data["id"].(string)
 	}
 	userID := create("member", "user")
@@ -192,9 +208,17 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 	member.call(t, "PUT", "/account/password", map[string]any{"current_password": "initial-password", "new_password": "member-password"}, 204, nil)
 	expectCode(t, member.call(t, "GET", "/auth/session", nil, 401, nil), "UNAUTHENTICATED")
 	member.login(t, "member", "member-password")
+	_, profileTag = founder.user(t, founderID)
+	profile = testData(founder.call(t, "PATCH", "/account", map[string]any{"email": "new@example.test"}, 200, map[string]string{"If-Match": profileTag}))
+	if profile["email"] != "new@example.test" || profile["email_verified"] != false {
+		t.Fatal("changing email retained verification")
+	}
 	expectCode(t, member.call(t, "GET", "/admin/users", nil, 403, nil), "FORBIDDEN")
 	_, tag = founder.user(t, userID)
-	founder.call(t, "PATCH", "/admin/users/"+userID, map[string]any{"display_name": "中文用户"}, 200, map[string]string{"If-Match": tag})
+	updated := testData(founder.call(t, "PATCH", "/admin/users/"+userID, map[string]any{"display_name": "中文用户", "email": ""}, 200, map[string]string{"If-Match": tag}))
+	if updated["email"] != nil || updated["email_verified"] != false {
+		t.Fatal("cleared email remains set")
+	}
 	expectCode(t, founder.call(t, "PATCH", "/admin/users/"+userID, map[string]any{"display_name": "旧版本"}, 412, map[string]string{"If-Match": tag}), "VERSION_CONFLICT")
 	_, tag = founder.user(t, userID)
 	founder.call(t, "PUT", "/admin/users/"+userID+"/status", map[string]any{"status": "disabled"}, 200, map[string]string{"If-Match": tag})

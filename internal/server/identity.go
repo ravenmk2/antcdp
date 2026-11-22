@@ -54,7 +54,7 @@ func userDTO(u *identity.User, founder uint64) gin.H {
 	if u.ManagedAgentID != nil {
 		managedAgentID = new(strconv.FormatUint(*u.ManagedAgentID, 10))
 	}
-	return gin.H{"id": strconv.FormatUint(u.ID, 10), "account_type": u.AccountType, "managed_agent_id": managedAgentID, "username": u.Username, "display_name": u.DisplayName, "role": u.Role, "is_founder": u.ID == founder, "status": u.Status, "avatar": avatar, "version": strconv.FormatUint(u.Version, 10), "last_login_at": optionalTime(u.LastLoginAt), "created_at": timestamp(u.CreatedAt), "updated_at": timestamp(u.UpdatedAt)}
+	return gin.H{"id": strconv.FormatUint(u.ID, 10), "account_type": u.AccountType, "managed_agent_id": managedAgentID, "username": u.Username, "display_name": u.DisplayName, "email": u.Email, "email_verified": u.EmailVerifiedAt != nil, "role": u.Role, "is_founder": u.ID == founder, "status": u.Status, "avatar": avatar, "version": strconv.FormatUint(u.Version, 10), "last_login_at": optionalTime(u.LastLoginAt), "created_at": timestamp(u.CreatedAt), "updated_at": timestamp(u.UpdatedAt)}
 }
 func authDTO(a *identity.Auth) gin.H {
 	return gin.H{"user": userDTO(a.User, a.FounderID), "expires_at": timestamp(a.Session.ExpiresAt), "session_ttl_days": a.Session.Days, "require_password_change": a.RequireChange}
@@ -184,12 +184,13 @@ func registerIdentity(api *gin.RouterGroup, o Options) {
 	business.PATCH("/account", func(c *gin.Context) {
 		var body struct {
 			DisplayName *string              `json:"display_name"`
+			Email       *string              `json:"email"`
 			Avatar      identity.AvatarPatch `json:"avatar_upload_id"`
 		}
 		if !decodePatch(c, &body) {
 			return
 		}
-		u, a, err := service.UpdateAccount(c.Request.Context(), rawSession(c), c.GetHeader("If-Match"), identity.ProfilePatch{DisplayName: body.DisplayName, Avatar: body.Avatar}, metadata(c))
+		u, a, err := service.UpdateAccount(c.Request.Context(), rawSession(c), c.GetHeader("If-Match"), identity.ProfilePatch{DisplayName: body.DisplayName, Email: body.Email, Avatar: body.Avatar}, metadata(c))
 		if err != nil {
 			httpx.Write(c, err)
 			return

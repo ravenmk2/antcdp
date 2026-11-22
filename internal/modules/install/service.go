@@ -22,6 +22,7 @@ import (
 	"github.com/gofrs/flock"
 	"github.com/ravenmk2/antcdp/internal/platform/config"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
+	"github.com/ravenmk2/antcdp/internal/platform/emailaddress"
 	"github.com/ravenmk2/antcdp/internal/platform/filestore"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/platform/password"
@@ -29,6 +30,7 @@ import (
 
 var usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{2,29}$`)
 var ErrFounderPasswordRequired = errors.New("a new founder password is required to complete initialization")
+var ErrFounderEmailRequired = errors.New("supply --founder-email to complete initialization from a checkpoint without an email")
 
 type backendMarker struct {
 	Generation        uint64 `json:"generation"`
@@ -48,6 +50,7 @@ type checkpoint struct {
 	Site           Site   `json:"site"`
 	Username       string `json:"username"`
 	DisplayName    string `json:"display_name"`
+	Email          string `json:"email,omitempty"`
 }
 type Service struct {
 	installationID    string
@@ -332,6 +335,11 @@ func Validate(r *Request) error {
 	if n := utf8.RuneCountInString(r.Founder.DisplayName); n < 1 || n > 30 {
 		return httpx.Invalid("founder.display_name", "invalid_length")
 	}
+	email, ok := emailaddress.Normalize(r.Founder.Email)
+	if !ok || email == "" {
+		return httpx.Invalid("founder.email", "invalid_format")
+	}
+	r.Founder.Email = email
 	if err := password.Validate(r.Founder.Password); err != nil {
 		return httpx.Invalid("founder.password", err.Error())
 	}
@@ -399,7 +407,7 @@ func (s *Service) Install(ctx context.Context, r Request) (string, error) {
 	if err = filestore.EnsurePrivateDir(s.path(".install")); err != nil {
 		return "", err
 	}
-	j := checkpoint{s.databaseTarget(), 1, id, "prepared", r.Site, r.Founder.Username, r.Founder.DisplayName}
+	j := checkpoint{DatabaseTarget: s.databaseTarget(), Version: 1, InstallationID: id, Stage: "prepared", Site: r.Site, Username: r.Founder.Username, DisplayName: r.Founder.DisplayName, Email: r.Founder.Email}
 	durable = true
 	if err = writeJSON(s.path(".install/staging.json"), j); err != nil {
 		return "", err
@@ -414,7 +422,7 @@ func (s *Service) Install(ctx context.Context, r Request) (string, error) {
 	if err = writeJSON(s.path(".install/staging.json"), j); err != nil {
 		return "", err
 	}
-	if err = b.Seed(ctx, Seed{id, cryptox.Fingerprint(key), r.Site, r.Founder.Username, r.Founder.DisplayName, hash, time.Now().UTC()}); err != nil {
+	if err = b.Seed(ctx, j.seed(key, hash)); err != nil {
 		return "", err
 	}
 	if err = s.finish(ctx, id, key); err != nil {
@@ -471,7 +479,7 @@ func (s *Service) finish(ctx context.Context, id string, key []byte) error {
 
 // Recover resumes only an empty schema or a fully migrated installation owned by
 // the same key/id. Partial DDL is never replayed speculatively.
-func (s *Service) Recover(ctx context.Context, newPassword string) error {
+func (s *Service) Recover(ctx context.Context, input RecoveryInput) error {
 	s.mu.RLock()
 	state := s.state
 	s.mu.RUnlock()
@@ -522,11 +530,28 @@ func (s *Service) Recover(ctx context.Context, newPassword string) error {
 		return err
 	}
 	if i == nil {
-		hash, err := password.Hash(newPassword)
+		email := j.Email
+		if email == "" {
+			email = input.Email
+		}
+		email, ok := emailaddress.Normalize(email)
+		if !ok {
+			return errors.New("invalid founder email in the checkpoint or --founder-email")
+		}
+		if email == "" {
+			return ErrFounderEmailRequired
+		}
+		hash, err := password.Hash(input.Password)
 		if err != nil {
 			return ErrFounderPasswordRequired
 		}
-		if err = b.Seed(ctx, Seed{j.InstallationID, cryptox.Fingerprint(key), j.Site, j.Username, j.DisplayName, hash, time.Now().UTC()}); err != nil {
+		if j.Email != email {
+			j.Email = email
+			if err = writeJSON(s.path(".install/staging.json"), j); err != nil {
+				return err
+			}
+		}
+		if err = b.Seed(ctx, j.seed(key, hash)); err != nil {
 			return err
 		}
 	} else if i.InstallationID != j.InstallationID || subtle.ConstantTimeCompare(i.KeyFingerprint, cryptox.Fingerprint(key)) != 1 {
@@ -536,6 +561,10 @@ func (s *Service) Recover(ctx context.Context, newPassword string) error {
 		return err
 	}
 	return nil
+}
+
+func (j checkpoint) seed(key []byte, hash string) Seed {
+	return Seed{InstallationID: j.InstallationID, Fingerprint: cryptox.Fingerprint(key), Site: j.Site, Username: j.Username, DisplayName: j.DisplayName, Email: j.Email, PasswordHash: hash, Now: time.Now().UTC()}
 }
 func readJSON(path string, v any) error {
 	b, err := filestore.ReadPrivate(path, 65536)

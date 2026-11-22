@@ -10,8 +10,10 @@ import (
 	"time"
 
 	driver "github.com/go-sql-driver/mysql"
+	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/install"
 	"github.com/ravenmk2/antcdp/internal/platform/config"
+	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
 // Uses a dedicated empty schema; leaves it intact for inspection.
@@ -218,6 +220,7 @@ func TestInitialMigration(t *testing.T) {
 	if err = s.db.SelectContext(ctx, &versions, selectVersions); err != nil || !slices.Equal(versions, expectedVersions) {
 		t.Fatal("repeated migration changed history", versions, err)
 	}
+	t.Run("user email", func(t *testing.T) { verifyUserEmailSchema(t, ctx, s) })
 	const setVersion = "UPDATE goose_db_version SET version_id=? WHERE version_id=?"
 	if _, err = s.db.ExecContext(ctx, setVersion, target+1, target); err != nil {
 		t.Fatal(err)
@@ -303,5 +306,61 @@ func TestInitialMigration(t *testing.T) {
 	var teamVersion uint64
 	if err = s.db.GetContext(ctx, &teamVersion, "SELECT team_version FROM user_sidebar_preference WHERE user_id=41"); err != nil || teamVersion != 1 {
 		t.Fatal("project change affected team version", err)
+	}
+}
+
+func verifyUserEmailSchema(t *testing.T, ctx context.Context, s *Store) {
+	t.Helper()
+	if _, err := s.db.ExecContext(ctx, "ALTER TABLE `user` DROP INDEX uq_user_verified_email"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SchemaReady(ctx); !errors.Is(err, install.ErrIncompleteSchema) {
+		t.Fatal("missing verified email index accepted", err)
+	}
+	if _, err := s.db.ExecContext(ctx, "ALTER TABLE `user` ADD UNIQUE KEY uq_user_verified_email (verified_email)"); err != nil {
+		t.Fatal(err)
+	}
+
+	const insertUser = "INSERT INTO `user` (account_type,username,display_name,email,created_at,updated_at) VALUES (?,?,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))"
+	var users []uint64
+	for _, account := range []struct{ kind, email string }{{"human", "Same@example.test"}, {"robot", "same@example.test"}} {
+		result, err := s.db.ExecContext(ctx, insertUser, account.kind, account.kind+"-email-fixture", account.kind, account.email)
+		if err != nil {
+			t.Fatal("unverified duplicate was rejected", err)
+		}
+		id, err := result.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		users = append(users, uint64(id))
+	}
+	start, results := make(chan struct{}), make(chan error, len(users))
+	for _, id := range users {
+		go func() {
+			<-start
+			results <- s.Transact(ctx, func(tx identity.Tx) error {
+				locked, err := tx.LockUsers([]uint64{id})
+				if err != nil {
+					return err
+				}
+				u := locked[id]
+				u.EmailVerifiedAt = new(time.Now().UTC())
+				return tx.SaveUser(u)
+			})
+		}()
+	}
+	close(start)
+	conflicts := 0
+	for range users {
+		if err := <-results; err != nil {
+			var apiErr *httpx.Error
+			if !errors.As(err, &apiErr) || apiErr.Status != 409 || apiErr.Code != "EMAIL_ALREADY_VERIFIED" {
+				t.Fatal("unexpected verification error", err)
+			}
+			conflicts++
+		}
+	}
+	if conflicts != 1 {
+		t.Fatal("expected only one verification to succeed", conflicts)
 	}
 }

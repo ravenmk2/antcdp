@@ -70,7 +70,7 @@ func TestMySQLInstallation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seed := install.Seed{InstallationID: cryptox.ID(), Fingerprint: cryptox.Fingerprint(cryptox.Random(32)), Site: install.Site{Name: "协作系统", Timezone: "Asia/Shanghai"}, Username: "founder", DisplayName: "创始人", PasswordHash: hash, Now: time.Now().UTC()}
+	seed := install.Seed{InstallationID: cryptox.ID(), Fingerprint: cryptox.Fingerprint(cryptox.Random(32)), Site: install.Site{Name: "协作系统", Timezone: "Asia/Shanghai"}, Username: "founder", DisplayName: "创始人", Email: "founder@example.test", PasswordHash: hash, Now: time.Now().UTC()}
 	if err = b.Seed(ctx, seed); err != nil {
 		t.Fatal(err)
 	}

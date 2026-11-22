@@ -82,7 +82,7 @@ func New() (*Registry, error) {
 func NewWithGit(git GitOperations) (*Registry, error) {
 	return loadRegistry(definitions, map[string]binding{
 		"operations/git_repo_list.json":   {revision: "1", maxArgsBytes: 1024, run: git.List},
-		"operations/git_repo_init.json":   {revision: "1", maxArgsBytes: 32 << 10, requiresSandbox: true, run: git.Init},
+		"operations/git_repo_init.json":   {revision: "2", maxArgsBytes: 32 << 10, requiresSandbox: true, run: git.Init},
 		"operations/svc_cred_ensure.json": {revision: "1", maxArgsBytes: 128, requiresSandbox: true, run: git.Ensure},
 		"operations/echo.json": {revision: "1", maxArgsBytes: 8 << 10,
 			run: func(_ context.Context, _ agentcore.ExecutionContext, _ agentcore.ID, args json.RawMessage) (json.RawMessage, error) {

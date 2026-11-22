@@ -16,6 +16,8 @@ const userSchema = z.object({
   id: z.string(),
   username: z.string(),
   display_name: z.string(),
+  email: z.string().nullable().default(null),
+  email_verified: z.boolean().default(false),
   role: z.enum(["admin", "user"]),
   is_founder: z.boolean(),
   status: z.enum(["active", "disabled"]),

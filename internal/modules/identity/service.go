@@ -12,6 +12,7 @@ import (
 
 	"github.com/ravenmk2/antcdp/internal/modules/settings"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
+	"github.com/ravenmk2/antcdp/internal/platform/emailaddress"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/platform/password"
 )
@@ -83,6 +84,11 @@ func validateCreate(r *CreateRequest) error {
 	if err := validateName(r.DisplayName, "display_name", 30); err != nil {
 		return err
 	}
+	value, ok := emailaddress.Normalize(r.Email)
+	if !ok {
+		return httpx.Invalid("email", "invalid_format")
+	}
+	r.Email = value
 	if r.Role != "user" && r.Role != "admin" {
 		return httpx.Invalid("role", "invalid_value")
 	}
@@ -276,6 +282,9 @@ func (s *Service) Register(ctx context.Context, r CreateRequest, meta Metadata) 
 func (s *Service) create(tx Tx, r CreateRequest, hash string, requireChange bool) (*User, error) {
 	now := s.now()
 	u := &User{AccountType: "human", Username: r.Username, DisplayName: r.DisplayName, Role: r.Role, CreatedAt: now, UpdatedAt: now}
+	if r.Email != "" {
+		u.Email = &r.Email
+	}
 	if err := tx.InsertUser(u); err != nil {
 		return nil, err
 	}

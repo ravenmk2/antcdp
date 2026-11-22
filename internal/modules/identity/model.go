@@ -14,20 +14,22 @@ import (
 )
 
 type User struct {
-	ID             uint64     `db:"id"`
-	AccountType    string     `db:"account_type"`
-	ManagedAgentID *uint64    `db:"managed_agent_id"`
-	Username       string     `db:"username"`
-	DisplayName    string     `db:"display_name"`
-	Role           string     `db:"role"`
-	Status         string     `db:"status"`
-	AvatarID       *uint64    `db:"avatar_file_id"`
-	AuthVersion    uint64     `db:"auth_version"`
-	Version        uint64     `db:"row_version"`
-	LastLoginAt    *time.Time `db:"last_login_at"`
-	CreatedAt      time.Time  `db:"created_at"`
-	UpdatedAt      time.Time  `db:"updated_at"`
-	DeletedAt      *time.Time `db:"deleted_at"`
+	ID              uint64     `db:"id"`
+	AccountType     string     `db:"account_type"`
+	ManagedAgentID  *uint64    `db:"managed_agent_id"`
+	Username        string     `db:"username"`
+	DisplayName     string     `db:"display_name"`
+	Email           *string    `db:"email"`
+	EmailVerifiedAt *time.Time `db:"email_verified_at"`
+	Role            string     `db:"role"`
+	Status          string     `db:"status"`
+	AvatarID        *uint64    `db:"avatar_file_id"`
+	AuthVersion     uint64     `db:"auth_version"`
+	Version         uint64     `db:"row_version"`
+	LastLoginAt     *time.Time `db:"last_login_at"`
+	CreatedAt       time.Time  `db:"created_at"`
+	UpdatedAt       time.Time  `db:"updated_at"`
+	DeletedAt       *time.Time `db:"deleted_at"`
 }
 type Password struct {
 	Hash          string    `db:"password_hash"`
@@ -135,6 +137,7 @@ type CreateRequest struct {
 	Avatar      AvatarPatch `json:"avatar_upload_id,omitzero"`
 	Username    string      `json:"username"`
 	DisplayName string      `json:"display_name"`
+	Email       string      `json:"email"`
 	Role        string      `json:"role"`
 	Password    string      `json:"password"`
 }
@@ -142,6 +145,7 @@ type ProfilePatch struct {
 	Avatar      AvatarPatch `json:"avatar_upload_id,omitzero"`
 	Username    *string     `json:"username,omitempty"`
 	DisplayName *string     `json:"display_name,omitempty"`
+	Email       *string     `json:"email,omitempty"`
 }
 type SettingsPatch struct {
 	Name         *string `json:"site_name,omitempty"`

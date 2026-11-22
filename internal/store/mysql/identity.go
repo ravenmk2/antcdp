@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	driver "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/modules/install"
 	"github.com/ravenmk2/antcdp/internal/modules/settings"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
@@ -38,6 +40,11 @@ func (s *Store) Transact(ctx context.Context, fn func(identity.Tx) error) error 
 		}
 		var dbErr *driver.MySQLError
 		if errors.As(err, &dbErr) && dbErr.Number == 1062 {
+			if strings.HasSuffix(dbErr.Message, "'uq_user_verified_email'") || strings.HasSuffix(dbErr.Message, ".uq_user_verified_email'") {
+				e := httpx.E(409, "EMAIL_ALREADY_VERIFIED", "该邮箱已由其他账号认证")
+				e.Details = []httpx.Detail{{Code: "conflict", Field: "email"}}
+				return e
+			}
 
 			for key, code := range map[string]string{"uq_remote_host_code": "CONNECTION_CODE_CONFLICT", "uq_remote_host_credential_code": "CREDENTIAL_CODE_CONFLICT", "uq_service_connection_owner_code": "CONNECTION_CODE_CONFLICT", "uq_service_credential_owner_code": "CREDENTIAL_CODE_CONFLICT"} {
 				if strings.Contains(dbErr.Message, key) {
@@ -72,7 +79,7 @@ type identityTx struct {
 	tx  *sqlx.Tx
 }
 
-const userColumns = "id,account_type,username,display_name,role,status,avatar_file_id,auth_version,row_version,last_login_at,created_at,updated_at,deleted_at,(SELECT a.id FROM agent a WHERE a.robot_user_id=`user`.id) AS managed_agent_id"
+const userColumns = "id,account_type,username,display_name,email,email_verified_at,role,status,avatar_file_id,auth_version,row_version,last_login_at,created_at,updated_at,deleted_at,(SELECT a.id FROM agent a WHERE a.robot_user_id=`user`.id) AS managed_agent_id"
 
 func (t *identityTx) FounderID() (uint64, error) {
 	var id uint64
@@ -155,7 +162,7 @@ func (t *identityTx) InsertUser(u *identity.User) error {
 	if u.AccountType == "robot" && u.Role != "user" {
 		return httpx.Invalid("role", "robot_must_be_user")
 	}
-	r, err := t.tx.ExecContext(t.ctx, "INSERT INTO `user` (account_type,username,display_name,role,status,created_at,updated_at) VALUES (?,?,?,?,'active',?,?)", u.AccountType, u.Username, u.DisplayName, u.Role, u.CreatedAt, u.UpdatedAt)
+	r, err := t.tx.ExecContext(t.ctx, "INSERT INTO `user` (account_type,username,display_name,email,email_verified_at,role,status,created_at,updated_at) VALUES (?,?,?,?,?,?,'active',?,?)", u.AccountType, u.Username, u.DisplayName, u.Email, u.EmailVerifiedAt, u.Role, u.CreatedAt, u.UpdatedAt)
 	if err != nil {
 		return err
 	}
@@ -179,9 +186,32 @@ func (t *identityTx) SaveUser(u *identity.User) error {
 			return err
 		}
 	}
-	_, err := t.tx.ExecContext(t.ctx, "UPDATE `user` SET username=?,display_name=?,role=?,status=?,avatar_file_id=?,auth_version=?,row_version=?,updated_at=?,deleted_at=? WHERE id=?", u.Username, u.DisplayName, u.Role, u.Status, u.AvatarID, u.AuthVersion, u.Version, u.UpdatedAt, u.DeletedAt, u.ID)
+	_, err := t.tx.ExecContext(t.ctx, "UPDATE `user` SET username=?,display_name=?,email=?,email_verified_at=?,role=?,status=?,avatar_file_id=?,auth_version=?,row_version=?,updated_at=?,deleted_at=? WHERE id=?", u.Username, u.DisplayName, u.Email, u.EmailVerifiedAt, u.Role, u.Status, u.AvatarID, u.AuthVersion, u.Version, u.UpdatedAt, u.DeletedAt, u.ID)
 	return err
 }
+
+func (s *Store) userEmailSchemaReady(ctx context.Context) error {
+	var ready bool
+	err := s.db.GetContext(ctx, &ready, `SELECT (
+  SELECT COUNT(*) FROM information_schema.COLUMNS
+  WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='user' AND IS_NULLABLE='YES' AND (
+    (COLUMN_NAME='email' AND DATA_TYPE='varchar' AND CHARACTER_MAXIMUM_LENGTH=254 AND COLLATION_NAME='ascii_bin') OR
+    (COLUMN_NAME='email_verified_at' AND DATA_TYPE='datetime' AND DATETIME_PRECISION=3) OR
+    (COLUMN_NAME='verified_email' AND DATA_TYPE='varchar' AND CHARACTER_MAXIMUM_LENGTH=254 AND COLLATION_NAME='ascii_bin' AND EXTRA='STORED GENERATED')
+  )
+) = 3 AND (
+  SELECT COUNT(*)=1 AND COALESCE(MAX(NON_UNIQUE=0 AND COLUMN_NAME='verified_email' AND SUB_PART IS NULL),FALSE)
+  FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='user' AND INDEX_NAME='uq_user_verified_email'
+)`)
+	if err != nil {
+		return err
+	}
+	if !ready {
+		return fmt.Errorf("user email columns or index are missing or incompatible: %w", install.ErrIncompleteSchema)
+	}
+	return nil
+}
+
 func (t *identityTx) WritePassword(id uint64, p identity.Password, create bool) error {
 	q := "UPDATE user_password SET password_hash=?,require_password_change=?,password_changed_at=? WHERE user_id=?"
 	args := []any{p.Hash, p.RequireChange, p.ChangedAt, id}

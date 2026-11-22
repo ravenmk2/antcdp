@@ -6,8 +6,10 @@ import { Field, Input } from "@/components/fields";
 import { PageHeader, Panel } from "@/components/layout";
 import {
   displayNameSchema,
+  optionalEmailSchema,
   passwordSchema as newPasswordSchema,
 } from "@/domain/validation";
+import { AccountEmailField } from "@/features/access/account-email-field";
 import { ImageEditor, type ImageValue } from "@/features/media/image-editor";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
 import { useUnsaved } from "@/hooks/use-unsaved";
@@ -17,7 +19,12 @@ import { Link, useLocation } from "react-router";
 import { z } from "zod";
 import { personalSettingsSection } from "./personal-settings-navigation";
 
-const profileSchema = z.object({ display_name: displayNameSchema });
+const profileSchema = z.object({
+  display_name: displayNameSchema,
+  email: optionalEmailSchema,
+});
+const profileFieldClass =
+  "py-3 sm:grid-cols-[130px_minmax(0,1fr)] sm:items-center sm:gap-x-6 sm:[&>p]:col-start-2";
 const passwordSchema = z
   .object({
     current: z.string().min(1, "请输入当前密码"),
@@ -46,7 +53,7 @@ export function AccountPage() {
           section === "security"
             ? "管理登录密码，保护你的账号访问。"
             : section === "profile"
-              ? "设置头像和显示名称，让协作成员更容易识别你。"
+              ? "设置头像、显示名称和邮箱。"
               : "管理你访问服务和远程主机时使用的凭证。"
         }
       />
@@ -71,20 +78,29 @@ function Profile() {
   const session = useSession();
   const user = session.user;
   const [name, setName] = useState(user.display_name);
+  const [email, setEmail] = useState(user.email ?? "");
   const [avatar, setAvatar] = useState<ImageValue | null | undefined>(
     undefined,
   );
   const errors = useFormErrors();
   const submission = useSubmission();
   const queryClient = useQueryClient();
-  const dirty = name !== user.display_name || avatar !== undefined;
+  const dirty =
+    name !== user.display_name ||
+    email !== (user.email ?? "") ||
+    avatar !== undefined;
   useUnsaved(dirty, submission.pending);
   async function save() {
-    const result = profileSchema.safeParse({ display_name: name });
+    const result = profileSchema.safeParse({ display_name: name, email });
     if (!result.success) {
-      errors.validate({
-        display_name: result.error.issues[0]?.message ?? "资料不正确",
-      });
+      errors.validate(
+        Object.fromEntries(
+          result.error.issues.map((issue) => [
+            String(issue.path[0]),
+            issue.message,
+          ]),
+        ),
+      );
       return;
     }
     await submission.run(
@@ -93,7 +109,10 @@ function Profile() {
           method: "PATCH",
           etag: `"u-${user.id}-v${user.version}"`,
           body: {
-            display_name: name.trim(),
+            display_name: result.data.display_name,
+            ...(result.data.email !== (user.email ?? "")
+              ? { email: result.data.email }
+              : {}),
             ...(avatar === undefined
               ? {}
               : { avatar_upload_id: avatar?.id ?? null }),
@@ -102,11 +121,12 @@ function Profile() {
         await queryClient.invalidateQueries({ queryKey: ["session"] });
         window.location.reload();
       },
-      (error) => errors.show(error, ["display_name", "avatar_upload_id"]),
+      (error) =>
+        errors.show(error, ["display_name", "email", "avatar_upload_id"]),
     );
   }
   return (
-    <Panel title="头像与名称" bodyClassName="p-6">
+    <Panel title="账号资料" bodyClassName="p-6">
       <form
         ref={errors.formRef}
         noValidate
@@ -116,24 +136,31 @@ function Profile() {
         }}
       >
         <ErrorNotice error={errors.error || submission.error} />
-        <div className="mb-6">
+        <div className="mb-2">
           <ImageEditor
             kind="avatar"
+            avatarName={name}
             current={user.avatar?.url}
             value={avatar}
             onChange={setAvatar}
             disabled={submission.pending}
           />
         </div>
-        <div className="grid gap-5">
-          <dl className="text-sm">
-            <dt className="mb-2 text-xs text-muted">用户名</dt>
-            <dd className="break-all font-medium">{user.username}</dd>
-            <dd className="mt-1 text-xs text-muted">
-              用于登录，个人设置中不可修改。
-            </dd>
-          </dl>
-          <Field label="显示名称" required error={errors.fields.display_name}>
+        <div className="divide-y divide-border-subtle">
+          <Field label="用户名" className={profileFieldClass}>
+            <Input
+              name="username"
+              autoComplete="username"
+              value={user.username}
+              readOnly
+            />
+          </Field>
+          <Field
+            label="显示名称"
+            required
+            className={profileFieldClass}
+            error={errors.fields.display_name}
+          >
             <Input
               name="display_name"
               autoComplete="nickname"
@@ -142,16 +169,27 @@ function Profile() {
               onChange={(event) => setName(event.target.value)}
             />
           </Field>
+          <AccountEmailField
+            className={profileFieldClass}
+            value={email}
+            savedEmail={user.email}
+            verified={user.email_verified}
+            disabled={submission.pending}
+            error={errors.fields.email}
+            autoComplete="email"
+            onChange={setEmail}
+          />
         </div>
         <div className="form-actions">
-          <span className="mr-auto text-xs text-muted">
-            {dirty ? "有未保存的修改" : "资料已保存"}
-          </span>
+          {dirty && (
+            <span className="mr-auto text-xs text-muted">有未保存的修改</span>
+          )}
           <Button
             variant="outline"
             disabled={!dirty || submission.pending}
             onClick={() => {
               setName(user.display_name);
+              setEmail(user.email ?? "");
               setAvatar(undefined);
             }}
           >

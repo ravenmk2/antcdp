@@ -236,6 +236,9 @@ func (s *Store) schemaReady(ctx context.Context, target int64) error {
 		}
 		return fmt.Errorf("database migration version %d does not match target %d", v, target)
 	}
+	if err = s.userEmailSchemaReady(ctx); err != nil {
+		return err
+	}
 	if err = s.modelsSchemaReady(ctx); err != nil {
 		return err
 	}
@@ -364,7 +367,7 @@ func (s *Store) Seed(ctx context.Context, seed install.Seed) error {
 	if count != 0 {
 		return errors.New("database already contains users; initialization refused")
 	}
-	r, err := tx.ExecContext(ctx, "INSERT INTO `user` (username,display_name,role,status,created_at,updated_at) VALUES (?,?,'admin','active',?,?)", seed.Username, seed.DisplayName, seed.Now, seed.Now)
+	r, err := tx.ExecContext(ctx, "INSERT INTO `user` (username,display_name,email,email_verified_at,role,status,created_at,updated_at) VALUES (?,?,?,?,'admin','active',?,?)", seed.Username, seed.DisplayName, seed.Email, seed.Now, seed.Now, seed.Now)
 	if err != nil {
 		return err
 	}

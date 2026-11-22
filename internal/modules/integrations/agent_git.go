@@ -37,12 +37,14 @@ type AgentRepoPage struct {
 }
 
 type AgentGitRemote struct {
-	ID         uint64  `json:"project_repo_id,string"`
-	Connection uint64  `json:"conn_id,string"`
-	Origin     string  `json:"origin"`
-	Branch     *string `json:"default_branch"`
-	Path       string  `json:"path"`
-	Base       string  `json:"-"`
+	ID          uint64  `json:"project_repo_id,string"`
+	Connection  uint64  `json:"conn_id,string"`
+	Origin      string  `json:"origin"`
+	Branch      *string `json:"default_branch"`
+	Path        string  `json:"path"`
+	Base        string  `json:"-"`
+	DisplayName string  `json:"-"`
+	Email       string  `json:"-"`
 }
 
 func (s *Service) agentAccess(ctx context.Context, auth agentcore.Authorization, fn func(identity.Tx, *identity.User, Repository) error) error {
@@ -191,6 +193,10 @@ func (s *Service) AgentGitRemote(ctx context.Context, auth agentcore.Authorizati
 			return err
 		}
 		out = AgentGitRemote{ID: id, Connection: conn.ID, Origin: origin.String(), Branch: row.Branch, Base: "https://" + base.Host}
+		out.DisplayName = user.DisplayName
+		if user.Email != nil {
+			out.Email = *user.Email
+		}
 		return nil
 	})
 	return out, err

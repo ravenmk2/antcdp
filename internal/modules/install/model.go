@@ -31,6 +31,7 @@ type Site struct {
 type Founder struct {
 	Username    string `json:"username"`
 	DisplayName string `json:"display_name"`
+	Email       string `json:"email"`
 	Password    string `json:"password"`
 }
 type Request struct {
@@ -39,11 +40,14 @@ type Request struct {
 	Founder         Founder `json:"founder"`
 }
 type Seed struct {
-	InstallationID                      string
-	Fingerprint                         []byte
-	Site                                Site
-	Username, DisplayName, PasswordHash string
-	Now                                 time.Time
+	InstallationID                             string
+	Fingerprint                                []byte
+	Site                                       Site
+	Username, DisplayName, Email, PasswordHash string
+	Now                                        time.Time
+}
+type RecoveryInput struct {
+	Email, Password string
 }
 type Instance struct {
 	InstallationID string `db:"installation_id"`
