@@ -131,6 +131,7 @@ it("keeps a rejected streamed tool mounted, updates its status and restores it f
     ],
   };
   const { update, user } = setup([records[0]], live);
+  await user.click(group());
   const button = screen.getByRole("button", { name: /执行命令.*pwd/ });
   await user.click(button);
   const rejected: Extract<DurableRecord, { event_type: "assistant/attempt" }> =
@@ -168,12 +169,13 @@ it("keeps a rejected streamed tool mounted, updates its status and restores it f
   expect(screen.getByText(/参数字段：\/wait_ms/)).toBeVisible();
   expect(screen.queryByText("尚未收到工具结果。")).toBeNull();
   update([records[0], rejected], null, "reload");
+  await user.click(group());
   expect(
     screen.getByRole("button", { name: /执行命令.*pwd/ }),
   ).toHaveTextContent("未执行");
 });
 
-it("does not render empty stream text as a placeholder or split the process group", () => {
+it("does not render empty stream text as a placeholder or split the process group", async () => {
   const first: ActiveAttempt = {
     ...draft,
     content: [
@@ -187,12 +189,17 @@ it("does not render empty stream text as a placeholder or split the process grou
       },
     ],
   };
-  const { update } = setup([records[0]], first);
+  const { update, user } = setup([records[0]], first);
   expect(screen.queryByText(/暂无介绍/)).toBeNull();
   expect(screen.queryByRole("region", { name: "思考过程" })).toBeNull();
-  const group = screen.getByRole("region", { name: "工具过程" });
-  expect(within(group).getByRole("button", { name: "思考中" })).toBeVisible();
-  expect(within(group).getByRole("button", { name: /读取文件/ })).toBeVisible();
+  const region = screen.getByRole("region", { name: "工具过程" });
+  expect(group()).toHaveAttribute("aria-expanded", "false");
+  expect(within(region).queryByRole("button", { name: "思考中" })).toBeNull();
+  await user.click(group());
+  expect(within(region).getByRole("button", { name: "思考中" })).toBeVisible();
+  expect(
+    within(region).getByRole("button", { name: /读取文件/ }),
+  ).toBeVisible();
   update([records[0]], {
     ...first,
     next_index: 2,
@@ -201,7 +208,7 @@ it("does not render empty stream text as a placeholder or split the process grou
     ),
   });
   expect(screen.getByText("读取前的进度说明")).toBeVisible();
-  expect(screen.getByRole("region", { name: "工具过程" })).toBe(group);
+  expect(screen.getByRole("region", { name: "工具过程" })).toBe(region);
   expect(screen.queryByText(/暂无介绍/)).toBeNull();
 });
 
@@ -220,6 +227,9 @@ it("previews live file work only while collapsed and removes the preview at comp
   };
   const { user, update } = setup([records[0]], first);
   const header = group();
+  expect(header).toHaveAttribute("aria-expanded", "false");
+  expect(header).toHaveTextContent("写入文件 · reports/result.txt");
+  await user.click(header);
   expect(header).toHaveAttribute("aria-expanded", "true");
   expect(header).not.toHaveTextContent(/写入文件|reports\/result.txt/);
   const tool = screen.getByRole("button", {
@@ -268,8 +278,7 @@ it("previews running reasoning only while collapsed and hides historical preview
   const { user, update } = setup([records[0]], draft);
   const region = screen.getByRole("region", { name: "思考过程" });
   const header = within(region).getAllByRole("button")[0];
-  expect(header).not.toHaveTextContent("整理结果");
-  await user.click(header);
+  expect(header).toHaveAttribute("aria-expanded", "false");
   expect(header).toHaveTextContent("整理结果");
   await user.click(header);
   expect(header).not.toHaveTextContent("整理结果");
@@ -286,7 +295,7 @@ it.each(["succeeded", "failed", "cancelled"] as const)(
   "automatically collapses a %s turn and restores both folds collapsed on refresh",
   async (status) => {
     const { user, update } = setup();
-    expect(group()).toHaveAttribute("aria-expanded", "true");
+    expect(group()).toHaveAttribute("aria-expanded", "false");
     const finished = [
       ...history,
       reply,
@@ -307,13 +316,13 @@ it.each(["succeeded", "failed", "cancelled"] as const)(
   },
 );
 
-it("keeps a group open between tools and reasoning, then closes it only once the reply is committed", () => {
+it("keeps a group folded through tool results and reasoning while reply text streams", () => {
   const { update } = setup(history.slice(0, 3));
-  expect(group()).toHaveAttribute("aria-expanded", "true");
+  expect(group()).toHaveAttribute("aria-expanded", "false");
   update(history); // A tool result alone is not a group boundary.
-  expect(group()).toHaveAttribute("aria-expanded", "true");
+  expect(group()).toHaveAttribute("aria-expanded", "false");
   update(history, draft);
-  expect(group()).toHaveAttribute("aria-expanded", "true");
+  expect(group()).toHaveAttribute("aria-expanded", "false");
   update(history, {
     ...draft,
     content: [
@@ -321,28 +330,28 @@ it("keeps a group open between tools and reasoning, then closes it only once the
       { type: "text", text: "后续正文" },
     ],
   });
-  expect(group()).toHaveAttribute("aria-expanded", "true");
+  expect(group()).toHaveAttribute("aria-expanded", "false");
   expect(screen.getByText("后续正文")).toBeVisible();
   update([...history, reply]);
   expect(group()).toHaveAttribute("aria-expanded", "false");
   expect(screen.queryByRole("button", { name: / · 执行过程$/ })).toBeNull();
 });
 
-it("does not close a bounded group until its outstanding tool returns", () => {
+it("keeps the folded preview of a bounded group until its outstanding tool returns", () => {
   const { update } = setup([...history.slice(0, 3), reply]);
-  expect(group()).toHaveAttribute("aria-expanded", "true");
+  expect(group()).toHaveAttribute("aria-expanded", "false");
+  expect(group()).toHaveTextContent("读取文件 · example.txt");
   update([...history, reply]);
   expect(group()).toHaveAttribute("aria-expanded", "false");
+  expect(group()).not.toHaveTextContent("example.txt");
 });
 
 it.each(["group", "thought", "tool"])(
   "protects manually opened %s and its ancestors through completion and replay",
   async (target) => {
     const { user, update } = setup();
-    if (target === "group") {
-      await user.click(group());
-      await user.click(group());
-    } else
+    await user.click(group());
+    if (target !== "group")
       await user.click(
         screen.getByRole("button", {
           name: target === "thought" ? /思考.*·/ : /读取文件/,
@@ -373,17 +382,21 @@ it.each(["group", "thought", "tool"])(
   },
 );
 
-it("releases ancestor protection when a manually opened detail is closed again", async () => {
+it("keeps the turn expanded when the group is open and its detail is closed again", async () => {
   const { user, update } = setup();
+  await user.click(group());
   const thoughtToggle = screen.getByRole("button", { name: /思考.*·/ });
   await user.click(thoughtToggle);
   await user.click(thoughtToggle);
   update([...history, reply, end]);
-  expect(turn()).toHaveAttribute("aria-expanded", "false");
+  expect(turn()).toHaveAttribute("aria-expanded", "true");
+  expect(group()).toHaveAttribute("aria-expanded", "true");
+  expect(thoughtToggle).toHaveAttribute("aria-expanded", "false");
 });
 
 it("honors manual group closure despite an open child and subsequent streaming", async () => {
   const { user, update } = setup(history, draft);
+  await user.click(group());
   await user.click(screen.getByRole("button", { name: /思考.*·/ }));
   await user.click(group());
   update(history, { ...draft, next_index: 2 });
@@ -403,6 +416,7 @@ it("preserves manual reasoning expansion as the first draft becomes a durable mu
     content: [{ type: "reasoning" as const, text: "核对文件内容" }],
   };
   const { user, update } = setup([records[0]], first);
+  await user.click(screen.getByRole("button", { name: /^思考与工具过程/ }));
   await user.click(screen.getByRole("button", { name: "思考中" }));
   const body = screen.getByText("核对文件内容");
   update(history);
@@ -432,6 +446,7 @@ it("does not force unknown tool outcomes open after completion", async () => {
 
 it("retains an open tool when pagination reveals the earlier reasoning in the same group", async () => {
   const { user, update } = setup([call, result]);
+  await user.click(group());
   await user.click(screen.getByRole("button", { name: /读取文件/ }));
   const body = screen.getByText("文件结果");
   update(structuredClone(history));
@@ -474,6 +489,7 @@ it.each([false, true])(
       },
     };
     const { user, update } = setup([records[0]], first);
+    await user.click(group());
     const button = screen.getByRole("button", { name: /^读取文件/ });
     await user.click(button);
     const section = screen.getByRole("region", { name: "工具过程" });
@@ -497,13 +513,13 @@ it.each([false, true])(
   },
 );
 
-it("defers automatic group and turn folding while reading, then folds when following resumes", () => {
+it("defers automatic turn folding while reading and keeps the group folded throughout", () => {
   const { update } = setup(history);
   update(history, draft, "page", "10", true);
   const finished = [...history, reply, end];
   update(finished, null, "page", "10", true);
   expect(turn()).toHaveAttribute("aria-expanded", "true");
-  expect(group()).toHaveAttribute("aria-expanded", "true");
+  expect(group()).toHaveAttribute("aria-expanded", "false");
   update(finished, null, "page", "10", false);
   expect(turn()).toHaveAttribute("aria-expanded", "false");
 });

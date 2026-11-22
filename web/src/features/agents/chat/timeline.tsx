@@ -327,7 +327,6 @@ function Timeline({
                       node={node}
                       sessionId={sessionId}
                       historical={Boolean(turn?.end)}
-                      pauseAutoCollapse={pauseAutoCollapse}
                       closed={closed}
                       issueToolIds={(
                         issues.get(node.runId ?? "") ?? []
@@ -672,7 +671,6 @@ const ProcessGroup = memo(function ProcessGroup({
   node,
   sessionId,
   historical,
-  pauseAutoCollapse,
   closed,
   onIssue,
   issueToolIds,
@@ -681,7 +679,6 @@ const ProcessGroup = memo(function ProcessGroup({
   node: PresentedProcess;
   sessionId: string;
   historical: boolean;
-  pauseAutoCollapse: boolean;
   closed: boolean;
   onIssue: (toolId: string) => void;
   issueToolIds: string[];
@@ -703,9 +700,6 @@ const ProcessGroup = memo(function ProcessGroup({
         !tool.question.answer),
   );
   const completed = historical || (closed && !pending);
-  const [automaticOpen, setAutomaticOpen] = useState(!completed);
-  if (!pauseAutoCollapse && automaticOpen === completed)
-    setAutomaticOpen(!completed);
   const live =
     !completed &&
     (node.tools.some((tool) => tool.draft && !tool.rejected) ||
@@ -790,7 +784,7 @@ const ProcessGroup = memo(function ProcessGroup({
       aria-label={node.tools.length ? "工具过程" : "思考过程"}
     >
       <ChatDisclosure
-        open={pauseAutoCollapse ? automaticOpen : !completed}
+        open={false}
         automatic
         label={
           live

@@ -2176,9 +2176,7 @@ it("shows the actual loaded skill version without claiming a filesystem copy", a
   const { user } = mount(
     <ConversationTimeline records={loaded} sessionId="10" attempt={null} />,
   );
-  expect(
-    screen.getByRole("button", { name: /^已使用工具 1 次/ }),
-  ).toHaveAttribute("aria-expanded", "true");
+  await user.click(screen.getByRole("button", { name: /^已使用工具 1 次/ }));
   await user.click(screen.getByText("加载技能"));
   expect(screen.getByText(/已加载技能版本 7/)).toBeVisible();
   expect(screen.getByText("技能文本可用，尚无工作目录副本。")).toBeVisible();
@@ -2384,6 +2382,7 @@ it("keeps live reasoning mounted through tools and finalization, and the final t
       <QueryClientProvider client={cache}>{children}</QueryClientProvider>
     ),
   });
+  await user.click(screen.getByRole("button", { name: /^思考与工具过程/ }));
   const firstToggle = screen.getByRole("button", { name: "思考中" });
   await user.click(firstToggle);
   const firstBody = screen.getByText("先核对文件");
