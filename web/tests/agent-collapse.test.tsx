@@ -126,7 +126,7 @@ it("keeps a rejected streamed tool mounted, updates its status and restores it f
         type: "tool_call",
         draft_call_id: "draft-0",
         name: "exec",
-        arguments_text: '{"command":"pwd","timeout_seconds":601}',
+        arguments_text: '{"command":"pwd","wait_ms":600001}',
       },
     ],
   };
@@ -148,14 +148,14 @@ it("keeps a rejected streamed tool mounted, updates its status and restores it f
         diagnostic: {
           code: "MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH",
           tool_name: "exec",
-          field_path: "/timeout_seconds",
+          field_path: "/wait_ms",
           constraint: "maximum",
-          expected: "600",
+          expected: "600000",
         },
         rejected_tools: [
           {
             name: "exec",
-            arguments_text: '{"command":"pwd","timeout_seconds":601}',
+            arguments_text: '{"command":"pwd","wait_ms":600001}',
             truncated: false,
           },
         ],
@@ -165,7 +165,7 @@ it("keeps a rejected streamed tool mounted, updates its status and restores it f
   expect(screen.getByRole("button", { name: /执行命令.*pwd/ })).toBe(button);
   expect(button).toHaveTextContent("参数校验失败 · 未执行");
   expect(button).toHaveAttribute("aria-expanded", "true");
-  expect(screen.getByText(/参数字段：\/timeout_seconds/)).toBeVisible();
+  expect(screen.getByText(/参数字段：\/wait_ms/)).toBeVisible();
   expect(screen.queryByText("尚未收到工具结果。")).toBeNull();
   update([records[0], rejected], null, "reload");
   expect(

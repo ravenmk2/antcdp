@@ -187,6 +187,7 @@ type execFixture struct {
 	commands, statuses, cancels atomic.Int32
 	stream                      string
 	background                  bool
+	wantTimeoutMS               int64
 	proxy                       bool
 	statusRunning               bool
 	exit                        *int32
@@ -194,7 +195,7 @@ type execFixture struct {
 
 func newExecFixture(t *testing.T, stream string, proxy bool) *execFixture {
 	t.Helper()
-	f := &execFixture{stream: stream, proxy: proxy}
+	f := &execFixture{stream: stream, proxy: proxy, wantTimeoutMS: 1000}
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/v1/sandboxes/") && !strings.Contains(r.URL.Path, "/proxy/") {
 			if r.Header.Get("OPEN-SANDBOX-API-KEY") != "private-test-key" {
@@ -227,8 +228,8 @@ func newExecFixture(t *testing.T, stream string, proxy bool) *execFixture {
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				t.Error(err)
 			}
-			if req.Timeout != 1000 {
-				t.Errorf("timeout not milliseconds: %d", req.Timeout)
+			if req.Timeout != f.wantTimeoutMS {
+				t.Errorf("command timeout = %d ms, want %d", req.Timeout, f.wantTimeoutMS)
 			}
 			f.background = req.Background
 			w.Header().Set("Content-Type", "text/event-stream")
@@ -293,7 +294,14 @@ func TestBackgroundAckAndCancelAreNotProcessCompletion(t *testing.T) {
 	p := providerFor(t, f.server, "direct")
 	spec := execSpec()
 	spec.Background = true
-	out, err := p.Exec(context.Background(), testRef(), spec, sandboxcore.ExecCallbacks{Started: func(context.Context, sandboxcore.ExecutionHandle) error { return nil }})
+	spec.Timeout = 0
+	f.wantTimeoutMS = 0
+	out, err := p.Exec(context.Background(), testRef(), spec, sandboxcore.ExecCallbacks{Started: func(ctx context.Context, _ sandboxcore.ExecutionHandle) error {
+		if _, ok := ctx.Deadline(); ok {
+			t.Error("unlimited background stream has a deadline")
+		}
+		return nil
+	}})
 	if err != nil || !out.Running || out.ExitCode != nil {
 		t.Fatalf("launch misclassified: %+v %v", out, err)
 	}

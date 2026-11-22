@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -18,11 +19,10 @@ import (
 )
 
 type CommandRequest struct {
-	Description    string `json:"description"`
-	Workdir        string `json:"workdir,omitempty"`
-	Command        string `json:"command"`
-	Background     bool   `json:"background"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
+	Description string `json:"description"`
+	Workdir     string `json:"workdir,omitempty"`
+	Command     string `json:"command"`
+	WaitMS      *int   `json:"wait_ms,omitempty"`
 }
 
 type SandboxExecutionMetadata struct {
@@ -78,14 +78,14 @@ func normalizeCommandRequest(w CommandRequest) (CommandRequest, error) {
 	if len(encoded) > 32<<10 {
 		return w, httpx.Invalid("command", "encoded_content_too_large")
 	}
-	if w.TimeoutSeconds == 0 {
-		w.TimeoutSeconds = 60
+	if w.WaitMS == nil {
+		w.WaitMS = new(60_000)
 	}
 	if strings.TrimSpace(w.Description) == "" || strings.ContainsAny(w.Description, "\r\n\x00") || utf8.RuneCountInString(w.Description) > 160 || !utf8.ValidString(w.Description) {
 		return w, httpx.Invalid("description", "invalid")
 	}
-	if w.TimeoutSeconds < 1 || w.TimeoutSeconds > 600 {
-		return w, httpx.Invalid("timeout_seconds", "out_of_range")
+	if *w.WaitMS < 0 || *w.WaitMS > 600_000 {
+		return w, httpx.Invalid("wait_ms", "out_of_range")
 	}
 	return w, nil
 }
@@ -157,7 +157,7 @@ func (s *CloudService) reserveCommand(ctx context.Context, ref agentcore.Executi
 		if e != nil {
 			return e
 		}
-		if frozen != w {
+		if !reflect.DeepEqual(frozen, w) {
 			return integrity()
 		}
 		binding, e := repo.Lease(x.Root.ID, false)
@@ -197,25 +197,21 @@ func (s *CloudService) reserveCommand(ctx context.Context, ref agentcore.Executi
 			return httpx.E(409, "SANDBOX_EXECUTION_ALREADY_EXISTS", "已有执行意图，不能重复派发")
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
-		deadline := now.Add(time.Duration(w.TimeoutSeconds) * time.Second)
-		if deadline.After(x.Root.DeadlineAt) {
-			deadline = x.Root.DeadlineAt
-		}
-
+		deadline := x.Root.DeadlineAt
 		if !deadline.After(now) {
 			return httpx.E(409, "DEADLINE_EXCEEDED", "执行期限已到")
 		}
-		out.Spec = sandboxcore.ExecSpec{Command: w.Command, CWD: out.Access.CWD, Background: true, Timeout: deadline.Sub(now), MaxOutputBytes: 32 << 10}
+		out.Spec = sandboxcore.ExecSpec{Command: w.Command, CWD: out.Access.CWD, Background: true, MaxOutputBytes: 32 << 10}
 		encoded, e := json.Marshal(out.Spec)
 		if e != nil {
 			return e
 		}
 		hash := sha256.Sum256(encoded)
-		out.Row = CloudExecutionRow{ComputerID: out.Access.ComputerID, BackendGeneration: out.Access.BackendGeneration, InstanceID: out.Access.InstanceID, RootRunID: x.Root.ID, RunID: x.Run.ID, ToolCallID: callID, ExecutionOrdinal: 1, ExecutionToken: NewStorageKey(), IsBackground: w.Background, Status: "prepared", CWD: out.Access.CWD, ExecutionSpecHash: hash[:], ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, DeadlineAt: deadline, LastObservation: json.RawMessage(`{}`)}
+		out.Row = CloudExecutionRow{ComputerID: out.Access.ComputerID, BackendGeneration: out.Access.BackendGeneration, InstanceID: out.Access.InstanceID, RootRunID: x.Root.ID, RunID: x.Run.ID, ToolCallID: callID, ExecutionOrdinal: 1, ExecutionToken: NewStorageKey(), IsBackground: *w.WaitMS == 0, Status: "prepared", CWD: out.Access.CWD, ExecutionSpecHash: hash[:], ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, DeadlineAt: deadline, LastObservation: json.RawMessage(`{}`)}
 		if e = repo.InsertCloudExecution(&out.Row); e != nil {
 			return e
 		}
-		out.Metadata = SandboxExecutionMetadata{ExecutionID: out.Row.ID, ComputerID: out.Access.ComputerID, Description: w.Description, Command: w.Command, CWD: out.Row.CWD, Background: w.Background, State: "running"}
+		out.Metadata = SandboxExecutionMetadata{ExecutionID: out.Row.ID, ComputerID: out.Access.ComputerID, Description: w.Description, Command: w.Command, CWD: out.Row.CWD, Background: out.Row.IsBackground, State: "running"}
 		out.Row.LastObservation, e = json.Marshal(out.Metadata)
 		if e != nil {
 			return e
@@ -285,18 +281,7 @@ func (s *CloudService) ExecuteCommand(ctx context.Context, ref agentcore.Executi
 		if computer == nil || computerCapabilities(computer).Execution != "supported" {
 			return httpx.E(409, "SANDBOX_EXECUTION_UNVERIFIED", "沙箱执行安全能力尚未验证")
 		}
-		claim.Spec.Timeout = time.Until(row.DeadlineAt)
-		if claim.Spec.Timeout <= 0 {
-			return httpx.E(409, "DEADLINE_EXCEEDED", "执行期限已到")
-		}
-		encoded, err := json.Marshal(claim.Spec)
-		if err != nil {
-			return err
-		}
-		hash := sha256.Sum256(encoded)
-		row.ExecutionSpecHash = hash[:]
-		claim.Row.ExecutionSpecHash = row.ExecutionSpecHash
-		return repo.SaveCloudExecution(row)
+		return nil
 	})
 	if e != nil {
 		out.Execution.State = "completed"
@@ -328,20 +313,19 @@ func (s *CloudService) ExecuteCommand(ctx context.Context, ref agentcore.Executi
 		out.Reason = "SANDBOX_SETTLEMENT_FAILED"
 		return out, settle
 	}
-	if e == nil && result.Handle != nil && result.Running && !w.Background {
+	if e == nil && result.Handle != nil && result.Running && *w.WaitMS > 0 {
 		row := claim.Row
 		row.RemoteExecutionID = &result.Handle.ID
-		waitErr := s.waitCommand(ctx, row, claim.Access, &out.Execution, 600*time.Millisecond)
+		waitErr := s.waitCommand(ctx, row, claim.Access, &out.Execution, time.Duration(*w.WaitMS)*time.Millisecond)
 		if waitErr != nil {
 			out.Execution.State = "outcome_unknown"
 			out.Reason = remoteSandboxError(waitErr)
 			return out, waitErr
 		}
 		if out.Execution.State != "completed" {
-			if err := s.markBackground(ctx, claim); err != nil {
+			if err := s.markBackground(ctx, claim, &out.Execution); err != nil {
 				return out, err
 			}
-			out.Execution.Background = true
 		}
 	}
 	if e == nil && result.Handle != nil {
@@ -645,7 +629,8 @@ func (s *CloudService) TaskKill(ctx context.Context, ref agentcore.ExecutionRef,
 	if meta.State == "completed" {
 		return observedCommand(meta), nil
 	}
-	e = s.cancelCommand(ctx, *row, access)
+	retry := row.CancelRequestedAt != nil && (meta.State == "running" || meta.State == "cancel_requested")
+	e = s.cancelCommand(ctx, *row, access, retry)
 	if e == nil {
 		meta.State = "cancel_requested"
 		return observedCommand(meta), nil
@@ -658,7 +643,7 @@ func (s *CloudService) TaskKill(ctx context.Context, ref agentcore.ExecutionRef,
 	return CommandResult{Execution: meta, Reason: remoteSandboxError(e)}, e
 }
 
-func (s *CloudService) cancelCommand(ctx context.Context, expected CloudExecutionRow, access *SandboxAccess) error {
+func (s *CloudService) cancelCommand(ctx context.Context, expected CloudExecutionRow, access *SandboxAccess, retry bool) error {
 	var handle *sandboxcore.ExecutionHandle
 	unknown := false
 	e := s.cloudBackground(ctx, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository) error {
@@ -666,13 +651,15 @@ func (s *CloudService) cancelCommand(ctx context.Context, expected CloudExecutio
 		if err != nil {
 			return err
 		}
-		if row.FinishedAt != nil || row.CancelRequestedAt != nil {
+		if row.FinishedAt != nil || row.CancelRequestedAt != nil && !retry {
 			return nil
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		row.Status = "cancelling"
 		if row.RemoteExecutionID != nil {
-			row.CancelRequestedAt = &now
+			if row.CancelRequestedAt == nil {
+				row.CancelRequestedAt = &now
+			}
 			h := sandboxcore.ExecutionHandle{Resource: access.Resource, ID: *row.RemoteExecutionID}
 			handle = &h
 		} else {
@@ -690,8 +677,7 @@ func (s *CloudService) cancelCommand(ctx context.Context, expected CloudExecutio
 	if handle == nil {
 		return nil
 	}
-	// Persisting cancellation intent precedes the one remote request. Neither
-	// a lost acknowledgment nor a successful acknowledgment releases occupancy.
+	// A cancellation acknowledgment leaves occupancy held until exit is observed.
 	return access.Provider.CancelExecution(ctx, *handle)
 }
 
@@ -967,7 +953,7 @@ func (s *CloudService) reconcileCommand(ctx context.Context, initial CloudExecut
 		return inspectErr
 	}
 	if mustCancel {
-		if e = s.cancelCommand(bounded, *row, access); e != nil {
+		if e = s.cancelCommand(bounded, *row, access, false); e != nil {
 			return e
 		}
 	}

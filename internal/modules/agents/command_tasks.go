@@ -25,13 +25,18 @@ func commandDirectory(cwd, workdir string) (string, error) {
 	return absolute, nil
 }
 
-func (s *CloudService) markBackground(ctx context.Context, claim commandClaim) error {
+func (s *CloudService) markBackground(ctx context.Context, claim commandClaim, meta *SandboxExecutionMetadata) error {
 	return s.cloudBackground(ctx, func(_ identity.Tx, _ Repository, _ StateRepository, repo CloudRepository) error {
 		row, err := lockCommandRows(repo, claim.Row, claim.Access)
 		if err != nil {
 			return err
 		}
-		row.IsBackground = true
+		// The stream can record exit between the last poll and the handoff.
+		if row.FinishedAt != nil {
+			meta.State, meta.ExitCode = "completed", row.ExitCode
+			return nil
+		}
+		row.IsBackground, meta.Background = true, true
 		return repo.SaveCloudExecution(row)
 	})
 }
@@ -105,6 +110,7 @@ func (s *CloudService) waitCommand(ctx context.Context, row CloudExecutionRow, a
 		observeCtx, cancel = context.WithDeadline(ctx, until)
 		defer cancel()
 	}
+	pollInterval := 200 * time.Millisecond
 	for {
 		if meta.State != "completed" {
 			result, err := access.Provider.InspectExecution(observeCtx, handle)
@@ -138,7 +144,8 @@ func (s *CloudService) waitCommand(ctx context.Context, row CloudExecutionRow, a
 				return nil
 			}
 		}
-		timer := time.NewTimer(min(200*time.Millisecond, time.Until(until)))
+		timer := time.NewTimer(min(pollInterval, time.Until(until)))
+		pollInterval = min(2*pollInterval, time.Second)
 		select {
 		case <-ctx.Done():
 			timer.Stop()

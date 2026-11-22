@@ -29,8 +29,11 @@ func (p *Provider) streamCommand(ctx context.Context, ref sandboxcore.ResourceRe
 	if callbacks.Started == nil {
 		return out, failure("SANDBOX_HANDLE_CALLBACK_REQUIRED", false)
 	}
-	ctx, cancel := context.WithTimeout(ctx, s.Timeout+10*time.Second)
-	defer cancel()
+	if s.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, s.Timeout+10*time.Second)
+		defer cancel()
+	}
 	streamHTTP := *p.http
 	// The stream uses the command deadline; control and filesystem requests keep their own timeout.
 	streamHTTP.Timeout = 0
@@ -139,7 +142,7 @@ func (p *Provider) streamCommand(ctx context.Context, ref sandboxcore.ResourceRe
 
 func commandRequest(s sandboxcore.ExecSpec) (sdk.RunCommandRequest, error) {
 	invalid := failure("SANDBOX_COMMAND_INVALID", false)
-	if (s.Command == "") == (len(s.Argv) == 0) || len(s.Command) > 64<<10 || len(s.Argv) > 128 || s.Timeout <= 0 || s.Timeout > 24*time.Hour || s.MaxOutputBytes < 1 || s.MaxOutputBytes > 1<<20 || len(s.CWD) > 4096 || !strings.HasPrefix(s.CWD, "/") || path.Clean(s.CWD) != s.CWD || strings.ContainsRune(s.CWD, 0) || strings.ContainsRune(s.Command, 0) {
+	if (s.Command == "") == (len(s.Argv) == 0) || len(s.Command) > 64<<10 || len(s.Argv) > 128 || s.Timeout < 0 || s.Timeout > 24*time.Hour || s.MaxOutputBytes < 1 || s.MaxOutputBytes > 1<<20 || len(s.CWD) > 4096 || !strings.HasPrefix(s.CWD, "/") || path.Clean(s.CWD) != s.CWD || strings.ContainsRune(s.CWD, 0) || strings.ContainsRune(s.Command, 0) {
 		return sdk.RunCommandRequest{}, invalid
 	}
 	total := 0

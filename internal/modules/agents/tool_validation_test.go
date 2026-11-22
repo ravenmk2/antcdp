@@ -11,10 +11,10 @@ import (
 )
 
 func TestToolValidationReportsSafeFields(t *testing.T) {
-	tool := agentcore.ToolSpec{Definition: modelcore.Tool{Name: "exec", InputSchema: json.RawMessage(`{"type":"object","required":["command"],"properties":{"command":{"type":"string"},"timeout_seconds":{"type":"integer","maximum":600}},"additionalProperties":false}`)}}
+	tool := agentcore.ToolSpec{Definition: modelcore.Tool{Name: "exec", InputSchema: json.RawMessage(`{"type":"object","required":["command"],"properties":{"command":{"type":"string"},"wait_ms":{"type":"integer","maximum":600000}},"additionalProperties":false}`)}}
 	for _, tc := range []struct{ args, path, keyword, expected string }{
-		{`{"command":"private-command","timeout_seconds":601}`, "/timeout_seconds", "maximum", "600"},
-		{`{"command":"private-command","timeout_seconds":"private-secret"}`, "/timeout_seconds", "type", "integer"},
+		{`{"command":"private-command","wait_ms":600001}`, "/wait_ms", "maximum", "600000"},
+		{`{"command":"private-command","wait_ms":"private-secret"}`, "/wait_ms", "type", "integer"},
 		{`{}`, "/command", "required", ""},
 		{`{"command":"private-command","private-property":true}`, "", "additionalProperties", ""},
 	} {

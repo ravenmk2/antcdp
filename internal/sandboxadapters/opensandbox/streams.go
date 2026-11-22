@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/ravenmk2/antcdp/internal/sandboxcore"
 )
@@ -72,8 +71,8 @@ func (p *Provider) startCommand(ctx context.Context, ref sandboxcore.ResourceRef
 	s.mu.Unlock()
 	ready := make(chan launch, 1)
 	// Until init is committed the dispatch permit owns cancellation. Afterwards
-	// the physical command deadline and factory shutdown bound the stream.
-	run, cancel := context.WithTimeout(s.ctx, spec.Timeout+10*time.Second)
+	// the factory owns the stream until the command finishes or it shuts down.
+	run, cancel := context.WithCancel(s.ctx)
 	stop := context.AfterFunc(ctx, cancel)
 	go func() {
 		defer s.writers.Done()

@@ -41,10 +41,16 @@ func TestManagedCommandOutcomeRequiresPhysicalEvidence(t *testing.T) {
 
 func TestManagedCommandArgumentsAreBounded(t *testing.T) {
 	got, err := normalizeCommandRequest(CommandRequest{Description: "Print message", Command: "printf ok"})
-	if err != nil || got.TimeoutSeconds != 60 {
+	if err != nil || got.WaitMS == nil || *got.WaitMS != 60_000 {
 		t.Fatalf("defaults %+v %v", got, err)
 	}
-	for _, w := range []CommandRequest{{Command: " "}, {Command: "a\x00b"}, {Command: strings.Repeat("x", (32<<10)+1)}, {Command: "echo", TimeoutSeconds: 601}, {Command: "echo", Description: "a\nb"}} {
+	for _, ms := range []int{0, 250, 600_000} {
+		got, err := normalizeCommandRequest(CommandRequest{Description: "Print message", Command: "echo", WaitMS: &ms})
+		if err != nil || *got.WaitMS != ms {
+			t.Fatalf("wait_ms %d: %+v %v", ms, got, err)
+		}
+	}
+	for _, w := range []CommandRequest{{Command: " "}, {Command: "a\x00b"}, {Command: strings.Repeat("x", (32<<10)+1)}, {Description: "Print", Command: "echo", WaitMS: new(-1)}, {Description: "Print", Command: "echo", WaitMS: new(600_001)}, {Command: "echo", Description: "a\nb"}} {
 		if _, err := normalizeCommandRequest(w); err == nil {
 			t.Fatalf("unbounded command accepted %+v", w)
 		}

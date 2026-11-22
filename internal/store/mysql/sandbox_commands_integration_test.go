@@ -33,6 +33,9 @@ type commandMemoryProvider struct {
 
 func (p *commandMemoryProvider) Exec(ctx context.Context, ref sb.ResourceRef, spec sb.ExecSpec, callbacks sb.ExecCallbacks) (sb.ExecResult, error) {
 	p.launches++
+	if spec.Timeout != 0 {
+		return sb.ExecResult{}, fmt.Errorf("unexpected command runtime limit %s", spec.Timeout)
+	}
 	if p.unknownNext {
 		p.unknownNext = false
 		return sb.ExecResult{}, &sb.Error{Code: "SANDBOX_TRANSPORT_UNKNOWN", Unknown: true}
@@ -110,7 +113,7 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(e)
 	}
 	x.Binding = binding
-	request := a.CommandRequest{Description: "Print background message", Command: "printf background", Background: true, TimeoutSeconds: 60}
+	request := a.CommandRequest{Description: "Print background message", Command: "printf background", WaitMS: new(25)}
 	args, _ := json.Marshal(request)
 	call := commandDeclare(t, f, x, 1, "exec", string(args))
 	remote.afterStarted = func(h sb.ExecutionHandle) {
@@ -120,7 +123,7 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		}
 	}
 	launched, e := svc.ExecuteCommand(ctx, x.Ref, uint64(call.ID), request)
-	if e != nil || launched.Execution.State != "running" || launched.Executed == nil || !*launched.Executed {
+	if e != nil || launched.Execution.State != "running" || !launched.Execution.Background || launched.Executed == nil || !*launched.Executed {
 		t.Fatal("background launch", e)
 	}
 	remote.afterStarted = nil
@@ -181,6 +184,12 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if remote.cancels != 1 {
 		t.Fatal("cancel was automatically repeated")
 	}
+	retryCall := commandDeclare(t, f, x, 5, "task_kill", fmt.Sprintf(`{"task_id":"%d"}`, executionID))
+	retried, e := svc.TaskKill(ctx, x.Ref, uint64(retryCall.ID), executionID)
+	if e != nil || retried.Execution.State != "cancel_requested" || remote.cancels != 2 {
+		t.Fatal("explicit retry did not interrupt the still-running command", e)
+	}
+	commandComplete(t, f, x, retryCall, retried)
 	for id, result := range remote.executions {
 		code := int32(143)
 		result.Running = false
@@ -193,7 +202,7 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	commandAssertHeld(t, f, executionID, false)
 	// Stop can win the race with a foreground command's result. Its immutable
 	// unknown result must be reconciled before releasing the root lease.
-	stoppedCall := commandDeclare(t, f, x, 5, "exec", string(args))
+	stoppedCall := commandDeclare(t, f, x, 6, "exec", string(args))
 	stopped, e := svc.ExecuteCommand(ctx, x.Ref, uint64(stoppedCall.ID), request)
 	if e != nil {
 		t.Fatal(e)
