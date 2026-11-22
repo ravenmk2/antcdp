@@ -20,8 +20,7 @@ import (
 // when to advance from a committed assistant through its tools to the next step.
 // A fresh instance of the framework is built for each Run, never a checkpoint.
 type Engine struct {
-	MaxSteps    int
-	MaxAttempts int
+	MaxSteps int
 }
 
 func (e Engine) Execute(ctx context.Context, ref agentcore.ExecutionRef, hooks agentcore.EngineHooks) error {
@@ -32,11 +31,7 @@ func (e Engine) Execute(ctx context.Context, ref agentcore.ExecutionRef, hooks a
 	if steps == 0 {
 		steps = 200
 	}
-	attempts := e.MaxAttempts
-	if attempts == 0 {
-		attempts = agentcore.MaxModelAttempts
-	}
-	if steps < 1 || steps > 200 || attempts < 1 || attempts > 10 {
+	if steps < 1 || steps > 200 {
 		return errors.New("invalid execution limits")
 	}
 	var completed uint32
@@ -50,7 +45,7 @@ func (e Engine) Execute(ctx context.Context, ref agentcore.ExecutionRef, hooks a
 	if first.Ref != ref || first.Step != completed+1 {
 		return errors.New("invalid prepared step")
 	}
-	b := &executionModel{completed: completed, ref: ref, hooks: hooks, prepared: first, maxSteps: steps, maxAttempts: attempts}
+	b := &executionModel{completed: completed, ref: ref, hooks: hooks, prepared: first, maxSteps: steps}
 	initial := make([]tool.BaseTool, 0, len(first.Tools))
 	for _, spec := range first.Tools {
 		info, err := toolInfo(spec.Definition)
@@ -94,12 +89,12 @@ func (e Engine) Execute(ctx context.Context, ref agentcore.ExecutionRef, hooks a
 }
 
 type executionModel struct {
-	ref                   agentcore.ExecutionRef
-	hooks                 agentcore.EngineHooks
-	prepared              agentcore.PreparedStep
-	completed             uint32
-	maxSteps, maxAttempts int
-	batch                 *agentcore.ToolBatch
+	ref       agentcore.ExecutionRef
+	hooks     agentcore.EngineHooks
+	prepared  agentcore.PreparedStep
+	completed uint32
+	maxSteps  int
+	batch     *agentcore.ToolBatch
 }
 type stepMiddleware struct {
 	adk.BaseChatModelAgentMiddleware
@@ -161,16 +156,15 @@ func (m *executionModel) Generate(ctx context.Context, _ []*schema.Message, _ ..
 	// and dynamic middleware must never replace native history or reorder tools.
 	step := m.prepared
 	imageRepaired := false
-	contextRecovered := false
-	for attempt := 1; attempt <= m.maxAttempts; attempt++ {
+	for attempt := uint32(1); ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		permit, err := m.hooks.BeginAttempt(ctx, step, uint32(attempt))
+		permit, err := m.hooks.BeginAttempt(ctx, step, attempt)
 		if err != nil {
 			return nil, err
 		}
-		if permit.Ref != m.ref || permit.Step != step.Step || permit.Attempt != uint32(attempt) || permit.Client == nil || permit.Deadline.IsZero() {
+		if permit.Ref != m.ref || permit.Step != step.Step || permit.Attempt != attempt || permit.Client == nil || permit.Deadline.IsZero() {
 			return nil, errors.New("invalid attempt permit")
 		}
 		callCtx, cancel := context.WithDeadline(ctx, permit.Deadline)
@@ -207,7 +201,7 @@ func (m *executionModel) Generate(ctx context.Context, _ []*schema.Message, _ ..
 			return nil, commit.Failure
 		}
 		if callErr != nil {
-			if errors.Is(callErr, modelcore.ErrContextWindowExceeded) && !streamStarted && !contextRecovered && attempt < m.maxAttempts && ctx.Err() == nil {
+			if commit.RecoverContext && ctx.Err() == nil {
 				if recovery, ok := m.hooks.(interface {
 					RecoverContext(context.Context, agentcore.PreparedStep) (agentcore.PreparedStep, bool, error)
 				}); ok {
@@ -217,7 +211,6 @@ func (m *executionModel) Generate(ctx context.Context, _ []*schema.Message, _ ..
 					}
 					if changed {
 						step, m.prepared = rebuilt, rebuilt
-						contextRecovered = true
 						continue
 					}
 				}
@@ -242,7 +235,7 @@ func (m *executionModel) Generate(ctx context.Context, _ []*schema.Message, _ ..
 					}
 				}
 			}
-			if !commit.Retry || attempt == m.maxAttempts {
+			if !commit.Retry {
 				return nil, callErr
 			}
 			if commit.RetryAfter < 0 || commit.RetryAfter > time.Minute {
@@ -257,7 +250,7 @@ func (m *executionModel) Generate(ctx context.Context, _ []*schema.Message, _ ..
 			}
 			continue
 		}
-		if commit.Retry {
+		if commit.Retry || commit.RecoverContext {
 			return nil, errors.New("successful attempt cannot retry")
 		}
 		if err := validateCommit(response, commit, permit); err != nil {
@@ -271,7 +264,6 @@ func (m *executionModel) Generate(ctx context.Context, _ []*schema.Message, _ ..
 		m.completed = step.Step
 		return toFramework(commit.Response.Message)
 	}
-	return nil, errors.New("model attempt limit exceeded")
 }
 
 func validateCommit(response modelcore.Response, commit agentcore.AttemptCommit, p agentcore.AttemptPermit) error {

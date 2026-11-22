@@ -80,7 +80,7 @@ func (s *Service) FreezeAttempt(ctx context.Context, ref agentcore.ExecutionRef,
 			return e
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
-		if d.Step.Ref != ref || d.Attempt == 0 || d.Attempt > agentcore.MaxModelAttempts || d.Purpose != "generation" || d.CompactionID != nil || uint64(d.Step.Step) != x.Run.CurrentStepNo || d.Step.Manifest.Revision != agentcore.Version(x.Session.SurfaceRevision) {
+		if d.Step.Ref != ref || d.Attempt == 0 || d.Purpose != "generation" || d.CompactionID != nil || uint64(d.Step.Step) != x.Run.CurrentStepNo || d.Step.Manifest.Revision != agentcore.Version(x.Session.SurfaceRevision) {
 			return httpx.E(409, "SURFACE_CHANGED", "模型请求源已变化")
 		}
 		if !now.Before(d.Deadline) || d.Deadline.After(x.Run.DeadlineAt) {
@@ -110,8 +110,13 @@ func (s *Service) FreezeAttempt(ctx context.Context, ref agentcore.ExecutionRef,
 		if previous != nil {
 			return httpx.E(409, "ATTEMPT_ALREADY_STARTED", "模型尝试已经登记，不允许再次外发")
 		}
+		var prior *ModelCallRow
 		if d.Attempt > 1 {
-			prior, err := st.AttemptForStep(x.Run.ID, uint64(d.Step.Step), uint64(d.Attempt-1))
+			if !agentcore.CanRetryModelAttempt(uint64(d.Attempt-1), x.Execution.Policy.MaxModelRetries) {
+				return httpx.E(409, "RETRY_NOT_ADMITTED", "已达到模型重试次数")
+			}
+			var err error
+			prior, err = st.AttemptForStep(x.Run.ID, uint64(d.Step.Step), uint64(d.Attempt-1))
 			if err != nil {
 				return err
 			}
@@ -140,14 +145,10 @@ func (s *Service) FreezeAttempt(ctx context.Context, ref agentcore.ExecutionRef,
 				return httpx.E(409, "RETRY_NOT_ADMITTED", "模型重试尚未获准")
 			}
 		}
-		budget, e := ledger(x.Run)
+		d.Reservation.ModelCalls = 1
+		reserved, e := reserveModelAttempt(st, x.Run, prior, d.Reservation)
 		if e != nil {
 			return e
-		}
-		d.Reservation.ModelCalls = 1
-		budget, res, e := budget.Reserve(d.Reservation)
-		if e != nil {
-			return coreError(e)
 		}
 		config, e := snapshotRequest(d.Step.Request, x.Execution.Model, d.Step.Tools, 0)
 		if e != nil {
@@ -158,10 +159,6 @@ func (s *Service) FreezeAttempt(ctx context.Context, ref agentcore.ExecutionRef,
 			return e
 		}
 		manifest, e := surfaceBytes(m)
-		if e != nil {
-			return e
-		}
-		reserved, e := json.Marshal(res)
 		if e != nil {
 			return e
 		}
@@ -180,9 +177,6 @@ func (s *Service) FreezeAttempt(ctx context.Context, ref agentcore.ExecutionRef,
 		runID, rootID := x.Run.ID, x.Root.ID
 		call := &ModelCallRow{SessionID: x.Session.ID, RunID: &runID, RootRunID: &rootID, StepNo: uint64(d.Step.Step), AttemptNo: uint64(d.Attempt), Purpose: "generation", Status: "running", ProviderID: uint64(x.Execution.Model.ProviderID), ModelDefinitionID: uint64(x.Execution.Model.DefinitionID), Protocol: string(x.Execution.Model.Protocol), RequestedModelID: x.Execution.Model.RemoteModelID, Thinking: thinking, RequestConfig: requestConfig, SurfaceManifest: manifest, RequestHash: digest, CapabilitySnapshot: capabilities, BudgetReservation: reserved, ExecutorEpoch: ref.Epoch, FenceVersion: ref.Fence, UsageCompleteness: "unknown", CreatedAt: now, StartedAt: &now, DeadlineAt: d.Deadline.UTC().Truncate(time.Millisecond)}
 		if e = st.InsertModelCall(call); e != nil {
-			return e
-		}
-		if e = saveLedger(st, x.Run, budget); e != nil {
 			return e
 		}
 		out.Permit = agentcore.AttemptPermit{Ref: ref, CallID: agentcore.ID(call.ID), Step: d.Step.Step, Attempt: d.Attempt, Deadline: call.DeadlineAt}
@@ -375,7 +369,7 @@ func usageNumber(v *int64) *uint64 {
 	n := uint64(*v)
 	return &n
 }
-func settleModelBudget(st StateRepository, root *RunRow, call *ModelCallRow, usage modelcore.Usage) error {
+func recordModelUsage(run *RunRow, call *ModelCallRow, usage modelcore.Usage) {
 	call.InputTokens = usageNumber(usage.InputTokens)
 	call.OutputTokens = usageNumber(usage.OutputTokens)
 	call.CacheReadTokens = usageNumber(usage.CacheReadTokens)
@@ -385,25 +379,87 @@ func settleModelBudget(st StateRepository, root *RunRow, call *ModelCallRow, usa
 		call.UsageSemanticsVersion = &version
 	}
 	call.UsageRaw, _ = json.Marshal(modelcore.FilterRawUsage(modelcore.Protocol(call.Protocol), usage.RawNumericFields))
+	call.UsageCompleteness = "unknown"
+	if call.InputTokens != nil && call.OutputTokens != nil {
+		call.UsageCompleteness = "complete"
+	} else if call.InputTokens != nil || call.OutputTokens != nil {
+		call.UsageCompleteness = "partial"
+	}
+	if call.UsageCompleteness != "complete" {
+		run.UsageCompleteness = call.UsageCompleteness
+	}
+}
+
+func hasModelReservation(call *ModelCallRow) bool {
+	return len(call.BudgetReservation) > 0 && string(call.BudgetReservation) != "null" &&
+		(len(call.BudgetSettlement) == 0 || string(call.BudgetSettlement) == "null")
+}
+
+// The reservation follows the most recent attempt for the step. A changed
+// request can resize it under the same run lock before the new call is sent.
+func reserveModelAttempt(st StateRepository, run *RunRow, prior *ModelCallRow, amount agentcore.Budget) (json.RawMessage, error) {
+	var previous agentcore.Reservation
+	if prior != nil {
+		if !hasModelReservation(prior) || json.Unmarshal(prior.BudgetReservation, &previous) != nil {
+			return nil, integrity()
+		}
+		prior.BudgetSettlement = json.RawMessage(`{"transferred_to_next_attempt":true}`)
+		if err := st.SaveModelCall(prior); err != nil {
+			return nil, err
+		}
+		if previous.Amount == amount {
+			return prior.BudgetReservation, nil
+		}
+	}
+	budget, err := ledger(run)
+	if err != nil {
+		return nil, err
+	}
+	if prior != nil {
+		budget, _, err = budget.Settle(previous, &agentcore.Budget{})
+		if err != nil {
+			return nil, coreError(err)
+		}
+	}
+	budget, reservation, err := budget.Reserve(amount)
+	if err != nil {
+		return nil, coreError(err)
+	}
+	if err = saveLedger(st, run, budget); err != nil {
+		return nil, err
+	}
+	return json.Marshal(reservation)
+}
+
+func settleModelBudget(st StateRepository, run *RunRow, call *ModelCallRow, usage modelcore.Usage) error {
+	recordModelUsage(run, call, usage)
+	return settleModelReservation(st, run, call, true)
+}
+
+func settleModelReservation(st StateRepository, run *RunRow, call *ModelCallRow, includeTokens bool) error {
 	var reservation agentcore.Reservation
 	if json.Unmarshal(call.BudgetReservation, &reservation) != nil {
 		return integrity()
 	}
-	l, e := ledger(root)
+	l, e := ledger(run)
 	if e != nil {
 		return e
 	}
-	// Missing token counts retain their reserved amount. A response never turns
-	// unknown usage into a fictional zero, even when the logical call is closed.
+	// Successful generation and compaction retain any unknown token dimensions.
+	// Terminal generation failures release all token reservations.
 	actual := agentcore.Budget{ModelCalls: 1}
-	release := agentcore.Budget{ModelCalls: reservation.Amount.ModelCalls}
-	if call.InputTokens != nil {
-		actual.InputTokens = *call.InputTokens
-		release.InputTokens = reservation.Amount.InputTokens
-	}
-	if call.OutputTokens != nil {
-		actual.OutputTokens = *call.OutputTokens
-		release.OutputTokens = reservation.Amount.OutputTokens
+	release := reservation.Amount
+	if includeTokens {
+		if call.InputTokens != nil {
+			actual.InputTokens = *call.InputTokens
+		} else {
+			release.InputTokens = 0
+		}
+		if call.OutputTokens != nil {
+			actual.OutputTokens = *call.OutputTokens
+		} else {
+			release.OutputTokens = 0
+		}
 	}
 	l, _, e = l.Settle(agentcore.Reservation{Amount: release}, &actual)
 	if e != nil {
@@ -417,16 +473,7 @@ func settleModelBudget(st StateRepository, root *RunRow, call *ModelCallRow, usa
 	if e != nil {
 		return e
 	}
-	call.UsageCompleteness = "unknown"
-	if call.InputTokens != nil && call.OutputTokens != nil {
-		call.UsageCompleteness = "complete"
-	} else if call.InputTokens != nil || call.OutputTokens != nil {
-		call.UsageCompleteness = "partial"
-	}
-	if call.UsageCompleteness != "complete" {
-		root.UsageCompleteness = call.UsageCompleteness
-	}
-	return saveLedger(st, root, l)
+	return saveLedger(st, run, l)
 }
 
 func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRef, result agentcore.AttemptResult) (agentcore.AttemptCommit, error) {
@@ -467,9 +514,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 		from := x.Session.LastSeq + 1
 		reason := modelOutcomeReason(outcome)
 		message := outcome.Response.Message
-		if e = settleModelBudget(st, x.Run, call, outcome.Response.Usage); e != nil {
-			return e
-		}
+		recordModelUsage(x.Run, call, outcome.Response.Usage)
 		if reason != "" {
 			observed := outcome.Response.Message.ToolCalls
 			if len(result.ObservedTools) > len(observed) {
@@ -482,31 +527,25 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 				status = "interrupted"
 			}
 			var retry *modelRetry
-			if delay, allowed := agentcore.ModelRetryDelay(outcome, call.AttemptNo, rand.Float64()); allowed && x.Run.Status == "running" && x.Root.Status == "running" && now.Add(delay).Before(x.Run.DeadlineAt) {
-				var reservation agentcore.Reservation
-				if json.Unmarshal(call.BudgetReservation, &reservation) != nil {
-					return integrity()
-				}
-				budget, err := ledger(x.Run)
-				if err != nil {
-					return err
-				}
-				if _, _, err = budget.Reserve(reservation.Amount); err == nil {
+			var recovery bool
+			limit := x.Execution.Policy.MaxModelRetries
+			if x.Run.Status == "running" && x.Root.Status == "running" && now.Before(x.Run.DeadlineAt) {
+				if delay, allowed := agentcore.ModelRetryDelay(outcome, call.AttemptNo, limit, rand.Float64()); allowed && now.Add(delay).Before(x.Run.DeadlineAt) {
 					stage := "request"
 					if outcome.StreamStarted || partial || len(outcome.Response.Message.ToolCalls) > 0 {
 						stage = "stream"
 					}
-					retry = &modelRetry{Number: int(call.AttemptNo), MaxRetries: agentcore.MaxModelAttempts - 1, DelayMS: delay.Milliseconds(), RetryAt: now.Add(delay).Truncate(time.Millisecond), Stage: stage}
+					retry = &modelRetry{Number: call.AttemptNo, MaxRetries: limit, DelayMS: delay.Milliseconds(), RetryAt: now.Add(delay).Truncate(time.Millisecond), Stage: stage}
+				}
+				recovery, e = contextRecoveryEligible(st, call, outcome, len(observed) > 0, limit)
+				if e != nil {
+					return e
 				}
 			}
 			// A generation limit ends this attempt without a retry, but valid text
 			// already shown to the user must remain available to "continue".
 			// Never replay its native thinking signatures or unfinished tool calls.
 			keepPartial := status == "interrupted" || reason == "MODEL_GENERATION_LIMIT" && message.Content != ""
-			recovery, e := contextRecoveryEligible(st, call, outcome, len(observed) > 0)
-			if e != nil {
-				return e
-			}
 			seq, e := appendEvent(st, x.Session, &x.Run.ID, "assistant/attempt", "model-result:"+strconv.FormatUint(call.ID, 10), map[string]any{"attempt_id": agentcore.ID(call.ID), "model_call_id": agentcore.ID(call.ID), "step_no": call.StepNo, "attempt_no": call.AttemptNo, "status": status, "rejected_tools": rejectedTools(observed), "content": uiAssistant(message, nil, result.ReasoningDurationMS), "partial": partial, "reason_code": reason, "diagnostic": diagnostic.From(diagnostic.With(outcome.Err, diagnostic.Detail{Source: "model", Stage: "response", Code: reason})), "retry": retry}, &StoredEvent{Message: &message, ModelCallID: agentcore.ID(call.ID), Interrupted: partial, PartialReason: reason, ExcludeFromContext: !keepPartial, Retry: retry, ContextRecovery: recovery}, now)
 			if e != nil {
 				return e
@@ -516,6 +555,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 			call.ErrorCode = &reason
 			out.AssistantSeq = agentcore.Seq(seq)
 			restoreRetry(&out, retry)
+			out.RecoverContext = recovery
 		} else {
 			bindingIDs := map[string]uint64{}
 			for _, frozen := range x.Context.Tools {
@@ -579,6 +619,13 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 				out.Calls = append(out.Calls, agentcore.PreparedToolCall{Ref: ref, ID: agentcore.ID(row.ID), ModelCallID: agentcore.ID(call.ID), Step: uint32(call.StepNo), Ordinal: uint32(i), Call: c, Spec: spec})
 			}
 		}
+		if out.Retry || out.RecoverContext {
+			if e = st.SaveRun(x.Run); e != nil {
+				return e
+			}
+		} else if e = settleModelReservation(st, x.Run, call, reason == ""); e != nil {
+			return e
+		}
 		if outcome.Response.ReturnedModel != "" {
 			model := outcome.Response.ReturnedModel
 			call.ResponseModelID = &model
@@ -621,6 +668,10 @@ func (s *Service) replayAttempt(st StateRepository, ref agentcore.ExecutionRef, 
 	if call.Status != "completed" {
 		if stored.Retry != nil {
 			restoreRetry(out, stored.Retry)
+			return nil
+		}
+		if stored.ContextRecovery {
+			out.RecoverContext = true
 			return nil
 		}
 		out.Failure = modelcore.ErrInvalidResponse

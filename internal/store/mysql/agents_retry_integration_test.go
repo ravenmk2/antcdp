@@ -21,6 +21,7 @@ import (
 
 func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 	t.Run("http_engine_store_recovery", func(t *testing.T) { runtimeRetryHTTP(t, f, agent) })
+	t.Run("configured_limits", func(t *testing.T) { runtimeRetryLimits(t, f) })
 	for _, mode := range []string{"recover", "stop", "restart", "budget", "cancelled_output", "generation_limit", "generation_limit_reasoning_only", "output_limit"} {
 		t.Run(mode, func(t *testing.T) {
 			session := runtimeSession(t, f, agent)
@@ -36,6 +37,9 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 			reservation := core.Budget{ModelCalls: 1, InputTokens: 100, OutputTokens: 100}
 			if mode == "budget" {
 				reservation.InputTokens = x.Policy.MaxInputTokens
+				if _, err = f.Store.db.ExecContext(f.Context, "UPDATE agent_run SET budget_limit=JSON_SET(budget_limit,'$.model_calls',1) WHERE id=?", x.Ref.RunID); err != nil {
+					t.Fatal(err)
+				}
 			}
 			draft := core.AttemptDraft{Step: step, Attempt: 1, Purpose: "generation", RequestHash: hash, Deadline: core.BoundedDeadline(time.Now(), 30, x.Deadline), Reservation: reservation}
 			first, err := f.Agents.FreezeAttempt(f.Context, x.Ref, draft)
@@ -43,6 +47,10 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 				t.Fatal(err)
 			}
 			outcome := core.AttemptOutcome{Err: modelcore.ErrIncompleteStream, StreamStarted: true, Response: modelcore.Response{Message: modelcore.Message{Role: "assistant", Content: "failed fragment must not enter context", Reasoning: "failed thinking", ToolCalls: []modelcore.ToolCall{{ID: "unsafe-fragment", Name: "effect", Arguments: `{}`}}}}}
+			if mode != "budget" {
+				input, output := int64(60), int64(25)
+				outcome.Response.Usage = modelcore.Usage{InputTokens: &input, OutputTokens: &output}
+			}
 			if mode == "cancelled_output" {
 				outcome.Cancelled = true
 			}
@@ -74,21 +82,13 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 			if err = f.Store.db.GetContext(f.Context, &tools, "SELECT COUNT(*) FROM agent_tool_call WHERE run_id=?", x.Ref.RunID); err != nil || tools != 0 {
 				t.Fatal("partial tool dispatched", tools, err)
 			}
-			wantRetry := mode != "budget" && mode != "cancelled_output" && !strings.HasPrefix(mode, "generation_limit") && mode != "output_limit"
+			wantRetry := mode != "cancelled_output" && !strings.HasPrefix(mode, "generation_limit") && mode != "output_limit"
 			if commit.Retry != wantRetry {
 				t.Fatal("retry eligibility", commit.Retry, mode)
 			}
-			if mode == "budget" {
-				var reserved string
-				if err = f.Store.db.GetContext(f.Context, &reserved, "SELECT budget_reserved FROM agent_run WHERE id=?", x.Ref.RunID); err != nil {
-					t.Fatal(err)
-				}
-				var budget core.Budget
-				if json.Unmarshal([]byte(reserved), &budget) != nil || budget.InputTokens != reservation.InputTokens {
-					t.Fatal("unknown usage reservation released", reserved)
-				}
-			}
+			oneCall := core.Budget{ModelCalls: 1}
 			if !wantRetry {
+				assertRetryBudget(t, f, x.Ref.RunID, oneCall, core.Budget{})
 				if _, err = f.Agents.EndRoot(f.Context, x.Ref, core.RunEnd{Status: core.Cancelled, Reason: "test_finished"}); err != nil {
 					t.Fatal(err)
 				}
@@ -110,6 +110,7 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 				}
 				return
 			}
+			assertRetryBudget(t, f, x.Ref.RunID, core.Budget{}, reservation)
 			again, err := f.Agents.CompleteAttempt(f.Context, x.Ref, result)
 			assertRunSteps(t, f, x, 1, 0)
 			if err != nil || !again.Retry || again.Failure != nil || again.AssistantSeq != commit.AssistantSeq || again.RetryAfter > commit.RetryAfter {
@@ -138,6 +139,7 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 					}
 				}
 				assertRunSteps(t, f, x, 1, 1)
+				assertRetryBudget(t, f, x.Ref.RunID, oneCall, core.Budget{})
 				if err == nil {
 					t.Fatal("closed execution admitted retry")
 				}
@@ -146,6 +148,7 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 			if err != nil {
 				t.Fatal("retry frozen surface changed", err)
 			}
+			assertRetryBudget(t, f, x.Ref.RunID, core.Budget{}, reservation)
 			if _, err = f.Agents.FreezeAttempt(f.Context, x.Ref, draft); err == nil {
 				t.Fatal("duplicate attempt admitted")
 			}
@@ -153,11 +156,18 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 			if err = f.Store.db.GetContext(f.Context, &started, "SELECT COUNT(*) FROM agent_event WHERE run_id=? AND event_type='model/retry-started'", x.Ref.RunID); err != nil || started != 1 {
 				t.Fatal("retry start observation", started, err)
 			}
-			zero := int64(0)
-			response := modelcore.Response{Message: modelcore.Message{Role: "assistant", Content: "recovered tool", ToolCalls: []modelcore.ToolCall{{ID: "safe-complete", Name: "echo", Arguments: `{}`}}}, Usage: modelcore.Usage{InputTokens: &zero, OutputTokens: &zero}}
+			input, output := int64(70), int64(35)
+			response := modelcore.Response{Message: modelcore.Message{Role: "assistant", Content: "recovered tool", ToolCalls: []modelcore.ToolCall{{ID: "safe-complete", Name: "echo", Arguments: `{}`}}}, Usage: modelcore.Usage{InputTokens: &input, OutputTokens: &output}}
 			success, err := f.Agents.CompleteAttempt(f.Context, x.Ref, core.AttemptResult{Permit: second.Permit, Outcome: core.AttemptOutcome{Response: response}})
 			if err != nil || success.Retry || len(success.Calls) != 1 {
 				t.Fatal("successful retry", success, err)
+			}
+			assertRetryBudget(t, f, x.Ref.RunID, core.Budget{ModelCalls: 1, InputTokens: 70, OutputTokens: 35}, core.Budget{})
+			if mode != "budget" {
+				var inputTokens int
+				if err = f.Store.db.GetContext(f.Context, &inputTokens, "SELECT input_tokens FROM agent_model_call WHERE id=?", first.Permit.CallID); err != nil || inputTokens != 60 {
+					t.Fatal("failed attempt usage missing", inputTokens, err)
+				}
 			}
 			permit, err := f.Agents.PrepareDispatch(f.Context, x.Ref, success.Calls[0].ID)
 			if err != nil || permit.Kind != "execute" {
@@ -178,6 +188,76 @@ func runtimeModelRetry(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 			}
 			runtimeEnd(t, f, x)
 			assertRunSteps(t, f, x, 2, 2)
+		})
+	}
+}
+
+func assertRetryBudget(t *testing.T, f *agentIntegrationFixture, run core.ID, used, reserved core.Budget) {
+	t.Helper()
+	var row struct {
+		Used     json.RawMessage `db:"budget_used"`
+		Reserved json.RawMessage `db:"budget_reserved"`
+	}
+	if err := f.Store.db.GetContext(f.Context, &row, "SELECT budget_used,budget_reserved FROM agent_run WHERE id=?", run); err != nil {
+		t.Fatal(err)
+	}
+	var gotUsed, gotReserved core.Budget
+	if json.Unmarshal(row.Used, &gotUsed) != nil || json.Unmarshal(row.Reserved, &gotReserved) != nil || gotUsed != used || gotReserved != reserved {
+		t.Fatalf("budget used %+v, reserved %+v; want %+v and %+v", gotUsed, gotReserved, used, reserved)
+	}
+}
+
+func runtimeRetryLimits(t *testing.T, f *agentIntegrationFixture) {
+	agent := runtimeTestAgent(t, f)
+	for _, tc := range []struct {
+		name     string
+		limit    int64
+		attempts uint32
+	}{{"disabled", 0, 1}, {"custom", 12, 13}, {"unlimited", core.UnlimitedModelRetries, 14}} {
+		t.Run(tc.name, func(t *testing.T) {
+			def, err := f.Agents.GetDefinition(f.Context, f.AdminToken, agent.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			policy := def.Data.(*a.Definition).RuntimePolicy
+			policy.MaxModelRetries = tc.limit
+			if _, err = f.Agents.PatchDefinition(f.Context, f.AdminToken, agent.ID, def.Tag, a.DefinitionPatch{RuntimePolicy: a.Field[a.RuntimePolicy]{Set: true, Value: policy}}); err != nil {
+				t.Fatal(err)
+			}
+			session := runtimeSession(t, f, agent.ID)
+			x := runtimeClaim(t, f, session.Configuration.ID, "check the frozen retry limit")
+			if x.Policy.MaxModelRetries != tc.limit {
+				t.Fatal("retry limit missing from snapshot", x.Policy.MaxModelRetries)
+			}
+			step, err := f.Agents.PrepareStep(f.Context, x, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			hash, err := core.ContentHash(step.Request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			reservation := core.Budget{ModelCalls: 1, InputTokens: 100, OutputTokens: 100}
+			for attempt := uint32(1); attempt <= tc.attempts; attempt++ {
+				draft := core.AttemptDraft{Step: step, Attempt: attempt, Purpose: "generation", RequestHash: hash, Deadline: x.Deadline, Reservation: reservation}
+				start, err := f.Agents.FreezeAttempt(f.Context, x.Ref, draft)
+				if err != nil {
+					t.Fatal(attempt, err)
+				}
+				outcome := core.AttemptOutcome{Err: &modeladapters.RemoteError{Status: 429, Delay: time.Millisecond}}
+				result, err := f.Agents.CompleteAttempt(f.Context, x.Ref, core.AttemptResult{Permit: start.Permit, Outcome: outcome})
+				wantRetry := attempt < tc.attempts || tc.limit == core.UnlimitedModelRetries
+				if err != nil || result.Retry != wantRetry {
+					t.Fatal(attempt, result.Retry, wantRetry, err)
+				}
+				if wantRetry {
+					time.Sleep(result.RetryAfter + time.Millisecond)
+				}
+			}
+			if _, err = f.Agents.EndRoot(f.Context, x.Ref, core.RunEnd{Status: core.Failed}); err != nil {
+				t.Fatal(err)
+			}
+			assertRetryBudget(t, f, x.Ref.RunID, core.Budget{ModelCalls: 1}, core.Budget{})
 		})
 	}
 }
@@ -248,8 +328,13 @@ func runtimeRetryHTTP(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 		for _, message := range input.Messages {
 			found = found || message.Role == "tool" && message.Content == "single durable effect"
 		}
-		if n != 4 || !found {
+		if !found || n > 5 {
 			t.Error("unexpected next step or missing committed tool", n)
+		}
+		if n == 4 {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
 		}
 		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"recovered final answer\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
 	}))
@@ -267,15 +352,20 @@ func runtimeRetryHTTP(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 	if err = (eino.Engine{}).Execute(f.Context, x.Ref, hooks); err != nil {
 		t.Fatal(err)
 	}
-	if requests.Load() != 4 || hooks.dispatched != 1 {
+	if requests.Load() != 5 || hooks.dispatched != 1 {
 		t.Fatal("attempt/tool counts", requests.Load(), hooks.dispatched)
 	}
 	var attempts, starts int
-	if err = f.Store.db.GetContext(f.Context, &attempts, "SELECT COUNT(*) FROM agent_model_call WHERE run_id=?", x.Ref.RunID); err != nil || attempts != 4 {
+	if err = f.Store.db.GetContext(f.Context, &attempts, "SELECT COUNT(*) FROM agent_model_call WHERE run_id=?", x.Ref.RunID); err != nil || attempts != 5 {
 		t.Fatal("durable attempts", attempts, err)
 	}
-	if err = f.Store.db.GetContext(f.Context, &starts, "SELECT COUNT(*) FROM agent_event WHERE run_id=? AND event_type='model/retry-started'", x.Ref.RunID); err != nil || starts != 2 {
+	if err = f.Store.db.GetContext(f.Context, &starts, "SELECT COUNT(*) FROM agent_event WHERE run_id=? AND event_type='model/retry-started'", x.Ref.RunID); err != nil || starts != 3 {
 		t.Fatal("durable starts", starts, err)
 	}
+	var secondStep []int
+	if err = f.Store.db.SelectContext(f.Context, &secondStep, "SELECT attempt_no FROM agent_model_call WHERE run_id=? AND step_no=2 ORDER BY attempt_no", x.Ref.RunID); err != nil || len(secondStep) != 2 || secondStep[0] != 1 || secondStep[1] != 2 {
+		t.Fatal("retry counter did not reset after success", secondStep, err)
+	}
+	assertRetryBudget(t, f, x.Ref.RunID, core.Budget{ModelCalls: 2, ToolCalls: 1}, core.Budget{InputTokens: 200, OutputTokens: 200})
 	runtimeEnd(t, f, x)
 }

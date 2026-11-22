@@ -23,6 +23,7 @@ export interface Timestamped {
 export interface RuntimePolicy {
   max_steps: number;
   max_model_calls: number;
+  max_model_retries: number;
   max_tool_calls: number;
   max_children: number;
   max_parallel_tools: number;
@@ -496,12 +497,11 @@ export interface RunDetail extends RunSummary {
   last_event_seq: string;
   end_seq: string | null;
   budget_usage: {
-    input_tokens_used: string;
-    output_tokens_used: string;
-    model_calls_used: number;
-    tool_calls_used: number;
-    children_started: number;
-    wall_time_ms: string;
+    input_tokens: number;
+    output_tokens: number;
+    model_calls: number;
+    tool_calls: number;
+    children: number;
   };
   binding: {
     id: string;

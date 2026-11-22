@@ -4,6 +4,7 @@ import type { ApiResponse } from "@/api/client";
 import { Button } from "@/components/button";
 import { Field, Input } from "@/components/fields";
 import { Panel } from "@/components/layout";
+import { Switch } from "@/components/ui/switch";
 import type { AgentDefinition, RuntimePolicy } from "@/types/agents";
 import { agentAdminRoot } from "@/features/agents/data/agent-api";
 import {
@@ -21,6 +22,12 @@ const limitGroups: {
     fields: [
       ["max_steps", "最大推理步数", 1, 200],
       ["max_model_calls", "模型调用上限", 1, 1000],
+      [
+        "max_model_retries",
+        "模型 API 自动重试次数",
+        0,
+        Number.MAX_SAFE_INTEGER,
+      ],
       ["max_tool_calls", "工具调用上限", 1, 1000],
       ["max_children", "子任务上限", 0, 8],
       ["max_parallel_tools", "同时执行的工具数", 1, 16],
@@ -103,13 +110,17 @@ export function AgentRuntimePolicy({
                         initial.data.agent_type !== "service" ||
                         key !== "approval_timeout_seconds",
                     )
-                    .map(([key, label, min, max]) =>
-                      readOnly ? (
+                    .map(([key, label, min, max]) => {
+                      const retries = key === "max_model_retries";
+                      const unlimited = retries && draft[key] === -1;
+                      return readOnly ? (
                         <dl key={key} className="agent-read-facts">
                           <div>
                             <dt>{label}</dt>
                             <dd className="text-xl font-semibold tabular-nums">
-                              {draft[key].toLocaleString()}
+                              {unlimited
+                                ? "不限次数"
+                                : draft[key].toLocaleString()}
                             </dd>
                           </div>
                         </dl>
@@ -117,7 +128,11 @@ export function AgentRuntimePolicy({
                         <Field
                           key={key}
                           label={label}
-                          hint={`${min.toLocaleString()}–${max.toLocaleString()}`}
+                          hint={
+                            retries
+                              ? "每个生成步骤单独计数。0 关闭重试。不限次数时仍受运行期限约束。"
+                              : `${min.toLocaleString()}–${max.toLocaleString()}`
+                          }
                         >
                           <Input
                             required
@@ -126,7 +141,8 @@ export function AgentRuntimePolicy({
                             max={max}
                             step={1}
                             name={key}
-                            value={draft[key]}
+                            disabled={unlimited}
+                            value={unlimited ? "" : draft[key]}
                             onChange={(event) =>
                               setDraft({
                                 ...draft,
@@ -134,9 +150,29 @@ export function AgentRuntimePolicy({
                               })
                             }
                           />
+                          {retries && (
+                            <div className="flex items-center gap-2 text-sm">
+                              <Switch
+                                aria-label="不限次数"
+                                checked={unlimited}
+                                disabled={save.pending || save.blocked}
+                                onCheckedChange={(checked) =>
+                                  setDraft({
+                                    ...draft,
+                                    max_model_retries: checked
+                                      ? -1
+                                      : baseline.max_model_retries === -1
+                                        ? 5
+                                        : baseline.max_model_retries,
+                                  })
+                                }
+                              />
+                              <span>不限次数</span>
+                            </div>
+                          )}
                         </Field>
-                      ),
-                    )}
+                      );
+                    })}
                 </div>
               </fieldset>
             ))}

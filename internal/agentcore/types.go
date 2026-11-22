@@ -93,6 +93,7 @@ type ContentBlock struct {
 type Policy struct {
 	MaxSteps               uint32 `json:"max_steps"`
 	MaxModelCalls          uint64 `json:"max_model_calls"`
+	MaxModelRetries        int64  `json:"max_model_retries"`
 	MaxToolCalls           uint64 `json:"max_tool_calls"`
 	MaxChildren            uint64 `json:"max_children"`
 	MaxParallelTools       int    `json:"max_parallel_tools"`

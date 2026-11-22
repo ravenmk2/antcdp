@@ -12,8 +12,8 @@ import (
 // Stored with the failed attempt so duplicate settlement cannot resample jitter
 // or change an already announced decision. It contains no provider diagnostics.
 type modelRetry struct {
-	Number     int       `json:"number"`
-	MaxRetries int       `json:"max_retries"`
+	Number     uint64    `json:"number"`
+	MaxRetries int64     `json:"max_retries"`
 	DelayMS    int64     `json:"delay_ms"`
 	RetryAt    time.Time `json:"retry_at"`
 	Stage      string    `json:"stage"`
@@ -29,8 +29,8 @@ func restoreRetry(out *agentcore.AttemptCommit, retry *modelRetry) {
 
 // Recovery eligibility is recorded with the failed attempt. It does not admit
 // resending that request: FreezeAttempt requires a smaller committed surface.
-func contextRecoveryEligible(st StateRepository, call *ModelCallRow, outcome agentcore.AttemptOutcome, observedTools bool) (bool, error) {
-	if !errors.Is(outcome.Err, modelcore.ErrContextWindowExceeded) || outcome.Cancelled || outcome.StreamStarted || observedTools || outcome.Response.Message.Content != "" || outcome.Response.Message.Reasoning != "" || call.RunID == nil || call.AttemptNo >= agentcore.MaxModelAttempts {
+func contextRecoveryEligible(st StateRepository, call *ModelCallRow, outcome agentcore.AttemptOutcome, observedTools bool, limit int64) (bool, error) {
+	if !errors.Is(outcome.Err, modelcore.ErrContextWindowExceeded) || outcome.Cancelled || outcome.StreamStarted || observedTools || outcome.Response.Message.Content != "" || outcome.Response.Message.Reasoning != "" || call.RunID == nil || !agentcore.CanRetryModelAttempt(call.AttemptNo, limit) {
 		return false, nil
 	}
 	for attempt := uint64(1); attempt < call.AttemptNo; attempt++ {

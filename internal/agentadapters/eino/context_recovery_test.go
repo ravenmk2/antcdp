@@ -15,6 +15,12 @@ type contextRecoveryHooks struct {
 	changed    bool
 }
 
+func (h *contextRecoveryHooks) CompleteAttempt(ctx context.Context, permit agentcore.AttemptPermit, out agentcore.AttemptOutcome) (agentcore.AttemptCommit, error) {
+	commit, err := h.engineHooks.CompleteAttempt(ctx, permit, out)
+	commit.RecoverContext = errors.Is(out.Err, modelcore.ErrContextWindowExceeded) && h.recoveries == 0
+	return commit, err
+}
+
 func (h *contextRecoveryHooks) RecoverContext(_ context.Context, step agentcore.PreparedStep) (agentcore.PreparedStep, bool, error) {
 	h.recoveries++
 	step.Request.Messages = []modelcore.Message{{Role: "user", Content: "replacement checkpoint"}}
@@ -46,7 +52,7 @@ func TestContextOverflowRetriesOnlyOnceAfterDurableReduction(t *testing.T) {
 				}
 				return modelcore.Response{Message: modelcore.Message{Role: "assistant", Content: "done"}}, nil
 			}}
-			err := (Engine{MaxSteps: 3, MaxAttempts: 4}).Execute(t.Context(), ref, h)
+			err := (Engine{MaxSteps: 3}).Execute(t.Context(), ref, h)
 			if calls != test.wantCalls || h.recoveries != 1 || len(h.prepared) != 1 || len(h.dispatch) != 0 {
 				t.Fatal("recovery repeated work", calls, h.recoveries, h.prepared)
 			}

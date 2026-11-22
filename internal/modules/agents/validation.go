@@ -89,9 +89,17 @@ func validateQuery(q *Query) error {
 	return nil
 }
 func defaultRuntimePolicy() RuntimePolicy {
-	return RuntimePolicy{60, 120, 200, 4, 4, 2700, 1800, 120, 180, 1000000, 100000}
+	return RuntimePolicy{
+		MaxSteps: 60, MaxModelCalls: 120, MaxModelRetries: agentcore.DefaultModelRetries,
+		MaxToolCalls: 200, MaxChildren: 4, MaxParallelTools: 4, RunTimeout: 2700,
+		QueueTimeout: 1800, QuestionTimeout: 120, ApprovalTimeout: 180,
+		MaxInputTokens: 1000000, MaxOutputTokens: 100000,
+	}
 }
 func validatePolicy(p RuntimePolicy) error {
+	if p.MaxModelRetries < agentcore.UnlimitedModelRetries {
+		return httpx.Invalid("runtime_policy.max_model_retries", "invalid_range")
+	}
 	for _, v := range []struct {
 		name            string
 		value, min, max int

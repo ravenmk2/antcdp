@@ -39,7 +39,7 @@ func (h *engineHooks) CompleteAttempt(_ context.Context, permit agentcore.Attemp
 	h.commits = append(h.commits, out)
 	commit := agentcore.AttemptCommit{Response: out.Response, Retry: out.Err != nil && h.retry, Failure: h.durableFailure}
 	if h.retryPolicy {
-		commit.RetryAfter, commit.Retry = agentcore.ModelRetryDelay(out, uint64(permit.Attempt), .5)
+		commit.RetryAfter, commit.Retry = agentcore.ModelRetryDelay(out, uint64(permit.Attempt), agentcore.DefaultModelRetries, .5)
 	}
 	if h.onCommit != nil {
 		h.onCommit()
@@ -147,6 +147,23 @@ func TestEngineDurablyRejectedOutputDoesNotDispatchOrRetry(t *testing.T) {
 	}
 }
 
+func TestEngineHonorsPersistedRetriesBeyondFormerLimit(t *testing.T) {
+	ref := agentcore.ExecutionRef{SessionID: 1, RunID: 2, RootRunID: 2, Epoch: "epoch", Fence: 1}
+	h := &engineHooks{ref: ref, retry: true}
+	h.prepare = func(step uint32) agentcore.PreparedStep {
+		return agentcore.PreparedStep{Ref: ref, Step: step, MaxParallelTools: 1, Request: modelcore.Request{Model: "test", Protocol: modelcore.ChatCompletions}}
+	}
+	h.client = &scriptedClient{invoke: func(_ context.Context, attempt int, _ modelcore.Request, _ modelcore.Emit) (modelcore.Response, error) {
+		if attempt <= 12 {
+			return modelcore.Response{}, modelcore.ErrRateLimited
+		}
+		return modelcore.Response{Message: modelcore.Message{Role: "assistant", Content: "finished"}}, nil
+	}}
+	if err := (Engine{}).Execute(t.Context(), ref, h); err != nil || len(h.commits) != 13 || len(h.prepared) != 1 {
+		t.Fatal("durable retries did not complete the original step", len(h.commits), h.prepared, err)
+	}
+}
+
 func TestEngineHumanWaitEndsTurnWithoutAnotherModelCall(t *testing.T) {
 	ref := agentcore.ExecutionRef{SessionID: 1, RunID: 2, RootRunID: 2, Epoch: "epoch", Fence: 1}
 	h := &engineHooks{ref: ref, dispatchError: agentcore.ErrWaitingInput}
@@ -180,7 +197,7 @@ func TestAttemptFailureDistinguishesTransportDeadlineAndCancellation(t *testing.
 			h.client = &scriptedClient{invoke: func(context.Context, int, modelcore.Request, modelcore.Emit) (modelcore.Response, error) {
 				return modelcore.Response{}, tc.cause
 			}}
-			m := executionModel{ref: ref, hooks: h, prepared: agentcore.PreparedStep{Ref: ref, Step: 1}, maxAttempts: 1}
+			m := executionModel{ref: ref, hooks: h, prepared: agentcore.PreparedStep{Ref: ref, Step: 1}}
 			_, err := m.Generate(t.Context(), nil)
 			if len(h.commits) != 1 || h.commits[0].Cancelled != tc.cancelled || len(h.dispatch) != 0 {
 				t.Fatalf("incorrect durable classification: %+v", h.commits)
@@ -201,7 +218,7 @@ func TestAttemptFailureDistinguishesTransportDeadlineAndCancellation(t *testing.
 		<-ctx.Done()
 		return modelcore.Response{}, ctx.Err()
 	}}}
-	m := executionModel{ref: ref, hooks: h, prepared: agentcore.PreparedStep{Ref: ref, Step: 1}, maxAttempts: 1}
+	m := executionModel{ref: ref, hooks: h, prepared: agentcore.PreparedStep{Ref: ref, Step: 1}}
 	_, err := m.Generate(ctx, nil)
 	if !errors.Is(err, context.DeadlineExceeded) || len(h.commits) != 1 || h.commits[0].Cancelled {
 		t.Fatalf("root deadline misclassified: err=%v commits=%+v", err, h.commits)

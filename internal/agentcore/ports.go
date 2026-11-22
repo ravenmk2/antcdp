@@ -50,12 +50,13 @@ type PreparedToolCall struct {
 	Spec        ToolSpec
 }
 type AttemptCommit struct {
-	Receipt      CommitReceipt
-	AssistantSeq Seq // assistant/message or assistant/attempt, never tool/call
-	Response     modelcore.Response
-	Calls        []PreparedToolCall
-	Retry        bool
-	RetryAfter   time.Duration
+	Receipt        CommitReceipt
+	AssistantSeq   Seq // assistant/message or assistant/attempt, never tool/call
+	Response       modelcore.Response
+	Calls          []PreparedToolCall
+	Retry          bool
+	RetryAfter     time.Duration
+	RecoverContext bool
 	// Failure is a durable failed attempt (for example output-limit rejection),
 	// not a persistence failure. It forbids tool dispatch and another model step.
 	Failure error

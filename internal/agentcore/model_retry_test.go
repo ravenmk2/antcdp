@@ -32,12 +32,12 @@ func TestModelRetryEligibilityAndLimits(t *testing.T) {
 	} {
 		t.Run(fmt.Sprint(tc.err), func(t *testing.T) {
 			for attempt := uint64(1); attempt <= 7; attempt++ {
-				_, ok := ModelRetryDelay(AttemptOutcome{Err: tc.err}, attempt, .5)
-				if ok != (tc.retry && attempt < MaxModelAttempts) {
+				_, ok := ModelRetryDelay(AttemptOutcome{Err: tc.err}, attempt, DefaultModelRetries, .5)
+				if ok != (tc.retry && attempt <= DefaultModelRetries) {
 					t.Fatalf("attempt %d retry=%v", attempt, ok)
 				}
 			}
-			if _, ok := ModelRetryDelay(AttemptOutcome{Err: tc.err, Cancelled: true}, 1, .5); ok {
+			if _, ok := ModelRetryDelay(AttemptOutcome{Err: tc.err, Cancelled: true}, 1, UnlimitedModelRetries, .5); ok {
 				t.Fatal("cancellation retried")
 			}
 		})
@@ -45,19 +45,33 @@ func TestModelRetryEligibilityAndLimits(t *testing.T) {
 }
 
 func TestModelRetryBackoffAndProviderInstruction(t *testing.T) {
-	for attempt := uint64(1); attempt < MaxModelAttempts; attempt++ {
+	for attempt := uint64(1); attempt <= DefaultModelRetries; attempt++ {
 		base := 500 * time.Millisecond * time.Duration(1<<(attempt-1))
 		for _, sample := range []float64{0, .5, 1} {
-			delay, ok := ModelRetryDelay(AttemptOutcome{Err: modelcore.ErrTransport}, attempt, sample)
+			delay, ok := ModelRetryDelay(AttemptOutcome{Err: modelcore.ErrTransport}, attempt, DefaultModelRetries, sample)
 			if !ok || delay < base*9/10 || delay > base*11/10 || delay > MaxModelRetryDelay {
 				t.Fatalf("backoff %v %v", delay, ok)
 			}
 		}
 	}
 	for _, delay := range []time.Duration{2 * time.Second, 10 * time.Second, 11 * time.Second, 24 * time.Hour} {
-		actual, ok := ModelRetryDelay(AttemptOutcome{Err: fmt.Errorf("wrapped: %w", retryInstruction{delay})}, 1, .5)
+		actual, ok := ModelRetryDelay(AttemptOutcome{Err: fmt.Errorf("wrapped: %w", retryInstruction{delay})}, 1, DefaultModelRetries, .5)
 		if ok != (delay <= MaxModelRetryDelay) || ok && actual != delay {
 			t.Fatal("provider instruction not respected", actual, ok)
+		}
+	}
+}
+
+func TestModelRetryCustomAndUnlimited(t *testing.T) {
+	out := AttemptOutcome{Err: modelcore.ErrTransport}
+	for _, tc := range []struct {
+		limit   int64
+		attempt uint64
+		want    bool
+	}{{0, 1, false}, {12, 12, true}, {12, 13, false}, {UnlimitedModelRetries, 1000, true}} {
+		delay, ok := ModelRetryDelay(out, tc.attempt, tc.limit, .5)
+		if ok != tc.want || ok && delay != MaxModelRetryDelay {
+			t.Fatalf("limit %d after %d attempts: delay=%v, retry=%v", tc.limit, tc.attempt, delay, ok)
 		}
 	}
 }

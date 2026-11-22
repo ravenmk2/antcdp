@@ -35,6 +35,7 @@ type ResourceRef = commandstate.ResourceRef
 type RuntimePolicy struct {
 	MaxSteps         int    `json:"max_steps"`
 	MaxModelCalls    int    `json:"max_model_calls"`
+	MaxModelRetries  int64  `json:"max_model_retries"`
 	MaxToolCalls     int    `json:"max_tool_calls"`
 	MaxChildren      int    `json:"max_children"`
 	MaxParallelTools int    `json:"max_parallel_tools"`
@@ -45,6 +46,17 @@ type RuntimePolicy struct {
 	MaxInputTokens   uint64 `json:"max_input_tokens"`
 	MaxOutputTokens  uint64 `json:"max_output_tokens"`
 }
+
+func (p *RuntimePolicy) UnmarshalJSON(data []byte) error {
+	type policy RuntimePolicy
+	value := policy{MaxModelRetries: agentcore.DefaultModelRetries}
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*p = RuntimePolicy(value)
+	return nil
+}
+
 type NetworkPolicy struct {
 	DefaultAction string   `json:"default_action"`
 	PresetIDs     []string `json:"preset_ids"`

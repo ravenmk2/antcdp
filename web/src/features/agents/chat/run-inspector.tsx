@@ -220,23 +220,28 @@ function RunDetailView({
               {[
                 [
                   "输入 Token 预算用量",
-                  run.data.data.budget_usage.input_tokens_used,
+                  run.data.data.budget_usage.input_tokens,
                 ],
                 [
                   "输出 Token 预算用量",
-                  run.data.data.budget_usage.output_tokens_used,
+                  run.data.data.budget_usage.output_tokens,
                 ],
-                ["子任务数量", run.data.data.budget_usage.children_started],
-                ["模型调用", run.data.data.model_call_count],
+                ["子任务数量", run.data.data.budget_usage.children],
+                ["模型 API 尝试", run.data.data.model_call_count],
+                ["计入模型调用预算", run.data.data.budget_usage.model_calls],
                 ["工具调用", run.data.data.tool_call_count],
-                ["运行耗时（毫秒）", run.data.data.budget_usage.wall_time_ms],
+                [
+                  "运行耗时（毫秒）",
+                  run.data.data.started_at && run.data.data.finished_at
+                    ? Date.parse(run.data.data.finished_at) -
+                      Date.parse(run.data.data.started_at)
+                    : "—",
+                ],
               ].map(([label, value]) => (
                 <div key={label}>
                   <dt className="text-xs text-muted">{label}</dt>
                   <dd className="mt-1 font-medium tabular-nums">
-                    {typeof value === "string"
-                      ? BigInt(value).toLocaleString()
-                      : value}
+                    {typeof value === "number" ? value.toLocaleString() : value}
                   </dd>
                 </div>
               ))}

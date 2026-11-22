@@ -53,6 +53,7 @@ const agent: AgentDefinition = {
   runtime_policy: {
     max_steps: 60,
     max_model_calls: 120,
+    max_model_retries: 5,
     max_tool_calls: 200,
     max_children: 4,
     max_parallel_tools: 4,
@@ -559,6 +560,34 @@ it("shows runtime values without editable inputs until editing is requested", as
   expect(
     screen.queryByRole("spinbutton", { name: "审批期限（秒）" }),
   ).toBeNull();
+});
+it("saves unlimited model retries and displays it as a setting", async () => {
+  let saved = agent;
+  override = async (path, options) => {
+    if (!path.endsWith("/definitions/4")) return;
+    if (options.method === "PATCH") {
+      const body = options.body as Pick<AgentDefinition, "runtime_policy">;
+      saved = { ...agent, runtime_policy: body.runtime_policy };
+    }
+    return response(saved, saved === agent ? '"version-1"' : '"version-2"');
+  };
+  const { user } = mount("/admin/agents/4?tab=runtime&view=edit");
+  const retry = await screen.findByRole("spinbutton", {
+    name: "模型 API 自动重试次数",
+  });
+  expect(retry).toHaveValue(5);
+  const unlimited = screen.getByRole("switch", { name: "不限次数" });
+  expect(unlimited).not.toBeChecked();
+  await user.click(unlimited);
+  expect(unlimited).toBeChecked();
+  expect(retry).toBeDisabled();
+  await user.click(screen.getByRole("button", { name: "保存本分区" }));
+  await waitFor(() =>
+    expect(saved.runtime_policy).toEqual({
+      ...agent.runtime_policy,
+      max_model_retries: -1,
+    }),
+  );
 });
 it.each(["mcp", "skills"])(
   "renders bound %s resources as readable links and states before editing",

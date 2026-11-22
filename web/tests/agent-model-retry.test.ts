@@ -75,6 +75,19 @@ it("rebuilds retry state from history across waiting, start, success and cancell
   expect(modelRetryStates([failed, started, ended]).get("30")).toBe("ended");
 });
 
+it("accepts durable retries with no configured maximum", () => {
+  const unlimited = {
+    ...failed,
+    data: {
+      ...failed.data,
+      attempt_no: 12,
+      retry: { ...failed.data.retry!, number: 12, max_retries: -1 },
+    },
+  };
+  expect(validRecord(unlimited)).toBe(true);
+  expect(modelRetryStates([unlimited]).get("30")).toBe("waiting");
+});
+
 it("isolates runs and steps and settles all attempts of a recovered step", () => {
   const next: Event<"assistant/attempt"> = {
     ...failed,

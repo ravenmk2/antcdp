@@ -285,7 +285,7 @@ func corePolicy(v *Definition) agentcore.Policy {
 	if v.Mode == "service" {
 		approval = "preauthorized_only"
 	}
-	return agentcore.Policy{MaxSteps: uint32(p.MaxSteps), MaxModelCalls: uint64(p.MaxModelCalls), MaxToolCalls: uint64(p.MaxToolCalls), MaxChildren: uint64(p.MaxChildren), MaxParallelTools: p.MaxParallelTools, RunTimeoutSeconds: p.RunTimeout, QueueTimeoutSeconds: p.QueueTimeout, QuestionTimeoutSeconds: p.QuestionTimeout, ApprovalTimeoutSeconds: p.ApprovalTimeout, MaxInputTokens: p.MaxInputTokens, MaxOutputTokens: p.MaxOutputTokens, ApprovalPolicy: approval}
+	return agentcore.Policy{MaxSteps: uint32(p.MaxSteps), MaxModelCalls: uint64(p.MaxModelCalls), MaxModelRetries: p.MaxModelRetries, MaxToolCalls: uint64(p.MaxToolCalls), MaxChildren: uint64(p.MaxChildren), MaxParallelTools: p.MaxParallelTools, RunTimeoutSeconds: p.RunTimeout, QueueTimeoutSeconds: p.QueueTimeout, QuestionTimeoutSeconds: p.QuestionTimeout, ApprovalTimeoutSeconds: p.ApprovalTimeout, MaxInputTokens: p.MaxInputTokens, MaxOutputTokens: p.MaxOutputTokens, ApprovalPolicy: approval}
 }
 
 type policySnapshot struct {

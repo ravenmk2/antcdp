@@ -69,7 +69,7 @@ export function turnIssues(records: DurableRecord[], nodes: PresentedNode[]) {
       if (!issue.reasons.includes(reason)) issue.reasons.push(reason);
       issue.state = data.retry ? "pending" : "failed";
       issue.summary = data.retry
-        ? `${retries.get(data.attempt_id) === "running" ? "正在重试" : "等待重试"} · ${data.retry.number}/${data.retry.max_retries}`
+        ? `${retries.get(data.attempt_id) === "running" ? "正在重试" : "等待重试"} · ${data.retry.max_retries === -1 ? `第 ${data.retry.number} 次` : `${data.retry.number}/${data.retry.max_retries}`}`
         : "模型调用未完成";
       const active = pending.get(run) ?? new Set<TurnIssue>();
       active.add(issue);

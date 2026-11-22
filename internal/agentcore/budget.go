@@ -65,6 +65,9 @@ func ValidatePolicy(p Policy) error {
 	if p.MaxSteps < 1 || p.MaxSteps > 200 || p.MaxModelCalls < 1 || p.MaxModelCalls > 1000 || p.MaxToolCalls < 1 || p.MaxToolCalls > 1000 || p.MaxChildren > 8 || p.MaxParallelTools < 1 || p.MaxParallelTools > 16 {
 		return invalid("budget")
 	}
+	if p.MaxModelRetries < UnlimitedModelRetries {
+		return invalid("max_model_retries")
+	}
 	if p.RunTimeoutSeconds < 60 || p.RunTimeoutSeconds > 86400 || p.QueueTimeoutSeconds < 60 || p.QueueTimeoutSeconds > 86400 || p.QuestionTimeoutSeconds < 5 || p.QuestionTimeoutSeconds > 600 || p.ApprovalTimeoutSeconds < 15 || p.ApprovalTimeoutSeconds > 900 {
 		return invalid("timeout")
 	}

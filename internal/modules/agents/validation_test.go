@@ -51,6 +51,28 @@ func TestPolicyIdentityAndNetwork(t *testing.T) {
 		t.Fatal("larger external egress range rejected", e)
 	}
 }
+
+func TestRuntimePolicyRetryDefaultAndExplicitValues(t *testing.T) {
+	for _, tc := range []struct {
+		json string
+		want int64
+	}{
+		{`{"max_model_calls":23}`, 5},
+		{`{"max_model_calls":23,"max_model_retries":0}`, 0},
+		{`{"max_model_calls":23,"max_model_retries":-1}`, -1},
+		{`{"max_model_calls":23,"max_model_retries":12}`, 12},
+	} {
+		var policy RuntimePolicy
+		if err := json.Unmarshal([]byte(tc.json), &policy); err != nil || policy.MaxModelRetries != tc.want || policy.MaxModelCalls != 23 {
+			t.Fatal("runtime policy decode", tc.json, policy, err)
+		}
+	}
+	policy := defaultRuntimePolicy()
+	policy.MaxModelRetries = -2
+	if err := validatePolicy(policy); err == nil {
+		t.Fatal("invalid retry value accepted")
+	}
+}
 func TestModelSelectionHashUsesEffectiveRoute(t *testing.T) {
 	s := &Service{Models: &models.Service{ValidateParameters: func(string, string, json.RawMessage) error { return nil }}}
 	v := &models.RuntimeModel{ProviderID: 1, DefinitionID: 2, ProviderType: "deepseek", ProviderName: "提供商", Name: "模型", Protocol: "chat_completions", RemoteModelID: "model", Config: models.Config{BaseURL: "https://example.test/v1"}, IdentityConfig: json.RawMessage(`{}`), AuthMethod: "api_key", ContextWindow: 8192, MaxOutput: 1024, Available: true}

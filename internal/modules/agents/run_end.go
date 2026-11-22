@@ -264,27 +264,30 @@ func (s *Service) endOne(st StateRepository, session *SessionRow, row *RunRow, e
 	}
 	for i := range modelCalls {
 		call := &modelCalls[i]
-		if call.Purpose != "generation" || call.ResponseEventSeq != nil || call.Status != "running" {
+		if call.Purpose != "generation" || !hasModelReservation(call) {
 			continue
 		}
-		reason := "MODEL_RESULT_UNCONFIRMED"
-		message := modelcore.Message{Role: "assistant"}
-		seq, e := appendEvent(st, session, &row.ID, "assistant/attempt", "model-result:"+strconv.FormatUint(call.ID, 10), map[string]any{"attempt_id": agentcore.ID(call.ID), "model_call_id": agentcore.ID(call.ID), "status": "interrupted", "content": []agentcore.ContentBlock{}, "partial": false, "reason_code": reason}, &StoredEvent{Message: &message, ModelCallID: agentcore.ID(call.ID)}, now)
-		if e != nil {
-			return e
+		if call.ResponseEventSeq == nil && call.Status == "running" {
+			reason := "MODEL_RESULT_UNCONFIRMED"
+			message := modelcore.Message{Role: "assistant"}
+			seq, err := appendEvent(st, session, &row.ID, "assistant/attempt", "model-result:"+strconv.FormatUint(call.ID, 10), map[string]any{"attempt_id": agentcore.ID(call.ID), "model_call_id": agentcore.ID(call.ID), "status": "interrupted", "content": []agentcore.ContentBlock{}, "partial": false, "reason_code": reason}, &StoredEvent{Message: &message, ModelCallID: agentcore.ID(call.ID)}, now)
+			if err != nil {
+				return err
+			}
+			call.ResponseEventSeq = &seq
+			call.Status = "interrupted"
+			call.ErrorCode = &reason
+			call.FinishedAt = &now
+			recordModelUsage(row, call, modelcore.Usage{})
+			if end.Status == agentcore.Succeeded {
+				end = agentcore.RunEnd{Status: agentcore.Interrupted, Reason: reason}
+			}
 		}
-		call.ResponseEventSeq = &seq
-		call.Status = "interrupted"
-		call.ErrorCode = &reason
-		call.FinishedAt = &now
-		if e = settleModelBudget(st, row, call, modelcore.Usage{}); e != nil {
+		if e = settleModelReservation(st, row, call, false); e != nil {
 			return e
 		}
 		if e = st.SaveModelCall(call); e != nil {
 			return e
-		}
-		if end.Status == agentcore.Succeeded {
-			end = agentcore.RunEnd{Status: agentcore.Interrupted, Reason: reason}
 		}
 	}
 	state, e := coreSession(session)

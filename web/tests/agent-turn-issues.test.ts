@@ -115,6 +115,19 @@ it("uses committed retry start and recovery rather than local timers", () => {
   ).toBe("pending");
 });
 
+it("shows the current retry without a denominator in unlimited mode", () => {
+  const unlimited = {
+    ...failed,
+    data: {
+      ...failed.data,
+      retry: { ...failed.data.retry!, number: 12, max_retries: -1 },
+    },
+  };
+  expect(project([unlimited]).get("20")![0].summary).toBe(
+    "等待重试 · 第 12 次",
+  );
+});
+
 it("does not call unknown physical work recovered when the run succeeds or settles", () => {
   const settled: Event<"run/settled"> = {
     ...end,

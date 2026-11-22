@@ -125,7 +125,7 @@ export function validRecord(record: DurableRecord) {
       !Number.isInteger(retry.number) ||
       retry.number < 1 ||
       !Number.isInteger(retry.max_retries) ||
-      retry.max_retries < retry.number ||
+      (retry.max_retries !== -1 && retry.max_retries < retry.number) ||
       !Number.isFinite(retry.delay_ms) ||
       retry.delay_ms < 0 ||
       !Number.isFinite(Date.parse(retry.retry_at)) ||

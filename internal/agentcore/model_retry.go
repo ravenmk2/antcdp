@@ -8,14 +8,22 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 )
 
-const MaxModelAttempts = 6
-const MaxModelRetryDelay = 10 * time.Second
+const (
+	DefaultModelRetries   = 5
+	UnlimitedModelRetries = -1
+	MaxModelRetryDelay    = 10 * time.Second
+)
+
+// CanRetryModelAttempt counts completed attempts, including the initial call.
+func CanRetryModelAttempt(attempt uint64, limit int64) bool {
+	return attempt > 0 && (limit == UnlimitedModelRetries || limit > 0 && attempt <= uint64(limit))
+}
 
 // ModelRetryDelay applies only to transient model failures. The caller persists
 // the decision before waiting and still enforces run deadlines and budgets.
 // sample is a uniform value in [0,1), supplied separately for deterministic tests.
-func ModelRetryDelay(out AttemptOutcome, attempt uint64, sample float64) (time.Duration, bool) {
-	if out.Cancelled || attempt == 0 || attempt >= MaxModelAttempts || errors.Is(out.Err, context.Canceled) || errors.Is(out.Err, context.DeadlineExceeded) {
+func ModelRetryDelay(out AttemptOutcome, attempt uint64, limit int64, sample float64) (time.Duration, bool) {
+	if out.Cancelled || !CanRetryModelAttempt(attempt, limit) || errors.Is(out.Err, context.Canceled) || errors.Is(out.Err, context.DeadlineExceeded) {
 		return 0, false
 	}
 	var execution *Error
@@ -31,6 +39,7 @@ func ModelRetryDelay(out AttemptOutcome, attempt uint64, sample float64) (time.D
 		delay := provider.RetryDelay()
 		return delay, delay <= MaxModelRetryDelay
 	}
-	delay := time.Duration(float64(500*time.Millisecond*time.Duration(1<<(attempt-1))) * (0.9 + 0.2*sample))
+	shift := min(attempt-1, 5)
+	delay := time.Duration(float64(500*time.Millisecond<<shift) * (0.9 + 0.2*sample))
 	return min(delay, MaxModelRetryDelay), true
 }
