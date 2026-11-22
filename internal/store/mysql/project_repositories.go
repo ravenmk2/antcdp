@@ -11,6 +11,23 @@ import (
 
 const projectRepoColumns = "r.id,r.project_id,r.connection_id,r.repo_id,r.name,r.namespace_path,r.full_path,r.web_url,r.http_clone_url,r.ssh_clone_url,r.default_branch,r.remote_archived,r.last_synced_at,r.row_version,r.created_by_user_id,r.created_at,r.updated_at,c.name AS connection_name,c.service_type,c.enabled AS connection_enabled"
 
+func (t *identityTx) ProjectIDForCode(code string) (uint64, error) {
+	var id uint64
+	err := t.tx.GetContext(t.ctx, &id, "SELECT id FROM project WHERE code=?", code)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
+}
+func (t *identityTx) ProjectIDForRepository(repoID uint64) (uint64, error) {
+	var id uint64
+	err := t.tx.GetContext(t.ctx, &id, "SELECT project_id FROM project_repository WHERE id=?", repoID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
+}
+
 func (t *identityTx) RepoVersion(pid uint64) (uint64, error) {
 	var n uint64
 	e := t.tx.GetContext(t.ctx, &n, "SELECT repositories_version FROM project WHERE id=?", pid)

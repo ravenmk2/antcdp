@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -9,7 +10,58 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/ravenmk2/antcdp/internal/agentcore"
+	"github.com/ravenmk2/antcdp/internal/modules/identity"
+	"github.com/ravenmk2/antcdp/internal/modules/integrations"
+	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
+
+const repositoryTestProjectCode = "292001"
+
+// Return a check to repeat after the existing fixture unlinks the repository.
+func verifyAgentRepositoryAccess(t *testing.T, db *Store, user, project, connection, repository string) func() {
+	t.Helper()
+	id := func(value string) uint64 {
+		v, err := strconv.ParseUint(value, 10, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	checkCode := func(err error, want string) {
+		t.Helper()
+		var failure *httpx.Error
+		if !errors.As(err, &failure) || failure.Code != want {
+			t.Fatalf("want %s, got %v", want, err)
+		}
+	}
+	svc := integrations.Service{Store: func() (identity.Store, error) { return db, nil }}
+	auth := agentcore.Authorization{AccountID: agentcore.ID(id(user))}
+	if err := db.db.Get(&auth.AccountVersion, "SELECT auth_version FROM user WHERE id=?", user); err != nil {
+		t.Fatal(err)
+	}
+	query := integrations.RepoQuery{Page: 1, Size: 1}
+	_, err := svc.AgentRepoList(t.Context(), auth, repositoryTestProjectCode, query)
+	checkCode(err, "NOT_FOUND")
+	auth.Grants = []agentcore.ResourceGrant{{Kind: "project", ID: agentcore.ID(id(project)), Role: "member"}}
+	page, err := svc.AgentRepoList(t.Context(), auth, repositoryTestProjectCode, query)
+	if err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != id(repository) || page.Items[0].Connection != id(connection) {
+		t.Fatalf("repository page: %+v, %v", page, err)
+	}
+	for _, code := range []string{project, "missing-project-code"} {
+		_, err := svc.AgentRepoList(t.Context(), auth, code, query)
+		checkCode(err, "NOT_FOUND")
+	}
+	_, err = svc.AgentRepoList(t.Context(), auth, "Invalid code", query)
+	checkCode(err, "VALIDATION_FAILED")
+	_, err = svc.AgentGitCredential(t.Context(), auth, id(connection), true)
+	checkCode(err, "PERSONAL_PREFERRED_REQUIRED") // A project credential is configured.
+	return func() {
+		_, err := svc.AgentGitRemote(t.Context(), auth, id(repository))
+		checkCode(err, "NOT_FOUND")
+	}
+}
 
 func verifyProjectRepositories(t *testing.T, db *Store, admin, member, other *apiClient, adminID, memberID string) {
 	fixture := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -62,7 +114,7 @@ func verifyProjectRepositories(t *testing.T, db *Store, admin, member, other *ap
 		t.Fatal("integration fixture requires private network address")
 	}
 	remoteURL := "http://" + net.JoinHostPort(host, strconv.Itoa(listener.Addr().(*net.TCPAddr).Port))
-	p := testData(admin.call(t, "POST", "/projects", map[string]any{"code": "repo_project", "name": "仓库关联验收", "admin_user_ids": []string{memberID}}, 201, nil))
+	p := testData(admin.call(t, "POST", "/projects", map[string]any{"code": repositoryTestProjectCode, "name": "仓库关联验收", "admin_user_ids": []string{memberID}}, 201, nil))
 	pid := p["id"].(string)
 	base := "/projects/" + pid + "/repositories"
 	catalog := "/admin/projects/" + pid + "/repository-connections"
@@ -104,9 +156,11 @@ func verifyProjectRepositories(t *testing.T, db *Store, admin, member, other *ap
 	if strings.Contains(fmt.Sprint(diagnostic), "credential_id") {
 		t.Fatal("diagnostic leaked credential ID")
 	}
+	requireUnlinked := verifyAgentRepositoryAccess(t, db, memberID, pid, cid, linkedItem["id"].(string))
 	verifyRepositoryLabels(t, db, admin, member, other, pid, linkedItem["id"].(string))
 	linkedTag := collection()
 	admin.call(t, "POST", base+"/batch-unlink", map[string]any{"ids": []string{linkedItem["id"].(string)}}, 200, map[string]string{"If-Match": linkedTag})
+	requireUnlinked()
 	labelsAfterUnlink := testData(admin.call(t, "GET", "/projects/"+pid+"/repository-labels", nil, 200, nil))["items"].([]any)
 	if len(labelsAfterUnlink) != 1 || labelsAfterUnlink[0].(map[string]any)["repository_count"] != float64(0) {
 		t.Fatal("unlink must retain dictionary and remove bindings", labelsAfterUnlink)

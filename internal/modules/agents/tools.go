@@ -17,6 +17,23 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
+func (s *Service) papiCallSpec(spec agentcore.ToolSpec, raw string, grants []agentcore.PAPIGrant) agentcore.ToolSpec {
+	if spec.MCP != nil || spec.Key != papi.CallTool || s.PAPI == nil {
+		return spec
+	}
+	var target struct {
+		API string `json:"api"`
+	}
+	if json.Unmarshal([]byte(raw), &target) != nil {
+		return spec
+	}
+	op := s.PAPI.Operation(target.API)
+	if op != nil && op.Effect == "write" && slices.ContainsFunc(grants, func(g agentcore.PAPIGrant) bool { return g.Code == op.Code }) {
+		spec.ExecutionClass = "side_effect"
+	}
+	return spec
+}
+
 func preparedCall(st StateRepository, ref agentcore.ExecutionRef, row *ToolCallRow) (agentcore.PreparedToolCall, error) {
 	var spec agentcore.ToolSpec
 	if json.Unmarshal(row.ToolDefinitionSnapshot, &spec) != nil {
@@ -162,6 +179,12 @@ func (s *Service) PrepareDispatch(ctx context.Context, ref agentcore.ExecutionRe
 			case e != nil:
 				return e
 			default:
+				if call.Spec.Key == papi.CallTool && s.PAPI.Operation(authorization.Code).RequiresSandbox() {
+					if x.Execution.Binding == nil || x.Execution.Binding.InstanceID == 0 {
+						blocked = "SANDBOX_UNAVAILABLE"
+						break
+					}
+				}
 				resourceAuthorization, e = json.Marshal(authorization)
 				if e != nil {
 					return e

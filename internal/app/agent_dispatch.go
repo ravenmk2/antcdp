@@ -67,7 +67,12 @@ func (d *agentToolDispatcher) Dispatch(ctx context.Context, execution agentcore.
 	case "list_artifacts", "show_artifacts":
 		out, err := d.service.SessionArtifactTool(ctx, permit)
 		if err != nil {
-			return sandboxToolFailure(err), nil
+			out := sandboxToolFailure(err)
+			if errors.Is(err, errGitCredentialRevoked) {
+				yes := true
+				out.Executed = &yes
+			}
+			return out, nil
 		}
 		return out, nil
 	case "read_tool_output":
@@ -150,13 +155,18 @@ func (d *agentToolDispatcher) dispatchPlatformAPI(ctx context.Context, ref agent
 	if json.Unmarshal(permit.Authorization, &snapshot) != nil || snapshot.Resource == nil || d.service.PAPI == nil {
 		return toolFailure("DISPATCH_PERMIT_INVALID", &no), nil
 	}
-	content, err := d.service.PAPI.Dispatch(ctx, execution, permit.Call.Spec.Key, permit.Call.Call.Arguments, *snapshot.Resource)
+	ctx, cancel := context.WithDeadline(ctx, permit.Deadline)
+	defer cancel()
+	content, err := d.service.PAPI.Dispatch(ctx, execution, permit.Call.Spec.Key, permit.Call.Call.Arguments, *snapshot.Resource, permit.Call.ID)
 	var failure *papi.Failure
 	if errors.As(err, &failure) {
 		return toolObservation("failed", failure.Code, failure.Content(), &no), nil
 	}
-	if err != nil || !json.Valid(content) {
-		return toolFailure("PAPI_EXECUTION_FAILED", &no), nil
+	if err != nil {
+		return sandboxToolFailure(err), nil
+	}
+	if !json.Valid(content) {
+		return toolFailure("PAPI_EXECUTION_FAILED", nil), nil
 	}
 	yes := true
 	return toolObservation("succeeded", "", string(content), &yes), nil

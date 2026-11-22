@@ -10,6 +10,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/cloudcomputers"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/sandboxes"
+	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
@@ -122,6 +123,17 @@ func (s *CloudService) requiresEnvironment(ctx context.Context, tx identity.Tx, 
 		d, e := s.Host.Catalog.Tool(ctx, tx, b.ToolKey)
 		if e != nil {
 			return false, e
+		}
+		if d != nil && d.Availability.Available && b.ToolKey == papi.CallTool && s.Host.PAPI != nil {
+			grants, err := r.PAPIGrants(agentID)
+			if err != nil {
+				return false, err
+			}
+			for _, grant := range grants {
+				if op := s.Host.PAPI.Operation(grant.Code); op != nil && op.RequiresSandbox() {
+					return true, nil
+				}
+			}
 		}
 		if d != nil && d.Availability.Available && d.RequiresSandbox {
 			return true, nil

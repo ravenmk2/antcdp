@@ -1,0 +1,35 @@
+{
+  "api_code": "git_repo_list",
+  "title": "列出项目仓库",
+  "summary": "按项目编码列出已关联的 GitLab 仓库。",
+  "description": "Use the immutable project_code from the prompt. Results are local project metadata; page starts at 1 and page_size defaults to 20.",
+  "effect": "read",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "project_code": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "page": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000000
+      },
+      "page_size": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    },
+    "required": [
+      "project_code"
+    ],
+    "additionalProperties": false
+  },
+  "example_args": {
+    "project_code": "delivery"
+  },
+  "result_description": "items with project_repo_id, conn_id, name, full_path, default_branch and connection_enabled, plus page, page_size and total."
+}

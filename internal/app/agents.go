@@ -18,6 +18,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/install"
+	"github.com/ravenmk2/antcdp/internal/modules/integrations"
 	"github.com/ravenmk2/antcdp/internal/modules/models"
 	webservice "github.com/ravenmk2/antcdp/internal/modules/webaccess"
 	"github.com/ravenmk2/antcdp/internal/papi"
@@ -38,10 +39,6 @@ type agentApplication struct {
 }
 
 func newAgentApplication(dataDir string, installer *install.Service, accounts *identity.Service, modelsService *models.Service, webService *webservice.Service) (*agentApplication, error) {
-	platformAPIs, err := papi.New()
-	if err != nil {
-		return nil, err
-	}
 	files, err := agents.NewByteStore(filepath.Join(dataDir, "agents", "files"))
 	if err != nil {
 		return nil, err
@@ -49,7 +46,7 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 	store := modelsService.Store
 	epoch := cryptox.ID()
 	hub := agentcore.NewHub(epoch)
-	service := &agents.Service{Identity: accounts, Store: store, ETag: installer.AgentETag, Models: modelsService, Files: files, Epoch: epoch, PAPI: platformAPIs}
+	service := &agents.Service{Identity: accounts, Store: store, ETag: installer.AgentETag, Models: modelsService, Files: files, Epoch: epoch}
 	resources := &agentresources.Service{Identity: accounts, Store: store, Cipher: installer.AgentResourceSecret, ETag: installer.AgentETag, Files: files, Epoch: epoch,
 		MCPFactory: func(_ context.Context, config mcp.Config) (agentresources.MCPClient, error) {
 			hosts, err := installer.OutboundProtectedHosts()
@@ -75,6 +72,11 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 	sandboxes.VerifyEnvironment = sandboxes.VerifyWorkspaceEnvironment
 	sandboxes.ExecutionReconciler = sandboxes.ReconcileExecutions
 	service.Sandboxes = sandboxes
+	gitAPIs := &gitPlatformAPI{sandbox: sandboxes, integrations: &integrations.Service{Store: store, Cipher: installer.IntegrationSecret}}
+	service.PAPI, err = papi.NewWithGit(papi.GitOperations{List: gitAPIs.list, Init: gitAPIs.initRepo, Ensure: gitAPIs.ensure})
+	if err != nil {
+		return nil, err
+	}
 	service.Skills = agents.FrozenSkillSource{Host: service}
 	service.ManagementOperation = func(ctx context.Context, raw string, id uint64) (*agents.Result, error) {
 		result, err := resources.ResourceOperation(ctx, raw, id)

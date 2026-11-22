@@ -180,14 +180,26 @@ func (s *Service) ownedRepoSnapshot(r Repository, id uint64, decrypt bool, owner
 	if e != nil {
 		return snap, e
 	}
-	if v == nil || v.Type != "gitlab" {
+	if v == nil {
 		return snap, fail()
 	}
-	allowed, err := ConnectionAllowed(r, v, owner)
+	var allowed bool
+	var err error
+	if owner.Type == "personal" {
+		allowed, err = userConnectionAllowed(r, v, owner.Owner)
+	} else {
+		allowed, err = ConnectionAllowed(r, v, owner)
+	}
 	if err != nil {
 		return snap, err
 	}
 	if !allowed {
+		return snap, fail()
+	}
+	if v.Type != "gitlab" {
+		if owner.Type == "personal" {
+			return snap, httpx.E(409, "SERVICE_TYPE_UNSUPPORTED", "当前仅支持 GitLab 凭证")
+		}
 		return snap, fail()
 	}
 	if !v.Enabled {

@@ -720,6 +720,9 @@ func (s *CloudService) ReconcileExecutions(ctx context.Context, bindingID uint64
 			failures = append(failures, e)
 		}
 	}
+	if err := s.reconcilePAPISteps(ctx, bindingID); err != nil {
+		failures = append(failures, err)
+	}
 	if err := s.reconcileCommandReadReferences(ctx, bindingID); err != nil {
 		failures = append(failures, err)
 	}

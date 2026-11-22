@@ -45,7 +45,7 @@ func agentPAPIIntegration(t *testing.T, f *agentIntegrationFixture) {
 	}
 	setTool(papi.CallTool)
 	initial, err := svc.GetPAPIGrants(f.Context, f.AdminToken, agent.ID, a.Query{})
-	if err != nil || initial.Pagination.Total != 1 {
+	if err != nil || initial.Pagination.Total != len(registry.Codes()) {
 		t.Fatalf("catalog: %v (%v)", initial, err)
 	}
 	const constraints = `{"args_schema":{"properties":{"n":{"minimum":9007199254740993,"maximum":9007199254740993}},"required":["n"]}}`
@@ -91,7 +91,7 @@ func agentPAPIIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if err = json.Unmarshal(admission.Permit.Authorization, &authority); err != nil {
 		t.Fatal(err)
 	}
-	result, err := registry.Dispatch(f.Context, execution, papi.CallTool, admission.Permit.Call.Call.Arguments, authority.Resource)
+	result, err := registry.Dispatch(f.Context, execution, papi.CallTool, admission.Permit.Call.Call.Arguments, authority.Resource, admission.Permit.Call.ID)
 	if err != nil || string(result) != echo {
 		t.Fatalf("exact echo after SQL round trip: %s (%v)", result, err)
 	}

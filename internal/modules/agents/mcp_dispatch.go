@@ -21,7 +21,7 @@ func (s *Service) resolveDispatchTool(ctx context.Context, tx identity.Tx, r Rep
 			break
 		}
 	}
-	if binding == nil || frozen == nil || !semanticSame(frozen.Spec, call.Spec) {
+	if binding == nil || frozen == nil || !semanticSame(s.papiCallSpec(frozen.Spec, call.Call.Arguments, x.Execution.PAPIGrants), call.Spec) {
 		return nil, nil, nil, "TOOL_NOT_AUTHORIZED", nil
 	}
 	if s.Catalog.Tool == nil {

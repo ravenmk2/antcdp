@@ -120,7 +120,7 @@ func (r *Registry) resolve(grants []agentcore.PAPIGrant, code string) (*Operatio
 	return nil, agentcore.PAPIGrant{}, &Failure{Code: Unavailable}
 }
 
-func (r *Registry) Dispatch(ctx context.Context, execution agentcore.ExecutionContext, key, raw string, authorization Authorization) (json.RawMessage, error) {
+func (r *Registry) Dispatch(ctx context.Context, execution agentcore.ExecutionContext, key, raw string, authorization Authorization, callID agentcore.ID) (json.RawMessage, error) {
 	var input toolInput
 	if err := json.Unmarshal([]byte(raw), &input); err != nil {
 		return nil, invalidArguments(err)
@@ -138,7 +138,7 @@ func (r *Registry) Dispatch(ctx context.Context, execution agentcore.ExecutionCo
 	if key == DescTool {
 		return op.describe(grant)
 	}
-	return op.binding.run(ctx, execution, input.Args)
+	return op.binding.run(ctx, execution, callID, input.Args)
 }
 
 type listing struct {

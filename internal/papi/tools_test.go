@@ -1,6 +1,7 @@
 package papi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -8,6 +9,53 @@ import (
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 )
+
+func TestGitAPIsUseGrantedOperationAndOriginalCall(t *testing.T) {
+	var received agentcore.ID
+	handler := func(_ context.Context, _ agentcore.ExecutionContext, id agentcore.ID, args json.RawMessage) (json.RawMessage, error) {
+		received = id
+		return args, nil
+	}
+	r, err := NewWithGit(GitOperations{List: handler, Init: handler, Ensure: handler})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		code, args, effect string
+		sandbox            bool
+	}{
+		{"git_repo_list", `{"project_code":"123"}`, "read", false},
+		{"git_repo_init", `{"project_repo_id":"1","path":"repo one"}`, "write", true},
+		{"svc_cred_ensure", `{"conn_id":"1"}`, "write", true},
+	} {
+		op := r.Operation(test.code)
+		if op == nil || op.Effect != test.effect || op.RequiresSandbox() != test.sandbox {
+			t.Fatal("incorrect execution contract", test.code)
+		}
+		grant, ok := r.Freeze(test.code, json.RawMessage(`{}`))
+		if !ok {
+			t.Fatal(test.code)
+		}
+		x := agentcore.ExecutionContext{PAPIGrants: []agentcore.PAPIGrant{grant}}
+		raw := `{"api":"` + test.code + `","args":` + test.args + `}`
+		permit, err := r.Prepare(t.Context(), x, CallTool, raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		received = 0
+		out, err := r.Dispatch(t.Context(), x, CallTool, raw, permit, 71)
+		if err != nil || received != 71 || string(out) != test.args {
+			t.Fatalf("%s: dispatch returned %s, call %d, %v", test.code, out, received, err)
+		}
+	}
+	g, _ := r.Freeze("svc_cred_ensure", json.RawMessage(`{}`))
+	x := agentcore.ExecutionContext{PAPIGrants: []agentcore.PAPIGrant{g}}
+	for _, args := range []string{`{"conn_id":"1","credential_id":"2"}`, `{"conn_id":"1","user_id":"2"}`, `{"conn_id":"1","path":"/data"}`} {
+		if _, err := r.Prepare(t.Context(), x, CallTool, `{"api":"svc_cred_ensure","args":`+args+`}`); err == nil {
+			t.Fatal("caller-controlled credential options accepted", args)
+		}
+	}
+}
 
 func TestEchoReturnsExactArguments(t *testing.T) {
 	r, err := New()
@@ -25,7 +73,7 @@ func TestEchoReturnsExactArguments(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := r.Dispatch(t.Context(), x, CallTool, raw, permit)
+		got, err := r.Dispatch(t.Context(), x, CallTool, raw, permit, 1)
 		if err != nil || string(got) != args {
 			t.Fatalf("echo changed input, length=%d: %v", len(args), err)
 		}
@@ -54,7 +102,7 @@ func TestDiscoveryAndExecutionShareFrozenAuthorization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := r.Dispatch(t.Context(), x, DescTool, `{"api":"echo"}`, description)
+	got, err := r.Dispatch(t.Context(), x, DescTool, `{"api":"echo"}`, description, 1)
 	if err != nil || !strings.Contains(string(got), `"allOf"`) || !strings.Contains(string(got), `9007199254740993`) || strings.Contains(string(got), `"example_args"`) {
 		t.Fatalf("description did not apply the same restriction: %s (%v)", got, err)
 	}

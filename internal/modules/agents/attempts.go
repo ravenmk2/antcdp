@@ -565,7 +565,8 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 			rows := make([]*ToolCallRow, len(message.ToolCalls))
 			zero, _ := json.Marshal(agentcore.Reservation{})
 			for i, c := range message.ToolCalls {
-				spec := specs[i]
+				spec := s.papiCallSpec(specs[i], c.Arguments, x.Execution.PAPIGrants)
+				specs[i] = spec
 				specJSON, e := json.Marshal(spec)
 				if e != nil {
 					return e
