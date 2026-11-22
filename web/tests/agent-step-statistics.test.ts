@@ -23,7 +23,7 @@ function step(
 
 it("counts step endings independently of attempts and preserves the counter on repeated step facts", () => {
   let state: ConversationSummary = {
-    version: 2,
+    version: 3,
     through_seq: "0",
     title: "",
     run_count: 1,
@@ -37,7 +37,7 @@ it("counts step endings independently of attempts and preserves the counter on r
       settled: false,
       model_call_count: 0,
       tool_call_count: 0,
-      plan_call_id: "0",
+      todos: null,
     },
   };
   state = foldConversationSummary(state, step("step/started", 1));

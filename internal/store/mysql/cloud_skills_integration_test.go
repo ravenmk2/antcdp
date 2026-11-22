@@ -77,7 +77,7 @@ func cloudSkillBindingsIntegration(t *testing.T, f *agentIntegrationFixture, clo
 	if err = cloud.PrepareTurn(ctx, first); err != nil {
 		t.Fatal("materialize first set", err)
 	}
-	loaded, err := host.Skills.Load(ctx, first, skill.Name, "SKILL.md")
+	loaded, err := host.Skills.Load(ctx, first, skill.Name)
 	if err != nil || uint64(loaded.VersionID) != firstVersion.ID || !loaded.Materialized || !strings.HasSuffix(loaded.StablePath, "/skills/cloud-review") {
 		t.Fatal("load pinned skill", err)
 	}
@@ -123,7 +123,7 @@ func cloudSkillBindingsIntegration(t *testing.T, f *agentIntegrationFixture, clo
 	if _, err = resources.PatchSkill(ctx, raw, skill.ID, current.Tag, r.SkillPatch{Enabled: r.Field[bool]{Set: true, Value: false}}); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err = host.Skills.Load(ctx, claim.Execution, skill.Name, "SKILL.md")
+	loaded, err = host.Skills.Load(ctx, claim.Execution, skill.Name)
 	if err != nil || uint64(loaded.VersionID) != secondVersion.ID {
 		t.Fatal("catalog disablement changed in-flight skill authority", err)
 	}

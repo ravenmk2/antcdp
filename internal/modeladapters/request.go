@@ -288,6 +288,11 @@ func encodeMessage(protocol modelcore.Protocol, message modelcore.Message) (json
 		return nil, modelcore.ErrInvalidRequest
 	}
 	limit := modelcore.MaxMessageBytes
+	// Tool history can include a complete 256 KiB skill. JSON escapes can
+	// expand each byte sixfold, in addition to the protocol envelope.
+	if message.Role == "tool" {
+		limit = 2 << 20
+	}
 	for _, image := range message.Images {
 		limit += len(image.DataBase64) + 1024
 	}

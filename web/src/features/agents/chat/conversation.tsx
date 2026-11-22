@@ -829,6 +829,7 @@ export function Conversation({
                           />
                         )}
                       <ConversationTimeline
+                        onChild={setChild}
                         records={state.records}
                         submissions={submissions.visible}
                         computerId={

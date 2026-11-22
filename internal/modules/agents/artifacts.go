@@ -272,7 +272,7 @@ func (s *Service) SessionArtifactTool(ctx context.Context, permit agentcore.Disp
 		if e != nil {
 			return e
 		}
-		if e = settleToolBudget(st, x.Root, call, &yes); e != nil {
+		if e = settleToolBudget(st, x.Run, call, &yes); e != nil {
 			return e
 		}
 		data, _ := json.Marshal(map[string]any{"shown": args.IDs})

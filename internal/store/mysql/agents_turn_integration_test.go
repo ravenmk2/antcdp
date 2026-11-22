@@ -75,7 +75,7 @@ func runtimeTurnLifecycle(t *testing.T, f *agentIntegrationFixture, agent uint64
 	t.Run("question_response_starts_new_turn", func(t *testing.T) {
 		session := runtimeSession(t, f, agent)
 		x := runtimeClaim(t, f, session.Configuration.ID, "ask a question")
-		attempt := runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "question", Name: "ask_user_question", Arguments: runtimeQuestionArgs}}})
+		attempt := runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "question", Name: "ask_question", Arguments: runtimeQuestionArgs}}})
 		wait, err := svc.PrepareDispatch(ctx, x.Ref, attempt.Calls[0].ID)
 		if err != nil || wait.Kind != "await_interaction" || wait.InteractionID == nil {
 			t.Fatalf("question was not persisted: %+v %v", wait, err)
@@ -87,7 +87,7 @@ func runtimeTurnLifecycle(t *testing.T, f *agentIntegrationFixture, agent uint64
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = svc.AnswerInteraction(ctx, raw, uint64(*wait.InteractionID), q.Tag, cryptox.ID(), core.QuestionAnswer{Answers: []core.AnswerItem{{QuestionID: "q1", OptionIDs: []string{"yes"}}}})
+		_, err = svc.AnswerInteraction(ctx, raw, uint64(*wait.InteractionID), q.Tag, cryptox.ID(), core.QuestionAnswer{Answers: []core.AnswerItem{{Status: "answered", QuestionID: "q1", OptionIDs: []string{"yes"}}}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -100,7 +100,7 @@ func runtimeTurnLifecycle(t *testing.T, f *agentIntegrationFixture, agent uint64
 	t.Run("late_question_reply_steers_running_turn", func(t *testing.T) {
 		session := runtimeSession(t, f, agent)
 		x := runtimeClaim(t, f, session.Configuration.ID, "ask then continue independent work")
-		attempt := runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "question", Name: "ask_user_question", Arguments: runtimeQuestionArgs}}})
+		attempt := runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "question", Name: "ask_question", Arguments: runtimeQuestionArgs}}})
 		wait, err := svc.PrepareDispatch(ctx, x.Ref, attempt.Calls[0].ID)
 		if err != nil || wait.InteractionID == nil {
 			t.Fatal("question admission", err)
@@ -116,7 +116,7 @@ func runtimeTurnLifecycle(t *testing.T, f *agentIntegrationFixture, agent uint64
 		if err != nil {
 			t.Fatal(err)
 		}
-		answer, err := svc.AnswerInteraction(ctx, raw, uint64(*wait.InteractionID), q.Tag, cryptox.ID(), core.QuestionAnswer{Answers: []core.AnswerItem{{QuestionID: "q1", OptionIDs: []string{"yes"}}}})
+		answer, err := svc.AnswerInteraction(ctx, raw, uint64(*wait.InteractionID), q.Tag, cryptox.ID(), core.QuestionAnswer{Answers: []core.AnswerItem{{Status: "answered", QuestionID: "q1", OptionIDs: []string{"yes"}}}})
 		if err != nil || answer.Data.(map[string]any)["delivery"] != "next_step" {
 			t.Fatal("late reply not steered", err)
 		}

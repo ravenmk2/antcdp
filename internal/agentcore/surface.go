@@ -125,12 +125,12 @@ func BuildSurface(manifest SurfaceManifest, facts map[Seq]HistoryFact) ([]modelc
 		}
 		switch entry.Kind {
 		case "message", "summary":
-			if len(group) != 1 || group[0].Message == nil || group[0].Kind != "input/message" && group[0].Kind != "assistant/message" && group[0].Kind != "compaction/summary" && (group[0].Kind != "assistant/attempt" || !group[0].Interrupted) || len(group[0].Message.ToolCalls) != 0 {
+			if len(group) != 1 || group[0].Message == nil || group[0].Kind != "input/message" && group[0].Kind != "subagent/message" && group[0].Kind != "assistant/message" && group[0].Kind != "compaction/summary" && (group[0].Kind != "assistant/attempt" || !group[0].Interrupted) || len(group[0].Message.ToolCalls) != 0 {
 				return nil, reject("SURFACE_INVALID")
 			}
 			f := group[0]
 			message := cloneMessage(*f.Message)
-			if f.Kind == "input/message" && message.Role != "user" || f.Kind == "compaction/summary" && message.Role != "user" || (f.Kind == "assistant/message" || f.Kind == "assistant/attempt") && message.Role != "assistant" {
+			if (f.Kind == "input/message" || f.Kind == "subagent/message") && message.Role != "user" || f.Kind == "compaction/summary" && message.Role != "user" || (f.Kind == "assistant/message" || f.Kind == "assistant/attempt") && message.Role != "assistant" {
 				return nil, reject("SURFACE_INVALID")
 			}
 			if f.Kind == "assistant/attempt" {

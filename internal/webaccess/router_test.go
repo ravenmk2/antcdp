@@ -3,6 +3,9 @@ package webaccess
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -116,5 +119,87 @@ func TestCancellationAndExhaustedPermitDoNotCallProvider(t *testing.T) {
 	p.Deadline = time.Now().Add(-time.Second)
 	if _, err := router.Search(t.Context(), p, "query"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatal(err)
+	}
+}
+
+func TestBatchOrderBudgetAndValidation(t *testing.T) {
+	var calls atomic.Int32
+	router := Router{Source: sourceFixture{settings: Settings{Search: SearchSettings{Routes: []RouteRef{{Kind: "provider", ID: "1"}, {Kind: "provider", ID: "2"}}, MaxResults: 20}}, resolve: func(context.Context, RouteRef, Operation) (Adapter, error) {
+		return adapterFixture{search: func(_ context.Context, q SearchRequest) (SearchResult, error) {
+			calls.Add(1)
+			return SearchResult{Results: []SearchEntry{{URL: q.Query}, {URL: "shared"}, {URL: q.Query + "/2"}}}, nil
+		}}, nil
+	}}}
+	batch := []string{" a ", "b", "a"}
+	out, err := router.SearchBatch(t.Context(), permit(), batch)
+	var urls []string
+	for _, r := range out.Results {
+		urls = append(urls, r.URL)
+	}
+	if err != nil || calls.Load() != 2 || !slices.Equal(urls, []string{"a", "b", "shared", "a/2", "b/2"}) {
+		t.Fatal(out, err)
+	}
+	batch = nil
+	for i := range 10 {
+		batch = append(batch, fmt.Sprint(i))
+	}
+	p := permit()
+	p.MaxCalls = 10
+	if _, err = router.SearchBatch(t.Context(), p, batch); err != nil || calls.Load() != 12 {
+		t.Fatal(err, calls.Load())
+	}
+	for _, invalid := range [][]string{nil, {" "}, append(batch, "overflow")} {
+		if _, err = router.SearchBatch(t.Context(), permit(), invalid); err == nil || calls.Load() != 12 {
+			t.Fatal("invalid batch dispatched")
+		}
+	}
+}
+
+func TestBatchCancellationDrainsRunningQueries(t *testing.T) {
+	began, stopped := make(chan struct{}), make(chan struct{})
+	var requests atomic.Int32
+	router := Router{Source: sourceFixture{settings: Settings{Search: SearchSettings{Routes: []RouteRef{{Kind: "provider", ID: "1"}, {Kind: "provider", ID: "2"}}, MaxResults: 5}}, resolve: func(context.Context, RouteRef, Operation) (Adapter, error) {
+		return adapterFixture{search: func(ctx context.Context, q SearchRequest) (SearchResult, error) {
+			requests.Add(1)
+			if q.Query == "slow" {
+				close(began)
+				<-ctx.Done()
+				close(stopped)
+				return SearchResult{}, ctx.Err()
+			}
+			<-began
+			return SearchResult{}, &Failure{Code: "DISPATCH_UNKNOWN", Unknown: true}
+		}}, nil
+	}}}
+	_, err := router.SearchBatch(t.Context(), permit(), []string{"slow", "unknown"})
+	if err == nil || requests.Load() != 2 {
+		t.Fatal("uncertain dispatch retried", requests.Load(), err)
+	}
+	select {
+	case <-stopped:
+	default:
+		t.Fatal("batch returned before peer stopped")
+	}
+}
+
+func TestBatchSharesOnlyOneSpareAttemptForTwoQueries(t *testing.T) {
+	var requests atomic.Int32
+	entered := make(chan struct{})
+	router := Router{Source: sourceFixture{settings: Settings{Search: SearchSettings{Routes: []RouteRef{{Kind: "provider", ID: "1"}, {Kind: "provider", ID: "2"}}, MaxResults: 5}}, resolve: func(_ context.Context, route RouteRef, _ Operation) (Adapter, error) {
+		return adapterFixture{search: func(ctx context.Context, q SearchRequest) (SearchResult, error) {
+			n := requests.Add(1)
+			if n == 2 {
+				close(entered)
+			}
+			<-entered
+			if route.ID == "1" {
+				return SearchResult{}, &Failure{Code: "UNAVAILABLE", Fallback: true}
+			}
+			return SearchResult{}, ctx.Err()
+		}}, nil
+	}}}
+	out, err := router.SearchBatch(t.Context(), permit(), []string{"one", "two"})
+	if err == nil || requests.Load() > 3 || len(out.Results) != 0 {
+		t.Fatal("invalid batch outcome", requests.Load(), out, err)
 	}
 }

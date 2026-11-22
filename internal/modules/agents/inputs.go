@@ -25,7 +25,7 @@ func inputText(view InputView) string {
 	if view.Answer != nil {
 		payload := any(view.Answer)
 		if view.QuestionContext != nil {
-			payload = map[string]any{"kind": "answer_to_pending_question", "tool": "ask_user_question", "tool_call_id": view.QuestionContext.ToolCallID, "questions": view.QuestionContext.Questions, "answer": view.Answer}
+			payload = map[string]any{"kind": "answer_to_pending_question", "tool": "ask_question", "tool_call_id": view.QuestionContext.ToolCallID, "questions": view.QuestionContext.Questions, "answer": view.Answer}
 		}
 		data, _ := json.Marshal(payload)
 		parts = append(parts, string(data))

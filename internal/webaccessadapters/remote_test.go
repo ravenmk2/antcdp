@@ -149,3 +149,15 @@ func TestReaderExtractsTextWithoutScriptsAndEnforcesTargetPolicy(t *testing.T) {
 		t.Fatal("reader reached local control plane", err)
 	}
 }
+
+func TestReaderMarkdownStructureAndRelativeLinks(t *testing.T) {
+	title, md, kind := markdownHTML("<html><head><title>Example</title><style>hidden-style</style></head><body><h2>Heading</h2><ol><li>First</li></ol><a href='next'>Link</a><pre><code>code sample</code></pre><table><tr><th>Name</th></tr><tr><td>Item</td></tr></table><script>hidden-script</script></body></html>", "https://example.org/nested/page.html")
+	if title != "Example" || kind != "text/markdown" || strings.Contains(md, "hidden-") {
+		t.Fatal(title, kind, md)
+	}
+	for _, want := range []string{"## Heading", "First", "[Link](https://example.org/nested/next)", "code sample", "| Name"} {
+		if !strings.Contains(md, want) {
+			t.Fatalf("missing %q in %s", want, md)
+		}
+	}
+}

@@ -113,8 +113,8 @@ func TestMetadataEncoderBoundsEscapedOutputAndPreservesIdentity(t *testing.T) {
 func TestSkillMaterializationRequiresFrozenContextAndInstalledState(t *testing.T) {
 	_, tx, x, _ := metadataFixture(t)
 	load := SkillLoadMetadata{SkillID: 1, VersionID: 2, SHA256: strings.Repeat("a", 64), RelativePath: "SKILL.md"}
-	if err := ValidateSkillLoadMetadata(load, 9); err != nil {
-		t.Fatal(err)
+	if err := ValidateSkillLoadMetadata(load, 9); err == nil {
+		t.Fatal("accepted uninstalled skill")
 	}
 	for _, path := range []string{"/data/agents/8/skills/test", "/data/agents/9/skills/../test", "/data/agents/9/skills/test/SKILL.md", "/data/agents/9/skills/.generation/test", "/data/agents/9/skills/test/"} {
 		load.Materialized, load.StablePath = true, &path

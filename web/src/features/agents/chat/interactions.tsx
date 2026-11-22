@@ -37,29 +37,26 @@ const statusNames: Record<Interaction["status"], string> = {
 };
 export function emptyAnswer(questions: Question[]): QuestionAnswer {
   return {
-    skip: false,
     answers: questions.map((question) => ({
-      question_id: question.question_id,
+      status: "answered" as const,
+      question_id: question.id,
       option_ids: [],
       text: null,
     })),
   };
 }
 export function validAnswer(questions: Question[], answer: QuestionAnswer) {
-  return (
-    answer.skip ||
-    questions.every((question) => {
-      const value = answer.answers.find(
-        (item) => item.question_id === question.question_id,
-      );
-      return (
-        value &&
-        ((value.option_ids.length > 0 && question.type !== "text") ||
-          ((question.type === "text" || question.allow_text) &&
-            Boolean(value.text?.trim())))
-      );
-    })
-  );
+  return questions.every((question) => {
+    const value = answer.answers.find(
+      (item) => item.question_id === question.id,
+    );
+    return (
+      value &&
+      (value.status === "skipped" ||
+        (value.option_ids.length > 0 && Boolean(question.options?.length)) ||
+        Boolean(value.text?.trim()))
+    );
+  });
 }
 export function QuestionFields({
   questions,
@@ -80,12 +77,18 @@ export function QuestionFields({
     values: Partial<QuestionAnswer["answers"][number]>,
   ) {
     onChange({
-      skip: false,
       answers: questions.map((question) => {
         const old = answer.answers.find(
-          (value) => value.question_id === question.question_id,
-        ) ?? { question_id: question.question_id, option_ids: [], text: null };
-        return question.question_id === id ? { ...old, ...values } : old;
+          (value) => value.question_id === question.id,
+        ) ?? {
+          status: "answered" as const,
+          question_id: question.id,
+          option_ids: [],
+          text: null,
+        };
+        return question.id === id
+          ? { ...old, status: "answered", ...values }
+          : old;
       }),
     });
   }
@@ -94,18 +97,18 @@ export function QuestionFields({
       {questions.map((question, index) => {
         if (page !== undefined && index !== page) return null;
         const value = answer.answers.find(
-          (item) => item.question_id === question.question_id,
+          (item) => item.question_id === question.id,
         );
         return (
-          <section key={question.question_id} className="agent-question-fields">
+          <section key={question.id} className="agent-question-fields">
             <h3 className="agent-question-prompt">
               {questions.length > 1 && `${index + 1}. `}
-              {question.prompt}
-              {question.type === "multi_choice" && (
+              {question.question}
+              {question.multi_select && (
                 <span className="agent-question-type">可多选</span>
               )}
             </h3>
-            {question.options.map((option, optionIndex) => (
+            {(question.options ?? []).map((option, optionIndex) => (
               <label
                 key={option.id}
                 className="agent-question-option"
@@ -113,24 +116,23 @@ export function QuestionFields({
               >
                 <input
                   className="agent-question-choice"
-                  type={question.type === "multi_choice" ? "checkbox" : "radio"}
-                  name={`${groupId}-${question.question_id}`}
+                  type={question.multi_select ? "checkbox" : "radio"}
+                  name={`${groupId}-${question.id}`}
                   value={option.id}
                   checked={value?.option_ids.includes(option.id) ?? false}
                   onChange={(event) =>
-                    patch(question.question_id, {
-                      option_ids:
-                        question.type === "multi_choice"
-                          ? event.target.checked
-                            ? [...(value?.option_ids ?? []), option.id]
-                            : (value?.option_ids ?? []).filter(
-                                (id) => id !== option.id,
-                              )
-                          : [option.id],
+                    patch(question.id, {
+                      option_ids: question.multi_select
+                        ? event.target.checked
+                          ? [...(value?.option_ids ?? []), option.id]
+                          : (value?.option_ids ?? []).filter(
+                              (id) => id !== option.id,
+                            )
+                        : [option.id],
                     })
                   }
                 />
-                {question.type === "single_choice" && (
+                {!question.multi_select && (
                   <span className="agent-question-number" aria-hidden>
                     {optionIndex + 1}
                   </span>
@@ -151,7 +153,20 @@ export function QuestionFields({
                 </span>
               </label>
             ))}
-            {question.type === "text" && (
+            <button
+              type="button"
+              onClick={() =>
+                patch(question.id, {
+                  status: "skipped",
+                  option_ids: [],
+                  text: null,
+                })
+              }
+              aria-pressed={value?.status === "skipped"}
+            >
+              {value?.status === "skipped" ? "已跳过此题" : "跳过此题"}
+            </button>
+            {!question.options?.length && (
               <textarea
                 className="agent-question-answer"
                 aria-label="你的回答"
@@ -160,13 +175,13 @@ export function QuestionFields({
                 maxLength={4000}
                 value={value?.text ?? ""}
                 onChange={(event) =>
-                  patch(question.question_id, {
+                  patch(question.id, {
                     text: event.target.value || null,
                   })
                 }
               />
             )}
-            {question.type !== "text" && question.allow_text && (
+            {Boolean(question.options?.length) && (
               <div className="agent-question-custom-row">
                 <span className="agent-question-custom-marker" aria-hidden>
                   ＋
@@ -179,7 +194,7 @@ export function QuestionFields({
                   maxLength={4000}
                   value={value?.text ?? ""}
                   onChange={(event) =>
-                    patch(question.question_id, {
+                    patch(question.id, {
                       text: event.target.value || null,
                     })
                   }
@@ -260,7 +275,7 @@ function InteractionEditor({
   const [answer, setAnswer] = useState<QuestionAnswer>(() =>
       interaction.kind === "question"
         ? emptyAnswer(interaction.questions)
-        : { skip: false, answers: [] },
+        : { answers: [] },
     ),
     [notice, setNotice] = useState(""),
     [now, setNow] = useState(Date.now());
@@ -287,7 +302,7 @@ function InteractionEditor({
     setAnswer(
       interaction.kind === "question"
         ? emptyAnswer(interaction.questions)
-        : { skip: false, answers: [] },
+        : { answers: [] },
     );
     setNotice(
       "delivery" in result
@@ -401,7 +416,16 @@ function InteractionEditor({
                   type="button"
                   className="agent-question-skip"
                   disabled={action.pending || action.uncertain}
-                  onClick={() => submit({ skip: true, answers: [] })}
+                  onClick={() =>
+                    submit({
+                      answers: interaction.questions.map((q) => ({
+                        status: "skipped",
+                        question_id: q.id,
+                        option_ids: [],
+                        text: null,
+                      })),
+                    })
+                  }
                 >
                   跳过全部问题
                 </button>

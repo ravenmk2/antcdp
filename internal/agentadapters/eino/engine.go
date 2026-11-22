@@ -39,14 +39,18 @@ func (e Engine) Execute(ctx context.Context, ref agentcore.ExecutionRef, hooks a
 	if steps < 1 || steps > 200 || attempts < 1 || attempts > 10 {
 		return errors.New("invalid execution limits")
 	}
-	first, err := hooks.PrepareStep(ctx, ref, 1)
+	var completed uint32
+	if resumed, ok := hooks.(interface{ CompletedSteps() uint32 }); ok {
+		completed = resumed.CompletedSteps()
+	}
+	first, err := hooks.PrepareStep(ctx, ref, completed+1)
 	if err != nil {
 		return err
 	}
-	if first.Ref != ref || first.Step != 1 {
+	if first.Ref != ref || first.Step != completed+1 {
 		return errors.New("invalid prepared step")
 	}
-	b := &executionModel{ref: ref, hooks: hooks, prepared: first, maxSteps: steps, maxAttempts: attempts}
+	b := &executionModel{completed: completed, ref: ref, hooks: hooks, prepared: first, maxSteps: steps, maxAttempts: attempts}
 	initial := make([]tool.BaseTool, 0, len(first.Tools))
 	for _, spec := range first.Tools {
 		info, err := toolInfo(spec.Definition)
@@ -59,23 +63,34 @@ func (e Engine) Execute(ctx context.Context, ref agentcore.ExecutionRef, hooks a
 	if err != nil {
 		return fmt.Errorf("initialize execution adapter: %w", err)
 	}
-	iterator := agent.Run(ctx, &adk.AgentInput{Messages: []*schema.Message{}})
 	for {
-		event, ok := iterator.Next()
+		iterator := agent.Run(ctx, &adk.AgentInput{Messages: []*schema.Message{}})
+		for {
+			event, ok := iterator.Next()
+			if !ok {
+				break
+			}
+			if event.Err != nil {
+				return event.Err
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if b.completed == 0 {
+			return errors.New("execution produced no model call")
+		}
+		waiter, ok := hooks.(interface {
+			AwaitChildReports(context.Context, agentcore.ExecutionRef) (bool, error)
+		})
 		if !ok {
-			break
+			return nil
 		}
-		if event.Err != nil {
-			return event.Err
+		again, err := waiter.AwaitChildReports(ctx, ref)
+		if err != nil || !again {
+			return err
 		}
 	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if b.completed == 0 {
-		return errors.New("execution produced no model call")
-	}
-	return nil
 }
 
 type executionModel struct {
@@ -93,7 +108,7 @@ type stepMiddleware struct {
 
 func (m *stepMiddleware) BeforeModelRewriteState(ctx context.Context, state *adk.ChatModelAgentState, _ *adk.ModelContext) (context.Context, *adk.ChatModelAgentState, error) {
 	b := m.bridge
-	if b.completed > 0 {
+	if b.completed >= b.prepared.Step {
 		if int(b.completed) >= b.maxSteps {
 			return ctx, nil, &agentcore.Error{Code: "STEP_LIMIT_EXCEEDED"}
 		}

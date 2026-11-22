@@ -12,6 +12,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/skillpackage"
+	"github.com/ravenmk2/antcdp/internal/webaccess"
 )
 
 const toolMetadataLimit = 64 << 10
@@ -65,8 +66,6 @@ func utf8Prefix(value string, n int) string {
 	return value
 }
 
-// SkillLoadMetadata preserves the historical event shape. New loads contain
-// text only and always report materialized=false and stable_path=null.
 type SkillLoadMetadata struct {
 	SkillID      agentcore.ID `json:"skill_id"`
 	VersionID    agentcore.ID `json:"skill_version_id"`
@@ -134,19 +133,8 @@ func decodeMetadata(raw []byte, out any, nullable string, keys ...string) error 
 // generation path. It does not establish that bytes have been materialized.
 func ValidateSkillLoadMetadata(load SkillLoadMetadata, agentID uint64) error {
 	hash, err := hex.DecodeString(load.SHA256)
-	if err != nil || len(hash) != 32 || strings.ToLower(load.SHA256) != load.SHA256 || load.SkillID == 0 || load.VersionID == 0 || agentID == 0 || !utf8.ValidString(load.RelativePath) || load.RelativePath == "" || len(load.RelativePath) > 1024 || strings.ContainsAny(load.RelativePath, "\\\x00") || strings.HasPrefix(load.RelativePath, "/") {
+	if err != nil || len(hash) != 32 || strings.ToLower(load.SHA256) != load.SHA256 || load.SkillID == 0 || load.VersionID == 0 || agentID == 0 || load.RelativePath != "SKILL.md" || !load.Materialized {
 		return integrity()
-	}
-	for _, part := range strings.Split(load.RelativePath, "/") {
-		if part == ".." || part == "." || part == "" {
-			return integrity()
-		}
-	}
-	if !load.Materialized {
-		if load.StablePath != nil {
-			return integrity()
-		}
-		return nil
 	}
 	if load.StablePath == nil {
 		return integrity()
@@ -160,6 +148,18 @@ func ValidateSkillLoadMetadata(load SkillLoadMetadata, agentID uint64) error {
 }
 
 func validateToolMetadata(tx identity.Tx, x executionRows, call *ToolCallRow, raw json.RawMessage, extra map[string]any) error {
+	if (call.ToolKey == "web_search" || call.ToolKey == "web_fetch") && call.MCPBindingID == nil && call.MCPServerID == nil {
+		fields, err := metadataObject(raw, "web_result")
+		if err != nil {
+			return err
+		}
+		var view webaccess.ToolView
+		if err = json.Unmarshal(fields["web_result"], &view); err != nil {
+			return integrity()
+		}
+		extra["web_result"] = view
+		return nil
+	}
 	if call.ToolKey == "write" && call.MCPBindingID == nil && call.MCPServerID == nil {
 		fields, err := metadataObject(raw, "file_write")
 		if err != nil {

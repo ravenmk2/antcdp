@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/diagnostic"
@@ -13,7 +14,7 @@ import (
 type HooksFactory func(context.Context, ExecutionContext) (EngineHooks, error)
 
 // Runtime schedules admitted root Runs and their one-level children. It has no
-// inference loop, no distributed lease, and never restarts an interrupted Run.
+// inference loop, no distributed lease, and can resume a parked parent at a durable step boundary.
 type Runtime struct {
 	Epoch                   string
 	Store                   RunStore
@@ -28,6 +29,9 @@ type Runtime struct {
 	mu                      sync.Mutex
 	active                  map[ID]context.CancelFunc
 	wake                    chan struct{}
+	reports                 chan struct{}
+	parked                  int
+	rootSlots               chan struct{}
 	roots                   sync.WaitGroup
 }
 
@@ -52,7 +56,9 @@ func (r *Runtime) validate() error {
 	}
 	r.mu.Lock()
 	r.active = map[ID]context.CancelFunc{}
+	r.rootSlots = make(chan struct{}, r.MaxRoots)
 	r.wake = make(chan struct{}, 1)
+	r.reports = make(chan struct{})
 	r.mu.Unlock()
 	return nil
 }
@@ -61,6 +67,7 @@ func (r *Runtime) Run(ctx context.Context) error {
 	if err := r.validate(); err != nil {
 		return err
 	}
+	defer r.drain()
 	for {
 		done, err := r.Recovery.Recover(ctx, r.Epoch, 100)
 		if err != nil {
@@ -75,7 +82,6 @@ func (r *Runtime) Run(ctx context.Context) error {
 	}
 	ticker := time.NewTicker(r.PollInterval)
 	defer ticker.Stop()
-	defer r.drain()
 	for {
 		if err := r.tick(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			r.report(err)
@@ -144,7 +150,7 @@ func (r *Runtime) tick(ctx context.Context) error {
 		r.committed(ctx, receipt)
 	}
 	r.mu.Lock()
-	slots := r.MaxRoots - len(r.active)
+	slots := r.MaxRoots - len(r.active) + r.parked
 	r.mu.Unlock()
 	if slots <= 0 {
 		return nil
@@ -166,34 +172,8 @@ func (r *Runtime) tick(ctx context.Context) error {
 				continue
 			}
 			r.committed(ctx, claim.Receipt)
-			runCtx, runCancel := context.WithCancel(ctx)
-			r.mu.Lock()
-			_, duplicate := r.active[claim.Execution.Ref.RunID]
-			if !duplicate {
-				r.active[claim.Execution.Ref.RunID] = runCancel
-			}
-			r.mu.Unlock()
-			if duplicate {
-				runCancel()
-				r.report(reject("RUN_ALREADY_ACTIVE"))
-				continue
-			}
+			r.StartRoot(ctx, claim.Execution)
 			slots--
-			r.roots.Add(1)
-			go func(execution ExecutionContext) {
-				defer r.roots.Done()
-				defer runCancel()
-				defer func() { r.mu.Lock(); delete(r.active, execution.Ref.RunID); r.mu.Unlock(); r.Notify() }()
-				end := r.execute(runCtx, execution)
-				commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-				defer cancel()
-				receipt, err := r.Store.EndRoot(commitCtx, execution.Ref, end)
-				if err != nil {
-					r.report(err)
-					return
-				}
-				r.committed(commitCtx, receipt)
-			}(claim.Execution)
 		}
 		if page.Next == nil || page.Next.After <= cursor.After || len(page.Items) == 0 {
 			break
@@ -201,6 +181,53 @@ func (r *Runtime) tick(ctx context.Context) error {
 		cursor = *page.Next
 	}
 	return nil
+}
+
+func (r *Runtime) StartRoot(ctx context.Context, execution ExecutionContext) {
+	runCtx, runCancel := context.WithDeadline(ctx, execution.Deadline)
+	r.mu.Lock()
+	_, duplicate := r.active[execution.Ref.RunID]
+	if !duplicate {
+		r.active[execution.Ref.RunID] = runCancel
+	}
+	r.mu.Unlock()
+	if duplicate {
+		runCancel()
+		r.report(reject("RUN_ALREADY_ACTIVE"))
+		return
+	}
+	r.roots.Add(1)
+	go func(execution ExecutionContext) {
+		defer r.roots.Done()
+		defer runCancel()
+		defer func() { r.mu.Lock(); delete(r.active, execution.Ref.RunID); r.mu.Unlock(); r.Notify() }()
+		slot := &rootSlot{pool: r.rootSlots}
+		var end RunEnd
+		if err := slot.acquire(runCtx); err != nil {
+			end = executionEnd(err)
+		} else {
+			end = r.execute(context.WithValue(runCtx, rootSlotKey{}, slot), execution)
+			slot.release()
+		}
+		commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if ctx.Err() != nil && execution.Ref.RunID == execution.Ref.RootRunID {
+			if store, ok := r.Store.(interface {
+				ChildReportState(context.Context, ExecutionRef) (bool, bool, error)
+			}); ok {
+				active, pending, err := store.ChildReportState(commitCtx, execution.Ref)
+				if err == nil && (active || pending) {
+					return
+				}
+			}
+		}
+		receipt, err := r.Store.EndRoot(commitCtx, execution.Ref, end)
+		if err != nil {
+			r.report(err)
+			return
+		}
+		r.committed(commitCtx, receipt)
+	}(execution)
 }
 
 func (r *Runtime) execute(ctx context.Context, execution ExecutionContext) RunEnd {
@@ -244,7 +271,7 @@ func (r *Runtime) execute(ctx context.Context, execution ExecutionContext) RunEn
 		}
 		hooks, err := r.Hooks(runCtx, current)
 		if err == nil {
-			err = r.Engine.Execute(runCtx, current.Ref, hooks)
+			err = r.Engine.Execute(context.WithValue(runCtx, childLifetimeKey{}, runCtx), current.Ref, hooks)
 		}
 		result <- err
 	}()
@@ -299,6 +326,9 @@ func executionEnd(err error) (end RunEnd) {
 	if errors.As(err, &coreErr) {
 		return RunEnd{Status: Failed, Reason: coreErr.Code}
 	}
+	if detail := diagnostic.From(err); detail != nil && (detail.Code == "BUDGET_EXCEEDED" || detail.Code == "CONTEXT_BUDGET_EXCEEDED") {
+		return RunEnd{Status: Failed, Reason: detail.Code}
+	}
 	return RunEnd{Status: Failed, Reason: "EXECUTION_FAILED"}
 }
 func (r *Runtime) committed(ctx context.Context, receipt CommitReceipt) {
@@ -310,14 +340,57 @@ func (r *Runtime) committed(ctx context.Context, receipt CommitReceipt) {
 // RunChild does not reserve a root worker. Its parent may hold the only logical
 // tool slot while waiting; the child's independent Eino execution remains live.
 func (r *Runtime) RunChild(ctx context.Context, request ChildRequest) (ToolCompletion, error) {
-	claim, err := r.Store.CreateChild(ctx, request)
-	if err != nil {
-		return ToolCompletion{}, err
+	lifetime, ok := ctx.Value(childLifetimeKey{}).(context.Context)
+	if request.Background && !ok {
+		return ToolCompletion{}, reject("CHILD_LIFETIME_INVALID")
 	}
-	if !claim.Created {
-		return ToolCompletion{}, reject("CHILD_ALREADY_CREATED")
+	var claim ChildClaim
+	for {
+		signal := r.childSignal()
+		var err error
+		claim, err = r.Store.CreateChild(ctx, request)
+		if err != nil {
+			return ToolCompletion{}, err
+		}
+		if claim.Created {
+			break
+		}
+		if claim.Startup != nil {
+			return *claim.Startup, nil
+		}
+		select {
+		case <-ctx.Done():
+			return ToolCompletion{}, ctx.Err()
+		case <-signal:
+		}
 	}
 	r.committed(ctx, claim.Receipt)
+	if request.Background {
+		if claim.Startup == nil {
+			return ToolCompletion{}, reject("CHILD_LIFETIME_INVALID")
+		}
+		r.roots.Add(1)
+		go func() {
+			defer r.roots.Done()
+			_, err := r.finishChild(lifetime, request, claim)
+			r.report(err)
+		}()
+		return *claim.Startup, nil
+	}
+	return r.finishChild(ctx, request, claim)
+}
+
+type childLifetimeKey struct{}
+
+func (r *Runtime) finishChild(ctx context.Context, request ChildRequest, claim ChildClaim) (ToolCompletion, error) {
+	defer func() {
+		r.mu.Lock()
+		if r.reports != nil {
+			close(r.reports)
+		}
+		r.reports = make(chan struct{})
+		r.mu.Unlock()
+	}()
 	end := r.execute(ctx, claim.Execution)
 	commitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
@@ -330,4 +403,83 @@ func (r *Runtime) RunChild(ctx context.Context, request ChildRequest) (ToolCompl
 	}
 	r.committed(commitCtx, commit.Receipt)
 	return commit.Result, nil
+}
+
+// An admitted root releases its execution slot while parked and reacquires
+// one before continuing. A newly admitted root may have taken its old slot.
+type rootSlotKey struct{}
+type rootSlot struct {
+	pool chan struct{}
+	held atomic.Bool
+}
+
+func (s *rootSlot) acquire(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case s.pool <- struct{}{}:
+	}
+	s.held.Store(true)
+	if err := ctx.Err(); err != nil {
+		s.release()
+		return err
+	}
+	return nil
+}
+func (s *rootSlot) release() {
+	if s.held.Swap(false) {
+		<-s.pool
+	}
+}
+func (r *Runtime) childSignal() <-chan struct{} {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.reports == nil {
+		r.reports = make(chan struct{})
+	}
+	return r.reports
+}
+
+// Subscribe before reading durable state so a racing completion cannot be lost.
+func (r *Runtime) AwaitChildReports(ctx context.Context, ref ExecutionRef) (bool, error) {
+	if ref.RunID != ref.RootRunID {
+		return false, nil
+	}
+	store, ok := r.Store.(interface {
+		ChildReportState(context.Context, ExecutionRef) (bool, bool, error)
+	})
+	if !ok {
+		return false, nil
+	}
+	for {
+		signal := r.childSignal()
+		active, ready, err := store.ChildReportState(ctx, ref)
+		if err != nil || ready || !active {
+			return ready, err
+		}
+		r.mu.Lock()
+		r.parked++
+		r.mu.Unlock()
+		slot, _ := ctx.Value(rootSlotKey{}).(*rootSlot)
+		if slot != nil {
+			slot.release()
+		}
+		r.Notify()
+		select {
+		case <-ctx.Done():
+		case <-signal:
+		}
+		if slot != nil {
+			err = slot.acquire(ctx)
+		}
+		r.mu.Lock()
+		r.parked--
+		r.mu.Unlock()
+		if err != nil {
+			return false, err
+		}
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+	}
 }

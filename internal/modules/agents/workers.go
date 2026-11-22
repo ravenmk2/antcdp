@@ -19,6 +19,11 @@ func (s *Service) WorkerStarted(ctx context.Context, ref agentcore.ExecutionRef)
 		if err != nil {
 			return err
 		}
+		if previous != nil && previous.ReleasedAt != nil && previous.ExecutorEpoch != ref.Epoch && previous.FenceVersion < ref.Fence {
+			previous.ExecutorEpoch, previous.FenceVersion, previous.ReleasedAt, previous.ReleaseReason, previous.State = ref.Epoch, ref.Fence, nil, nil, "active"
+			previous.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
+			return st.SaveResourceReference(previous)
+		}
 		if previous != nil {
 			return httpx.E(409, "WORKER_ALREADY_STARTED", "本次运行已启动执行线程")
 		}

@@ -71,12 +71,13 @@ export function toolSummary(
   const name =
     tool.call?.data.tool_key ??
     tool.draft?.name ??
-    (tool.question ? "ask_user_question" : "");
+    (tool.question ? "ask_question" : "");
   const args =
     tool.call?.data.arguments ??
     draftArgumentStrings(tool.draft?.argumentsText ?? "");
   const hint =
-    name === "exec" && typeof args.description === "string"
+    (name === "exec" || name === "subagent") &&
+    typeof args.description === "string"
       ? args.description
       : (name === "papi_call" || name === "papi_desc") &&
           typeof tool.call?.data.arguments.api === "string"
@@ -92,6 +93,7 @@ export function toolSummary(
               args.destination,
               args.command,
               args.pattern,
+              Array.isArray(args.queries) ? args.queries.join(" · ") : null,
               args.query,
               args.url,
             ].find(

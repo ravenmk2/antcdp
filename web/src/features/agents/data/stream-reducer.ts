@@ -40,6 +40,9 @@ export const eventTypes: readonly EventType[] = [
   "tool/output_pruned",
   "tool/call",
   "tool/result",
+  "subagent/reported",
+  "subagent/message",
+  "todo/write",
   "tool/reconciled",
   "interaction/asked",
   "interaction/decided",
@@ -361,7 +364,7 @@ function installSnapshot(
     const run = summary?.latest_run;
     if (
       !summary ||
-      summary.version !== 2 ||
+      summary.version !== 3 ||
       summary.through_seq !== frame.through_seq ||
       typeof summary.title !== "string" ||
       !count(summary.run_count) ||
@@ -377,7 +380,7 @@ function installSnapshot(
           !count(run.tool_call_count) ||
           typeof run.status !== "string" ||
           typeof run.settled !== "boolean" ||
-          (run.plan !== undefined && !Array.isArray(run.plan))))
+          (run.todos !== undefined && !Array.isArray(run.todos))))
     )
       return gap(state, "schema_unsupported");
   }

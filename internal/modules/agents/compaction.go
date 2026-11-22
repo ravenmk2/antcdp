@@ -438,7 +438,7 @@ func (s *Service) ProcessPendingCompactions(ctx context.Context, limit int) erro
 				if descriptor == nil || !descriptor.Availability.Available || descriptor.RequiresSandbox {
 					continue
 				}
-				spec := agentcore.ToolSpec{Key: binding.ToolKey, Definition: descriptor.Definition, ExecutionClass: descriptor.ExecutionClass, ParallelSafe: descriptor.ParallelSafe, Policy: binding.Policy, ResultLimit: 64 << 10}
+				spec := agentcore.ToolSpec{Key: binding.ToolKey, Definition: descriptor.Definition, ExecutionClass: descriptor.ExecutionClass, ParallelSafe: descriptor.ParallelSafe, Policy: binding.Policy, ResultLimit: toolOutputInlineLimit(binding.ToolKey)}
 				tools = append(tools, spec)
 			}
 			prepared, e := agentcore.BuildPreparedStep(agentcore.ExecutionRef{}, 1, frozen.LockedModel, agent.SystemPrompt, request.Source, nil, tools, agent.RuntimePolicy.MaxParallelTools)

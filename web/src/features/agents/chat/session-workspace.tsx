@@ -27,7 +27,6 @@ import { runtimeReason } from "../data/runtime-reasons";
 import { runStatusNames } from "@/features/agents/resources/admin-shared";
 import { WorkspaceFilesDrawer } from "../sandbox/workspace-files";
 import { FileReference } from "./content";
-import { readPlan } from "./timeline";
 
 type WorkspaceTab = "progress" | "files" | "context";
 
@@ -144,37 +143,16 @@ function SessionProgress({
   const status = activeRunId
     ? activeStatus
     : (run?.status ?? session.view_state?.latest_result?.status);
-  const calls = new Set(
-    records
-      .filter(
-        (record) =>
-          record.run_id === id &&
-          record.event_type === "tool/call" &&
-          record.data.tool_key === "update_plan",
-      )
-      .map((record) =>
-        record.event_type === "tool/call" ? record.data.tool_call_id : "",
-      ),
-  );
-  const lastPlan = [...records]
+  const projected =
+    conversation?.latest_run?.id === id ? conversation?.latest_run : undefined;
+  const lastWrite = [...records]
     .reverse()
     .find(
-      (record) =>
-        record.run_id === id &&
-        record.event_type === "tool/result" &&
-        record.data.status === "succeeded" &&
-        !record.data.truncated &&
-        calls.has(record.data.tool_call_id),
+      (record) => record.run_id === id && record.event_type === "todo/write",
     );
-  const projected =
-    conversation && conversation.latest_run?.id === id
-      ? conversation.latest_run
-      : null;
-  const plan = projected?.plan
-    ? readPlan(projected.plan)
-    : lastPlan?.event_type === "tool/result"
-      ? readPlan(lastPlan.data.content)
-      : null;
+  const todos =
+    projected?.todos ??
+    (lastWrite?.event_type === "todo/write" ? lastWrite.data.todos : null);
   return (
     <div className="agent-workspace-sections">
       <section>
@@ -289,17 +267,14 @@ function SessionProgress({
           </>
         )}
       </section>
-      {plan && (
+      {Boolean(todos?.length) && (
         <section>
-          <h3 className="agent-workspace-section-title">任务计划</h3>
-          <p className="mb-4 text-xs leading-5 text-muted">
-            助手最近提交的计划，不代表所有步骤均已执行。
-          </p>
+          <h3 className="agent-workspace-section-title">任务清单</h3>
           <ol className="agent-workspace-plan">
-            {plan.plan.map((step, index) => (
+            {todos?.map((step, index) => (
               <li key={index} data-state={step.status}>
                 {step.status === "completed" ? <Check /> : <Circle />}
-                <span>{step.step}</span>
+                <span>{step.content}</span>
                 <span className="sr-only">
                   {step.status === "completed"
                     ? "已完成"

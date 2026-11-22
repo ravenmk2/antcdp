@@ -322,17 +322,17 @@ it("shows readable grep matches with truncation and preserves unsupported result
 });
 
 it("tolerates a successful plan state arriving before its result", async () => {
-  const node = tool("update_plan", {}, {});
+  const node = tool("todo_write", {}, {});
   node.result = undefined;
   render(<ToolEvent {...node} sessionId="1" />);
-  await userEvent.setup().click(screen.getByText("更新任务计划"));
+  await userEvent.setup().click(screen.getByText("更新待办"));
   expect(screen.queryByText("尚未收到工具结果。")).toBeNull();
 });
 
 it("shows question and answer pairs for waiting, multiple selections, late answers and skipped questions", async () => {
   if (question.kind !== "question")
     throw new Error("Expected question fixture");
-  const node = tool("ask_user_question", { questions: question.questions }, {});
+  const node = tool("ask_question", { questions: question.questions }, {});
   const { rerender } = render(
     <ToolEvent
       {...node}
@@ -349,9 +349,9 @@ it("shows question and answer pairs for waiting, multiple selections, late answe
         ...question,
         status: "reply_queued",
         answer: {
-          skip: false,
           answers: [
             {
+              status: "answered",
               question_id: "q1",
               option_ids: ["test", "prod"],
               text: "都需要检查",
@@ -371,7 +371,16 @@ it("shows question and answer pairs for waiting, multiple selections, late answe
       question={{
         ...question,
         status: "answered",
-        answer: { skip: true, answers: [] },
+        answer: {
+          answers: [
+            {
+              status: "skipped",
+              question_id: "q1",
+              option_ids: [],
+              text: null,
+            },
+          ],
+        },
       }}
       sessionId="1"
     />,
@@ -395,4 +404,40 @@ it("highlights applied file changes from the tool result", async () => {
   expect(screen.getByLabelText("文件差异")).toHaveTextContent("+new");
   expect(screen.getByText("-old")).toHaveClass("text-destructive");
   expect(screen.getByText("+new")).toHaveClass("text-success");
+});
+
+it("shows a background child report on its original card", async () => {
+  const node = tool(
+    "subagent",
+    { task: "Review the file", background: true },
+    {},
+  );
+  node.result!.data.child_started = {
+    child_id: "3",
+    session_id: "4",
+    description: "Review",
+    status: "started",
+  };
+  const onChild = vi.fn();
+  const { rerender } = render(
+    <ToolEvent {...node} sessionId="1" onChild={onChild} />,
+  );
+  await userEvent.setup().click(screen.getByText("委派临时子任务"));
+  expect(screen.getByText("子助手运行中")).toBeTruthy();
+  node.report = {
+    source: "subagent",
+    child_id: "3",
+    session_id: "4",
+    run_id: "3",
+    tool_call_id: "8",
+    description: "Review",
+    status: "succeeded",
+    reason_code: null,
+    result_summary: "Reviewed the file",
+    artifact_ids: [],
+  };
+  rerender(<ToolEvent {...node} sessionId="1" onChild={onChild} />);
+  expect(screen.getByText("Reviewed the file")).toBeTruthy();
+  await userEvent.setup().click(screen.getByText("查看子任务详情"));
+  expect(onChild).toHaveBeenCalledWith("4");
 });

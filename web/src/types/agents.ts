@@ -357,8 +357,12 @@ export interface InputAccepted {
   accepted_seq: string;
 }
 export interface QuestionAnswer {
-  skip: boolean;
-  answers: { question_id: string; option_ids: string[]; text: string | null }[];
+  answers: {
+    status: "answered" | "skipped";
+    question_id: string;
+    option_ids: string[];
+    text: string | null;
+  }[];
 }
 export type InputSource =
   | { kind: "interaction"; id: string }
@@ -404,16 +408,15 @@ export interface InputSummary extends Versioned {
   queue_deadline_at: string;
 }
 export interface Question {
-  question_id: string;
-  prompt: string;
-  type: "single_choice" | "multi_choice" | "text";
-  options: {
+  id: string;
+  question: string;
+  multi_select?: boolean;
+  options?: {
     id: string;
     label: string;
     description?: string;
     recommended?: boolean;
   }[];
-  allow_text: boolean;
 }
 export type QuestionStatus =
   "waiting" | "continued" | "reply_queued" | "answered" | "cancelled";

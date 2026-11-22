@@ -154,7 +154,7 @@ func (s *Service) summarizeImageAttempt(ctx context.Context, record agentcore.Co
 		call := &ModelCallRow{SessionID: row.SessionID, RunID: row.RunID, CompactionID: &row.ID, Purpose: "compaction", AttemptNo: attempt, Status: "running", ProviderID: uint64(frozen.ProviderID), ModelDefinitionID: uint64(frozen.DefinitionID), Protocol: string(frozen.Protocol), RequestedModelID: frozen.RemoteModelID, Thinking: thinking, RequestConfig: config, SurfaceManifest: manifest, RequestHash: digest, CapabilitySnapshot: caps, ExecutorEpoch: row.ExecutorEpoch, FenceVersion: row.FenceVersion, UsageCompleteness: "unknown", CreatedAt: now, StartedAt: &now, DeadlineAt: row.DeadlineAt}
 		if x.Root != nil {
 			call.RootRunID = &x.Root.ID
-			l, e := ledger(x.Root)
+			l, e := ledger(x.Run)
 			if e != nil {
 				return e
 			}
@@ -174,7 +174,7 @@ func (s *Service) summarizeImageAttempt(ctx context.Context, record agentcore.Co
 			if e != nil {
 				return e
 			}
-			if e = saveLedger(st, x.Root, l); e != nil {
+			if e = saveLedger(st, x.Run, l); e != nil {
 				return e
 			}
 		}
@@ -226,7 +226,7 @@ func (s *Service) summarizeImageAttempt(ctx context.Context, record agentcore.Co
 			call.ResponseModelID = &value
 		}
 		if x.Root != nil {
-			if err = settleModelBudget(st, x.Root, call, response.Usage); err != nil {
+			if err = settleModelBudget(st, x.Run, call, response.Usage); err != nil {
 				return err
 			}
 		} else {
@@ -382,11 +382,7 @@ func (s *Service) Fail(ctx context.Context, failure agentcore.CompactionFailure)
 			if run == nil {
 				return integrity()
 			}
-			id := run.ID
-			if run.RootRunID != nil {
-				id = *run.RootRunID
-			}
-			root, e = st.Run(id, true)
+			root, e = st.Run(run.ID, true)
 			if e != nil {
 				return e
 			}

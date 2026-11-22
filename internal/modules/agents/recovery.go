@@ -2,6 +2,7 @@ package agents
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
@@ -27,6 +28,16 @@ func (s *Service) Recover(ctx context.Context, epoch string, limit int) (bool, e
 	}
 	for _, row := range rows {
 		ref := agentcore.ExecutionRef{SessionID: agentcore.ID(row.SessionID), RunID: agentcore.ID(row.ID), RootRunID: agentcore.ID(row.ID), Epoch: row.ExecutorEpoch, Fence: row.FenceVersion}
+		if s.ResumeRoot != nil && row.Status == "running" && time.Now().Before(row.DeadlineAt) {
+			execution, ok, err := s.recoverBackgroundParent(ctx, ref, epoch)
+			if err != nil {
+				return false, err
+			}
+			if ok {
+				s.ResumeRoot(ctx, execution)
+				continue
+			}
+		}
 		receipt, e := s.EndRoot(ctx, ref, agentcore.RunEnd{Status: agentcore.Interrupted, Reason: "executor_restarted"})
 		if e != nil {
 			return false, e
@@ -199,3 +210,116 @@ func (s *Service) expireInteraction(ctx context.Context, id uint64, now time.Tim
 }
 
 var _ agentcore.RecoveryStore = (*Service)(nil)
+
+// Resume at a closed tool boundary. Unconfirmed external operations use the
+// normal interruption path and are never dispatched a second time.
+func (s *Service) recoverBackgroundParent(ctx context.Context, ref agentcore.ExecutionRef, epoch string) (execution agentcore.ExecutionContext, resume bool, err error) {
+	var receipt agentcore.CommitReceipt
+	err = s.background(ctx, func(tx identity.Tx, r Repository, st StateRepository) error {
+		// Most historical roots have no background call. Only acquire live
+		// execution authority when a resumable boundary actually exists.
+		calls, e := st.RunTools(uint64(ref.RunID))
+		if e != nil {
+			return e
+		}
+		var deliveredStep uint64
+		hasBackground := false
+		for _, c := range calls {
+			if c.ResultEventSeq == nil {
+				return nil
+			}
+			if c.ExecutionClass == "child" && len(c.ExecutionRef) > 0 {
+				var child childReference
+				if json.Unmarshal(c.ExecutionRef, &child) != nil {
+					return integrity()
+				}
+				if child.Background {
+					hasBackground = true
+					deliveredStep = max(deliveredStep, child.DeliveredStep)
+				}
+			}
+		}
+		if !hasBackground {
+			return nil
+		}
+		x, e := s.lockExecution(tx, r, st, ref, true)
+		if e != nil {
+			return e
+		}
+		active, pending, e := visitChildReports(st, x.Session, x.Run, false, time.Time{})
+		if e != nil {
+			return e
+		}
+		deliveredAtBoundary := deliveredStep > 0 && deliveredStep == x.Run.CurrentStepNo
+		if !active && !pending && !deliveredAtBoundary {
+			return nil
+		}
+		models, e := st.RunModelCalls(x.Run.ID)
+		if e != nil {
+			return e
+		}
+		for _, c := range models {
+			if c.Status == "running" || (!active && !pending && c.Purpose == "generation" && c.StepNo >= deliveredStep) {
+				return nil
+			}
+		}
+		family, e := st.FamilyRuns(x.Run.ID)
+		if e != nil {
+			return e
+		}
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		from := x.Session.LastSeq + 1
+		for i := range family {
+			child := &family[i]
+			if child.ID == x.Run.ID || agentcore.RunStatus(child.Status).Terminal() {
+				continue
+			}
+			session, e := st.Session(child.SessionID, true)
+			if e != nil {
+				return e
+			}
+			if session == nil {
+				return integrity()
+			}
+			child, e = st.Run(child.ID, true)
+			if e != nil {
+				return e
+			}
+			if child == nil {
+				return integrity()
+			}
+			start := session.LastSeq + 1
+			if e = s.endOne(st, session, child, agentcore.RunEnd{Status: agentcore.Interrupted, Reason: "executor_restarted"}, now); e != nil {
+				return e
+			}
+			if _, e = s.settleChildResult(st, x.Session, session, x.Run, child, now); e != nil {
+				return e
+			}
+			if e = st.SaveSession(session); e != nil {
+				return e
+			}
+			receipt.Ranges = append(receipt.Ranges, eventReceipt(session.ID, start, session.LastSeq).Ranges...)
+		}
+		if x.Session.LastSeq >= from {
+			receipt.Ranges = append(receipt.Ranges, eventReceipt(x.Session.ID, from, x.Session.LastSeq).Ranges...)
+		}
+		x.Run.ExecutorEpoch = epoch
+		x.Run.FenceVersion++
+		if e = st.SaveRun(x.Run); e != nil {
+			return e
+		}
+		if e = st.SaveSession(x.Session); e != nil {
+			return e
+		}
+		execution = x.Execution
+		execution.Ref.Epoch = epoch
+		execution.Ref.Fence = x.Run.FenceVersion
+		execution.CompletedSteps = uint32(x.Run.CurrentStepNo)
+		resume = true
+		return nil
+	})
+	if err == nil && len(receipt.Ranges) > 0 && s.Committed != nil {
+		s.Committed(ctx, receipt)
+	}
+	return
+}

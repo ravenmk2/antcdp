@@ -45,7 +45,7 @@ import {
 } from "./disclosure-motion";
 
 export { runtimeReason } from "../data/runtime-reasons";
-export { readPlan } from "./tool-event";
+
 export function ConversationTimeline(props: ConversationTimelineProps) {
   return (
     <DisclosureState key={props.sessionId}>
@@ -54,6 +54,7 @@ export function ConversationTimeline(props: ConversationTimelineProps) {
   );
 }
 type ConversationTimelineProps = {
+  onChild?: (sessionId: string) => void;
   records: DurableRecord[];
   sessionId: string;
   attempt: ActiveAttempt | null;
@@ -73,6 +74,7 @@ function Timeline({
   pauseAutoCollapse = false,
   onVisibleResult,
   computerId,
+  onChild,
   submissions = [],
 }: ConversationTimelineProps) {
   const { user } = useSession();
@@ -321,6 +323,7 @@ function Timeline({
                 <div className="agent-process-slot">
                   <DisclosureScope id={node.runId ?? node.id}>
                     <ProcessGroup
+                      onChild={onChild}
                       node={node}
                       sessionId={sessionId}
                       historical={Boolean(turn?.end)}
@@ -673,6 +676,7 @@ const ProcessGroup = memo(function ProcessGroup({
   closed,
   onIssue,
   issueToolIds,
+  onChild,
 }: {
   node: PresentedProcess;
   sessionId: string;
@@ -681,6 +685,7 @@ const ProcessGroup = memo(function ProcessGroup({
   closed: boolean;
   onIssue: (toolId: string) => void;
   issueToolIds: string[];
+  onChild?: (id: string) => void;
 }) {
   const pending = node.tools.some(
     (tool) =>
@@ -758,6 +763,9 @@ const ProcessGroup = memo(function ProcessGroup({
       <ToolEvent
         key={entry.key ?? tool.id}
         id={tool.id}
+        report={tool.report}
+        todos={tool.todos}
+        onChild={onChild}
         draft={tool.draft}
         rejected={tool.rejected}
         call={tool.call}

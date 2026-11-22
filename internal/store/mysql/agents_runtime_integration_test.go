@@ -33,10 +33,10 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 		if key == "read_tool_output" {
 			class = "read_only"
 		}
-		if key == "delegate" {
+		if key == "subagent" {
 			class = "child"
 		}
-		if key == "ask_user_question" {
+		if key == "ask_question" {
 			class = "question"
 		}
 		policies := []string{"allow", "deny", "confirm"}
@@ -63,6 +63,8 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 	t.Run("image_files", func(t *testing.T) { runtimeImageFiles(t, f) })
 	t.Run("tool_and_question_lifecycle", func(t *testing.T) { runtimeToolsAndQuestions(t, f, agent.ID) })
 	t.Run("approval_rechecks_next_turn_permission", func(t *testing.T) { runtimeApproval(t, f, agent.ID) })
+	t.Run("restart_parked_parent", func(t *testing.T) { runtimeRecoverBackgroundParent(t, f, agent.ID) })
+	t.Run("background_reports", func(t *testing.T) { runtimeBackgroundChildren(t, f, agent.ID) })
 	t.Run("child_atomic_result_and_recovery", func(t *testing.T) { runtimeChildren(t, f, agent.ID) })
 	t.Run("current_epoch_uncommitted_model_result", func(t *testing.T) { runtimeUncommittedModel(t, f, agent.ID) })
 	t.Run("stop_publishes_queue_transition", func(t *testing.T) { runtimeStopQueue(t, f, agent.ID) })
@@ -146,7 +148,7 @@ func runtimeToolPolicies(t *testing.T, f *agentIntegrationFixture, id uint64, ef
 		t.Fatal(e)
 	}
 	items := []a.ToolBindingWrite{}
-	for _, key := range []string{"echo", "ask_user_question", "delegate", "effect", "read_tool_output"} {
+	for _, key := range []string{"echo", "ask_question", "subagent", "effect", "read_tool_output"} {
 		policy := "allow"
 		if key == "effect" {
 			policy = effectPolicy
@@ -228,12 +230,12 @@ func runtimeEnd(t *testing.T, f *agentIntegrationFixture, execution core.Executi
 	}
 }
 
-const runtimeQuestionArgs = `{"questions":[{"question_id":"q1","prompt":"请选择继续方式","type":"single_choice","options":[{"id":"yes","label":"继续","description":"继续检查"}],"allow_text":false}]}`
+const runtimeQuestionArgs = `{"questions":[{"id":"q1","question":"请选择继续方式","options":[{"id":"yes","label":"继续","description":"继续检查"}]}]}`
 
 func runtimeToolsAndQuestions(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 	session := runtimeSession(t, f, agent)
 	x := runtimeClaim(t, f, session.Configuration.ID, "执行工具并请求补充")
-	commit := runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "call-echo", Name: "echo", Arguments: `{}`}, {ID: "call-question", Name: "ask_user_question", Arguments: runtimeQuestionArgs}}})
+	commit := runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "call-echo", Name: "echo", Arguments: `{}`}, {ID: "call-question", Name: "ask_question", Arguments: runtimeQuestionArgs}}})
 	if len(commit.Calls) != 2 {
 		t.Fatal("all tool intentions were not committed")
 	}
@@ -278,7 +280,7 @@ func runtimeToolsAndQuestions(t *testing.T, f *agentIntegrationFixture, agent ui
 	if e != nil {
 		t.Fatal(e)
 	}
-	answer := core.QuestionAnswer{Answers: []core.AnswerItem{{QuestionID: "q1", OptionIDs: []string{"yes"}}}}
+	answer := core.QuestionAnswer{Answers: []core.AnswerItem{{Status: "answered", QuestionID: "q1", OptionIDs: []string{"yes"}}}}
 	key := cryptox.ID()
 	answered, e := f.Agents.AnswerInteraction(f.Context, f.AdminToken, uint64(*q.InteractionID), view.Tag, key, answer)
 	if e != nil || answered.Data.(map[string]any)["delivery"] != "tool_result" {
@@ -302,7 +304,7 @@ func runtimeToolsAndQuestions(t *testing.T, f *agentIntegrationFixture, agent ui
 	assertRunSteps(t, f, x, 2, 2)
 
 	x = runtimeClaim(t, f, session.Configuration.ID, "等待一个可以迟答的问题")
-	commit = runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "call-late", Name: "ask_user_question", Arguments: runtimeQuestionArgs}}})
+	commit = runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "call-late", Name: "ask_question", Arguments: runtimeQuestionArgs}}})
 	q, e = f.Agents.PrepareDispatch(f.Context, x.Ref, commit.Calls[0].ID)
 	if e != nil || q.InteractionID == nil {
 		t.Fatal(e)
@@ -377,7 +379,7 @@ func runtimeChildren(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 	for _, interrupt := range []bool{false, true} {
 		session := runtimeSession(t, f, agent)
 		x := runtimeClaim(t, f, session.Configuration.ID, "委派独立分析")
-		commit := runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "call-child", Name: "delegate", Arguments: `{"task":"分析一个问题","file_refs":[]}`}}})
+		commit := runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "call-child", Name: "subagent", Arguments: `{"task":"分析一个问题"}`}}})
 		permit, e := f.Agents.PrepareDispatch(f.Context, x.Ref, commit.Calls[0].ID)
 		if e != nil || permit.Kind != "execute" {
 			t.Fatal(e)
@@ -780,4 +782,140 @@ func runtimeDebug(t *testing.T, f *agentIntegrationFixture, agent uint64) {
 	if _, e = f.Agents.ArchiveSession(f.Context, f.AdminToken, uint64(session), configuration.Tag, cryptox.ID()); e != nil {
 		t.Fatal(e)
 	}
+}
+
+func runtimeBackgroundChildren(t *testing.T, f *agentIntegrationFixture, agent uint64) {
+	session := runtimeSession(t, f, agent)
+	x := runtimeClaim(t, f, session.Configuration.ID, "background reports")
+	svc, ctx := f.Agents, f.Context
+	calls := []modelcore.ToolCall{}
+	for _, id := range []string{"a", "b"} {
+		calls = append(calls, modelcore.ToolCall{ID: id, Name: "subagent", Arguments: `{"task":"work","background":true}`})
+	}
+	parent := runtimeAttempt(t, f, x, 1, modelcore.Message{Role: "assistant", ToolCalls: calls})
+	var children []core.ChildClaim
+	for _, call := range parent.Calls {
+		permit, err := svc.PrepareDispatch(ctx, x.Ref, call.ID)
+		if err != nil || permit.Kind != "execute" {
+			t.Fatal("admit", err)
+		}
+		req := core.ChildRequest{Parent: call, Background: true, Content: []core.TextBlock{{Type: "text", Text: "work"}}}
+		child, err := svc.CreateChild(ctx, req)
+		if err != nil || !child.Created || child.Startup == nil || !strings.Contains(child.Startup.Content, "started") {
+			t.Fatal("launch", err)
+		}
+		replay, err := svc.CreateChild(ctx, req)
+		if err != nil || replay.Created || replay.Startup.Content != child.Startup.Content {
+			t.Fatal("duplicate launch", err)
+		}
+		children = append(children, child)
+	}
+	active, pending, err := svc.ChildReportState(ctx, x.Ref)
+	if err != nil || !active || pending {
+		t.Fatal("wait", active, pending, err)
+	}
+	for i := len(children) - 1; i >= 0; i-- {
+		child := children[i]
+		runtimeAttempt(t, f, child.Execution, 1, modelcore.Message{Role: "assistant", Content: "child " + calls[i].ID})
+		for range 2 {
+			if _, err = svc.EndChild(ctx, child.Execution.Ref, core.ChildEnd{End: core.RunEnd{Status: core.Succeeded}}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	step, err := svc.PrepareStep(ctx, x, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reports := []string{}
+	for _, m := range step.Request.Messages {
+		if m.Role == "user" && strings.Contains(m.Content, "result_summary") {
+			reports = append(reports, m.Content)
+		}
+	}
+	if len(reports) != 2 || !strings.Contains(reports[0], "child b") || !strings.Contains(reports[1], "child a") {
+		t.Fatal(reports)
+	}
+	if active, pending, err = svc.ChildReportState(ctx, x.Ref); err != nil || active || pending {
+		t.Fatal("undelivered", err)
+	}
+	for _, run := range []core.ExecutionContext{x, children[0].Execution, children[1].Execution} {
+		var raw []byte
+		if err = f.Store.db.GetContext(ctx, &raw, "SELECT budget_used FROM agent_run WHERE id=?", uint64(run.Ref.RunID)); err != nil {
+			t.Fatal(err)
+		}
+		var used core.Budget
+		if err = json.Unmarshal(raw, &used); err != nil || used.ModelCalls != 1 || run.Ref == x.Ref && (used.ToolCalls != 2 || used.Children != 2) {
+			t.Fatal("independent budget", used, err)
+		}
+	}
+	runtimePreparedAttempt(t, f, x, step, modelcore.Message{Role: "assistant", Content: "done"})
+	runtimeEnd(t, f, x)
+}
+
+func runtimeRecoverBackgroundParent(t *testing.T, f *agentIntegrationFixture, agent uint64) {
+	svc, ctx := f.Agents, f.Context
+	session := runtimeSession(t, f, agent)
+	parent := runtimeClaim(t, f, session.Configuration.ID, "restart")
+	if err := svc.WorkerStarted(ctx, parent.Ref); err != nil {
+		t.Fatal(err)
+	}
+	committed := runtimeAttempt(t, f, parent, 1, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "async", Name: "subagent", Arguments: `{"task":"work","background":true}`}}})
+	call := committed.Calls[0]
+	if _, err := svc.PrepareDispatch(ctx, parent.Ref, call.ID); err != nil {
+		t.Fatal(err)
+	}
+	child, err := svc.CreateChild(ctx, core.ChildRequest{Parent: call, Background: true, Content: []core.TextBlock{{Type: "text", Text: "work"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resumed core.ExecutionContext
+	previous := svc.ResumeRoot
+	svc.ResumeRoot = func(_ context.Context, x core.ExecutionContext) { resumed = x }
+	defer func() { svc.ResumeRoot = previous }()
+	if _, err = svc.Recover(ctx, "next-executor", 100); err != nil {
+		t.Fatal(err)
+	}
+	if resumed.Ref.RunID != parent.Ref.RunID || resumed.CompletedSteps != 1 || resumed.Ref.Fence <= parent.Ref.Fence {
+		t.Fatal("resume", resumed.Ref)
+	}
+	if err = svc.WorkerStarted(ctx, resumed.Ref); err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.PrepareStep(ctx, resumed, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Restart again after delivery was committed but before the next
+	// model request began. The durable user message is reused exactly once.
+	if _, err = svc.Recover(ctx, "third-executor", 100); err != nil {
+		t.Fatal(err)
+	}
+	if resumed.CompletedSteps != 2 || resumed.Ref.Epoch != "third-executor" {
+		t.Fatal("lost delivered report", resumed.Ref)
+	}
+	if err = svc.WorkerStarted(ctx, resumed.Ref); err != nil {
+		t.Fatal(err)
+	}
+	step, err := svc.PrepareStep(ctx, resumed, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, m := range step.Request.Messages {
+		if m.Role == "user" && strings.Contains(m.Content, "executor_restarted") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatal("interrupted child reports", count)
+	}
+	if _, err = svc.PrepareStep(ctx, child.Execution, 1); err == nil {
+		t.Fatal("old child can execute")
+	}
+	runtimePreparedAttempt(t, f, resumed, step, modelcore.Message{Role: "assistant", Content: "reported interruption"})
+	if err = svc.WorkerStopped(ctx, resumed.Ref); err != nil {
+		t.Fatal(err)
+	}
+	runtimeEnd(t, f, resumed)
 }

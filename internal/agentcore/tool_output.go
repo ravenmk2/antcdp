@@ -11,6 +11,9 @@ import (
 const ToolOutputInlineBytes = 16 << 10
 const ToolOutputMaxBytes = 4 << 20
 
+// The reader permits 10 MiB of body text. Retain the source and title with it.
+const FetchOutputMaxBytes = (10 << 20) + (16 << 10)
+
 // HeadTail bounds UTF-8 bytes, keeping diagnostics at both ends. The marker is
 // part of the budget. It is deterministic and never mutates the original fact.
 func HeadTail(text string, budget int, marker string) string {

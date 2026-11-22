@@ -1554,8 +1554,14 @@ it("answers a continued question with its independent ETag and preserves a pause
     method: "POST",
     etag: '"q1"',
     body: {
-      skip: false,
-      answers: [{ question_id: "q1", option_ids: ["test"], text: null }],
+      answers: [
+        {
+          status: "answered",
+          question_id: "q1",
+          option_ids: ["test"],
+          text: null,
+        },
+      ],
     },
   });
   expect(action?.idempotencyKey).toBeTruthy();
@@ -1571,8 +1577,8 @@ it("keeps answers across question pages and submits them together", async () => 
               ...questions,
               {
                 ...questions[0],
-                question_id: "q2",
-                prompt: "第二项选择",
+                id: "q2",
+                question: "第二项选择",
               },
             ],
           },
@@ -1613,8 +1619,8 @@ it("keeps answers across question pages and submits them together", async () => 
       mock.mock.calls.find(([url]) => url.endsWith("/answers"))?.[1]?.body,
     ).toMatchObject({
       answers: [
-        { question_id: "q1", option_ids: ["test"] },
-        { question_id: "q2", option_ids: ["prod"] },
+        { status: "answered", question_id: "q1", option_ids: ["test"] },
+        { status: "answered", question_id: "q2", option_ids: ["prod"] },
       ],
     }),
   );
@@ -1668,7 +1674,7 @@ it("shows a recommendation without selecting it and submits multiple option IDs 
             questions: [
               {
                 ...initialQuestion,
-                type: "multi_choice",
+                multi_select: true,
                 options: [
                   { id: "test", label: "测试环境", recommended: true },
                   { id: "prod", label: "生产环境" },
@@ -1711,7 +1717,9 @@ it("shows a recommendation without selecting it and submits multiple option IDs 
     expect(
       mock.mock.calls.find(([url]) => url.endsWith("/answers"))?.[1]?.body,
     ).toMatchObject({
-      answers: [{ question_id: "q1", option_ids: ["test", "prod"] }],
+      answers: [
+        { status: "answered", question_id: "q1", option_ids: ["test", "prod"] },
+      ],
     }),
   );
 });
@@ -1771,9 +1779,9 @@ it("renders and copies a late answer without empty text blocks or surrounding bl
       content: [{ type: "text", text: "\n  \n" }],
       question_context: { tool_call_id: "80", questions: question.questions },
       question_answer: {
-        skip: false,
         answers: [
           {
+            status: "answered",
             question_id: "q1",
             option_ids: ["test"],
             text: "\r\n补充第一行\r\n补充第二行\r\n",

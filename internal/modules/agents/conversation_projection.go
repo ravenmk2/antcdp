@@ -8,7 +8,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 )
 
-const conversationProjectionVersion = 2
+const conversationProjectionVersion = 3
 
 // ConversationProjection contains display facts only. It grants no permission
 // and cannot replace the execution rows that own leases and side effects.
@@ -23,15 +23,14 @@ type ConversationProjection struct {
 }
 
 type ConversationRun struct {
-	ID         agentcore.ID    `json:"id"`
-	Status     string          `json:"status"`
-	Step       uint64          `json:"step"`
-	EndedSteps uint64          `json:"completed_steps"`
-	Settled    bool            `json:"settled"`
-	ModelCalls uint64          `json:"model_call_count"`
-	ToolCalls  uint64          `json:"tool_call_count"`
-	PlanCallID agentcore.ID    `json:"plan_call_id"`
-	Plan       json.RawMessage `json:"plan,omitempty"`
+	ID         agentcore.ID `json:"id"`
+	Status     string       `json:"status"`
+	Step       uint64       `json:"step"`
+	EndedSteps uint64       `json:"completed_steps"`
+	Settled    bool         `json:"settled"`
+	ModelCalls uint64       `json:"model_call_count"`
+	ToolCalls  uint64       `json:"tool_call_count"`
+	Todos      []TodoItem   `json:"todos"`
 }
 
 type ConversationProjectionRow struct {
@@ -73,13 +72,10 @@ func FoldConversation(state ConversationProjection, record DurableRecord) (Conve
 		Configuration struct {
 			Title string `json:"title"`
 		} `json:"configuration"`
-		RunID     agentcore.ID    `json:"run_id"`
-		Status    string          `json:"status"`
-		Step      uint64          `json:"step_no"`
-		ToolID    agentcore.ID    `json:"tool_call_id"`
-		ToolKey   string          `json:"tool_key"`
-		Content   json.RawMessage `json:"content"`
-		Truncated bool            `json:"truncated"`
+		RunID  agentcore.ID `json:"run_id"`
+		Status string       `json:"status"`
+		Step   uint64       `json:"step_no"`
+		Todos  []TodoItem   `json:"todos"`
 	}
 	encoded, err := json.Marshal(record.Data)
 	if err != nil || json.Unmarshal(encoded, &data) != nil {
@@ -96,7 +92,7 @@ func FoldConversation(state ConversationProjection, record DurableRecord) (Conve
 		state.Title = data.Configuration.Title
 	case "run/started":
 		state.Runs++
-		state.LatestRun = &ConversationRun{ID: data.RunID, Status: "running"}
+		state.LatestRun = &ConversationRun{ID: data.RunID, Status: "running", Todos: []TodoItem{}}
 	case "run/state", "run/ended":
 		if state.LatestRun != nil && state.LatestRun.ID == data.RunID {
 			state.LatestRun.Status = data.Status
@@ -125,14 +121,12 @@ func FoldConversation(state ConversationProjection, record DurableRecord) (Conve
 		state.ToolCalls++
 		if state.LatestRun != nil && record.RunID != nil && uint64(state.LatestRun.ID) == *record.RunID {
 			state.LatestRun.ToolCalls++
-			if data.ToolKey == "update_plan" {
-				state.LatestRun.PlanCallID = data.ToolID
-			}
 		}
-	case "tool/result":
-		if state.LatestRun != nil && state.LatestRun.PlanCallID == data.ToolID && data.ToolID != 0 && data.Status == "succeeded" && !data.Truncated {
-			state.LatestRun.Plan = data.Content
+	case "todo/write":
+		if state.LatestRun != nil && record.RunID != nil && *record.RunID == uint64(state.LatestRun.ID) {
+			state.LatestRun.Todos = data.Todos
 		}
+
 	}
 	return state, nil
 }

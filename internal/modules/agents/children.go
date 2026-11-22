@@ -3,6 +3,8 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"sort"
+	"strconv"
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
@@ -12,9 +14,13 @@ import (
 )
 
 type childReference struct {
-	Kind      string       `json:"kind"`
-	SessionID agentcore.ID `json:"session_id"`
-	RunID     agentcore.ID `json:"run_id"`
+	Background    bool         `json:"background,omitempty"`
+	Description   string       `json:"description,omitempty"`
+	ReportSeq     uint64       `json:"report_seq,omitempty"`
+	DeliveredStep uint64       `json:"delivered_step,omitempty"`
+	Kind          string       `json:"kind"`
+	SessionID     agentcore.ID `json:"session_id"`
+	RunID         agentcore.ID `json:"run_id"`
 }
 
 func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildRequest) (agentcore.ChildClaim, error) {
@@ -30,14 +36,14 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 		if request.SessionID != 0 || request.RunID != 0 {
 			return httpx.Invalid("child", "server_generated_ids")
 		}
-		if e = agentcore.ValidateInput(request.Content, request.Files, nil); e != nil {
+		if e = agentcore.ValidateInput(request.Content, nil, nil); e != nil {
 			return coreError(e)
 		}
 		parent, e := st.ToolCall(uint64(request.Parent.ID), true)
 		if e != nil {
 			return e
 		}
-		if parent == nil || parent.RunID != x.Run.ID || parent.ExecutionClass != "child" || parent.DispatchToken == nil || parent.ResultEventSeq != nil {
+		if parent == nil || parent.RunID != x.Run.ID || parent.ExecutionClass != "child" || parent.DispatchToken == nil {
 			return httpx.E(409, "CHILD_NOT_AUTHORIZED", "委派调用当前不可执行")
 		}
 		if len(parent.ExecutionRef) > 0 && string(parent.ExecutionRef) != "null" {
@@ -45,28 +51,32 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 			if json.Unmarshal(parent.ExecutionRef, &existing) != nil || existing.Kind != "child" {
 				return integrity()
 			}
+			if parent.ResultEventSeq != nil {
+				commit, err := loadToolCommit(st, parent)
+				if err != nil {
+					return err
+				}
+				out.Startup = &commit.Result
+			}
 			out.Created = false
 			return nil
+		}
+		if parent.ResultEventSeq != nil {
+			return integrity()
 		}
 		call, e := preparedCall(st, request.Parent.Ref, parent)
 		if e != nil {
 			return e
 		}
 		var args struct {
-			Task  string              `json:"task"`
-			Files []agentcore.FileRef `json:"file_refs"`
+			Background  bool   `json:"background"`
+			Description string `json:"description"`
+			Task        string `json:"task"`
 		}
 		if json.Unmarshal([]byte(call.Call.Arguments), &args) != nil {
 			return integrity()
 		}
-		if args.Files == nil {
-			args.Files = []agentcore.FileRef{}
-		}
-		files := request.Files
-		if files == nil {
-			files = []agentcore.FileRef{}
-		}
-		if !same(request.Content, []agentcore.TextBlock{{Type: "text", Text: args.Task}}) || !same(files, args.Files) {
+		if args.Background != request.Background || args.Description != request.Description || !same(request.Content, []agentcore.TextBlock{{Type: "text", Text: args.Task}}) {
 			return httpx.E(409, "TOOL_ARGUMENTS_CHANGED", "子任务必须使用已批准的原始任务参数")
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
@@ -127,7 +137,7 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 		if e != nil {
 			return coreError(e)
 		}
-		if e = saveLedger(st, x.Root, budget); e != nil {
+		if e = saveLedger(st, x.Run, budget); e != nil {
 			return e
 		}
 		v.ActiveRunID = &child.ID
@@ -135,10 +145,7 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 		if e = st.InsertInput(input); e != nil {
 			return e
 		}
-		if e = bindInputFiles(st, x.RootSession, input.ID, 0, request.Files, x.Execution.Model, now); e != nil {
-			return e
-		}
-		view := InputView{ID: input.ID, SessionID: v.ID, Kind: "message", Content: request.Content, Files: files, Origin: "system", Actor: agentcore.ActorRef{Kind: "system"}, Delivery: "next_turn", State: "claimed", Position: 1, QueueDeadline: input.QueueDeadlineAt, Revision: 1, Version: s.tag("input", input.ID, 1), CreatedAt: now, UpdatedAt: now}
+		view := InputView{ID: input.ID, SessionID: v.ID, Kind: "message", Content: request.Content, Files: []agentcore.FileRef{}, Origin: "system", Actor: agentcore.ActorRef{Kind: "system"}, Delivery: "next_turn", State: "claimed", Position: 1, QueueDeadline: input.QueueDeadlineAt, Revision: 1, Version: s.tag("input", input.ID, 1), CreatedAt: now, UpdatedAt: now}
 		input.AcceptedSeq = 1
 		view.AcceptedSeq = 1
 		seq, e := appendEvent(st, v, &child.ID, "input/accepted", "", map[string]any{"input": view}, nil, now)
@@ -157,7 +164,7 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 		}
 		child.StartedSeq = &seq
 		child.StartedAt = &now
-		parent.ExecutionRef, e = json.Marshal(childReference{Kind: "child", SessionID: agentcore.ID(v.ID), RunID: agentcore.ID(child.ID)})
+		parent.ExecutionRef, e = json.Marshal(childReference{Kind: "child", Background: args.Background, Description: args.Description, SessionID: agentcore.ID(v.ID), RunID: agentcore.ID(child.ID)})
 		if e != nil {
 			return e
 		}
@@ -173,11 +180,27 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 			return e
 		}
 		from := x.Session.LastSeq + 1
+		if args.Background {
+			receipt := map[string]any{"status": "started", "child_id": agentcore.ID(child.ID), "session_id": agentcore.ID(v.ID), "description": args.Description}
+			content, err := json.Marshal(receipt)
+			if err != nil {
+				return err
+			}
+			yes := true
+			if err = settleToolBudget(st, x.Run, parent, &yes); err != nil {
+				return err
+			}
+			commit, err := settleToolEvent(st, x.Session, parent, "succeeded", &yes, string(content), "", map[string]any{"child_started": receipt}, now)
+			if err != nil {
+				return err
+			}
+			out.Startup = &commit.Result
+		}
 		if e = st.SaveSession(x.Session); e != nil {
 			return e
 		}
 		out.Created = true
-		out.Execution = agentcore.ExecutionContext{Ref: plan.Run.Ref, AgentID: agentcore.ID(v.AgentID), Principal: x.Execution.Principal, Authorization: x.Execution.Authorization, ContentSessionID: agentcore.ID(x.RootSession.ID), Policy: x.Execution.Policy, Model: x.Execution.Model, Binding: x.Execution.Binding, Deadline: child.DeadlineAt}
+		out.Execution = agentcore.ExecutionContext{Ref: plan.Run.Ref, AgentID: agentcore.ID(v.AgentID), Principal: x.Execution.Principal, Authorization: x.Execution.Authorization, PAPIGrants: x.Execution.PAPIGrants, ContentSessionID: agentcore.ID(x.RootSession.ID), Policy: x.Execution.Policy, Model: x.Execution.Model, Binding: x.Execution.Binding, Deadline: child.DeadlineAt}
 		out.Receipt = eventReceipt(v.ID, 1, v.LastSeq)
 		if x.Session.LastSeq >= from {
 			out.Receipt.Ranges = append(out.Receipt.Ranges, agentcore.EventRange{SessionID: agentcore.ID(x.Session.ID), From: agentcore.Seq(from), Through: agentcore.Seq(x.Session.LastSeq)})
@@ -243,17 +266,35 @@ func (s *Service) settleChildResult(st StateRepository, parentSession, childSess
 	if e != nil {
 		return agentcore.ToolCommit{}, e
 	}
-	if call.ResultEventSeq != nil {
+	var ref childReference
+	if json.Unmarshal(call.ExecutionRef, &ref) != nil {
+		return agentcore.ToolCommit{}, integrity()
+	}
+	if call.ResultEventSeq != nil && (!ref.Background || ref.ReportSeq != 0) {
 		return loadToolCommit(st, call)
 	}
 	summary, e := childSummary(st, childSession)
 	if e != nil {
 		return agentcore.ToolCommit{}, e
 	}
-	result := map[string]any{"session_id": agentcore.ID(child.SessionID), "run_id": agentcore.ID(child.ID), "status": child.Status, "reason_code": child.EndReason, "result_summary": summary, "artifact_ids": []agentcore.ID{}}
+	result := map[string]any{"source": "subagent", "child_id": agentcore.ID(child.ID), "description": ref.Description, "tool_call_id": agentcore.ID(call.ID), "session_id": agentcore.ID(child.SessionID), "run_id": agentcore.ID(child.ID), "status": child.Status, "reason_code": child.EndReason, "result_summary": summary, "artifact_ids": []agentcore.ID{}}
 	content, e := json.Marshal(result)
 	if e != nil {
 		return agentcore.ToolCommit{}, e
+	}
+	if ref.Background {
+		ref.ReportSeq, e = appendEvent(st, parentSession, &root.ID, "subagent/reported", "subagent-report:"+strconv.FormatUint(child.ID, 10), result, nil, now)
+		if e != nil {
+			return agentcore.ToolCommit{}, e
+		}
+		call.ExecutionRef, e = json.Marshal(ref)
+		if e != nil {
+			return agentcore.ToolCommit{}, e
+		}
+		if e = st.SaveToolCall(call); e != nil {
+			return agentcore.ToolCommit{}, e
+		}
+		return loadToolCommit(st, call)
 	}
 	yes := true
 	if e = settleToolBudget(st, root, call, &yes); e != nil {
@@ -306,7 +347,7 @@ func (s *Service) EndChild(ctx context.Context, ref agentcore.ExecutionRef, end 
 			if child.FenceVersion != ref.Fence {
 				return httpx.E(409, "EXECUTION_FENCED", "子任务执行已失效")
 			}
-			if e = s.endOne(st, childSession, child, root, end.End, now); e != nil {
+			if e = s.endOne(st, childSession, child, end.End, now); e != nil {
 				return e
 			}
 		}
@@ -341,3 +382,78 @@ func (s *Service) EndChild(ctx context.Context, ref agentcore.ExecutionRef, end 
 var _ agentcore.RunStore = (*Service)(nil)
 var _ agentcore.StepStore = (*Service)(nil)
 var _ agentcore.ToolStore = (*Service)(nil)
+
+// Visit background calls under the parent session lock. Reports can only enter
+// history at a step boundary, after all tool results for the prior call.
+func visitChildReports(st StateRepository, session *SessionRow, run *RunRow, deliver bool, now time.Time) (active, pending bool, err error) {
+	if run.RootRunID != nil {
+		return
+	}
+	rows, err := st.RunTools(run.ID)
+	if err != nil {
+		return
+	}
+	type report struct {
+		call ToolCallRow
+		ref  childReference
+	}
+	var ready []report
+	for _, row := range rows {
+		if row.ExecutionClass != "child" || len(row.ExecutionRef) == 0 {
+			continue
+		}
+		var ref childReference
+		if err = json.Unmarshal(row.ExecutionRef, &ref); err != nil {
+			return
+		}
+		if !ref.Background || ref.DeliveredStep != 0 {
+			continue
+		}
+		if ref.ReportSeq == 0 {
+			active = true
+			continue
+		}
+		pending = true
+		if deliver {
+			ready = append(ready, report{row, ref})
+		}
+	}
+	sort.Slice(ready, func(i, j int) bool { return ready[i].ref.ReportSeq < ready[j].ref.ReportSeq })
+	for _, item := range ready {
+		row, e := st.EventAt(session.ID, item.ref.ReportSeq)
+		if e != nil {
+			return false, false, e
+		}
+		if row == nil {
+			return false, false, integrity()
+		}
+		stored, e := decodeEvent(*row)
+		if e != nil {
+			return false, false, e
+		}
+		message := modelcore.Message{Role: "user", Content: string(stored.Public)}
+		if _, e = appendEvent(st, session, &run.ID, "subagent/message", "subagent-delivered:"+strconv.FormatUint(item.call.ID, 10), stored.Public, &StoredEvent{Message: &message}, now); e != nil {
+			return false, false, e
+		}
+		item.ref.DeliveredStep = run.CurrentStepNo
+		item.call.ExecutionRef, e = json.Marshal(item.ref)
+		if e != nil {
+			return false, false, e
+		}
+		if e = st.SaveToolCall(&item.call); e != nil {
+			return false, false, e
+		}
+	}
+	return
+}
+func (s *Service) ChildReportState(ctx context.Context, ref agentcore.ExecutionRef) (active, pending bool, err error) {
+	err = s.background(ctx, func(tx identity.Tx, r Repository, st StateRepository) error {
+		x, e := s.lockExecution(tx, r, st, ref, true)
+		if e != nil {
+			return e
+		}
+		active, pending, e = visitChildReports(st, x.Session, x.Run, false, time.Time{})
+		return e
+	})
+	return
+}

@@ -140,7 +140,7 @@ func (s *Service) FreezeAttempt(ctx context.Context, ref agentcore.ExecutionRef,
 				return httpx.E(409, "RETRY_NOT_ADMITTED", "模型重试尚未获准")
 			}
 		}
-		budget, e := ledger(x.Root)
+		budget, e := ledger(x.Run)
 		if e != nil {
 			return e
 		}
@@ -182,7 +182,7 @@ func (s *Service) FreezeAttempt(ctx context.Context, ref agentcore.ExecutionRef,
 		if e = st.InsertModelCall(call); e != nil {
 			return e
 		}
-		if e = saveLedger(st, x.Root, budget); e != nil {
+		if e = saveLedger(st, x.Run, budget); e != nil {
 			return e
 		}
 		out.Permit = agentcore.AttemptPermit{Ref: ref, CallID: agentcore.ID(call.ID), Step: d.Step.Step, Attempt: d.Attempt, Deadline: call.DeadlineAt}
@@ -467,7 +467,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 		from := x.Session.LastSeq + 1
 		reason := modelOutcomeReason(outcome)
 		message := outcome.Response.Message
-		if e = settleModelBudget(st, x.Root, call, outcome.Response.Usage); e != nil {
+		if e = settleModelBudget(st, x.Run, call, outcome.Response.Usage); e != nil {
 			return e
 		}
 		if reason != "" {
@@ -487,7 +487,7 @@ func (s *Service) CompleteAttempt(ctx context.Context, ref agentcore.ExecutionRe
 				if json.Unmarshal(call.BudgetReservation, &reservation) != nil {
 					return integrity()
 				}
-				budget, err := ledger(x.Root)
+				budget, err := ledger(x.Run)
 				if err != nil {
 					return err
 				}

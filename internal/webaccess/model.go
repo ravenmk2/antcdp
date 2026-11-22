@@ -84,6 +84,7 @@ type SearchEntry struct {
 }
 
 type Attempt struct {
+	Query   string   `json:"query,omitempty"`
 	Route   RouteRef `json:"route"`
 	Status  string   `json:"status"`
 	Reason  *string  `json:"reason"`
@@ -98,6 +99,7 @@ type SearchResult struct {
 }
 
 type FetchResult struct {
+	StatusCode   int       `json:"status_code,omitempty"`
 	RequestedURL string    `json:"requested_url"`
 	FinalURL     *string   `json:"final_url"`
 	Title        string    `json:"title"`
@@ -106,6 +108,17 @@ type FetchResult struct {
 	Truncated    bool      `json:"truncated"`
 	Route        RouteRef  `json:"route"`
 	Attempts     []Attempt `json:"attempts"`
+}
+
+// ToolView holds the facts needed for a replayable search or fetch card.
+type ToolView struct {
+	Sources      []SearchEntry `json:"sources,omitempty"`
+	RequestedURL string        `json:"requested_url,omitempty"`
+	FinalURL     *string       `json:"final_url,omitempty"`
+	Title        string        `json:"title,omitempty"`
+	StatusCode   int           `json:"status_code,omitempty"`
+	Truncated    bool          `json:"truncated"`
+	Attempts     []Attempt     `json:"attempts"`
 }
 
 type Adapter interface {

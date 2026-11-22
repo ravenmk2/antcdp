@@ -48,7 +48,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	host.Epoch = "artifact-transfer-test"
 	host.Catalog = a.ResourceCatalog{Tool: func(_ context.Context, _ identity.Tx, key string) (*a.ToolDescriptor, error) {
 		class := "sandbox"
-		if key == "delegate" {
+		if key == "subagent" {
 			class = "child"
 		}
 		return &a.ToolDescriptor{Key: key, Name: key, Source: a.ToolSource{Kind: "builtin"}, ExecutionClass: class, RequiresSandbox: class == "sandbox", ParallelSafe: false, SupportedPolicies: []string{"allow", "deny"}, Availability: a.Availability{Available: true}, Definition: modelcore.Tool{Name: key, Description: "File transfer fixture", InputSchema: json.RawMessage(`{"type":"object"}`)}}, nil
@@ -67,7 +67,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = host.PutToolBindings(ctx, f.AdminToken, agent.ID, bindings.Tag, a.ToolBindingsWrite{Items: []a.ToolBindingWrite{{ToolKey: "save_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "load_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "list_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "show_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "delegate", Policy: "allow", Constraints: json.RawMessage(`{}`)}}}); e != nil {
+	if _, e = host.PutToolBindings(ctx, f.AdminToken, agent.ID, bindings.Tag, a.ToolBindingsWrite{Items: []a.ToolBindingWrite{{ToolKey: "save_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "load_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "list_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "show_artifacts", Policy: "allow", Constraints: json.RawMessage(`{}`)}, {ToolKey: "subagent", Policy: "allow", Constraints: json.RawMessage(`{}`)}}}); e != nil {
 		t.Fatal(e)
 	}
 	session := runtimeSession(t, f, agent.ID)
@@ -164,7 +164,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	}
 	// Child publication belongs to the root content domain while its unique
 	// tool result belongs to the child's independent event sequence.
-	delegated := commandDeclare(t, f, x, 4, "delegate", `{"task":"生成子任务制品","file_refs":[]}`)
+	delegated := commandDeclare(t, f, x, 4, "subagent", `{"task":"生成子任务制品"}`)
 	child, e := host.CreateChild(ctx, core.ChildRequest{Parent: delegated, Content: []core.TextBlock{{Type: "text", Text: "生成子任务制品"}}})
 	if e != nil || !child.Created {
 		t.Fatal("create artifact child", e)

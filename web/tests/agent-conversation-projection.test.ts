@@ -353,8 +353,14 @@ it("joins late question answers to their original tool across append and paged h
       status: "reply_queued",
       actor_ref: { kind: "user", id: "1" },
       answer: {
-        skip: false,
-        answers: [{ question_id: "q1", option_ids: ["test"], text: "先检查" }],
+        answers: [
+          {
+            status: "answered",
+            question_id: "q1",
+            option_ids: ["test"],
+            text: "先检查",
+          },
+        ],
       },
       decision: null,
       pending_reply_input_id: "61",

@@ -16,7 +16,17 @@ type StepPreparer func(context.Context, ExecutionContext, uint32) (PreparedStep,
 // PersistentHooks composes narrow host ports without importing platform code.
 // Prepare performs live discovery/context commits once; retries use its frozen
 // value. Opening a client resolves the current secret without changing route.
+func (h *PersistentHooks) CompletedSteps() uint32 { return h.Execution.CompletedSteps }
+
+func (h *PersistentHooks) AwaitChildReports(ctx context.Context, ref ExecutionRef) (bool, error) {
+	if h.WaitChildren == nil {
+		return false, nil
+	}
+	return h.WaitChildren(ctx, ref)
+}
+
 type PersistentHooks struct {
+	WaitChildren    func(context.Context, ExecutionRef) (bool, error)
 	Execution       ExecutionContext
 	Prepare         StepPreparer
 	Models          ModelClientFactory
@@ -149,7 +159,11 @@ func (h *PersistentHooks) InvokeTool(ctx context.Context, call PreparedToolCall)
 	if h.Tools == nil {
 		return ToolCompletion{}, invalid("tool_runner")
 	}
-	return h.Tools.Invoke(ctx, h.Execution, call)
+	result, err := h.Tools.Invoke(ctx, h.Execution, call)
+	if err == nil && call.Ref.RunID != call.Ref.RootRunID && result.Reason == "BUDGET_EXCEEDED" {
+		return result, reject(result.Reason)
+	}
+	return result, err
 }
 func (h *PersistentHooks) Emit(ctx context.Context, permit AttemptPermit, delta modelcore.Delta) error {
 	if h.Hub != nil {

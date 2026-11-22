@@ -785,7 +785,7 @@ func (s *CloudService) commitFileTransfer(ctx context.Context, claim fileTransfe
 			return integrity()
 		}
 		yes := true
-		if e = settleToolBudget(st, x.Root, call, &yes); e != nil {
+		if e = settleToolBudget(st, x.Run, call, &yes); e != nil {
 			return e
 		}
 		commit, e := settleToolEvent(st, x.Session, call, "succeeded", &yes, content, "", extra, now, images...)

@@ -120,7 +120,7 @@ export function ActivityIcon({
         task_list: "exec",
         task_output: "exec",
         task_kill: "exec",
-        delegate: "task",
+        subagent: "task",
         save_artifacts: "write",
         load_artifacts: "read",
         list_artifacts: "read",
@@ -165,9 +165,9 @@ export function ActivityIcon({
       ? ListTree
       : name === "papi_desc"
         ? FileText
-        : name === "update_plan"
+        : name === "todo_write"
           ? List
-          : name === "question" || name === "ask_user_question"
+          : name === "question" || name === "ask_question"
             ? MessageCircleQuestion
             : Wrench;
   return <Icon aria-hidden="true" className={className} />;

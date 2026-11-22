@@ -26,7 +26,9 @@ func toolOutputInlineLimit(key string) int {
 	// These tools already bound their output or carry structured interaction /
 	// instruction semantics. Do not turn plans or explicit file reads into previews.
 	switch key {
-	case "read", "edit", "write", "read_tool_output", "skill", "update_plan", "ask_user_question", "save_artifacts", "load_artifacts", "list_artifacts", "show_artifacts", "read_image", "delegate":
+	case "skill":
+		return agentcore.SkillTextMaxBytes + 2048
+	case "read", "edit", "write", "read_tool_output", "todo_write", "ask_question", "save_artifacts", "load_artifacts", "list_artifacts", "show_artifacts", "read_image", "subagent":
 		return 64 << 10
 	default:
 		return agentcore.ToolOutputInlineBytes
@@ -37,7 +39,11 @@ func toolOutputInlineLimit(key string) int {
 // The process-local lease prevents maintenance racing an active writer.
 func (s *Service) stageToolOutput(ctx context.Context, ref agentcore.ExecutionRef, result agentcore.ToolResult) (*FileRow, error) {
 	content := result.Observation.Content
-	if len(content) <= toolOutputInlineLimit(result.Call.Spec.Key) || len(content) > agentcore.ToolOutputMaxBytes || s.Files == nil || s.Epoch == "" || result.Call.Spec.Key == "read_tool_output" {
+	limit := agentcore.ToolOutputMaxBytes
+	if result.Call.Spec.Key == "web_fetch" {
+		limit = agentcore.FetchOutputMaxBytes
+	}
+	if len(content) <= toolOutputInlineLimit(result.Call.Spec.Key) || len(content) > limit || s.Files == nil || s.Epoch == "" || result.Call.Spec.Key == "read_tool_output" {
 		return nil, nil
 	}
 	var file *FileRow
@@ -70,7 +76,7 @@ func (s *Service) stageToolOutput(ctx context.Context, ref agentcore.ExecutionRe
 		return nil, err
 	}
 	defer func() { _ = s.releaseFileLease(ctx, lease.ID) }()
-	facts, err := s.Files.Write(ctx, file.StorageKey, strings.NewReader(content), agentcore.ToolOutputMaxBytes)
+	facts, err := s.Files.Write(ctx, file.StorageKey, strings.NewReader(content), int64(limit))
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +150,7 @@ func parseToolOutputRead(raw json.RawMessage) (ToolOutputRead, error) {
 	var input ToolOutputRead
 	d := json.NewDecoder(bytes.NewReader(raw))
 	d.DisallowUnknownFields()
-	if d.Decode(&input) != nil || d.Decode(new(any)) != io.EOF || input.FileID == 0 || input.Offset < 0 || input.Offset > agentcore.ToolOutputMaxBytes || input.Limit < 0 || input.Limit > 8192 || len(input.Query) > 256 || !utf8.ValidString(input.Query) {
+	if d.Decode(&input) != nil || d.Decode(new(any)) != io.EOF || input.FileID == 0 || input.Offset < 0 || input.Offset > agentcore.FetchOutputMaxBytes || input.Limit < 0 || input.Limit > 8192 || len(input.Query) > 256 || !utf8.ValidString(input.Query) {
 		return input, httpx.Invalid("arguments", "invalid_value")
 	}
 	if input.Limit == 0 {
@@ -181,7 +187,7 @@ func (s *Service) ReadToolOutput(ctx context.Context, ref agentcore.ExecutionRef
 		if err != nil {
 			return err
 		}
-		if !bound || file.IntegrityState != "verified" || file.SizeBytes == nil || *file.SizeBytes > agentcore.ToolOutputMaxBytes {
+		if !bound || file.IntegrityState != "verified" || file.SizeBytes == nil || *file.SizeBytes > agentcore.FetchOutputMaxBytes {
 			return missing()
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
@@ -197,7 +203,7 @@ func (s *Service) ReadToolOutput(ctx context.Context, ref agentcore.ExecutionRef
 		return "", httpx.E(409, "FILE_UNAVAILABLE", "工具输出暂不可读取")
 	}
 	defer func() { _ = reader.Close() }()
-	data, err := io.ReadAll(io.LimitReader(contextReader{ctx, reader}, agentcore.ToolOutputMaxBytes+1))
+	data, err := io.ReadAll(io.LimitReader(contextReader{ctx, reader}, agentcore.FetchOutputMaxBytes+1))
 	if err != nil {
 		return "", err
 	}

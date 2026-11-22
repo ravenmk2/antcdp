@@ -3,12 +3,13 @@ package agentcore
 import (
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 )
 
 func TestQuestionRecommendationsPersistAndValidate(t *testing.T) {
-	questions := []Question{{ID: "scope", Prompt: "Choose scope", Type: "single_choice", Options: []QuestionOption{
+	questions := []Question{{ID: "scope", Prompt: "Choose scope", Options: []QuestionOption{
 		{ID: "one", Label: "One", Recommended: pointer(true)},
 		{ID: "two", Label: "Two", Recommended: pointer(false)},
 		{ID: "legacy", Label: "Legacy"},
@@ -27,14 +28,14 @@ func TestQuestionRecommendationsPersistAndValidate(t *testing.T) {
 	if err := ValidateQuestions(restored); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateAnswer(restored, QuestionAnswer{Answers: []AnswerItem{{QuestionID: "scope", OptionIDs: []string{"two"}}}}); err != nil {
+	if err := ValidateAnswer(restored, QuestionAnswer{Answers: []AnswerItem{{Status: "answered", QuestionID: "scope", OptionIDs: []string{"two"}}}}); err != nil {
 		t.Fatalf("a non-recommended answer must remain valid: %v", err)
 	}
 	restored[0].Options[1].Recommended = pointer(true)
 	if ValidateQuestions(restored) == nil {
 		t.Fatal("single choice accepted multiple recommendations")
 	}
-	restored[0].Type = "multi_choice"
+	restored[0].MultiSelect = true
 	if err := ValidateQuestions(restored); err != nil {
 		t.Fatalf("multiple choice rejected multiple recommendations: %v", err)
 	}
@@ -43,8 +44,8 @@ func TestQuestionRecommendationsPersistAndValidate(t *testing.T) {
 func TestTimelyAnswerResumesToolWithoutQueuedInput(t *testing.T) {
 	now := time.Now()
 	session := Session{ID: 1, ActiveRunID: pointer(ID(2))}
-	question := Interaction{ID: 3, SessionID: 1, RunID: 2, Kind: "question", Status: "waiting", Version: 1, Deadline: now.Add(time.Minute), Questions: []Question{{ID: "q", Prompt: "Details?", Type: "text"}}}
-	answer := QuestionAnswer{Answers: []AnswerItem{{QuestionID: "q", Text: pointer("answer")}}}
+	question := Interaction{ID: 3, SessionID: 1, RunID: 2, Kind: "question", Status: "waiting", Version: 1, Deadline: now.Add(time.Minute), Questions: []Question{{ID: "q", Prompt: "Details?"}}}
+	answer := QuestionAnswer{Answers: []AnswerItem{{Status: "answered", QuestionID: "q", Text: pointer("answer")}}}
 	plan, err := PlanAnswer(session, question, 1, ActorRef{}, answer, 0, now)
 	if err != nil || plan.Delivery != "tool_result" || !plan.SettleTool || plan.Interaction.Status != "answered" || plan.Interaction.PendingReplyInputID != nil {
 		t.Fatalf("timely answer queued instead of resuming: %+v %v", plan, err)
@@ -66,5 +67,24 @@ func TestTimedOutQuestionSurvivesNormalTurnEnd(t *testing.T) {
 		if err != nil || plan.Interactions[0].Status != "cancelled" {
 			t.Fatalf("stop left question open: %+v %v", plan, err)
 		}
+	}
+}
+
+func TestQuestionBatchFreeTextAndIndividualSkip(t *testing.T) {
+	var questions []Question
+	answer := QuestionAnswer{}
+	for i := range 12 {
+		id := strconv.Itoa(i)
+		questions = append(questions, Question{ID: id, Prompt: "请输入"})
+		answer.Answers = append(answer.Answers, AnswerItem{QuestionID: id, Status: "skipped"})
+	}
+	value := "文字"
+	answer.Answers[7].Status = "answered"
+	answer.Answers[7].Text = &value
+	if err := ValidateAnswer(questions, answer); err != nil {
+		t.Fatal(err)
+	}
+	if ValidateQuestions(nil) == nil {
+		t.Fatal("empty questions")
 	}
 }

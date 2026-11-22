@@ -13,19 +13,18 @@ type QuestionOption struct {
 	Recommended *bool  `json:"recommended,omitempty"`
 }
 type Question struct {
-	ID        string           `json:"question_id"`
-	Prompt    string           `json:"prompt"`
-	Type      string           `json:"type"`
-	Options   []QuestionOption `json:"options"`
-	AllowText bool             `json:"allow_text"`
+	ID          string           `json:"id"`
+	Prompt      string           `json:"question"`
+	MultiSelect bool             `json:"multi_select,omitempty"`
+	Options     []QuestionOption `json:"options"`
 }
 type AnswerItem struct {
+	Status     string   `json:"status"`
 	QuestionID string   `json:"question_id"`
 	OptionIDs  []string `json:"option_ids"`
 	Text       *string  `json:"text"`
 }
 type QuestionAnswer struct {
-	Skip    bool         `json:"skip"`
 	Answers []AnswerItem `json:"answers"`
 }
 type Interaction struct {
@@ -54,7 +53,7 @@ type InteractionPlan struct {
 }
 
 func ValidateQuestions(questions []Question) error {
-	if len(questions) < 1 || len(questions) > 3 {
+	if len(questions) < 1 {
 		return invalid("questions")
 	}
 	seen := map[string]bool{}
@@ -63,12 +62,6 @@ func ValidateQuestions(questions []Question) error {
 			return invalid("questions")
 		}
 		seen[q.ID] = true
-		if q.Type != "single_choice" && q.Type != "multi_choice" && q.Type != "text" {
-			return invalid("question_type")
-		}
-		if q.Type == "text" && len(q.Options) != 0 {
-			return invalid("options")
-		}
 		options := map[string]bool{}
 		recommended := 0
 		for _, o := range q.Options {
@@ -80,7 +73,7 @@ func ValidateQuestions(questions []Question) error {
 				recommended++
 			}
 		}
-		if q.Type == "single_choice" && recommended > 1 {
+		if !q.MultiSelect && recommended > 1 {
 			return invalid("recommended")
 		}
 	}
@@ -101,12 +94,6 @@ func ValidateAnswer(questions []Question, answer QuestionAnswer) error {
 	if err := ValidateQuestions(questions); err != nil {
 		return err
 	}
-	if answer.Skip {
-		if len(answer.Answers) != 0 {
-			return invalid("answers")
-		}
-		return nil
-	}
 	if len(answer.Answers) != len(questions) {
 		return invalid("answers")
 	}
@@ -121,7 +108,13 @@ func ValidateAnswer(questions []Question, answer QuestionAnswer) error {
 			return invalid("question_id")
 		}
 		seen[a.QuestionID] = true
-		if q.Type == "single_choice" && len(a.OptionIDs) > 1 || q.Type == "text" && len(a.OptionIDs) != 0 {
+		if a.Status == "skipped" && len(a.OptionIDs) == 0 && a.Text == nil {
+			continue
+		}
+		if a.Status != "answered" {
+			return invalid("answer_status")
+		}
+		if !q.MultiSelect && len(a.OptionIDs) > 1 {
 			return invalid("option_ids")
 		}
 		valid := map[string]bool{}
@@ -138,7 +131,7 @@ func ValidateAnswer(questions []Question, answer QuestionAnswer) error {
 		text := ""
 		if a.Text != nil {
 			text = *a.Text
-			if utf8.RuneCountInString(text) > 4000 || q.Type != "text" && !q.AllowText {
+			if utf8.RuneCountInString(text) > 4000 {
 				return invalid("text")
 			}
 		}

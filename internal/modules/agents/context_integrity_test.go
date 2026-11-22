@@ -223,3 +223,24 @@ func TestRuntimeAndSkillSnapshots(t *testing.T) {
 		}
 	}
 }
+
+func TestSkillEnvelopePreservesFullEscapedText(t *testing.T) {
+	raw := strings.Repeat("\x01", agentcore.SkillTextMaxBytes-6) + "中文"
+	text := "Skill review\\nSkill directory: /data/agents/1/skills/review\\n\\n" + raw
+	m := &contextIntegrityMemory{calls: map[uint64]*ToolCallRow{}}
+	session := &SessionRow{ID: 1}
+	call := &ToolCallRow{ID: 2, SessionID: 1, RunID: 3, ModelCallID: 4, ProviderCallID: "skill-call", ToolKey: "skill"}
+	yes := true
+	commit, err := settleToolEvent(m, session, call, "succeeded", &yes, text, "", map[string]any{"skill_load": map[string]any{"materialized": true}}, time.Now())
+	if err != nil || commit.Result.Truncated || commit.Result.Content != text {
+		t.Fatal("skill settlement", err)
+	}
+	stored, err := decodeEvent(m.rows[0])
+	if err != nil || stored.Message.Content != text {
+		t.Fatal("model history lost skill text", err)
+	}
+	replay, err := loadToolCommit(m, call)
+	if err != nil || replay.Result.Content != text {
+		t.Fatal("replay lost skill text", err)
+	}
+}

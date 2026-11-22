@@ -84,6 +84,7 @@ type AgentEngine interface {
 }
 
 type ExecutionContext struct {
+	CompletedSteps   uint32
 	Ref              ExecutionRef
 	AgentID          ID
 	Principal        PrincipalRef
@@ -153,13 +154,15 @@ type RunEnd struct {
 	Reason     string
 }
 type ChildRequest struct {
-	Parent    PreparedToolCall
-	SessionID ID
-	RunID     ID
-	Content   []TextBlock
-	Files     []FileRef
+	Background  bool
+	Description string
+	Parent      PreparedToolCall
+	SessionID   ID
+	RunID       ID
+	Content     []TextBlock
 }
 type ChildClaim struct {
+	Startup   *ToolCompletion
 	Created   bool
 	Execution ExecutionContext
 	Receipt   CommitReceipt
@@ -280,9 +283,12 @@ type SkillLoad struct {
 	StablePath    string
 	Materialized  bool
 }
+
+const SkillTextMaxBytes = 256 << 10
+
 type SkillSource interface {
 	Directory(context.Context, ExecutionContext) (SkillDirectory, error)
-	Load(context.Context, ExecutionContext, string, string) (SkillLoad, error)
+	Load(context.Context, ExecutionContext, string) (SkillLoad, error)
 }
 type Environment interface {
 	Acquire(context.Context, ExecutionContext) (*BindingRef, error)

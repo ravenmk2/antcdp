@@ -231,6 +231,7 @@ type Service struct {
 	SessionChanged      func(agentcore.SessionChange)
 	Files               *ByteStore
 	Skills              agentcore.SkillSource
+	ResumeRoot          func(context.Context, agentcore.ExecutionContext)
 	CancelRun           func(agentcore.ID)
 	Epoch               string
 	RuntimeModels       agentcore.ModelClientFactory

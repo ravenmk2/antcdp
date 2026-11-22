@@ -157,14 +157,13 @@ export const question: Interaction = {
   status: "continued",
   questions: [
     {
-      question_id: "q1",
-      prompt: "优先核对哪个环境？",
-      type: "single_choice",
+      id: "q1",
+      question: "优先核对哪个环境？",
+      multi_select: false,
       options: [
         { id: "test", label: "测试环境" },
         { id: "prod", label: "生产环境", description: "需要更严格的检查" },
       ],
-      allow_text: true,
     },
   ],
   answer: null,

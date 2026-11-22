@@ -37,6 +37,19 @@ type StoredEvent struct {
 	ContextRecovery    bool        `json:"context_recovery,omitempty"`
 }
 
+const skillResultEventMaxBytes = 4 << 20
+
+// The skill envelope carries both model and public text. Each JSON string may
+// take six bytes per input byte after escaping control characters.
+func resultEventLimit(kind string, public any) int {
+	if kind == "tool/result" {
+		if data, ok := public.(map[string]any); ok && data["skill_load"] != nil {
+			return skillResultEventMaxBytes
+		}
+	}
+	return agentcore.MaxEventBytes
+}
+
 func appendEvent(st StateRepository, session *SessionRow, runID *uint64, kind, key string, public any, facts *StoredEvent, now time.Time) (uint64, error) {
 	data, e := json.Marshal(public)
 	if e != nil {
@@ -52,7 +65,7 @@ func appendEvent(st StateRepository, session *SessionRow, runID *uint64, kind, k
 	if e != nil {
 		return 0, e
 	}
-	if len(payload) > agentcore.MaxEventBytes {
+	if len(payload) > resultEventLimit(kind, public) {
 		return 0, httpx.E(422, "OUTPUT_LIMIT_EXCEEDED", "事件内容超过上限")
 	}
 	seq := session.LastSeq + 1

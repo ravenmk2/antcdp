@@ -469,3 +469,13 @@ func TestProviderThinkingParametersAreExplicit(t *testing.T) {
 		}
 	}
 }
+
+func TestEscapedSkillToolHistoryFitsBothProtocols(t *testing.T) {
+	content := strings.Repeat("\x01", 256<<10)
+	for _, protocol := range []modelcore.Protocol{modelcore.ChatCompletions, modelcore.AnthropicMessages} {
+		raw, err := encodeMessage(protocol, modelcore.Message{Role: "tool", ToolCallID: "skill-1", Content: content})
+		if err != nil || len(raw) < 6*len(content) {
+			t.Fatal(protocol, len(raw), err)
+		}
+	}
+}

@@ -3,9 +3,14 @@ package webaccess
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
+	"sync/atomic"
+
 	"time"
 	"unicode/utf8"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type Router struct {
@@ -15,8 +20,8 @@ type Router struct {
 	ClassifyURL func(context.Context, string, []string) (internal bool, err error)
 }
 
-func prepare(ctx context.Context, permit Permit) (context.Context, context.CancelFunc, error) {
-	if permit.Deadline.IsZero() || permit.MaxCalls < 1 || permit.MaxCalls > 3 {
+func prepare(ctx context.Context, permit Permit, maxCalls int) (context.Context, context.CancelFunc, error) {
+	if permit.Deadline.IsZero() || permit.MaxCalls < 1 || permit.MaxCalls > maxCalls {
 		return nil, nil, Fail("WEB_ACCESS_INVALID_PERMIT")
 	}
 	if !time.Now().Before(permit.Deadline) {
@@ -27,11 +32,25 @@ func prepare(ctx context.Context, permit Permit) (context.Context, context.Cance
 }
 
 func (r *Router) Search(ctx context.Context, permit Permit, query string) (SearchResult, error) {
+	return r.SearchBatch(ctx, permit, []string{query})
+}
+
+func (r *Router) SearchBatch(ctx context.Context, permit Permit, queries []string) (SearchResult, error) {
 	result := SearchResult{Results: []SearchEntry{}, Attempts: []Attempt{}}
-	if r.Source == nil || !utf8.ValidString(query) || strings.TrimSpace(query) == "" || utf8.RuneCountInString(query) > 128 {
+	if r.Source == nil || len(queries) == 0 || len(queries) > 10 {
 		return result, Fail("WEB_ACCESS_INVALID_REQUEST")
 	}
-	ctx, cancel, err := prepare(ctx, permit)
+	var unique []string
+	for _, q := range queries {
+		q = strings.TrimSpace(q)
+		if q == "" || !utf8.ValidString(q) || utf8.RuneCountInString(q) > 128 {
+			return result, Fail("WEB_ACCESS_INVALID_REQUEST")
+		}
+		if !slices.Contains(unique, q) {
+			unique = append(unique, q)
+		}
+	}
+	ctx, cancel, err := prepare(ctx, permit, 10)
 	if err != nil {
 		return result, err
 	}
@@ -40,18 +59,75 @@ func (r *Router) Search(ctx context.Context, permit Permit, query string) (Searc
 	if err != nil {
 		return result, err
 	}
-	if settings.Search.MaxResults < 1 || settings.Search.MaxResults > 20 || len(settings.Search.Routes) > 3 {
+	config := settings.Search
+	if config.MaxResults < 1 || config.MaxResults > 20 || len(config.Routes) > 3 {
 		return result, Fail("WEB_ACCESS_INVALID_CONFIGURATION")
 	}
-	if len(settings.Search.Routes) == 0 {
+	if len(config.Routes) == 0 {
 		return result, Fail("WEB_ACCESS_NOT_CONFIGURED")
 	}
+	var extra atomic.Int32
+	budget := min(permit.MaxCalls, max(3, len(unique)))
+	if budget < len(unique) {
+		return result, Fail("WEB_ACCESS_CALL_BUDGET_EXCEEDED")
+	}
+	extra.Store(int32(budget - len(unique)))
+	group, ctx := errgroup.WithContext(ctx)
+	parts := make([]SearchResult, len(unique))
+	for i, q := range unique {
+		group.Go(func() error {
+			var e error
+			parts[i], e = r.searchRoutes(ctx, config, q, &extra)
+			return e
+		})
+	}
+	err = group.Wait()
+	for i, part := range parts {
+		for j := range part.Attempts {
+			part.Attempts[j].Query = unique[i]
+		}
+		result.Attempts = append(result.Attempts, part.Attempts...)
+		result.Truncated = result.Truncated || part.Truncated
+	}
+	if err != nil {
+		return result, err
+	}
+	if len(parts) == 1 {
+		result.Route = parts[0].Route
+	}
+	seen := map[string]bool{}
+	for rank := 0; ; rank++ {
+		found := false
+		for _, part := range parts {
+			if rank >= len(part.Results) {
+				continue
+			}
+			found = true
+			entry := part.Results[rank]
+			if seen[entry.URL] {
+				continue
+			}
+			if len(result.Results) == config.MaxResults {
+				result.Truncated = true
+				return result, nil
+			}
+			seen[entry.URL] = true
+			result.Results = append(result.Results, entry)
+		}
+		if !found {
+			return result, nil
+		}
+	}
+}
+
+func (r *Router) searchRoutes(ctx context.Context, config SearchSettings, query string, extra *atomic.Int32) (SearchResult, error) {
+	var result SearchResult
 	var last error
-	for i, route := range settings.Search.Routes {
-		if i >= permit.MaxCalls {
+	for i, route := range config.Routes {
+		if i > 0 && extra.Add(-1) < 0 {
 			return result, Fail("WEB_ACCESS_CALL_BUDGET_EXCEEDED")
 		}
-		if err = ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return result, err
 		}
 		if route.Kind != "provider" {
@@ -63,7 +139,7 @@ func (r *Router) Search(ctx context.Context, permit Permit, query string) (Searc
 		}
 		if resolveErr == nil {
 			var value SearchResult
-			value, resolveErr = adapter.Search(ctx, SearchRequest{Query: query, MaxResults: settings.Search.MaxResults})
+			value, resolveErr = adapter.Search(ctx, SearchRequest{Query: query, MaxResults: config.MaxResults})
 			if resolveErr == nil {
 				if value.Results == nil {
 					value.Results = []SearchEntry{}
@@ -90,7 +166,7 @@ func (r *Router) Fetch(ctx context.Context, permit Permit, rawURL string) (Fetch
 	if r.Source == nil || r.ClassifyURL == nil {
 		return result, Fail("WEB_ACCESS_NOT_CONFIGURED")
 	}
-	ctx, cancel, err := prepare(ctx, permit)
+	ctx, cancel, err := prepare(ctx, permit, 3)
 	if err != nil {
 		return result, err
 	}

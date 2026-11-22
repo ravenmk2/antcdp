@@ -79,7 +79,7 @@ func runtimeThinkingSelection(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	commit := runtimePreparedAttempt(t, f, x, prepared, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "thinking-child", Name: "delegate", Arguments: `{"task":"verify inherited thinking","file_refs":[]}`}}})
+	commit := runtimePreparedAttempt(t, f, x, prepared, modelcore.Message{Role: "assistant", ToolCalls: []modelcore.ToolCall{{ID: "thinking-child", Name: "subagent", Arguments: `{"task":"verify inherited thinking","file_refs":[]}`}}})
 	estimate, err := modelcore.EstimateRequestTokens(prepared.Request)
 	if err != nil {
 		t.Fatal(err)

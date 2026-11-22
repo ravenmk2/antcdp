@@ -104,12 +104,13 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 	}
 	runner.Hub = hub
 	runtime.Hooks = func(_ context.Context, execution agentcore.ExecutionContext) (agentcore.EngineHooks, error) {
-		return &agentcore.PersistentHooks{Execution: execution, Prepare: service.PrepareStep, RepairImages: service.RepairImageFiles, CompactOverflow: service.CompactOverflow, Models: agentModelFactory{modelsService}, Store: service, Tools: runner, Hub: hub, Estimate: estimateAgentRequest}, nil
+		return &agentcore.PersistentHooks{WaitChildren: runtime.AwaitChildReports, Execution: execution, Prepare: service.PrepareStep, RepairImages: service.RepairImageFiles, CompactOverflow: service.CompactOverflow, Models: agentModelFactory{modelsService}, Store: service, Tools: runner, Hub: hub, Estimate: estimateAgentRequest}, nil
 	}
 	service.Committed = func(ctx context.Context, receipt agentcore.CommitReceipt) {
 		hub.Committed(ctx, receipt)
 		runtime.Notify()
 	}
+	service.ResumeRoot = runtime.StartRoot
 	service.CancelRun = runtime.Cancel
 	service.SessionChanged = hub.SessionChanged
 	return &agentApplication{streams: streams, Service: service, Resources: resources, Runtime: runtime, Hub: hub, Sandboxes: sandboxes}, nil

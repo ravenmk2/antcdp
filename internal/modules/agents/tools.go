@@ -74,7 +74,7 @@ func settleToolBudget(st StateRepository, root *RunRow, call *ToolCallRow, execu
 }
 func (s *Service) blockTool(st StateRepository, x executionRows, row *ToolCallRow, reason, content string, now time.Time) (agentcore.DispatchAdmission, error) {
 	no := false
-	if e := settleToolBudget(st, x.Root, row, &no); e != nil {
+	if e := settleToolBudget(st, x.Run, row, &no); e != nil {
 		return agentcore.DispatchAdmission{}, e
 	}
 	if content == "" {
@@ -219,7 +219,7 @@ func (s *Service) PrepareDispatch(ctx context.Context, ref agentcore.ExecutionRe
 				return nil
 			}
 		}
-		l, e := ledger(x.Root)
+		l, e := ledger(x.Run)
 		if e != nil {
 			return e
 		}
@@ -235,7 +235,7 @@ func (s *Service) PrepareDispatch(ctx context.Context, ref agentcore.ExecutionRe
 		if e != nil {
 			return e
 		}
-		if e = saveLedger(st, x.Root, l); e != nil {
+		if e = saveLedger(st, x.Run, l); e != nil {
 			return e
 		}
 		if call.Spec.ExecutionClass == "question" {
@@ -389,8 +389,8 @@ func (s *Service) CompleteTool(ctx context.Context, ref agentcore.ExecutionRef, 
 		truncated := obs.Truncated
 		content := obs.Content
 		limit := result.Call.Spec.ResultLimit
-		if limit <= 0 || limit > 64<<10 {
-			limit = 64 << 10
+		if limit <= 0 || limit > toolOutputInlineLimit(row.ToolKey) {
+			limit = toolOutputInlineLimit(row.ToolKey)
 		}
 		inlineLimit := min(limit, toolOutputInlineLimit(row.ToolKey))
 		extra := map[string]any{"truncated": truncated}
@@ -417,18 +417,32 @@ func (s *Service) CompleteTool(ctx context.Context, ref agentcore.ExecutionRef, 
 			content = agentcore.HeadTail(content, inlineLimit-len(notice), "\n\n[... middle omitted ...]\n\n") + notice
 			extra["truncated"] = true
 		}
-		if len(obs.Metadata) > 0 {
+		from := x.Session.LastSeq + 1
+		if row.ToolKey == "todo_write" && obs.Status == "succeeded" && row.MCPBindingID == nil {
+			list, _, err := ParseTodos(obs.Metadata)
+			if err != nil {
+				return integrity()
+			}
+			event := struct {
+				TodoList
+				ToolCallID agentcore.ID `json:"tool_call_id"`
+			}{list, agentcore.ID(row.ID)}
+			if _, err = appendEvent(st, x.Session, &row.RunID, "todo/write", "", event, nil, time.Now().UTC()); err != nil {
+				return err
+			}
+		} else if len(obs.Metadata) > 0 {
 			if e = validateToolMetadata(tx, x, row, obs.Metadata, extra); e != nil {
 				return e
 			}
 		}
-		if e = settleToolBudget(st, x.Root, row, obs.Executed); e != nil {
+		if e = settleToolBudget(st, x.Run, row, obs.Executed); e != nil {
 			return e
 		}
 		out, e = settleToolEvent(st, x.Session, row, obs.Status, obs.Executed, content, obs.Reason, extra, time.Now().UTC().Truncate(time.Millisecond))
 		if e != nil {
 			return e
 		}
+		out.Receipt.Ranges[0].From = agentcore.Seq(from)
 		out.Receipt.Ranges[0].Through = agentcore.Seq(x.Session.LastSeq)
 		out.Result.Receipt = out.Receipt
 		return st.SaveSession(x.Session)

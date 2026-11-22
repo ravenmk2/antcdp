@@ -1,4 +1,4 @@
-import type { DurableRecord } from "@/types/agent-events";
+import { runStatusNames } from "../resources/admin-shared";
 import type { Question } from "@/types/agents";
 import { useState } from "react";
 import { Circle, CircleCheck, LoaderCircle, X } from "lucide-react";
@@ -30,9 +30,9 @@ export const builtinToolNames: Record<string, string> = {
   web_search: "网络搜索",
   web_fetch: "网页读取",
   skill: "加载技能",
-  ask_user_question: "向用户提问",
-  update_plan: "更新任务计划",
-  delegate: "委派临时子任务",
+  ask_question: "向用户提问",
+  todo_write: "更新待办",
+  subagent: "委派临时子任务",
   read: "读取文件",
   read_tool_output: "读取工具输出",
   read_image: "读取图片",
@@ -55,13 +55,20 @@ export function ToolEvent({
   rejected,
   call,
   result,
+  todos,
+  report,
   taskStatus,
   reconciliation,
   status: liveStatus,
   question,
   sessionId,
+  onChild,
   onIssue,
-}: ToolNode & { sessionId: string; onIssue?: () => void }) {
+}: ToolNode & {
+  sessionId: string;
+  onIssue?: () => void;
+  onChild?: (id: string) => void;
+}) {
   const [opened, setOpen] = useState<boolean | null>(null);
   const pendingQuestion = Boolean(
     question &&
@@ -93,9 +100,12 @@ export function ToolEvent({
           exit_code: taskStatus.exit_code,
         }
       : snapshot;
+  const child = report ?? result?.data.child_result;
+  const started = result?.data.child_started;
   const failed = reconciliation
     ? reconciliation.data.observed_status === "failed"
-    : status === "failed" ||
+    : child?.status === "failed" ||
+      status === "failed" ||
       (execution?.state === "completed" &&
         execution.exit_code !== null &&
         execution.exit_code !== 0);
@@ -127,13 +137,9 @@ export function ToolEvent({
       ? value
       : null;
   const search = value ? readSearchResult(name, value) : null;
-  const plan =
-    name === "update_plan" && builtin && knownSuccess && result
-      ? readPlan(result.data.content)
-      : null;
   const questions =
     question?.questions ??
-    (name === "ask_user_question" &&
+    (name === "ask_question" &&
     builtin &&
     Array.isArray(args.questions) &&
     args.questions.length > 0 &&
@@ -141,36 +147,40 @@ export function ToolEvent({
       (q: unknown) =>
         q &&
         typeof q === "object" &&
-        "prompt" in q &&
-        typeof q.prompt === "string" &&
-        "options" in q &&
-        Array.isArray(q.options) &&
-        q.options.every(
-          (o: unknown) =>
-            o &&
-            typeof o === "object" &&
-            "label" in o &&
-            typeof o.label === "string",
-        ),
+        "question" in q &&
+        typeof q.question === "string" &&
+        (!("options" in q) ||
+          (Array.isArray(q.options) &&
+            q.options.every(
+              (o: unknown) =>
+                o &&
+                typeof o === "object" &&
+                "label" in o &&
+                typeof o.label === "string",
+            ))),
     )
       ? (args.questions as Question[])
       : null);
   const running =
     !reconciliation &&
-    (taskStatus?.state === "running" ||
+    (Boolean(started && !child) ||
+      taskStatus?.state === "running" ||
       (status && ["prepared", "dispatching", "running"].includes(status)));
-  const verifiedStatus =
-    taskStatus?.state === "completed"
-      ? executionStatus(taskStatus)
-      : reconciliation
-        ? reconciliation.data.executed === false
-          ? "确认未执行"
-          : ({
-              succeeded: "已核实结束",
-              failed: "已核实失败",
-              cancelled: "已确认停止",
-            }[reconciliation.data.observed_status] ?? "已核实结束")
-        : undefined;
+  const verifiedStatus = child
+    ? runStatusNames[child.status]
+    : started
+      ? "子助手执行中"
+      : taskStatus?.state === "completed"
+        ? executionStatus(taskStatus)
+        : reconciliation
+          ? reconciliation.data.executed === false
+            ? "确认未执行"
+            : ({
+                succeeded: "已核实结束",
+                failed: "已核实失败",
+                cancelled: "已确认停止",
+              }[reconciliation.data.observed_status] ?? "已核实结束")
+          : undefined;
   const label = rejected
     ? `${rejected.interrupted ? "生成已中断" : rejected.diagnostic?.code === "MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH" ? "参数校验失败" : "调用未完成"} · 未执行`
     : draft
@@ -193,10 +203,19 @@ export function ToolEvent({
                   dispatching: "正在派发",
                   prepared: "已准备",
                   waiting_approval:
-                    name === "ask_user_question" ? "等待回答" : "等待批准",
+                    name === "ask_question" ? "等待回答" : "等待批准",
                 }[status]
               : "等待结果"));
-  const specialized = Boolean(execution || file || plan || questions || search);
+  const specialized = Boolean(
+    child ||
+    started ||
+    execution ||
+    file ||
+    todos ||
+    questions ||
+    search ||
+    (name === "web_search" && result?.data.web_result?.sources?.length),
+  );
   return (
     <div
       id={`tool-${id}`}
@@ -263,7 +282,9 @@ export function ToolEvent({
               data-pending={pendingQuestion}
             >
               {questions.length} 个问题 ·{" "}
-              {question?.answer?.skip
+              {question?.answer?.answers.every(
+                (item) => item.status === "skipped",
+              )
                 ? "已跳过"
                 : question?.answer
                   ? "已回答"
@@ -319,15 +340,43 @@ export function ToolEvent({
                 当前记录包含工具结果；加载更早记录可查看关联的调用名称和参数。
               </p>
             )}
-            {plan && (
+            {result?.data.web_result && (
+              <WebResultCard view={result.data.web_result} />
+            )}
+            {(child || started) && (
+              <section>
+                <strong>
+                  {report?.description || started?.description || "子任务"}
+                </strong>
+                <p>
+                  {child
+                    ? "子任务回报 · " + runStatusNames[child.status]
+                    : "子助手运行中"}
+                </p>
+                {onChild && (
+                  <button
+                    type="button"
+                    onClick={() => onChild((child ?? started)!.session_id)}
+                  >
+                    查看子任务详情
+                  </button>
+                )}
+                {typeof args.task === "string" && (
+                  <p className="whitespace-pre-wrap">{args.task}</p>
+                )}
+                {child?.result_summary && <p>{child.result_summary}</p>}
+                {child?.reason_code && <p>{child.reason_code}</p>}
+              </section>
+            )}
+            {todos && (
               <div className="space-y-3">
-                {plan.explanation && (
+                {todos.explanation && (
                   <p className="whitespace-pre-wrap text-sm leading-6 text-muted">
-                    {plan.explanation}
+                    {todos.explanation}
                   </p>
                 )}
                 <ol className="space-y-2">
-                  {plan.plan.map((step, index) => (
+                  {todos.todos.map((step, index) => (
                     <li
                       key={index}
                       className="flex items-start gap-3 text-sm leading-6"
@@ -355,7 +404,7 @@ export function ToolEvent({
                             : "text-foreground"
                         }
                       >
-                        {step.step}
+                        {step.content}
                       </span>
                       <span className="sr-only">
                         {step.status === "completed"
@@ -512,47 +561,57 @@ export function ToolEvent({
   );
 }
 
-export function readPlan(
-  blocks: Extract<
-    DurableRecord,
-    { event_type: "tool/result" }
-  >["data"]["content"],
-): {
-  explanation?: string;
-  plan: { step: string; status: "pending" | "in_progress" | "completed" }[];
-} | null {
-  if (blocks.length !== 1 || blocks[0].type !== "text") return null;
-  try {
-    const value: unknown = JSON.parse(blocks[0].text);
-    if (
-      !value ||
-      typeof value !== "object" ||
-      !("plan" in value) ||
-      !Array.isArray(value.plan) ||
-      value.plan.length > 20 ||
-      !value.plan.length
-    )
-      return null;
-    if ("explanation" in value && typeof value.explanation !== "string")
-      return null;
-    if (
-      !value.plan.every(
-        (step: unknown) =>
-          step &&
-          typeof step === "object" &&
-          "step" in step &&
-          typeof step.step === "string" &&
-          step.step.length <= 1000 &&
-          "status" in step &&
-          ["pending", "in_progress", "completed"].includes(String(step.status)),
-      )
-    )
-      return null;
-    return value as {
-      explanation?: string;
-      plan: { step: string; status: "pending" | "in_progress" | "completed" }[];
-    };
-  } catch {
-    return null;
-  }
+function WebResultCard({
+  view,
+}: {
+  view: NonNullable<
+    import("@/types/agent-events").EventPayloads["tool/result"]["web_result"]
+  >;
+}) {
+  return (
+    <div className="space-y-2 text-sm">
+      {view.requested_url && (
+        <div>
+          <a
+            href={webLink(view.final_url || view.requested_url)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {view.title || view.final_url || view.requested_url}
+          </a>
+          {view.status_code && <span> · HTTP {view.status_code}</span>}
+          {view.final_url && view.final_url !== view.requested_url && (
+            <p>
+              请求地址 {view.requested_url} → {view.final_url}
+            </p>
+          )}
+        </div>
+      )}
+      {view.sources?.map((source) => (
+        <div key={source.url}>
+          <a href={webLink(source.url)} target="_blank" rel="noreferrer">
+            {source.title || source.url}
+          </a>
+          {source.published_at && <span> · {source.published_at}</span>}
+          <p>{source.summary}</p>
+        </div>
+      ))}
+      {view.truncated && <p>来源内容已截断</p>}
+      {view.attempts?.length > 0 && (
+        <details>
+          <summary>访问诊断</summary>
+          {view.attempts.map((a, i) => (
+            <p key={i}>
+              {a.query && <span>{a.query} · </span>}
+              {a.route.kind} {a.route.id} · {a.status} {a.reason}
+            </p>
+          ))}
+        </details>
+      )}
+    </div>
+  );
+}
+
+function webLink(value: string) {
+  return /^https?:\/\//i.test(value) ? value : undefined;
 }

@@ -7,17 +7,9 @@ describe("question recommendation compatibility", () => {
       text: "测试环境",
       recommended: true,
     });
-    expect(recommendedLabel("测试环境（推荐）", false)).toEqual({
-      text: "测试环境",
-      recommended: false,
-    });
-    expect(recommendedLabel("测试环境 (Recommended)")).toEqual({
-      text: "测试环境",
-      recommended: true,
-    });
     expect(recommendedLabel("测试环境（推荐）")).toEqual({
-      text: "测试环境",
-      recommended: true,
+      text: "测试环境（推荐）",
+      recommended: false,
     });
     expect(recommendedLabel("测试环境").recommended).toBe(false);
   });

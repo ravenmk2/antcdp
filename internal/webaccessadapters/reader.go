@@ -8,10 +8,15 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 
@@ -76,7 +81,7 @@ func (r Reader) Fetch(ctx context.Context, input webaccess.FetchRequest) (webacc
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return result, &webaccess.Failure{Code: "WEB_ACCESS_CONTENT_UNAVAILABLE", Fallback: true}
 	}
-	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	mediaType, params, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil {
 		return result, webaccess.Fail("WEB_ACCESS_CONTENT_TYPE_UNSUPPORTED")
 	}
@@ -96,9 +101,12 @@ func (r Reader) Fetch(ctx context.Context, input webaccess.FetchRequest) (webacc
 	if truncated {
 		data = data[:input.MaxBytes]
 	}
-	decoded, err := charset.NewReader(bytes.NewReader(data), response.Header.Get("Content-Type"))
-	if err != nil {
-		return result, webaccess.Fail("WEB_ACCESS_CONTENT_ENCODING_UNSUPPORTED")
+	var decoded io.Reader = bytes.NewReader(data)
+	if mediaType == "text/html" || params["charset"] != "" {
+		decoded, err = charset.NewReader(decoded, response.Header.Get("Content-Type"))
+		if err != nil {
+			return result, webaccess.Fail("WEB_ACCESS_CONTENT_ENCODING_UNSUPPORTED")
+		}
 	}
 	text, err := io.ReadAll(io.LimitReader(decoded, input.MaxBytes+1))
 	if err != nil {
@@ -111,15 +119,42 @@ func (r Reader) Fetch(ctx context.Context, input webaccess.FetchRequest) (webacc
 	value, cut := bounded(value, int(input.MaxBytes))
 	truncated = truncated || cut
 	if mediaType == "text/html" {
-		result.Title, value = plainHTML(value)
-		mediaType = "text/plain"
+		result.Title, value, mediaType = markdownHTML(value, response.Request.URL.String())
 	}
+	result.StatusCode = response.StatusCode
 	result.Content, result.Truncated = bounded(value, int(input.MaxBytes))
 	result.Truncated = result.Truncated || truncated
 	final := response.Request.URL.String()
 	result.FinalURL = &final
 	result.MediaType = mediaType
 	return result, nil
+}
+
+func markdownHTML(source, finalURL string) (string, string, string) {
+	plain := func() (string, string, string) { title, body := plainHTML(source); return title, body, "text/plain" }
+	var title string
+	doc, err := html.Parse(strings.NewReader(source))
+	if err != nil {
+		return plain()
+	}
+	for node := range doc.Descendants() {
+		if node.Type != html.ElementNode {
+			continue
+		}
+		if node.Data == "title" && title == "" && node.FirstChild != nil && node.FirstChild.Type == html.TextNode {
+			title, _ = bounded(strings.Join(strings.Fields(node.FirstChild.Data), " "), 1024)
+		}
+		// A Markdown table has no spanning cells. Avoid expanding spans supplied by a page.
+		if node.Data == "td" || node.Data == "th" {
+			node.Attr = slices.DeleteFunc(node.Attr, func(a html.Attribute) bool { return a.Key == "rowspan" || a.Key == "colspan" })
+		}
+	}
+	conv := converter.NewConverter(converter.WithPlugins(base.NewBasePlugin(), commonmark.NewCommonmarkPlugin(), table.NewTablePlugin()))
+	md, err := conv.ConvertNode(doc, converter.WithDomain(finalURL))
+	if err != nil {
+		return plain()
+	}
+	return title, string(md), "text/markdown"
 }
 
 func plainHTML(source string) (string, string) {

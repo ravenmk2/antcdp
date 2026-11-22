@@ -112,7 +112,7 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 		if d == nil || !d.Availability.Available {
 			continue
 		}
-		tools = append(tools, FrozenTool{Binding: binding, RequiresSandbox: d.RequiresSandbox, Spec: agentcore.ToolSpec{Key: binding.ToolKey, Definition: d.Definition, ExecutionClass: d.ExecutionClass, ParallelSafe: d.ParallelSafe, Policy: binding.Policy, ResultLimit: 64 << 10}})
+		tools = append(tools, FrozenTool{Binding: binding, RequiresSandbox: d.RequiresSandbox, Spec: agentcore.ToolSpec{Key: binding.ToolKey, Definition: d.Definition, ExecutionClass: d.ExecutionClass, ParallelSafe: d.ParallelSafe, Policy: binding.Policy, ResultLimit: toolOutputInlineLimit(binding.ToolKey)}})
 	}
 	for i := range tools {
 		if papi.IsTool(tools[i].Spec.Key) {

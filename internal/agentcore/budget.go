@@ -24,8 +24,7 @@ func budgetFields(v *Budget) []*uint64 {
 	return []*uint64{&v.ModelCalls, &v.ToolCalls, &v.Children, &v.InputTokens, &v.OutputTokens}
 }
 
-// Reserve operates on a value; the store commits it while holding the root Run
-// lock. Child runs must use the root ledger, not an independent copy of limits.
+// Reserve charges the run that owns the call. The store holds its run lock.
 func (v BudgetLedger) Reserve(amount Budget) (BudgetLedger, Reservation, error) {
 	limits, used, reserved, amounts := budgetFields(&v.Limit), budgetFields(&v.Used), budgetFields(&v.Reserved), budgetFields(&amount)
 	for i, limit := range limits {

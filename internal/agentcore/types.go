@@ -235,7 +235,7 @@ type Event struct {
 }
 
 const MaxEventBytes = 256 << 10
-const MaxHistoryBytes = 1 << 20
+const MaxHistoryBytes = 2 << 20
 
 func NewEvent(session ID, seq Seq, run *ID, kind, key string, value any, now time.Time) (Event, error) {
 	b, err := json.Marshal(value)

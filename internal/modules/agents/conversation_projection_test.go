@@ -72,8 +72,8 @@ func TestConversationCheckpointReplayRecoveryAndImmutableState(t *testing.T) {
 	}{
 		{"run/started", `{"run_id":"7"}`},
 		{"assistant/message", `{"step_no":1,"content":[]}`},
-		{"tool/call", `{"tool_call_id":"8","tool_key":"update_plan"}`},
-		{"tool/result", `{"tool_call_id":"8","status":"succeeded","content":[{"type":"text","text":"plan"}]}`},
+		{"tool/call", `{"tool_call_id":"8","tool_key":"todo_write"}`},
+		{"todo/write", `{"tool_call_id":"8","todos":[{"content":"Build","status":"completed"}]}`},
 		{"run/ended", `{"run_id":"7","status":"succeeded"}`},
 		{"run/settled", `{"run_id":"7"}`},
 	} {
@@ -83,7 +83,7 @@ func TestConversationCheckpointReplayRecoveryAndImmutableState(t *testing.T) {
 	}
 	reads := m.reads
 	want, err := loadConversationProjection(m, 1, v.LastSeq)
-	if err != nil || m.reads != reads || want.LatestRun == nil || !want.LatestRun.Settled || len(want.LatestRun.Plan) == 0 {
+	if err != nil || m.reads != reads || want.LatestRun == nil || !want.LatestRun.Settled || len(want.LatestRun.Todos) == 0 {
 		t.Fatal("checkpoint was not used", want, err)
 	}
 	cache := *m.cache

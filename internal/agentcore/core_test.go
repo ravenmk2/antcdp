@@ -120,8 +120,8 @@ func TestArchiveCancelsLateAnswerWithoutRevivingOnRestore(t *testing.T) {
 func TestQuestionTimeoutVersusApprovalAndLateReply(t *testing.T) {
 	now := time.Now()
 	s := Session{ID: 1, ExecutionMode: "chat", ActiveRunID: pointer(ID(2))}
-	q := Interaction{ID: 3, SessionID: 1, RunID: 2, Kind: "question", Status: "waiting", Version: 1, Deadline: now, Questions: []Question{{ID: "q", Prompt: "Details?", Type: "text"}}}
-	answer := QuestionAnswer{Answers: []AnswerItem{{QuestionID: "q", Text: pointer("details")}}}
+	q := Interaction{ID: 3, SessionID: 1, RunID: 2, Kind: "question", Status: "waiting", Version: 1, Deadline: now, Questions: []Question{{ID: "q", Prompt: "Details?"}}}
+	answer := QuestionAnswer{Answers: []AnswerItem{{Status: "answered", QuestionID: "q", Text: pointer("details")}}}
 	late, err := PlanAnswer(s, q, 1, ActorRef{Kind: "user", ID: pointer(ID(4))}, answer, 5, now)
 	if err != nil {
 		t.Fatal(err)

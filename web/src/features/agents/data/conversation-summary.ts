@@ -25,7 +25,7 @@ export function foldConversationSummary(
         settled: false,
         model_call_count: 0,
         tool_call_count: 0,
-        plan_call_id: "0",
+        todos: [],
       };
       break;
     case "run/state":
@@ -61,18 +61,10 @@ export function foldConversationSummary(
       state.tool_call_count++;
       if (run && run.id === event.run_id) {
         run.tool_call_count++;
-        if (event.data.tool_key === "update_plan")
-          run.plan_call_id = event.data.tool_call_id;
       }
       break;
-    case "tool/result":
-      if (
-        run &&
-        run.plan_call_id === event.data.tool_call_id &&
-        event.data.status === "succeeded" &&
-        !event.data.truncated
-      )
-        run.plan = event.data.content;
+    case "todo/write":
+      if (run && run.id === event.run_id) run.todos = event.data.todos;
       break;
   }
   return state;

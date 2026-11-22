@@ -169,6 +169,9 @@ func (s *Service) BeginStep(ctx context.Context, ref agentcore.ExecutionRef, ste
 				return e
 			}
 		}
+		if _, _, e = visitChildReports(st, x.Session, x.Run, true, now); e != nil {
+			return e
+		}
 		out.InputIDs, e = s.claimQuestionReplies(st, x.Session, x.Run, uint64(step), now)
 		if e != nil {
 			return e

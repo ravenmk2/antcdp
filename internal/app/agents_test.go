@@ -16,30 +16,30 @@ import (
 
 func TestAgentBuiltinSchemasSupportControlAndRejectExtraArguments(t *testing.T) {
 	valid := map[string]string{
-		"read_tool_output":  `{"file_id":"1","query":"ERROR"}`,
-		"read":              `{"file_path":"note.md"}`,
-		"read_image":        `{"path":"/data/storage/plot.png"}`,
-		"write":             `{"file_path":"note.md","content":"report"}`,
-		"edit":              `{"file_path":"note.md","old_string":"old","new_string":"new"}`,
-		"glob":              `{"pattern":"*.go"}`,
-		"grep":              `{"pattern":"TODO","literal":true}`,
-		"load_artifacts":    `{"items":[{"artifact_id":"1"}]}`,
-		"list_artifacts":    `{}`,
-		"show_artifacts":    `{"artifact_ids":["1"]}`,
-		"exec":              `{"description":"Show working directory","command":"pwd"}`,
-		"task_list":         `{}`,
-		"task_output":       `{"task_id":"1"}`,
-		"task_kill":         `{"task_id":"1"}`,
-		"save_artifacts":    `{"files":[{"path":"report.md","description":"排查结果"}]}`,
-		"web_search":        `{"query":"public test"}`,
-		"web_fetch":         `{"url":"https://example.com/"}`,
-		"skill":             `{"name":"review-code","path":"SKILL.md"}`,
-		"ask_user_question": `{"questions":[{"question_id":"scope","prompt":"Choose a scope","type":"single_choice","options":[{"id":"one","label":"First","description":"One item"}],"allow_text":true}]}`,
-		"update_plan":       `{"plan":[{"step":"Check the current state","status":"in_progress"}]}`,
-		"delegate":          `{"task":"Explain the public example"}`,
-		papi.ListTool:       `{"offset":0,"limit":20}`,
-		papi.DescTool:       `{"api":"echo"}`,
-		papi.CallTool:       `{"api":"echo","args":{"nested":{"value":true}}}`,
+		"read_tool_output": `{"file_id":"1","query":"ERROR"}`,
+		"read":             `{"file_path":"note.md"}`,
+		"read_image":       `{"path":"/data/storage/plot.png"}`,
+		"write":            `{"file_path":"note.md","content":"report"}`,
+		"edit":             `{"file_path":"note.md","old_string":"old","new_string":"new"}`,
+		"glob":             `{"pattern":"*.go"}`,
+		"grep":             `{"pattern":"TODO","literal":true}`,
+		"load_artifacts":   `{"items":[{"artifact_id":"1"}]}`,
+		"list_artifacts":   `{}`,
+		"show_artifacts":   `{"artifact_ids":["1"]}`,
+		"exec":             `{"description":"Show working directory","command":"pwd"}`,
+		"task_list":        `{}`,
+		"task_output":      `{"task_id":"1"}`,
+		"task_kill":        `{"task_id":"1"}`,
+		"save_artifacts":   `{"files":[{"path":"report.md","description":"排查结果"}]}`,
+		"web_search":       `{"queries":["public test"]}`,
+		"web_fetch":        `{"url":"https://example.com/"}`,
+		"skill":            `{"name":"review-code"}`,
+		"ask_question":     `{"questions":[{"id":"scope","question":"Choose a scope","options":[{"id":"one","label":"First","description":"One item"}]}]}`,
+		"todo_write":       `{"todos":[{"content":"Check the current state","status":"in_progress"}]}`,
+		"subagent":         `{"task":"Explain the public example"}`,
+		papi.ListTool:      `{"offset":0,"limit":20}`,
+		papi.DescTool:      `{"api":"echo"}`,
+		papi.CallTool:      `{"api":"echo","args":{"nested":{"value":true}}}`,
 	}
 	seen := map[string]bool{}
 	for _, tool := range builtinAgentTools() {
@@ -87,11 +87,11 @@ func TestAgentBuiltinSchemasSupportControlAndRejectExtraArguments(t *testing.T) 
 
 func TestQuestionSchemaAcceptsOptionalRecommendationBoolean(t *testing.T) {
 	for _, tool := range builtinAgentTools() {
-		if tool.Key != "ask_user_question" {
+		if tool.Key != "ask_question" {
 			continue
 		}
 		for _, value := range []string{"", `,"recommended":true`, `,"recommended":false`, `,"recommended":"yes"`} {
-			args := `{"questions":[{"question_id":"scope","prompt":"Choose","type":"single_choice","options":[{"id":"one","label":"One","description":"Tradeoff"` + value + `}],"allow_text":true}]}`
+			args := `{"questions":[{"id":"scope","question":"Choose","options":[{"id":"one","label":"One","description":"Tradeoff"` + value + `}]}]}`
 			err := mcp.ValidateArguments(tool.Definition.InputSchema, json.RawMessage(args))
 			if (err != nil) != strings.Contains(value, `"yes"`) {
 				t.Fatalf("recommendation %s: %v", value, err)

@@ -160,7 +160,7 @@ func (t *agentsTx) Events(id, after, through uint64, limit int, desc bool) ([]a.
 		order = "DESC"
 	}
 	rows := []a.EventRow{}
-	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentEventColumns+" FROM agent_event WHERE session_id=? AND seq>? AND seq<=? ORDER BY seq "+order+" LIMIT ?", id, after, through, limit)
+	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentEventColumns+" FROM agent_event FORCE INDEX (uq_agent_event_seq) WHERE session_id=? AND seq>? AND seq<=? ORDER BY seq "+order+" LIMIT ?", id, after, through, limit)
 	return rows, e
 }
 func (t *agentsTx) EventAt(id, seq uint64) (*a.EventRow, error) {

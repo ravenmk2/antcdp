@@ -49,7 +49,7 @@ func settleToolEvent(st StateRepository, session *SessionRow, call *ToolCallRow,
 		if e != nil {
 			return agentcore.ToolCommit{}, e
 		}
-		if len(encoded) <= agentcore.MaxEventBytes {
+		if len(encoded) <= resultEventLimit("tool/result", data) {
 			break
 		}
 		if len(content) == 0 {
@@ -225,17 +225,20 @@ func (s *Service) EndRoot(ctx context.Context, ref agentcore.ExecutionRef, end a
 				continue
 			}
 			childEnd := agentcore.RunEnd{Status: agentcore.Interrupted, Reason: "parent_run_ended"}
+			if end.Status == agentcore.Cancelled || end.Reason == "deadline_exceeded" {
+				childEnd = end
+			}
 			if end.Status == agentcore.Succeeded {
 				return httpx.E(409, "CHILD_NOT_SETTLED", "子任务尚未结算")
 			}
-			if e = s.endOne(st, sessions[child.SessionID], child, root, childEnd, now); e != nil {
+			if e = s.endOne(st, sessions[child.SessionID], child, childEnd, now); e != nil {
 				return e
 			}
 			if _, e = s.settleChildResult(st, sessions[root.SessionID], sessions[child.SessionID], root, child, now); e != nil {
 				return e
 			}
 		}
-		if e = s.endOne(st, sessions[root.SessionID], root, root, end, now); e != nil {
+		if e = s.endOne(st, sessions[root.SessionID], root, end, now); e != nil {
 			return e
 		}
 		if e = settleFamily(st, root, sessions, now); e != nil {
@@ -254,7 +257,7 @@ func (s *Service) EndRoot(ctx context.Context, ref agentcore.ExecutionRef, end a
 	})
 	return out, e
 }
-func (s *Service) endOne(st StateRepository, session *SessionRow, row, root *RunRow, end agentcore.RunEnd, now time.Time) error {
+func (s *Service) endOne(st StateRepository, session *SessionRow, row *RunRow, end agentcore.RunEnd, now time.Time) error {
 	modelCalls, e := st.RunModelCalls(row.ID)
 	if e != nil {
 		return e
@@ -274,7 +277,7 @@ func (s *Service) endOne(st StateRepository, session *SessionRow, row, root *Run
 		call.Status = "interrupted"
 		call.ErrorCode = &reason
 		call.FinishedAt = &now
-		if e = settleModelBudget(st, root, call, modelcore.Usage{}); e != nil {
+		if e = settleModelBudget(st, row, call, modelcore.Usage{}); e != nil {
 			return e
 		}
 		if e = st.SaveModelCall(call); e != nil {
@@ -360,7 +363,7 @@ func (s *Service) endOne(st StateRepository, session *SessionRow, row, root *Run
 			resultExecuted = &executed
 			reason = "question_pending"
 		}
-		if e = settleToolBudget(st, root, call, resultExecuted); e != nil {
+		if e = settleToolBudget(st, row, call, resultExecuted); e != nil {
 			return e
 		}
 		if _, e = settleToolEvent(st, session, call, resultStatus, resultExecuted, "执行已结束，工具没有可确认的完整结果。", reason, nil, now); e != nil {

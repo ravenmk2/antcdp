@@ -50,7 +50,18 @@ export interface SandboxExecution {
   truncated: boolean;
 }
 
+export interface TodoItem {
+  content: string;
+  status: "pending" | "in_progress" | "completed";
+}
 export interface EventPayloads {
+  "subagent/reported": ChildReport;
+  "subagent/message": ChildReport;
+  "todo/write": {
+    tool_call_id: string;
+    explanation?: string;
+    todos: TodoItem[];
+  };
   "step/started": { run_id: string; step_no: number };
   "step/ended": { run_id: string; step_no: number };
   "session/title": {
@@ -203,6 +214,25 @@ export interface EventPayloads {
     file_write?: { path: string; operation: "create" | "update"; diff: string };
     output_file?: { file_id: string; size_bytes: string; sha256: string };
     source_truncated?: boolean;
+    web_result?: {
+      sources?: {
+        title: string;
+        url: string;
+        summary: string;
+        published_at?: string | null;
+      }[];
+      requested_url?: string;
+      final_url?: string;
+      title?: string;
+      status_code?: number;
+      truncated: boolean;
+      attempts: {
+        query?: string;
+        route: { kind: string; id: string };
+        status: string;
+        reason?: string | null;
+      }[];
+    };
     artifacts?: {
       artifact_id: string;
       filename: string;
@@ -230,6 +260,12 @@ export interface EventPayloads {
       sha256: string;
       size_bytes: string;
       availability: string;
+    };
+    child_started?: {
+      child_id: string;
+      session_id: string;
+      description: string;
+      status: "started";
     };
     child_result?: {
       session_id: string;
@@ -360,7 +396,7 @@ export interface SnapshotState {
   interactions_truncated: boolean;
 }
 export interface ConversationSummary {
-  version: 2;
+  version: 3;
   through_seq: string;
   title: string;
   run_count: number;
@@ -374,8 +410,7 @@ export interface ConversationSummary {
     settled: boolean;
     model_call_count: number;
     tool_call_count: number;
-    plan_call_id: string;
-    plan?: ContentBlock[];
+    todos: TodoItem[] | null;
   };
 }
 export interface SnapshotFrame {
@@ -470,4 +505,17 @@ export interface SessionsChangedFrame {
   subscription_id: string;
   session_ids: string[];
   resync: boolean;
+}
+
+export interface ChildReport {
+  source: "subagent";
+  child_id: string;
+  session_id: string;
+  run_id: string;
+  tool_call_id: string;
+  description: string;
+  status: RunStatus;
+  reason_code: string | null;
+  result_summary: string | null;
+  artifact_ids: string[];
 }

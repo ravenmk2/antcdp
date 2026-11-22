@@ -65,14 +65,16 @@ func (t *agentsTx) FileByHash(session uint64, hash []byte) (*a.FileRow, error) {
 	return v, e
 }
 
+// Scan in sequence order. A filesort of the inline JSON payload can exceed
+// the MySQL sort buffer with a single full-size skill result.
 func (t *agentsTx) SurfaceEvents(session, after, through uint64, limit int) ([]a.EventRow, error) {
 	rows := []a.EventRow{}
-	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentEventColumns+" FROM agent_event WHERE session_id=? AND seq>? AND seq<=? AND event_type IN ('input/message','assistant/message','assistant/attempt','tool/result','context/message','compaction/summary','image/offload','tool/output_pruned') ORDER BY seq LIMIT ?", session, after, through, limit)
+	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentEventColumns+" FROM agent_event FORCE INDEX (uq_agent_event_seq) WHERE session_id=? AND seq>? AND seq<=? AND event_type IN ('input/message','subagent/message','assistant/message','assistant/attempt','tool/result','context/message','compaction/summary','image/offload','tool/output_pruned') ORDER BY seq LIMIT ?", session, after, through, limit)
 	return rows, e
 }
 func (t *agentsTx) PendingReconciliationEvents(session, through uint64, limit int) ([]a.EventRow, error) {
 	rows := []a.EventRow{}
-	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentEventColumns+" FROM agent_event WHERE session_id=? AND seq<=? AND event_type='tool/reconciled' AND NOT EXISTS (SELECT 1 FROM agent_event projected WHERE projected.session_id=agent_event.session_id AND projected.semantic_key=CONCAT('reconciliation-context:',agent_event.seq)) ORDER BY seq LIMIT ?", session, through, limit)
+	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentEventColumns+" FROM agent_event FORCE INDEX (uq_agent_event_seq) WHERE session_id=? AND seq<=? AND event_type='tool/reconciled' AND NOT EXISTS (SELECT 1 FROM agent_event projected WHERE projected.session_id=agent_event.session_id AND projected.semantic_key=CONCAT('reconciliation-context:',agent_event.seq)) ORDER BY seq LIMIT ?", session, through, limit)
 	return rows, e
 }
 func (t *agentsTx) AttemptForStep(run, step, attempt uint64) (*a.ModelCallRow, error) {

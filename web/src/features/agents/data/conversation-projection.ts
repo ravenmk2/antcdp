@@ -25,6 +25,8 @@ export interface ToolNode {
   draft?: { name?: string; argumentsText: string; committed?: boolean };
   call?: Event<"tool/call">;
   result?: Event<"tool/result">;
+  report?: Event<"subagent/reported">["data"];
+  todos?: Event<"todo/write">["data"];
   reconciliation?: Event<"tool/reconciled">;
   status?: ToolCall["status"];
   question?: QuestionInteraction;
@@ -91,6 +93,7 @@ export class ConversationProjector {
     return this.currentGroup;
   }
   private apply(record: DurableRecord) {
+    if (record.event_type === "subagent/message") return;
     if (record.event_type === "tool/reconciled") {
       const reconciliation = record;
       const index = this.tools.get(record.data.tool_call_id);
@@ -175,6 +178,8 @@ export class ConversationProjector {
       return;
     }
     if (
+      record.event_type === "todo/write" ||
+      record.event_type === "subagent/reported" ||
       record.event_type === "tool/call" ||
       record.event_type === "tool/result" ||
       record.event_type === "tool/state"
@@ -197,6 +202,8 @@ export class ConversationProjector {
         tool.ordinal = record.data.call_ordinal ?? tool.ordinal;
         tool.status = record.data.status ?? "prepared";
       }
+      if (record.event_type === "subagent/reported") tool.report = record.data;
+      if (record.event_type === "todo/write") tool.todos = record.data;
       if (record.event_type === "tool/result") {
         tool.result = record;
         tool.status = record.data.status;

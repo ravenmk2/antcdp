@@ -343,7 +343,20 @@ func childResultSummaries(st StateRepository, runID uint64) (map[uint64]*string,
 		if row.ExecutionClass != "child" || row.ResultEventSeq == nil {
 			continue
 		}
-		event, e := st.EventAt(row.SessionID, *row.ResultEventSeq)
+		seq := *row.ResultEventSeq
+		var ref childReference
+		if len(row.ExecutionRef) > 0 {
+			if err := json.Unmarshal(row.ExecutionRef, &ref); err != nil {
+				return nil, integrity()
+			}
+			if ref.Background {
+				if ref.ReportSeq == 0 {
+					continue
+				}
+				seq = ref.ReportSeq
+			}
+		}
+		event, e := st.EventAt(row.SessionID, seq)
 		if e != nil {
 			return nil, e
 		}
@@ -363,6 +376,16 @@ func childResultSummaries(st StateRepository, runID uint64) (map[uint64]*string,
 		raw, e := json.Marshal(record.Data)
 		if e != nil {
 			return nil, e
+		}
+		if ref.Background {
+			var report struct {
+				Summary *string `json:"result_summary"`
+			}
+			if json.Unmarshal(raw, &report) != nil || event.EventType != "subagent/reported" {
+				return nil, integrity()
+			}
+			out[uint64(ref.RunID)] = report.Summary
+			continue
 		}
 		if e = json.Unmarshal(raw, &body); e != nil {
 			return nil, integrity()
