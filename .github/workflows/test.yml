@@ -142,4 +142,5 @@ jobs:
           GRANT ALL PRIVILEGES ON antcdp_test_cloud.* TO 'antcdp_test'@'%';"
 
       - name: Test MySQL installation, authentication and management
-        run: go test -race -count=1 -v ./internal/store/mysql
+        # The full integration suite can exceed Go's default 10-minute timeout under -race.
+        run: go test -race -timeout=20m -count=1 -v ./internal/store/mysql
