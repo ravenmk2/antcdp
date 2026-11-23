@@ -61,6 +61,7 @@ export type CloudState =
   | "deleting"
   | "deleted";
 export interface CloudComputer extends Versioned {
+  terminal_sessions?: number;
   id: string;
   owner_user_id: string;
   pool_agent_id: string | null;

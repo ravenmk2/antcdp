@@ -69,7 +69,7 @@ func (s *CloudService) GetOperation(ctx context.Context, raw string, id uint64) 
 		if e != nil {
 			return e
 		}
-		if op == nil || op.Kind == "command" {
+		if op == nil || op.Kind == "command" || op.Kind == "terminal" {
 			return missing()
 		}
 		computer, e := cr.Computer(op.ComputerID, false)
@@ -96,7 +96,7 @@ func (s *CloudService) cloudView(cr CloudRepository, v *CloudComputerRow) (Cloud
 	if e != nil {
 		return CloudView{}, e
 	}
-	out := CloudView{ID: v.ID, OwnerUserID: v.OwnerUserID, PoolAgentID: v.PoolAgentID, State: v.State, BackendGeneration: v.BackendGeneration, InstanceID: v.InstanceID, StorageGeneration: v.StorageGeneration, Environment: v.EffectiveEnvironment, AppliedSpecID: v.AppliedSpecID, AppliedSpecVersion: v.AppliedSpecVersion, AppliedTemplateVersion: v.AppliedSpecVersion, VolumeState: v.VolumeState, RuntimeID: v.RuntimeID, VolumeID: v.VolumeID, VolumeName: v.VolumeName, VolumeCleanupState: v.VolumeCleanupState, ActiveLeases: activity.Leases, PendingTransfers: activity.Transfers, UnknownExecutions: activity.Unknown, IdleSince: v.IdleSince, LastActivityAt: v.LastActivityAt, ErrorCode: v.ErrorCode, Version: strings.Trim(s.tag("computer", v.ID, v.RowVersion), `"`)}
+	out := CloudView{TerminalSessions: activity.Terminals, ID: v.ID, OwnerUserID: v.OwnerUserID, PoolAgentID: v.PoolAgentID, State: v.State, BackendGeneration: v.BackendGeneration, InstanceID: v.InstanceID, StorageGeneration: v.StorageGeneration, Environment: v.EffectiveEnvironment, AppliedSpecID: v.AppliedSpecID, AppliedSpecVersion: v.AppliedSpecVersion, AppliedTemplateVersion: v.AppliedSpecVersion, VolumeState: v.VolumeState, RuntimeID: v.RuntimeID, VolumeID: v.VolumeID, VolumeName: v.VolumeName, VolumeCleanupState: v.VolumeCleanupState, ActiveLeases: activity.Leases, PendingTransfers: activity.Transfers, UnknownExecutions: activity.Unknown, IdleSince: v.IdleSince, LastActivityAt: v.LastActivityAt, ErrorCode: v.ErrorCode, Version: strings.Trim(s.tag("computer", v.ID, v.RowVersion), `"`)}
 	if latest != nil {
 		out.LatestOperationID = &latest.ID
 	}
@@ -219,6 +219,10 @@ func maintenanceBusy(cr CloudRepository, computerID uint64) error {
 	if e != nil {
 		return e
 	}
+	return checkMaintenanceActivity(a)
+}
+
+func checkMaintenanceActivity(a CloudActivity) error {
 	if a.Leases > 0 || a.Transfers > 0 || a.Unknown > 0 || a.References > 0 || a.Operations > 0 {
 		return httpx.E(409, "CLOUD_COMPUTER_BUSY", "云电脑仍有在途或待核实的活动")
 	}
@@ -226,8 +230,9 @@ func maintenanceBusy(cr CloudRepository, computerID uint64) error {
 }
 
 type CloudMaintenanceWrite struct {
-	Action        string `json:"action"`
-	ConfirmDelete bool   `json:"confirm_delete"`
+	Action           string `json:"action"`
+	ConfirmDelete    bool   `json:"confirm_delete"`
+	ConfirmTerminals bool   `json:"confirm_terminals,omitempty"`
 }
 
 func (s *CloudService) MaintainComputer(ctx context.Context, raw string, id uint64, tag, key string, w CloudMaintenanceWrite) (*Result, error) {
@@ -255,8 +260,15 @@ func (s *CloudService) MaintainComputer(ctx context.Context, raw string, id uint
 		if v.DeletedAt != nil {
 			return httpx.E(409, "CLOUD_COMPUTER_DELETED", "云电脑已永久删除")
 		}
-		if e = maintenanceBusy(cr, id); e != nil {
+		activity, e := cr.CloudActivity(id)
+		if e != nil {
 			return e
+		}
+		if e = checkMaintenanceActivity(activity); e != nil {
+			return e
+		}
+		if activity.Terminals > 0 && !w.ConfirmTerminals && (w.Action == "pause" || w.Action == "rebuild" || w.Action == "delete") {
+			return httpx.E(409, "CLOUD_TERMINALS_ACTIVE", "云电脑有保留的运维终端，请刷新后确认维护对终端的影响")
 		}
 		if w.Action == "delete" && v.VolumeID != nil && computerCapabilities(v).VolumeDeletion == "unsupported" {
 			return httpx.E(409, "CLOUD_VOLUME_DELETION_UNSUPPORTED", "后端不支持独立删除数据卷，无法完成永久删除")

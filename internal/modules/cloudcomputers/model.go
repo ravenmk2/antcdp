@@ -71,6 +71,7 @@ type Operation struct {
 }
 
 type Activity struct {
+	Terminals  int `db:"terminals"`
 	Leases     int `db:"leases"`
 	Transfers  int `db:"transfers"`
 	Unknown    int `db:"unknown"`

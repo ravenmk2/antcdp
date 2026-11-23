@@ -29,6 +29,7 @@ func registerAgentSandboxes(user, admin, infra *gin.RouterGroup, o Options) {
 		}))
 	}
 	registerSandboxFiles(u, o)
+	registerCloudTerminal(a, o)
 	infra.GET("/network-presets", agentRead(o, func(c *gin.Context) (*agents.Result, error) {
 		if !modelNoQuery(c) {
 			return nil, nil

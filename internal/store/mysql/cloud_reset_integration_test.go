@@ -92,6 +92,7 @@ func TestCloudBackendOwnershipAndVerifiedDeletion(t *testing.T) {
 	if before.State != "ready" || before.VolumeID == nil {
 		t.Fatal("computer not prepared")
 	}
+	t.Run("admin_terminals", func(t *testing.T) { testCloudTerminals(t, f, svc, before.ID) })
 	t.Run("synchronous_file_mutations", func(t *testing.T) {
 		testSynchronousWorkspaceMutations(t, f, svc, before.ID, remote.sandboxMemoryProvider)
 	})

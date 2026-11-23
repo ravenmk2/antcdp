@@ -135,7 +135,8 @@ func (t *agentsTx) CloudActivity(id uint64) (a.CloudActivity, error) {
  (SELECT COUNT(*) FROM agent_file_operation WHERE cloud_computer_id=? AND finished_at IS NULL) AS transfers,
  (SELECT COUNT(*) FROM sandbox_execution e JOIN agent_sandbox_execution a ON a.sandbox_execution_id=e.id JOIN agent_cloud_computer_lease l ON l.root_run_id=a.root_run_id WHERE l.cloud_computer_id=? AND finished_at IS NULL AND status='outcome_unknown') AS unknown,
  (SELECT COUNT(*) FROM agent_resource_reference WHERE resource_kind='cloud_computer' AND resource_id=? AND released_at IS NULL) AS refs,
- (SELECT COUNT(*) FROM cloud_computer_operation WHERE cloud_computer_id=? AND finished_at IS NULL) AS operations`, id, id, id, id, id)
+ (SELECT COUNT(*) FROM cloud_computer_operation WHERE cloud_computer_id=? AND kind<>'terminal' AND finished_at IS NULL) AS operations,
+ (SELECT COUNT(*) FROM cloud_computer_operation op JOIN cloud_computer c ON c.id=op.cloud_computer_id AND c.sandbox_instance_id=op.sandbox_instance_id WHERE c.id=? AND c.deleted_at IS NULL AND op.kind='terminal' AND op.finished_at IS NULL) AS terminals`, id, id, id, id, id, id)
 	return v, e
 }
 
@@ -159,7 +160,7 @@ func (s *Store) SandboxInUse(ctx context.Context) (bool, error) {
  OR EXISTS(SELECT 1 FROM sandbox_operation WHERE finished_at IS NULL)
  OR EXISTS(SELECT 1 FROM sandbox_execution WHERE finished_at IS NULL)
  OR EXISTS(SELECT 1 FROM agent_cloud_computer_lease WHERE released_at IS NULL)
- OR EXISTS(SELECT 1 FROM cloud_computer_operation WHERE finished_at IS NULL AND kind<>'command')
+ OR EXISTS(SELECT 1 FROM cloud_computer_operation WHERE finished_at IS NULL AND kind NOT IN ('command','terminal'))
  OR EXISTS(SELECT 1 FROM agent_file_operation WHERE finished_at IS NULL)`)
 	return busy, err
 }

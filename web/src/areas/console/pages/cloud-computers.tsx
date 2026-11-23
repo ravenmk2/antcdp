@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
+import { TerminalSquare } from "lucide-react";
+import { RowAction, RowActions } from "@/components/row-actions";
 import { Link, useParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { request } from "@/api/client";
@@ -37,7 +39,12 @@ import {
   sandboxKeys,
 } from "@/features/agents/sandbox/shared";
 
+const CloudTerminal = lazy(
+  () => import("@/features/agents/cloud/cloud-terminal"),
+);
+
 export function CloudComputersPage() {
+  const [terminal, setTerminal] = useState<string | null>(null);
   const { params, page, size, change } = useListParams();
   const state = params.get("state") ?? "all",
     pool = params.get("pool_agent_id") ?? "",
@@ -133,6 +140,7 @@ export function CloudComputersPage() {
             "状态",
             "活动轮次 / 待核实",
             "最近活动",
+            "操作",
           ]}
         >
           {query.data?.data.map((v) => (
@@ -165,6 +173,17 @@ export function CloudComputersPage() {
                 {v.active_leases} / {v.unknown_executions}
               </td>
               <td>{new Date(v.last_activity_at).toLocaleString()}</td>
+              <td>
+                <RowActions label={`云电脑 ${v.id}`}>
+                  <RowAction
+                    icon={<TerminalSquare />}
+                    disabled={v.state !== "ready"}
+                    onSelect={() => setTerminal(v.id)}
+                  >
+                    打开终端
+                  </RowAction>
+                </RowActions>
+              </td>
             </tr>
           ))}
         </SimpleTable>
@@ -178,6 +197,17 @@ export function CloudComputersPage() {
           }
         />
       </AsyncBoundary>
+      {terminal && (
+        <Suspense fallback={null}>
+          <CloudTerminal
+            computerId={terminal}
+            onClose={() => {
+              setTerminal(null);
+              void query.refetch();
+            }}
+          />
+        </Suspense>
+      )}
     </ConsoleListPage>
   );
 }
@@ -314,7 +344,7 @@ export function CloudComputerDetailPage() {
                 )}
               {!v.pool_agent_id && (
                 <p className="mt-4 text-sm text-muted">
-                  个人电脑的文件仅归属用户可访问；此页面只提供维护。
+                  文件浏览仅向个人电脑的归属用户开放。
                 </p>
               )}
             </Panel>
@@ -381,11 +411,21 @@ export function CloudComputerDetailPage() {
                       body: {
                         action: maintenance,
                         confirm_delete: maintenance === "delete",
+                        ...(v.terminal_sessions
+                          ? { confirm_terminals: true }
+                          : {}),
                       },
                     },
                   })
                 }
               >
+                {Boolean(v.terminal_sessions) &&
+                  ["pause", "rebuild", "delete"].includes(maintenance) && (
+                    <Notice tone="warning">
+                      这台云电脑有 {v.terminal_sessions}{" "}
+                      个保留的运维终端。暂停会中断连接，重建或删除会终止其中运行的进程。
+                    </Notice>
+                  )}
                 {action.recovery}
               </ConfirmDialog>
             )}

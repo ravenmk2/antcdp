@@ -229,6 +229,14 @@ func (t *agentsTx) InsertCloudOperation(v *a.CloudOperationRow) error {
 }
 
 func (t *agentsTx) SaveCloudOperation(v *a.CloudOperationRow) error {
+	// A confirmed replacement or deletion retires PTYs even if their browsers
+	// disconnected before the old instance went away.
+	if v.Status == "succeeded" && (v.Kind == "rebuild" || v.Kind == "delete") {
+		_, err := t.tx.ExecContext(t.ctx, `UPDATE cloud_computer_operation SET status='completed', finished_at=?, updated_at=? WHERE cloud_computer_id=? AND kind='terminal' AND finished_at IS NULL AND (?='delete' OR sandbox_instance_id<>?)`, v.UpdatedAt, v.UpdatedAt, v.ComputerID, v.Kind, v.InstanceID)
+		if err != nil {
+			return err
+		}
+	}
 	if e := t.saveCloudFileHold(v); e != nil {
 		return e
 	}
