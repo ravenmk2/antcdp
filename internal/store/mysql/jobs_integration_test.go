@@ -152,9 +152,7 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	// Service access validates the exact project credential but never decrypts it.
 	conn := testData(admin.call(t, "POST", "/admin/service-connections/jenkins", map[string]any{"name": "Job 未实现适配器", "code": "job-jenkins", "config": map[string]string{"base_url": "https://jenkins.example.com"}}, 201, nil))
 	grantServiceConnection(t, admin, "/admin/service-connections/jenkins/"+conn["id"].(string), "project", strings.TrimPrefix(project, "/projects/"), true)
-	credentials := project + "/service-connections/jenkins/" + conn["id"].(string) + "/credentials"
-	admin.call(t, "GET", credentials, nil, 200, nil)
-	cred := testData(admin.call(t, "POST", credentials, map[string]any{"name": "Job 凭证", "authentication": map[string]any{"auth_method": "jenkins_api_token", "identity_config": map[string]string{"username": "build-bot"}, "secret": map[string]string{"token": "must-never-be-decrypted"}}}, 201, map[string]string{"If-Match": admin.last.Header().Get("ETag")}))
+	cred := testData(admin.call(t, "POST", project+"/credentials", map[string]any{"name": "Job 凭证", "kind": "username_password", "identifier": "build-bot", "material": map[string]string{"value": "must-never-be-decrypted"}}, 201, nil))
 	grantBody := map[string]any{"connection_id": conn["id"], "credential_id": cred["id"]}
 	grant := testData(admin.call(t, "POST", path+"/resource-grants", grantBody, 200, nil))
 	bound := config(`async function main(ctx){try {await ctx.resources.call("job-jenkins","build",{target:"example",operation:"build",params:{}})}catch(e){return e.code}}`)

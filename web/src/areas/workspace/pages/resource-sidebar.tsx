@@ -4,6 +4,7 @@ import {
   FileText,
   FolderGit2,
   LayoutDashboard,
+  KeyRound,
   Play,
   Radio,
   Server,
@@ -69,6 +70,7 @@ const collaborationLinks = [
 const settingsLinks = [
   sectionLink("profile", Settings),
   sectionLink("integrations", Cable),
+  sectionLink("credentials", KeyRound),
   sectionLink("hosts", Server),
 ];
 const robotLink = sectionLink("dingtalk", Bot);

@@ -13,15 +13,21 @@ const sections = [
     icon: KeyRound,
   },
   {
+    to: "/account/credentials",
+    label: "凭据管理",
+    key: "credentials",
+    icon: KeyRound,
+  },
+  {
     to: "/account/integrations",
-    label: "服务凭证",
+    label: "服务连接",
     key: "integrations",
     icon: Cable,
     detail: "连接详情",
   },
   {
     to: "/account/remote-hosts",
-    label: "SSH 凭证",
+    label: "远程主机",
     key: "hosts",
     icon: Server,
     detail: "主机详情",
@@ -37,7 +43,7 @@ export function personalSettingsSection(path: string, search: string) {
         : matchPath({ path: section.to, end: !section.detail }, path),
     ) ??
     sections.find((section) => section.key === legacySection) ??
-    sections[0]!
+    sections.find((section) => section.key === "profile")!
   );
 }
 

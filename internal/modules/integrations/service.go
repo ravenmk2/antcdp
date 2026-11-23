@@ -14,6 +14,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/modules/credentials"
+
 	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
 
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
@@ -24,12 +26,13 @@ var credentialCodePattern = resourcecode.Pattern
 var strongTagPattern = regexp.MustCompile(`^"[a-f0-9]{64}"$`)
 
 type Service struct {
-	Type      string
-	Identity  *identity.Service
-	Store     func() (identity.Store, error)
-	Cipher    func(purpose, value string, seal bool) (string, error)
-	ETag      func(string) string
-	PublicURL string
+	CredentialCipher credentials.Cipher
+	Type             string
+	Identity         *identity.Service
+	Store            func() (identity.Store, error)
+	Cipher           func(purpose, value string, seal bool) (string, error)
+	ETag             func(string) string
+	PublicURL        string
 	// Probe is a controlled test seam. Production uses the restricted GitLab transport.
 	Probe        func(context.Context, *HTTPConfig, string, time.Time) Diagnostic
 	ReceiveEvent func(context.Context, identity.Tx, uint64, http.Header, []byte) (map[string]any, error)
@@ -100,17 +103,6 @@ type Authentication struct {
 	Method   string          `json:"auth_method"`
 	Identity json.RawMessage `json:"identity_config"`
 	Secret   *TokenSecret    `json:"secret"`
-}
-type CredentialCreate struct {
-	Code           Field[string]    `json:"code"`
-	Name           string           `json:"name"`
-	Description    Field[string]    `json:"description"`
-	Authentication *Authentication  `json:"authentication"`
-	ExpiresAt      Field[time.Time] `json:"expires_at"`
-}
-type CredentialWrite struct {
-	CommonWrite
-	ExpiresAt Field[time.Time] `json:"expires_at"`
 }
 type SelectionWrite struct {
 	CredentialID string `json:"credential_id"`
@@ -230,14 +222,14 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 				return forbidden()
 			}
 			owner.Owner = 0
-		case "personal":
+		case "user":
 			owner.Owner = a.User.ID
 		case "robot":
 			robot, err := identity.AuthorizeRobotAccount(tx, a, owner.Owner)
 			if err != nil {
 				return err
 			}
-			owner.Type, owner.Owner = "personal", robot.ID
+			owner.Type, owner.Owner = "user", robot.ID
 		case "project":
 			if err := authorizeSubject(tx, a, owner, true, write); err != nil {
 				return err
@@ -273,7 +265,7 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 				allowed = v.Ownership == "platform"
 			case "project":
 				allowed, err = r.ConnectionGranted(v.ID, owner, write)
-			case "personal":
+			case "user":
 				allowed, err = userConnectionAllowed(r, v, owner.Owner)
 			default:
 				return forbidden()
@@ -284,7 +276,7 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 			if !allowed {
 				return fail()
 			}
-			if write && owner.Type == "personal" && v.Ownership == "project" {
+			if write && owner.Type == "user" && v.Ownership == "project" {
 				active, err := ConnectionAllowed(r, v, CredentialOwnership{Type: "project", Owner: *v.ProjectID})
 				if err != nil {
 					return err
@@ -313,7 +305,7 @@ func (s *Service) connectionResult(v *ServiceConnection) Result {
 	return Result{Data: v, Tag: tag}
 }
 func (s *Service) credentialResult(v *ServiceCredential) Result {
-	tag := s.credentialTag(v)
+	tag := v.Tag()
 	v.EditVersion = unquote(tag)
 	return Result{Data: v, Tag: tag}
 }
@@ -575,13 +567,6 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 					return httpx.E(409, "CONNECTION_REFERENCED", "请先解除项目仓库关联")
 				}
 			}
-			n, err := r.CredentialCount(id)
-			if err != nil {
-				return err
-			}
-			if n != 0 {
-				return httpx.E(409, "CONNECTION_NOT_EMPTY", "请先移除该连接的全部凭证")
-			}
 			refs, err := r.ConnectionJobReferences(id, 0)
 			if err != nil {
 				return err
@@ -611,22 +596,9 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 }
 func sameID(a, b *uint64) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
 func purpose(kind string, connection, id uint64, method string) string {
-	return credentialPurpose("gitlab", kind, connection, id, method)
+	return fmt.Sprintf("service-integrations/gitlab/%s/%d/%d/%s/v1", kind, connection, id, method)
 }
-func owned(cr *ServiceCredential, v *ServiceConnection, o CredentialOwnership) bool {
-	if cr == nil || cr.ConnectionID != v.ID || cr.Type != v.Type || cr.Ownership != o.Type {
-		return false
-	}
-	switch o.Type {
-	case "platform":
-		return cr.UserID == nil && cr.ProjectID == nil
-	case "personal":
-		return cr.ProjectID == nil && cr.UserID != nil && *cr.UserID == o.Owner
-	case "project":
-		return cr.UserID == nil && cr.ProjectID != nil && *cr.ProjectID == o.Owner
-	}
-	return false
-}
+
 func validateToken(token string) error {
 	if len(token) < 8 || len(token) > 8192 || strings.ContainsAny(token, "\r\n\x00") || strings.TrimSpace(token) != token || strings.Trim(token, "*") == "" {
 		return httpx.Invalid("token", "invalid_format")
@@ -641,10 +613,6 @@ func newCredentialCode() (string, error) {
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return hex.EncodeToString(b[:]), nil
-}
-
-func credentialPurpose(serviceType, kind string, connection, id uint64, method string) string {
-	return fmt.Sprintf("service-integrations/%s/%s/%d/%d/%s/v1", serviceType, kind, connection, id, method)
 }
 
 func connectionURL(kind, raw string) string {

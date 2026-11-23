@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 )
 
 func TestJenkinsAuthentication(t *testing.T) {
@@ -29,18 +27,7 @@ func TestJenkinsAuthentication(t *testing.T) {
 	if validateAuthenticationFor("jenkins", valid) == nil {
 		t.Fatal("wrong authentication method accepted")
 	}
-	key := make([]byte, 32)
-	binding := credentialPurpose("jenkins", "credential", 1, 2, "jenkins_api_token")
-	sealed, err := cryptox.Encrypt(key, "installation", binding, "token-secret")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = cryptox.Decrypt(key, "installation", credentialPurpose("gitlab", "credential", 1, 2, "jenkins_api_token"), sealed); err == nil {
-		t.Fatal("ciphertext accepted by another service")
-	}
-	if purpose("credential", 1, 2, "gitlab_access_token") != "service-integrations/gitlab/credential/1/2/gitlab_access_token/v1" {
-		t.Fatal("GitLab encryption binding changed")
-	}
+
 }
 
 func TestJenkinsProbe(t *testing.T) {

@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Folder,
   LayoutDashboard,
+  KeyRound,
   Mail,
   MessageSquare,
   ScrollText,
@@ -65,6 +66,7 @@ const consoleGroups = [
     label: "连接与环境",
     icon: Cable,
     items: [
+      { to: "/admin/credentials", label: "凭据管理", icon: KeyRound },
       { to: "/admin/integrations", label: "服务集成", icon: Cable },
       { to: "/admin/remote-hosts", label: "远程主机", icon: Server },
       { to: "/admin/sandboxes", label: "沙箱配置", icon: Server },

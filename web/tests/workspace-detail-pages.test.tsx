@@ -300,9 +300,9 @@ it("keeps project credential links in the workspace", async () => {
     "aria-current",
     "page",
   );
-  await user.click(rail.getByRole("link", { name: "SSH 凭证" }));
+  await user.click(rail.getByRole("link", { name: "远程主机" }));
   expect(await screen.findByText("主机目录")).toBeVisible();
-  expect(rail.getByRole("link", { name: "SSH 凭证" })).toHaveAttribute(
+  expect(rail.getByRole("link", { name: "远程主机" })).toHaveAttribute(
     "aria-current",
     "page",
   );

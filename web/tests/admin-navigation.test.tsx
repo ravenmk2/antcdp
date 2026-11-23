@@ -105,6 +105,7 @@ it("restores only safe group preferences and reveals implemented routes", async 
     "技能库",
     "MCP 服务",
     "网络检索",
+    "凭据管理",
     "服务集成",
     "远程主机",
     "沙箱配置",

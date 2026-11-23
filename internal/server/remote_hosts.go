@@ -28,7 +28,7 @@ func remoteHostInput(c *gin.Context, input any) (any, bool) {
 	return reflect.ValueOf(input).Elem().Interface(), true
 }
 func registerRemoteHosts(api *gin.RouterGroup, o Options) {
-	s := &i.Service{Identity: o.Identity, Cipher: o.Installer.RemoteHostSecret, ETag: o.Installer.RemoteHostETag, PublicURL: o.Runtime.Origin(), Store: func() (identity.Store, error) {
+	s := &i.Service{Identity: o.Identity, Cipher: o.Installer.CredentialSecret, ETag: o.Installer.RemoteHostETag, PublicURL: o.Runtime.Origin(), Store: func() (identity.Store, error) {
 		st, ok := o.Installer.Backend().(identity.Store)
 		if !ok {
 			return nil, httpx.E(503, "SERVICE_UNAVAILABLE", "系统尚未就绪")
@@ -45,9 +45,6 @@ func registerRemoteHosts(api *gin.RouterGroup, o Options) {
 		}
 		if r.Tag != "" {
 			c.Header("ETag", r.Tag)
-		}
-		if r.CollectionTag != "" {
-			c.Header("X-Collection-ETag", r.CollectionTag)
 		}
 		if r.Location != "" {
 			location := r.Location
@@ -95,7 +92,7 @@ func registerRemoteHosts(api *gin.RouterGroup, o Options) {
 		})
 		for _, route := range []struct{ method, path, op string }{
 			{"GET", "", "get"}, {"PATCH", "", "update"}, {"DELETE", "", "delete"},
-			{"GET", "/fallback-credential", "fallback"}, {"PUT", "/fallback-credential", "set_fallback"}, {"DELETE", "/fallback-credential", "clear_fallback"}, {"GET", "/diagnostics", "diagnostics"},
+			{"GET", "/diagnostics", "diagnostics"},
 		} {
 			api.Handle(route.method, base+"/:connection_id"+route.path, func(c *gin.Context) {
 				if !noQuery(c) {
@@ -109,8 +106,6 @@ func registerRemoteHosts(api *gin.RouterGroup, o Options) {
 				switch route.op {
 				case "update":
 					input = &i.ConnectionWrite{}
-				case "set_fallback":
-					input = &i.SelectionWrite{}
 				}
 				input, ok = remoteHostInput(c, input)
 				if !ok {
@@ -150,11 +145,10 @@ func registerRemoteHosts(api *gin.RouterGroup, o Options) {
 			r, a, err := s.Verify(c.Request.Context(), rawSession(c), id, 0, i.CredentialOwnership{Type: "platform"}, c.GetHeader("If-Match"), metadata(c))
 			finish(c, r, a, err, 200)
 		})
-		for _, group := range []struct{ path, ownership string }{{base, "platform"}, {personal, "personal"}, {project, "project"}, {"/admin/robots/:robot_id/remote-hosts", "robot"}} {
+		for _, group := range []struct{ path, ownership string }{{base, "platform"}, {personal, "user"}, {project, "project"}, {"/admin/robots/:robot_id/remote-hosts", "robot"}} {
 			prefix := group.path + "/:connection_id/credentials"
 			for _, route := range []struct{ method, path, op string }{
-				{"GET", "", "list"}, {"POST", "", "create"}, {"GET", "/preferred", "get_preferred"}, {"PUT", "/preferred", "preferred"}, {"DELETE", "/preferred", "clear_preferred"},
-				{"GET", "/:credential_id", "get"}, {"PATCH", "/:credential_id", "update"}, {"DELETE", "/:credential_id", "delete"}, {"PUT", "/:credential_id/authentication", "authentication"}, {"GET", "/:credential_id/diagnostics", "diagnostics"}, {"POST", "/:credential_id/verify", "verify"},
+				{"GET", "", "list"}, {"GET", "/preferred", "get_preferred"}, {"PUT", "/preferred", "preferred"}, {"DELETE", "/preferred", "clear_preferred"}, {"GET", "/:credential_id/diagnostics", "diagnostics"}, {"POST", "/:credential_id/verify", "verify"},
 			} {
 				api.Handle(route.method, prefix+route.path, func(c *gin.Context) {
 					if !noQuery(c) {
@@ -186,14 +180,8 @@ func registerRemoteHosts(api *gin.RouterGroup, o Options) {
 					}
 					var input any
 					switch route.op {
-					case "create":
-						input = &i.CredentialCreate{}
-					case "update":
-						input = &i.CredentialWrite{}
 					case "preferred":
 						input = &i.SelectionWrite{}
-					case "authentication":
-						input = &i.Authentication{}
 					case "verify":
 						input = &struct{}{}
 					}
@@ -209,11 +197,8 @@ func registerRemoteHosts(api *gin.RouterGroup, o Options) {
 						finish(c, r, a, err, 200)
 						return
 					}
-					r, a, err := s.Credentials(c.Request.Context(), rawSession(c), id, cid, owner, route.op, c.GetHeader("If-Match"), c.GetHeader("X-Collection-If-Match"), input, metadata(c))
+					r, a, err := s.Choices(c.Request.Context(), rawSession(c), id, cid, owner, route.op, c.GetHeader("If-Match"), input, metadata(c))
 					status := 200
-					if route.op == "create" {
-						status = 201
-					}
 					if route.method == "DELETE" {
 						status = 204
 					}

@@ -627,19 +627,8 @@ func (s *Service) IntegrationSecret(purpose, value string, seal bool) (string, e
 	return s.resourceSecret("integrations", purpose, value, seal)
 }
 
-// RemoteHostSecret uses an independent derived key for new material. Legacy SSH
-// ciphertext can only be opened with its original purpose and derivation.
-func (s *Service) RemoteHostSecret(purpose, value string, seal bool) (string, error) {
-	namespace := "remote-hosts"
-	if strings.HasPrefix(purpose, "service-integrations/ssh/credential/") {
-		if seal {
-			return "", errors.New("legacy SSH encryption is read-only")
-		}
-		namespace = "integrations"
-	} else if !strings.HasPrefix(purpose, "remote-hosts/ssh/credential/") {
-		return "", errors.New("invalid remote host purpose")
-	}
-	return s.resourceSecret(namespace, purpose, value, seal)
+func (s *Service) CredentialSecret(purpose, value string, seal bool) (string, error) {
+	return s.resourceSecret("credentials", purpose, value, seal)
 }
 func (s *Service) resourceSecret(namespace, purpose, value string, seal bool) (string, error) {
 	s.mu.RLock()

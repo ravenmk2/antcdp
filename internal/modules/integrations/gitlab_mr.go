@@ -38,7 +38,7 @@ func (s *Service) AgentGitLabMRClient(ctx context.Context, auth agentcore.Author
 		if _, err = c.ID(row.RepoID); err != nil {
 			return integrity()
 		}
-		snap, err := s.preferredRepoSnapshot(r, conn, true, CredentialOwnership{Type: "personal", Owner: user.ID})
+		snap, err := s.preferredRepoSnapshot(r, conn, true, CredentialOwnership{Type: "user", Owner: user.ID})
 		if err != nil {
 			return err
 		}

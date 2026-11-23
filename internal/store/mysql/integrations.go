@@ -14,7 +14,6 @@ import (
 
 const connectionColumns = "id,service_type,ownership_type,project_id,code,name,description,enabled,row_version,config_version,credentials_version,grants_version,created_by_user_id,created_at,updated_at"
 const secretProjection = "secret_ciphertext IS NOT NULL AS has_secret,COALESCE(((secret_ciphertext IS NULL AND secret_format_version IS NULL AND secret_key_version IS NULL) OR (secret_ciphertext IS NOT NULL AND secret_format_version=1 AND secret_key_version='v1')),FALSE) AS secret_valid"
-const credentialColumns = "id,connection_id,service_type,code,ownership_type,project_id,user_id,name,description,auth_method,auth_schema_version,identity_config,enabled,is_preferred," + secretProjection + ",expires_at,row_version,material_version,created_by_user_id,created_at,updated_at"
 
 func integrationIntegrity() error {
 	return httpx.E(500, "DATA_INTEGRITY_ERROR", "服务配置完整性异常")
@@ -64,6 +63,9 @@ func (t *identityTx) SaveConnection(v *i.ServiceConnection) error {
 	return t.tx.GetContext(t.ctx, &v.UpdatedAt, "SELECT updated_at FROM service_connection WHERE id=?", v.ID)
 }
 func (t *identityTx) DeleteConnection(id uint64) error {
+	if _, err := t.tx.ExecContext(t.ctx, "DELETE FROM credential_preference WHERE resource_kind='service_connection' AND resource_id=?", id); err != nil {
+		return err
+	}
 	if _, err := t.tx.ExecContext(t.ctx, "DELETE FROM service_connection_grant WHERE connection_id=?", id); err != nil {
 		return err
 	}
@@ -72,58 +74,6 @@ func (t *identityTx) DeleteConnection(id uint64) error {
 	}
 	_, err := t.tx.ExecContext(t.ctx, "DELETE FROM service_connection WHERE id=?", id)
 	return err
-}
-func (t *identityTx) Credentials(id uint64, owner i.CredentialOwnership) ([]i.ServiceCredential, error) {
-	rows := []i.ServiceCredential{}
-	err := t.tx.SelectContext(t.ctx, &rows, "SELECT "+credentialColumns+" FROM service_credential WHERE connection_id=? AND ownership_type=? AND owner_key=? ORDER BY name,id", id, owner.Type, owner.Owner)
-	if err != nil {
-		return nil, err
-	}
-	for j := range rows {
-		if !rows[j].ValidRecord() {
-			return nil, integrationIntegrity()
-		}
-	}
-	return rows, nil
-}
-func (t *identityTx) Credential(id uint64) (*i.ServiceCredential, error) {
-	v := &i.ServiceCredential{}
-	err := t.tx.GetContext(t.ctx, v, "SELECT "+credentialColumns+" FROM service_credential WHERE id=?", id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	if !v.ValidRecord() {
-		return nil, integrationIntegrity()
-	}
-	return v, nil
-}
-func (t *identityTx) InsertCredential(v *i.ServiceCredential) error {
-	v.CreatedAt = time.Now().UTC().Truncate(time.Millisecond)
-	v.UpdatedAt = v.CreatedAt
-	result, err := t.tx.NamedExecContext(t.ctx, "INSERT INTO service_credential(connection_id,service_type,code,ownership_type,project_id,user_id,name,description,auth_method,auth_schema_version,identity_config,expires_at,created_by_user_id,created_at,updated_at) VALUES(:connection_id,:service_type,:code,:ownership_type,:project_id,:user_id,:name,:description,:auth_method,:auth_schema_version,:identity_config,:expires_at,:created_by_user_id,:created_at,:updated_at)", v)
-	if err != nil {
-		return err
-	}
-	id, err := result.LastInsertId()
-	v.ID = uint64(id)
-	return err
-}
-func (t *identityTx) SaveCredential(v *i.ServiceCredential) error {
-	v.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
-	_, err := t.tx.NamedExecContext(t.ctx, "UPDATE service_credential SET name=:name,description=:description,auth_method=:auth_method,auth_schema_version=:auth_schema_version,identity_config=:identity_config,enabled=:enabled,is_preferred=:is_preferred,expires_at=:expires_at,row_version=:row_version,material_version=:material_version,updated_at=:updated_at WHERE id=:id", v)
-	return err
-}
-func (t *identityTx) DeleteCredential(id uint64) error {
-	_, err := t.tx.ExecContext(t.ctx, "DELETE FROM service_credential WHERE id=?", id)
-	return err
-}
-func (t *identityTx) CredentialCount(id uint64) (int, error) {
-	var n int
-	err := t.tx.GetContext(t.ctx, &n, "SELECT COUNT(*) FROM service_credential WHERE connection_id=?", id)
-	return n, err
 }
 func (t *identityTx) WebhookSettings(id uint64) (*i.WebhookSettings, error) {
 	v := &i.WebhookSettings{}
@@ -149,8 +99,7 @@ func (t *identityTx) SaveWebhookSettings(v *i.WebhookSettings) error {
 }
 func secretColumns(kind string) (table, prefix, key string) {
 	switch kind {
-	case "credential":
-		return "service_credential", "", "id"
+
 	case "webhook":
 		return "service_connection_gitlab", "webhook_", "connection_id"
 	}
@@ -175,7 +124,7 @@ func diagnosticColumns(kind string) (table, col, key string) {
 	case "connection":
 		return "service_connection", "last_connection_check", "id"
 	case "credential":
-		return "service_credential", "last_verification", "id"
+		return "credential_preference", "last_verification", "id"
 	case "webhook":
 		return "service_connection_gitlab", "webhook_last_receipt", "connection_id"
 	}
@@ -191,29 +140,4 @@ func (t *identityTx) SaveDiagnostics(kind string, id uint64, v json.RawMessage) 
 	table, col, key := diagnosticColumns(kind)
 	_, err := t.tx.ExecContext(t.ctx, fmt.Sprintf("UPDATE %s SET %s=? WHERE %s=?", table, col, key), []byte(v), id)
 	return err
-}
-
-// Account deletion already holds the user row; creation takes the same lock.
-func (t *identityTx) DeletePersonalServiceCredentials(uid uint64) error {
-	ids := []uint64{}
-	if err := t.tx.SelectContext(t.ctx, &ids, "SELECT DISTINCT connection_id FROM service_credential WHERE user_id=? ORDER BY connection_id", uid); err != nil {
-		return err
-	}
-	for _, id := range ids {
-		v, err := t.Connection(id)
-		if err != nil {
-			return err
-		}
-		if v == nil {
-			return integrationIntegrity()
-		}
-		if _, err = t.tx.ExecContext(t.ctx, "DELETE FROM service_credential WHERE connection_id=? AND ownership_type='personal' AND user_id=?", id, uid); err != nil {
-			return err
-		}
-		v.CredentialsVersion++
-		if err = t.SaveConnection(v); err != nil {
-			return err
-		}
-	}
-	return nil
 }

@@ -22,7 +22,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	t.Run("message_management", func(t *testing.T) { verifyMessageManagement(t, db, installer, admin, member) })
 	t.Run("project_repositories", func(t *testing.T) { verifyProjectRepositories(t, db, admin, member, other, adminID, memberID) })
 	verifyJenkinsIntegrations(t, db, installer, admin, member, other, memberID)
-	t.Run("remote_hosts", func(t *testing.T) { verifyRemoteHosts(t, db, installer, admin, member, other) })
+	t.Run("remote_hosts", func(t *testing.T) { verifyRemoteHosts(t, db, installer, admin, member, other, memberID) })
 	base := "/admin/service-connections/gitlab"
 	tag := func(client *apiClient, path string) map[string]string {
 		client.call(t, "GET", path, nil, 200, nil)
@@ -179,47 +179,44 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	admin.call(t, "GET", base+"/"+otherID+"/webhook-endpoints/"+id, nil, 404, nil)
 	member.call(t, "GET", webhook, nil, 403, nil)
 
-	auth := map[string]any{"auth_method": "gitlab_access_token", "identity_config": map[string]any{}, "secret": map[string]string{"token": "glpat-private-test-token"}}
+	material := map[string]string{"value": "glpat-private-test-token"}
 	create := func(client *apiClient, p, name string) string {
-		data := testData(client.call(t, "POST", p, map[string]any{"name": name, "authentication": auth}, 201, tag(client, p)))
-		if strings.Contains(fmt.Sprint(data), "glpat-") || strings.Contains(fmt.Sprint(data), "ciphertext") {
+		data := testData(client.call(t, "POST", p, map[string]any{"name": name, "kind": "secret", "material": material}, 201, nil))
+		if strings.Contains(fmt.Sprint(data), "glpat-") {
 			t.Fatal("secret leaked")
-		}
-		code := data["code"].(string)
-		if len(code) != 32 || code[12] != '4' {
-			t.Fatal("invalid UUID")
 		}
 		return data["id"].(string)
 	}
+	catalog := "/admin/credentials"
 	commonBefore := admin.call(t, "GET", path, nil, 200, nil)
 	commonTag := admin.last.Header().Get("ETag")
 	sys := path + "/credentials"
-	one := create(admin, sys, "系统一")
-	two := create(admin, sys, "系统二")
+	one := create(admin, catalog, "系统一")
+	two := create(admin, catalog, "系统二")
 	commonAfter := admin.call(t, "GET", path, nil, 200, nil)
 	if fmt.Sprint(commonBefore) != fmt.Sprint(commonAfter) || admin.last.Header().Get("ETag") != commonTag {
 		t.Fatal("credential write altered connection representation")
 	}
 	for _, code := range []string{"UPPER", "bad space", "-prefix", strings.Repeat("a", 65)} {
-		admin.call(t, "POST", sys, map[string]any{"name": "code test", "code": code, "authentication": auth}, 422, tag(admin, sys))
+		admin.call(t, "POST", catalog, map[string]any{"name": "code test", "code": code, "kind": "secret", "material": material}, 422, tag(admin, sys))
 	}
-	oneData := testData(admin.call(t, "GET", sys+"/"+one, nil, 200, nil))
-	member.call(t, "POST", "/me/service-connections/gitlab/"+id+"/credentials", map[string]any{"name": "duplicate", "code": oneData["code"], "authentication": auth}, 201, tag(member, "/me/service-connections/gitlab/"+id+"/credentials"))
-	admin.call(t, "PATCH", sys+"/"+one, map[string]string{"code": "renamed"}, 422, tag(admin, sys+"/"+one))
-	admin.call(t, "PUT", sys+"/"+one+"/authentication", map[string]any{"auth_method": "gitlab_access_token", "identity_config": map[string]string{"token_type": "personal"}, "secret": map[string]string{"token": "new-token-value"}}, 422, tag(admin, sys+"/"+one))
-	beforeCredential := tag(admin, sys+"/"+one)["If-Match"]
+	oneData := testData(admin.call(t, "GET", catalog+"/"+one, nil, 200, nil))
+	member.call(t, "POST", "/me/credentials", map[string]any{"name": "duplicate", "code": oneData["code"], "kind": "secret", "material": material}, 201, nil)
+	admin.call(t, "POST", catalog, map[string]any{"name": "conflict", "code": oneData["code"], "kind": "access_key_pair", "identifier": "test", "material": material}, 409, nil)
+	admin.call(t, "PATCH", catalog+"/"+one, map[string]string{"code": "renamed"}, 422, tag(admin, catalog+"/"+one))
+	beforeCredential := tag(admin, catalog+"/"+one)["If-Match"]
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": one}, 200, tag(admin, sys+"/preferred"))
-	if tag(admin, sys+"/"+one)["If-Match"] == beforeCredential {
-		t.Fatal("preferred failed to update object version")
+	if tag(admin, catalog+"/"+one)["If-Match"] != beforeCredential {
+		t.Fatal("preference modified independent credential")
 	}
 	oldPreferred := tag(admin, sys+"/preferred")
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": two}, 200, oldPreferred)
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": one}, 412, oldPreferred)
 	admin.call(t, "GET", path+"/fallback-credential", nil, 404, nil)
-	admin.call(t, "PATCH", sys+"/"+two, map[string]bool{"enabled": false}, 200, tag(admin, sys+"/"+two))
+	admin.call(t, "PATCH", catalog+"/"+two, map[string]bool{"enabled": false}, 200, tag(admin, catalog+"/"+two))
 
-	if testData(admin.call(t, "GET", sys+"/preferred", nil, 200, nil))["credential_id"] != nil {
-		t.Fatal("disabled preferred not cleared")
+	if testData(admin.call(t, "GET", sys+"/preferred", nil, 200, nil))["credential_id"] != two {
+		t.Fatal("disable changed selected identity")
 	}
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": one}, 200, tag(admin, sys+"/preferred"))
 	// Two commands share the same preferred snapshot; only one may commit.
@@ -245,14 +242,14 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	if (first != http.StatusNoContent || second != http.StatusPreconditionFailed) && (second != http.StatusNoContent || first != http.StatusPreconditionFailed) {
 		t.Fatalf("concurrent selection: %d/%d", first, second)
 	}
-	admin.call(t, "PUT", sys+"/"+one+"/authentication", auth, 200, tag(admin, sys+"/"+one))
+	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": one}, 200, tag(admin, sys+"/preferred"))
 	// Real encryption and transactions, with only the remote HTTP probe substituted.
 	store := func() (identity.Store, error) { return db, nil }
-	svc := &integrations.Service{Identity: identity.New(store), Store: store, Cipher: installer.IntegrationSecret, ETag: installer.IntegrationETag}
+	svc := &integrations.Service{Identity: identity.New(store), Store: store, CredentialCipher: installer.CredentialSecret, Cipher: installer.IntegrationSecret, ETag: installer.IntegrationETag}
 	connectionID, _ := strconv.ParseUint(id, 10, 64)
 	credentialID, _ := strconv.ParseUint(one, 10, 64)
 	raw := admin.cookies["antcdp_session"].Value
-	credentialTag := tag(admin, sys+"/"+one)["If-Match"]
+	credentialTag := tag(admin, catalog+"/"+one)["If-Match"]
 	collectionTag := tag(admin, sys)["If-Match"]
 	svc.Probe = func(ctx context.Context, _ *integrations.HTTPConfig, token string, started time.Time) integrations.Diagnostic {
 		if token != "glpat-private-test-token" {
@@ -263,7 +260,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	if _, _, err := svc.Verify(context.Background(), raw, connectionID, credentialID, integrations.CredentialOwnership{Type: "platform"}, credentialTag); err != nil {
 		t.Fatal(err)
 	}
-	if tag(admin, sys+"/"+one)["If-Match"] != credentialTag || tag(admin, sys)["If-Match"] != collectionTag {
+	if tag(admin, catalog+"/"+one)["If-Match"] != credentialTag || tag(admin, sys)["If-Match"] != collectionTag {
 		t.Fatal("diagnostic changed edit versions")
 	}
 	svc.Probe = func(ctx context.Context, _ *integrations.HTTPConfig, _ string, started time.Time) integrations.Diagnostic {
@@ -285,24 +282,17 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 		t.Fatal("stale result replaced latest diagnostic", latest)
 	}
 	var sealed string
-	if err := db.db.GetContext(context.Background(), &sealed, "SELECT secret_ciphertext FROM service_credential WHERE id=?", one); err != nil {
+	if err := db.db.GetContext(context.Background(), &sealed, "SELECT ciphertext FROM credential WHERE id=?", one); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.db.ExecContext(context.Background(), "UPDATE service_credential SET secret_format_version=NULL WHERE id=?", one); err != nil {
-		t.Fatal(err)
+	if _, err := installer.CredentialSecret("credential/"+two+"/secret/v1", sealed, false); err == nil {
+		t.Fatal("material accepted for different credential")
 	}
-	expectCode(t, admin.call(t, "GET", sys+"/"+one, nil, 500, nil), "DATA_INTEGRITY_ERROR")
-	if _, err := db.db.ExecContext(context.Background(), "UPDATE service_credential SET secret_format_version=1 WHERE id=?", one); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := installer.IntegrationSecret("service-integrations/gitlab/credential/"+id+"/"+two+"/gitlab_access_token/v1", sealed, false); err == nil {
-		t.Fatal("secret accepted under another credential")
-	}
-	mine := "/me/service-connections/gitlab/" + id + "/credentials"
+	mine := "/me/credentials"
 	personal := create(member, mine, "个人令牌")
 	admin.call(t, "GET", mine+"/"+personal, nil, 404, nil)
 	other.call(t, "GET", mine+"/"+personal, nil, 404, nil)
-	pp := "/projects/" + pid + "/service-connections/gitlab/" + id + "/credentials"
+	pp := "/projects/" + pid + "/credentials"
 	projectCred := create(member, pp, "项目令牌")
 	other.call(t, "GET", pp, nil, 403, nil)
 	admin.call(t, "GET", pp, nil, 200, nil)
@@ -311,11 +301,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	member.call(t, "PATCH", pp+"/"+projectCred, map[string]string{"name": "禁止修改"}, 409, tag(member, pp+"/"+projectCred))
 	admin.call(t, "POST", "/projects/"+pid+"/restore", nil, 204, tag(admin, "/projects/"+pid))
 	member.call(t, "POST", mine, map[string]any{"name": "非法归属", "user_id": adminID}, 422, tag(member, mine))
-	oldCollection := tag(admin, sys)["If-Match"]
-	create(admin, sys, "系统三")
-	headers := tag(admin, sys+"/"+one)
-	headers["X-Collection-If-Match"] = oldCollection
-	admin.call(t, "DELETE", sys+"/"+one, nil, 412, headers)
+	admin.call(t, "DELETE", catalog+"/"+one, nil, 409, tag(admin, catalog+"/"+one))
 	admin.call(t, "DELETE", path, nil, 409, tag(admin, path))
 	// Connection deletion removes its singleton settings, secret and receiver.
 	admin.call(t, "DELETE", base+"/"+secondID, nil, 204, tag(admin, base+"/"+secondID))

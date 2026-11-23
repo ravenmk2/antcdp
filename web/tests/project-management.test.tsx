@@ -229,9 +229,9 @@ it("keeps credential management inside the console project context", async () =>
   const link = await screen.findByRole("link", { name: "管理服务连接" });
   expect(link).toHaveAttribute("href", "/admin/projects/7/integrations");
 
-  await user.click(screen.getByRole("button", { name: "SSH 凭证" }));
+  await user.click(screen.getByRole("button", { name: "远程主机" }));
   expect(
-    await screen.findByRole("link", { name: "管理 SSH 凭证" }),
+    await screen.findByRole("link", { name: "配置远程主机首选凭据" }),
   ).toHaveAttribute("href", "/admin/projects/7/remote-hosts");
 });
 

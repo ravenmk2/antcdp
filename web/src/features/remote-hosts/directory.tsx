@@ -411,7 +411,6 @@ export function HostDetail({
           <CredentialPanel
             base={`${scope}/remote-hosts/${host.id}/credentials`}
             provider={sshProvider}
-            fallbackPath={admin ? `${path}/fallback-credential` : undefined}
             readonly={project?.status === "archived"}
           />
         )}
@@ -434,7 +433,7 @@ export function HostDetail({
       >
         <ErrorNotice error={submission.error} />
         <p className="text-sm text-muted">
-          删除前须清空全部归属凭证；已信任公钥与诊断会一并删除。
+          删除主机将清除其首选设置、公钥和诊断记录。
         </p>
       </ConfirmDialog>
     </>

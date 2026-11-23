@@ -1,3 +1,4 @@
+import { Link as RouterLink } from "react-router";
 import { useState } from "react";
 import { isVersionConflict, request } from "@/api/client";
 import { Button } from "@/components/button";
@@ -257,7 +258,7 @@ function RobotCredentials({
           value={selected}
           onValueChange={setSelected}
         >
-          <option value="">选择要配置凭据的连接</option>
+          <option value="">选择资源以设置首选凭据</option>
           {query.data?.data.items.map((v) => (
             <option key={v.id} value={v.id}>
               {v.name}
@@ -279,7 +280,12 @@ function RobotCredentials({
             base={`/admin/robots/${robotId}/${kind === "hosts" ? "remote-hosts" : `service-connections/${item.service_type}`}/${item.id}/credentials`}
           />
         ) : (
-          <Notice>选择连接后管理机器人的账号凭据。秘密保存后不可读取。</Notice>
+          <RouterLink
+            className="text-sm text-primary"
+            to={`/admin/robots/${robotId}/credentials`}
+          >
+            管理机器人账号凭据 →
+          </RouterLink>
         )}
       </AsyncBoundary>
     </div>

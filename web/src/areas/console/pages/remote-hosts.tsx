@@ -50,13 +50,11 @@ export function RemoteHostsPage({
   return (
     <ConsoleListPage nested>
       <PageHeader
-        title={
-          admin ? "远程主机" : projectId ? "项目 SSH 凭证" : "个人 SSH 凭证"
-        }
+        title={admin ? "远程主机" : projectId ? "项目远程主机" : "个人远程主机"}
         description={
           admin
-            ? "维护 SSH 主机、公钥信任、归属凭证与连接诊断。"
-            : "选择主机并维护当前归属凭证；主机地址和公钥信任由系统管理员管理。"
+            ? "维护 SSH 主机、公钥信任、首选凭据和连接诊断。"
+            : "选择远程主机，配置当前范围的首选凭据。"
         }
       />
       <HostDirectory

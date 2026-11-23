@@ -27,13 +27,9 @@ func verifyJenkinsIntegrations(t *testing.T, db *Store, installer *install.Servi
 func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.Service, admin, member, other *apiClient, memberID, kind, label string) {
 	t.Helper()
 	base := "/admin/service-connections/" + kind
-	method := kind + "_basic"
-	if kind == "jenkins" {
-		method = "jenkins_api_token"
-	}
 	initialURL, updatedURL := "https://jenkins.example.com/jenkins/", "http://jenkins.example.com/ci"
 	if kind == "mysql" || kind == "postgresql" {
-		method = kind + "_password"
+
 		initialURL = kind + "://db.example.com/app"
 		updatedURL = kind + "://db.example.com/other"
 	}
@@ -91,23 +87,20 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 	admin.call(t, "PATCH", path, map[string]any{"name": "stale"}, 412, old)
 	admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"job": "forbidden"}}, 422, tag(admin, path))
 	sys := path + "/credentials"
-	auth := map[string]any{"auth_method": method, "identity_config": map[string]string{"username": "build-bot"}, "secret": map[string]string{"token": "jenkins-private-test-token"}}
 	create := func(client *apiClient, collection, name string) string {
-		result := testData(client.call(t, "POST", collection, map[string]any{"name": name, "authentication": auth}, 201, tag(client, collection)))
-		if result["identity_config"].(map[string]any)["username"] != "build-bot" || strings.Contains(fmt.Sprint(result), "jenkins-private-test-token") {
+		result := testData(client.call(t, "POST", collection, map[string]any{"name": name, "kind": "username_password", "identifier": "build-bot", "material": map[string]string{"value": "jenkins-private-test-token"}}, 201, nil))
+		if result["identifier"] != "build-bot" || strings.Contains(fmt.Sprint(result), "jenkins-private-test-token") {
 			t.Fatal("incorrect public identity/secret")
 		}
 		return result["id"].(string)
 	}
-	cid := create(admin, sys, "系统构建账号")
-	cp := sys + "/" + cid
-	admin.call(t, "POST", sys, map[string]any{"name": "wrong method", "authentication": map[string]any{"auth_method": "gitlab_access_token", "identity_config": map[string]string{}, "secret": map[string]string{"token": "test-token"}}}, 422, tag(admin, sys))
-	admin.call(t, "PUT", cp+"/authentication", map[string]any{"auth_method": method, "identity_config": map[string]string{"username": "bot", "extra": "forbidden"}, "secret": map[string]string{"token": "test-token"}}, 422, tag(admin, cp))
-	admin.call(t, "GET", "/admin/service-connections/gitlab/"+id+"/credentials/"+cid, nil, 404, nil)
+	catalog := "/admin/credentials"
+	cid := create(admin, catalog, "系统构建账号")
+	cp := catalog + "/" + cid
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": cid}, 200, tag(admin, sys+"/preferred"))
 	admin.call(t, "GET", path+"/fallback-credential", nil, 404, nil)
 	store := func() (identity.Store, error) { return db, nil }
-	svc := (&integrations.Service{Identity: identity.New(store), Store: store, Cipher: installer.IntegrationSecret, ETag: installer.IntegrationETag}).ForType(kind)
+	svc := (&integrations.Service{Identity: identity.New(store), Store: store, CredentialCipher: installer.CredentialSecret, Cipher: installer.IntegrationSecret, ETag: installer.IntegrationETag}).ForType(kind)
 	connectionID, _ := strconv.ParseUint(id, 10, 64)
 	credentialID, _ := strconv.ParseUint(cid, 10, 64)
 	raw := admin.cookies["antcdp_session"].Value
@@ -133,7 +126,7 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 			t.Fatal("TLS default missing")
 		}
 		admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"tls_mode": "verify-full"}}, 200, tag(admin, path))
-		diagnostic := testData(admin.call(t, "GET", cp+"/diagnostics", nil, 200, nil))["latest"].(map[string]any)
+		diagnostic := testData(admin.call(t, "GET", sys+"/"+cid+"/diagnostics", nil, 200, nil))["latest"].(map[string]any)
 		if diagnostic["outdated"] != true {
 			t.Fatal("TLS change did not invalidate verification")
 		}
@@ -143,7 +136,7 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 	}
 	if kind == "openobserve" {
 		admin.call(t, "PATCH", path, map[string]any{"config": map[string]any{"default_organization": "another_org"}}, 200, tag(admin, path))
-		diagnostic := testData(admin.call(t, "GET", cp+"/diagnostics", nil, 200, nil))["latest"].(map[string]any)
+		diagnostic := testData(admin.call(t, "GET", sys+"/"+cid+"/diagnostics", nil, 200, nil))["latest"].(map[string]any)
 		if diagnostic["outdated"] != true {
 			t.Fatal("organization change did not invalidate verification")
 		}
@@ -161,56 +154,37 @@ func verifyHTTPServiceIntegrations(t *testing.T, db *Store, installer *install.S
 	if !errors.As(err, &apiErr) || apiErr.Code != "STATE_CHANGED" {
 		t.Fatal("stale result accepted", err)
 	}
-	if kind == "elasticsearch" {
-		keyAuth := map[string]any{"auth_method": "elasticsearch_api_key", "identity_config": map[string]string{}, "secret": map[string]string{"token": "aWQ6c2VjcmV0"}}
-		admin.call(t, "PUT", cp+"/authentication", keyAuth, 200, tag(admin, cp))
-		if testData(admin.call(t, "GET", cp, nil, 200, nil))["auth_method"] != "elasticsearch_api_key" {
-			t.Fatal("API key replacement failed")
-		}
+	admin.call(t, "PATCH", cp, map[string]any{"identifier": "new-bot", "material": map[string]string{"value": "new-test-material"}}, 200, tag(admin, cp))
+	if testData(admin.call(t, "GET", sys+"/preferred", nil, 200, nil))["credential_id"] != cid {
+		t.Fatal("rotation lost preference")
 	}
-	auth["identity_config"] = map[string]string{"username": "new-bot"}
-	admin.call(t, "PUT", cp+"/authentication", auth, 200, tag(admin, cp))
-	stored := testData(admin.call(t, "GET", cp, nil, 200, nil))
-	if stored["identity_config"].(map[string]any)["username"] != "new-bot" || stored["is_preferred"] != true {
-		t.Fatal("authentication replacement lost identity/preferred")
-	}
-	auth["identity_config"] = map[string]string{"username": "build-bot"}
-	var sealed string
-	if err := db.db.GetContext(context.Background(), &sealed, "SELECT secret_ciphertext FROM service_credential WHERE id=?", cid); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := installer.IntegrationSecret("service-integrations/gitlab/credential/"+id+"/"+cid+"/jenkins_api_token/v1", sealed, false); err == nil {
-		t.Fatal("cross-type decryption succeeded")
-	}
-	admin.call(t, "PATCH", cp, map[string]any{"enabled": false}, 200, tag(admin, cp))
-	if testData(admin.call(t, "GET", sys+"/preferred", nil, 200, nil))["credential_id"] != nil {
-		t.Fatal("disabled selections retained")
-	}
-	admin.call(t, "POST", cp+"/verify", map[string]any{}, 409, tag(admin, cp))
+	admin.call(t, "PATCH", cp, map[string]bool{"enabled": false}, 200, tag(admin, cp))
+	admin.call(t, "POST", sys+"/"+cid+"/verify", map[string]any{}, 409, tag(admin, cp))
 	admin.call(t, "PATCH", path, map[string]any{"enabled": false}, 200, tag(admin, path))
 	admin.call(t, "POST", path+"/test", map[string]any{}, 409, tag(admin, path))
 	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": strings.ToLower(label) + "_project", "name": label + " 项目权限", "admin_user_ids": []string{memberID}}, 201, nil))
 	projectPath := "/projects/" + project["id"].(string)
 	grantServiceConnection(t, admin, path, "project", project["id"].(string), true)
-	mine := "/me/service-connections/" + kind + "/" + id + "/credentials"
+	mine := "/me/credentials"
 	personal := create(member, mine, "个人构建账号")
 	admin.call(t, "GET", mine+"/"+personal, nil, 404, nil)
 	other.call(t, "GET", mine+"/"+personal, nil, 404, nil)
 
-	pp := projectPath + "/service-connections/" + kind + "/" + id + "/credentials"
+	pp := projectPath + "/credentials"
 	pc := create(member, pp, "项目构建账号")
 	other.call(t, "GET", pp, nil, 403, nil)
 	admin.call(t, "POST", projectPath+"/archive", nil, 204, tag(admin, projectPath))
 	member.call(t, "GET", pp, nil, 200, nil)
-	member.call(t, "PUT", pp+"/"+pc+"/authentication", auth, 409, tag(member, pp+"/"+pc))
+	member.call(t, "PATCH", pp+"/"+pc, map[string]string{"name": "archived"}, 409, tag(member, pp+"/"+pc))
 	admin.call(t, "POST", projectPath+"/restore", nil, 204, tag(admin, projectPath))
 	admin.call(t, "DELETE", path, nil, 409, tag(admin, path))
+	admin.call(t, "DELETE", sys+"/preferred", nil, 204, tag(admin, sys+"/preferred"))
 	for _, item := range []struct {
 		client         *apiClient
 		collection, id string
-	}{{admin, sys, cid}, {member, mine, personal}, {member, pp, pc}} {
+	}{{admin, catalog, cid}, {member, mine, personal}, {member, pp, pc}} {
 		headers := tag(item.client, item.collection+"/"+item.id)
-		headers["X-Collection-If-Match"] = tag(item.client, item.collection)["If-Match"]
+
 		item.client.call(t, "DELETE", item.collection+"/"+item.id, nil, 204, headers)
 	}
 	grantServiceConnection(t, admin, path, "project", project["id"].(string), false)

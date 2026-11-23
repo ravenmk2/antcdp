@@ -361,7 +361,7 @@ export function ConnectionDetail({
       <div className="mt-5 min-w-0">
         {admin && tab === "grants" && <ConnectionGrants path={path} />}
         {project && summary.ownership_type === "platform" && (
-          <Notice>此连接由平台维护；当前项目只管理自己的访问凭证。</Notice>
+          <Notice>此连接由平台维护；当前项目可以为此连接选择首选凭据。</Notice>
         )}
         {canManage && provider && (
           <div hidden={tab !== "config"} role="tabpanel" aria-label="连接配置">
@@ -431,8 +431,8 @@ export function ConnectionDetail({
         <div className="grid gap-3">
           {recovery}
           <p className="text-sm text-muted">
-            仅当凭证、仓库引用和有效授权已清空时可删除。Webhook
-            设置和秘密一并删除，远端 Hook 需自行移除。
+            请先解除仓库引用和有效授权。Webhook 设置和秘密一并删除，远端 Hook
+            需自行移除。
           </p>
         </div>
       </ConfirmDialog>

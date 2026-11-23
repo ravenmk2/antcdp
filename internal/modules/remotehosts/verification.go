@@ -3,7 +3,9 @@ package remotehosts
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+
+	"github.com/ravenmk2/antcdp/internal/modules/credentials"
+
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
@@ -75,6 +77,7 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 	}
 	var g Config
 	var token, username string
+	var preferenceID uint64
 	snapshot := storedDiagnostic{}
 	a, err := s.access(ctx, raw, owner, id, true, func(_ identity.Tx, r Repository, _ *identity.Auth, v *Host, owner CredentialOwnership) error {
 		if !v.Enabled {
@@ -86,14 +89,14 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 		if cid == 0 {
 			return check(tag, s.connectionTag(v))
 		}
-		cr, err := r.Credential(cid)
+		cr, p, err := credentials.Selected(r, "remote_host", id, owner, v.Type)
 		if err != nil {
 			return err
 		}
-		if !owned(cr, v, owner) {
+		if cr == nil || cr.ID != cid {
 			return fail()
 		}
-		if err = check(tag, s.credentialTag(cr)); err != nil {
+		if err = check(tag, cr.Tag()); err != nil {
 			return err
 		}
 		if !cr.Usable() {
@@ -101,24 +104,26 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 		}
 		snapshot.CredentialVersion = cr.Version
 		snapshot.MaterialVersion = cr.MaterialVersion
-		var identity struct {
-			Username string `json:"username"`
-		}
-		if err := json.Unmarshal(cr.Identity, &identity); err != nil {
-			return integrity()
-		}
-		username = identity.Username
-		sealed, err := r.Secret("credential", cid)
+		preferenceID = p.ID
+		username = cr.Identifier
+		m, err := credentials.Open(r, s.Cipher, cr)
 		if err != nil {
 			return err
 		}
-		binding := credentialPurpose(v.Type, "credential", id, cid, cr.AuthMethod)
-		// Version 1 was written before the module split. IDs and AAD remain unchanged.
-		if cr.SecretFormat == 1 {
-			binding = fmt.Sprintf("service-integrations/ssh/credential/%d/%d/%s/v1", id, cid, cr.AuthMethod)
+		auth := Authentication{Method: "ssh_password", Secret: &TokenSecret{Token: m.Value}}
+		if cr.Kind == credentials.SSHKey {
+			auth.Method = "ssh_private_key"
+			if m.Passphrase != "" {
+				auth.Method = "ssh_encrypted_key"
+			}
+			auth.Secret = &TokenSecret{PrivateKey: m.Value, Passphrase: m.Passphrase}
 		}
-		token, err = s.Cipher(binding, sealed, false)
-		return err
+		auth.Identity, _ = json.Marshal(map[string]string{"username": username})
+		if err := validateAuthenticationFor(v.Type, &auth); err != nil {
+			return err
+		}
+		token = secretMaterial("ssh", &auth)
+		return nil
 	})
 	if err != nil {
 		return Result{}, a, err
@@ -135,17 +140,17 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 		}
 		kind, target := "connection", id
 		if cid != 0 {
-			cr, err := r.Credential(cid)
+			cr, p, err := credentials.Selected(r, "remote_host", id, owner, v.Type)
 			if err != nil {
 				return err
 			}
-			if !owned(cr, v, owner) {
+			if cr == nil || cr.ID != cid {
 				return fail()
 			}
-			if !cr.Usable() || cr.Version != snapshot.CredentialVersion || cr.MaterialVersion != snapshot.MaterialVersion {
+			if p.ID != preferenceID || !cr.Usable() || cr.Version != snapshot.CredentialVersion || cr.MaterialVersion != snapshot.MaterialVersion {
 				return changedState()
 			}
-			kind, target = "credential", cid
+			kind, target = "credential", p.ID
 		}
 		if err := saveDiagnostic(r, kind, target, snapshot); err != nil {
 			return err
@@ -158,9 +163,10 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 			}
 			targetKind := "remote_host"
 			if cid != 0 {
-				targetKind = "ssh_credential"
+				targetKind = "credential"
+				target = cid
 			}
-			return s.audit(tx, actor, targetKind, target, v.Name, "verified", map[string]any{"enabled": v.Enabled}, m)
+			return audit(tx, actor, targetKind, target, v.Name, "verified", map[string]any{"enabled": v.Enabled}, m)
 		}
 		return nil
 	})

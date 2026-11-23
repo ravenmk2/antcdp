@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/ravenmk2/antcdp/internal/modules/credentials"
+
 	c "github.com/ravenmk2/antcdp/internal/modules/collaboration"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
@@ -185,7 +187,7 @@ func (s *Service) ownedRepoSnapshot(r Repository, id uint64, decrypt bool, owner
 	}
 	var allowed bool
 	var err error
-	if owner.Type == "personal" {
+	if owner.Type == "user" {
 		allowed, err = userConnectionAllowed(r, v, owner.Owner)
 	} else {
 		allowed, err = ConnectionAllowed(r, v, owner)
@@ -197,7 +199,7 @@ func (s *Service) ownedRepoSnapshot(r Repository, id uint64, decrypt bool, owner
 		return snap, fail()
 	}
 	if v.Type != "gitlab" {
-		if owner.Type == "personal" {
+		if owner.Type == "user" {
 			return snap, httpx.E(409, "SERVICE_TYPE_UNSUPPORTED", "当前仅支持 GitLab 凭证")
 		}
 		return snap, fail()
@@ -215,21 +217,12 @@ func (s *Service) preferredRepoSnapshot(r Repository, v *ServiceConnection, decr
 		return snap, e
 	}
 	v.Config = *g
-	creds, e := r.Credentials(v.ID, owner)
+	selected, _, e := credentials.Selected(r, "service_connection", v.ID, owner, v.Type)
 	if e != nil {
 		return snap, e
 	}
-	var selected *ServiceCredential
-	for j := range creds {
-		if creds[j].Preferred {
-			if selected != nil {
-				return snap, integrity()
-			}
-			selected = &creds[j]
-		}
-	}
 	if selected == nil {
-		if owner.Type == "personal" {
+		if owner.Type == "user" {
 			return snap, httpx.E(409, "PERSONAL_PREFERRED_REQUIRED", "请先设置此连接的个人首选 GitLab 凭证")
 		}
 		return snap, httpx.E(409, "PROJECT_PREFERRED_REQUIRED", "请先为该连接设置当前项目的首选凭证")
@@ -240,14 +233,14 @@ func (s *Service) preferredRepoSnapshot(r Repository, v *ServiceConnection, decr
 	snap.Connection = *v
 	snap.Credential = *selected
 	if decrypt {
-		sealed, e := r.Secret("credential", selected.ID)
+		material, e := credentials.Open(r, s.CredentialCipher, selected)
 		if e != nil {
 			return snap, e
 		}
-		snap.Token, e = s.Cipher(credentialPurpose(v.Type, "credential", v.ID, selected.ID, selected.AuthMethod), sealed, false)
-		if e != nil {
+		if e = validateToken(material.Value); e != nil {
 			return snap, e
 		}
+		snap.Token = material.Value
 	}
 	return snap, nil
 }
@@ -691,7 +684,7 @@ func (s *Service) GetProjectRepo(ctx context.Context, raw string, pid, id uint64
 		if connection == nil {
 			return integrity()
 		}
-		credential, e := r.Credential(d.CredentialID)
+		credential, _, e := credentials.Selected(r, "service_connection", connection.ID, CredentialOwnership{Type: "project", Owner: pid}, connection.Type)
 		if e != nil {
 			return e
 		}
@@ -699,7 +692,7 @@ func (s *Service) GetProjectRepo(ctx context.Context, raw string, pid, id uint64
 		if err != nil {
 			return err
 		}
-		outdated := !allowed || !connection.Enabled || connection.Version != d.ConnectionVersion || connection.ConfigVersion != d.ConfigVersion || connection.CredentialsVersion != d.CredentialsVersion || credential == nil || !credential.Usable() || !credential.Preferred || credential.MaterialVersion != d.MaterialVersion
+		outdated := !allowed || !connection.Enabled || connection.Version != d.ConnectionVersion || connection.ConfigVersion != d.ConfigVersion || connection.CredentialsVersion != d.CredentialsVersion || credential == nil || !credential.Usable() || credential.ID != d.CredentialID || credential.MaterialVersion != d.MaterialVersion
 		out.Data = map[string]any{"latest": map[string]any{"status": d.Status, "reason": d.Reason, "finished_at": d.FinishedAt, "outdated": outdated}}
 		return nil
 	})

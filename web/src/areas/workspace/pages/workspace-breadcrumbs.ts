@@ -55,7 +55,7 @@ export function workspaceBreadcrumbs(
       { label: project.name, to: `/projects/${project.id}` },
     ];
     const credentialMatch = path.match(
-      /^\/projects\/[1-9]\d*\/(integrations|remote-hosts)(?:\/([1-9]\d*))?$/,
+      /^\/projects\/[1-9]\d*\/(integrations|remote-hosts|credentials)(?:\/([1-9]\d*))?$/,
     );
     const jobMatch = path.match(
       /^\/projects\/[1-9]\d*\/jobs(?:\/(new|[1-9]\d*)(?:\/runs\/([1-9]\d*))?)?\/?$/,
@@ -64,7 +64,12 @@ export function workspaceBreadcrumbs(
       const [, section, objectId] = credentialMatch;
       const sectionPath = `/projects/${project.id}/${section}`;
       items.push({
-        label: section === "integrations" ? "项目服务连接" : "项目 SSH 凭证",
+        label:
+          section === "credentials"
+            ? "项目凭据"
+            : section === "integrations"
+              ? "项目服务连接"
+              : "项目远程主机",
         ...(objectId ? { to: sectionPath } : {}),
       });
       if (objectId)

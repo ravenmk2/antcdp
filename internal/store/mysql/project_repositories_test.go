@@ -132,7 +132,7 @@ func verifyProjectRepositories(t *testing.T, db *Store, admin, member, other *ap
 		return map[string]string{"If-Match": admin.last.Header().Get("ETag")}
 	}
 	sys := "/projects/" + pid + "/service-connections/gitlab/" + cid + "/credentials"
-	cred := testData(admin.call(t, "POST", sys, map[string]any{"name": "repository token", "authentication": map[string]any{"auth_method": "gitlab_access_token", "identity_config": map[string]any{}, "secret": map[string]string{"token": "repository-fixture-token"}}}, 201, etag(sys)))
+	cred := testData(admin.call(t, "POST", "/projects/"+pid+"/credentials", map[string]any{"name": "repository token", "kind": "secret", "material": map[string]string{"value": "repository-fixture-token"}}, 201, nil))
 	admin.call(t, "PUT", sys+"/preferred", map[string]string{"credential_id": cred["id"].(string)}, 200, etag(sys+"/preferred"))
 	browse := testData(admin.call(t, "GET", catalog+"/"+cid+"/repos?q=remote", nil, 200, nil))
 	cursor := browse["next_cursor"].(string)

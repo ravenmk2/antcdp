@@ -220,7 +220,7 @@ type GitMaterial struct {
 
 func (s *Service) AgentGitCredential(ctx context.Context, auth agentcore.Authorization, id uint64, decrypt bool) (out GitMaterial, err error) {
 	err = s.agentAccess(ctx, auth, func(_ identity.Tx, user *identity.User, r Repository) error {
-		snap, err := s.ownedRepoSnapshot(r, id, decrypt, CredentialOwnership{Type: "personal", Owner: user.ID})
+		snap, err := s.ownedRepoSnapshot(r, id, decrypt, CredentialOwnership{Type: "user", Owner: user.ID})
 		if err != nil {
 			return err
 		}

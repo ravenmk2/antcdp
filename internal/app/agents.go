@@ -72,7 +72,7 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 	sandboxes.VerifyEnvironment = sandboxes.VerifyWorkspaceEnvironment
 	sandboxes.ExecutionReconciler = sandboxes.ReconcileExecutions
 	service.Sandboxes = sandboxes
-	gitAPIs := &gitPlatformAPI{sandbox: sandboxes, integrations: &integrations.Service{Store: store, ETag: installer.IntegrationETag, Cipher: installer.IntegrationSecret}}
+	gitAPIs := &gitPlatformAPI{sandbox: sandboxes, integrations: &integrations.Service{Store: store, ETag: installer.IntegrationETag, CredentialCipher: installer.CredentialSecret, Cipher: installer.IntegrationSecret}}
 	service.PAPI, err = papi.NewWithGit(papi.GitOperations{
 		List: gitAPIs.list, Init: gitAPIs.initRepo, Ensure: gitAPIs.ensure,
 		MergeRequests: gitLabMROperations(gitAPIs.integrations),

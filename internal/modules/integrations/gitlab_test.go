@@ -88,18 +88,18 @@ func TestSecretBindingAndCollectionABA(t *testing.T) {
 		}
 	}
 	v := ServiceConnection{ID: 1, CredentialsVersion: 1}
-	s := CredentialOwnership{Type: "personal", Owner: 2}
+	s := CredentialOwnership{Type: "user", Owner: 2}
 	svc := &Service{ETag: func(v string) string {
 		h := hmac.New(sha256.New, key)
 		h.Write([]byte(v))
 		return fmt.Sprintf("%x", h.Sum(nil))
 	}}
-	old := svc.collectionTag(&v, s)
-	if old == svc.collectionTag(&v, CredentialOwnership{Type: "personal", Owner: 3}) {
+	old := svc.preferredTag(&v, s)
+	if old == svc.preferredTag(&v, CredentialOwnership{Type: "user", Owner: 3}) {
 		t.Fatal("scope unbound")
 	}
 	v.CredentialsVersion += 2
-	if old == svc.collectionTag(&v, s) {
+	if old == svc.preferredTag(&v, s) {
 		t.Fatal("ABA accepted")
 	}
 }

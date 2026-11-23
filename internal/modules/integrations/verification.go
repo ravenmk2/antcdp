@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ravenmk2/antcdp/internal/modules/credentials"
+
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
@@ -142,6 +144,7 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 	}
 	var g HTTPConfig
 	var token, username string
+	var preferenceID uint64
 	var grantsVersion uint64
 	snapshot := storedDiagnostic{}
 	a, err := s.access(ctx, raw, owner, id, true, func(_ identity.Tx, r Repository, _ *identity.Auth, v *ServiceConnection, owner CredentialOwnership) error {
@@ -158,14 +161,14 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 			}
 			return check(tag, s.connectionTag(v))
 		}
-		cr, err := r.Credential(cid)
+		cr, p, err := credentials.Selected(r, "service_connection", id, owner, v.Type)
 		if err != nil {
 			return err
 		}
-		if !owned(cr, v, owner) {
+		if cr == nil || cr.ID != cid {
 			return fail()
 		}
-		if err = check(tag, s.credentialTag(cr)); err != nil {
+		if err = check(tag, cr.Tag()); err != nil {
 			return err
 		}
 		if !cr.Usable() {
@@ -173,19 +176,23 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 		}
 		snapshot.CredentialVersion = cr.Version
 		snapshot.MaterialVersion = cr.MaterialVersion
-		var identity struct {
-			Username string `json:"username"`
-		}
-		if err := json.Unmarshal(cr.Identity, &identity); err != nil {
-			return integrity()
-		}
-		username = identity.Username
-		sealed, err := r.Secret("credential", cid)
+		preferenceID = p.ID
+		username = cr.Identifier
+		m, err := credentials.Open(r, s.CredentialCipher, cr)
 		if err != nil {
 			return err
 		}
-		token, err = s.Cipher(credentialPurpose(v.Type, "credential", id, cid, cr.AuthMethod), sealed, false)
-		return err
+		method := adapters[v.Type].method
+		if v.Type == "elasticsearch" && cr.Kind == credentials.Secret {
+			method = "elasticsearch_api_key"
+		}
+		identity := map[string]string{}
+		if username != "" {
+			identity["username"] = username
+		}
+		encoded, _ := json.Marshal(identity)
+		token = m.Value
+		return validateAuthenticationFor(v.Type, &Authentication{Method: method, Identity: encoded, Secret: &TokenSecret{Token: token}})
 	})
 	if err != nil {
 		return Result{}, a, err
@@ -202,17 +209,17 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 		}
 		kind, target := "connection", id
 		if cid != 0 {
-			cr, err := r.Credential(cid)
+			cr, p, err := credentials.Selected(r, "service_connection", id, owner, v.Type)
 			if err != nil {
 				return err
 			}
-			if !owned(cr, v, owner) {
+			if cr == nil || cr.ID != cid {
 				return fail()
 			}
-			if !cr.Usable() || cr.Version != snapshot.CredentialVersion || cr.MaterialVersion != snapshot.MaterialVersion {
+			if p.ID != preferenceID || !cr.Usable() || cr.Version != snapshot.CredentialVersion || cr.MaterialVersion != snapshot.MaterialVersion {
 				return changedState()
 			}
-			kind, target = "credential", cid
+			kind, target = "credential", p.ID
 		}
 		if err := saveDiagnostic(r, kind, target, snapshot); err != nil {
 			return err

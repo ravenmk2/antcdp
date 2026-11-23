@@ -14,7 +14,8 @@ export const projectSectionLabels = {
   roles: "角色管理",
   teams: "参与团队",
   integrations: "服务连接",
-  hosts: "SSH 凭证",
+  hosts: "远程主机",
+  credentials: "凭据管理",
   dingtalk: "钉钉机器人",
 } as const;
 export type WorkspaceProjectSettingSection = keyof typeof projectSectionLabels;
@@ -24,6 +25,7 @@ export const projectSectionRoutes: Partial<
 > = {
   integrations: "integrations",
   hosts: "remote-hosts",
+  credentials: "credentials",
   dingtalk: "dingtalk",
 };
 
@@ -49,6 +51,8 @@ export function resolveWorkspaceProjectView(
   if (!match) return null;
   const projectId = match[1]!;
   const remainder = match[2]?.replace(/\/$/, "") ?? "";
+  if (remainder === "credentials")
+    return { projectId, page: "settings", section: "credentials" };
   if (remainder === "events")
     return { projectId, page: "events", section: "profile" };
   if (remainder === "description/edit")

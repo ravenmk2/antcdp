@@ -8,6 +8,7 @@ const names: Record<string, string> = {
   "/admin/projects": "项目管理",
   "/admin/teams": "团队管理",
   "/admin/integrations": "服务集成",
+  "/admin/credentials": "凭据管理",
   "/admin/remote-hosts": "远程主机",
   "/admin/models": "模型管理",
   "/admin/agents": "助手管理",
@@ -151,13 +152,18 @@ export function adminBreadcrumbs(
       return items;
     }
     const credentialMatch = remainder.match(
-      /^(integrations|remote-hosts)(?:\/([1-9]\d*))?$/,
+      /^(integrations|remote-hosts|credentials)(?:\/([1-9]\d*))?$/,
     );
     if (credentialMatch) {
       const [, section, objectId] = credentialMatch;
       const sectionPath = `${projectPath}/${section}`;
       items.push({
-        label: section === "integrations" ? "项目服务连接" : "项目 SSH 凭证",
+        label:
+          section === "credentials"
+            ? "项目凭据"
+            : section === "integrations"
+              ? "项目服务连接"
+              : "项目远程主机",
         ...(objectId ? { to: sectionPath } : {}),
       });
       if (objectId)

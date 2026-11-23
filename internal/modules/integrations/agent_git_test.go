@@ -37,7 +37,7 @@ func TestPersonalGitCredentialChecksBeforeReadingMaterial(t *testing.T) {
 		{"gitlab", true, false, "RESOURCE_DISABLED"},
 	} {
 		r := gitCredentialGateFixture{connection: ServiceConnection{ID: 1, Type: test.kind, Ownership: "platform", Enabled: test.enabled}, granted: test.granted}
-		_, err := (&Service{}).ownedRepoSnapshot(r, 1, true, CredentialOwnership{Type: "personal", Owner: 2})
+		_, err := (&Service{}).ownedRepoSnapshot(r, 1, true, CredentialOwnership{Type: "user", Owner: 2})
 		var failure *httpx.Error
 		if !errors.As(err, &failure) || failure.Code != test.code {
 			t.Errorf("%+v: got %v", test, err)

@@ -8,11 +8,9 @@ CREATE TABLE `remote_host` (
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
     host VARCHAR(253) NOT NULL,
     port SMALLINT UNSIGNED NOT NULL DEFAULT 22,
-    fallback_credential_id BIGINT UNSIGNED NULL,
     row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     config_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     credentials_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
-    fallback_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     last_connection_check JSON NULL,
     created_by_user_id BIGINT UNSIGNED NOT NULL,
     created_at DATETIME(3) NOT NULL,
@@ -21,6 +19,5 @@ CREATE TABLE `remote_host` (
     UNIQUE KEY uq_remote_host_code (code),
     UNIQUE KEY uq_remote_host_name (name),
     KEY idx_remote_host_enabled (enabled, id),
-    KEY idx_remote_host_creator (created_by_user_id),
-    KEY idx_remote_host_fallback (fallback_credential_id)
+    KEY idx_remote_host_creator (created_by_user_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

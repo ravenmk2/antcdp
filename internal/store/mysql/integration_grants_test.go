@@ -47,21 +47,26 @@ func verifyConnectionScopes(t *testing.T, admin, member, other *apiClient, membe
 	stale := tag(admin, globalPath+"/grants")
 	grantServiceConnection(t, admin, globalPath, "project", pb, true)
 	admin.call(t, "PUT", globalPath+"/grants/project/"+pa, map[string]bool{"enabled": false}, 412, stale)
-	cred := func(prefix string) string {
-		p := prefix + "/credentials"
-		return testData(member.call(t, "POST", p, map[string]any{"name": "只读", "code": "readonly", "authentication": map[string]any{"auth_method": "mysql_password", "identity_config": map[string]string{"username": "reader"}, "secret": map[string]string{"token": "fixture-password"}}}, 201, tag(member, p)))["id"].(string)
+	cred := func(project string) string {
+		return testData(member.call(t, "POST", "/projects/"+project+"/credentials", map[string]any{"name": "只读", "code": "readonly", "kind": "username_password", "identifier": "reader", "material": map[string]string{"value": "fixture-password"}}, 201, nil))["id"].(string)
 	}
-	credentialA := cred(projectA + "/mysql/" + global)
-	cred(projectB + "/mysql/" + global)
-	cred(localPath)
-	cred(projectB + "/mysql/" + localB)
-	credentialPath := projectA + "/mysql/" + global + "/credentials/" + credentialA
-	member.call(t, "GET", projectB+"/mysql/"+global+"/credentials/"+credentialA, nil, 404, nil)
+	credentialA, credentialB := cred(pa), cred(pb)
+	prefer := func(prefix, id string, want int) {
+		p := prefix + "/credentials/preferred"
+		member.call(t, "PUT", p, map[string]string{"credential_id": id}, want, tag(member, p))
+	}
+	prefer(projectA+"/mysql/"+global, credentialA, 200)
+	prefer(localPath, credentialA, 200)
+	prefer(projectB+"/mysql/"+global, credentialA, 404)
+	prefer(projectB+"/mysql/"+localB, credentialB, 200)
+	pref := projectA + "/mysql/" + global + "/credentials/preferred"
 	grantServiceConnection(t, admin, globalPath, "project", pa, false)
-	member.call(t, "GET", credentialPath, nil, 404, nil)
-	member.call(t, "POST", credentialPath+"/verify", map[string]any{}, 404, nil)
+	member.call(t, "GET", pref, nil, 404, nil)
+	member.call(t, "GET", "/projects/"+pa+"/credentials/"+credentialA, nil, 200, nil)
 	grantServiceConnection(t, admin, globalPath, "project", pa, true)
-	member.call(t, "GET", credentialPath, nil, 200, nil)
+	if testData(member.call(t, "GET", pref, nil, 200, nil))["credential_id"] != credentialA {
+		t.Fatal("preference changed during revocation")
+	}
 	// Team grants are independent: association with a team never grants a project access.
 	team := testData(admin.call(t, "POST", "/teams", map[string]any{"name": "连接授权团队", "code": "connection-scope-team", "admin_user_ids": []string{memberID}}, 201, nil))["id"].(string)
 	admin.call(t, "GET", "/projects/"+pa, nil, 200, nil)

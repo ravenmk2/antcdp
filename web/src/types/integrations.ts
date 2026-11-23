@@ -38,29 +38,23 @@ export interface Authentication {
   identity_config: Record<string, string>;
   secret: Record<string, string>;
 }
+export type CredentialKind =
+  "username_password" | "secret" | "ssh_private_key" | "access_key_pair";
 export interface Credential {
   id: string;
-  connection_id: string;
-  service_type: string;
   code: string;
-  ownership_type: string;
-  project_id: string | null;
-  user_id: string | null;
   name: string;
   description: string;
-  auth_method: string;
-  identity_config: Record<string, string>;
+  kind: CredentialKind;
+  identifier: string;
   enabled: boolean;
-  is_preferred: boolean;
-  has_secret: boolean;
   expires_at: string | null;
+  scope_kind: "platform" | "project" | "user";
+  scope_id: string;
   version: string;
-  created_at: string;
-  updated_at: string;
 }
 export interface CredentialSet {
   items: Credential[];
-  mutation_version: string;
 }
 export interface Selection {
   credential_id: string | null;

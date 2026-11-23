@@ -1,10 +1,10 @@
 import { Link, useSearchParams } from "react-router";
-import { ArrowRight, Cable, Server } from "lucide-react";
+import { ArrowRight, Cable, KeyRound, Server } from "lucide-react";
 import { Button } from "@/components/button";
 import { Panel } from "@/components/layout";
 import type { Resource } from "@/types/collaboration";
 
-const sections = ["integrations", "hosts"] as const;
+const sections = ["integrations", "hosts", "credentials"] as const;
 export type ProjectSettingSection = (typeof sections)[number];
 
 export function normalizeProjectSetting(value: string | null) {
@@ -23,7 +23,8 @@ export function ProjectSettings({
   const [, setParams] = useSearchParams();
   const links = [
     { key: "integrations", label: "服务连接", icon: Cable },
-    { key: "hosts", label: "SSH 凭证", icon: Server },
+    { key: "hosts", label: "远程主机", icon: Server },
+    { key: "credentials", label: "凭据管理", icon: KeyRound },
   ] as const;
   function select(key: ProjectSettingSection) {
     setParams((current) => {
@@ -66,18 +67,28 @@ export function ProjectSettings({
             }
           >
             <p className="text-sm text-muted">
-              维护项目自己的连接和凭证，并使用平台授权的共享连接。
+              管理连接参数，并为每个连接选择首选凭据。
             </p>
+          </Panel>
+        )}
+        {section === "credentials" && (
+          <Panel title="项目凭据">
+            <Link
+              className="text-primary"
+              to={`/admin/projects/${project.id}/credentials`}
+            >
+              管理项目凭据 →
+            </Link>
           </Panel>
         )}
         {section === "hosts" && (
           <Panel
-            title="项目 SSH 凭证"
+            title="项目远程主机"
             action={
               <Button
                 render={
                   <Link to={`/admin/projects/${project.id}/remote-hosts`}>
-                    管理 SSH 凭证 <ArrowRight />
+                    配置远程主机首选凭据 <ArrowRight />
                   </Link>
                 }
                 nativeButton={false}
@@ -87,7 +98,7 @@ export function ProjectSettings({
             }
           >
             <p className="text-sm text-muted">
-              主机地址与公钥信任由系统级远程主机管理；此处只维护项目归属凭证。
+              选择主机访问项目资源时使用的凭据。
             </p>
           </Panel>
         )}

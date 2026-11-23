@@ -113,8 +113,8 @@ it("keeps workspace and personal settings navigation through credential routes a
     within(nav)
       .getAllByRole("link")
       .map((link) => link.textContent),
-  ).toEqual(["个人资料", "账号安全", "服务凭证", "SSH 凭证"]);
-  expect(within(nav).getByRole("link", { name: "服务凭证" })).toHaveAttribute(
+  ).toEqual(["个人资料", "账号安全", "凭据管理", "服务连接", "远程主机"]);
+  expect(within(nav).getByRole("link", { name: "服务连接" })).toHaveAttribute(
     "aria-current",
     "page",
   );
@@ -124,11 +124,11 @@ it("keeps workspace and personal settings navigation through credential routes a
       .filter((link) => link.getAttribute("aria-current") === "page"),
   ).toHaveLength(1);
   expect(
-    await screen.findByRole("link", { name: "进入凭证管理" }),
+    await screen.findByRole("link", { name: "设置首选凭据" }),
   ).toHaveAttribute("href", "/account/integrations");
-  await userEvent.click(within(nav).getByRole("link", { name: "服务凭证" }));
+  await userEvent.click(within(nav).getByRole("link", { name: "服务连接" }));
   expect(
-    await screen.findByRole("heading", { name: "个人服务凭证" }),
+    await screen.findByRole("heading", { name: "个人服务连接" }),
   ).toBeVisible();
   expect(screen.getByRole("navigation", { name: "主导航" })).toBeVisible();
   await act(() => router.navigate("/account/remote-hosts/999"));
@@ -136,7 +136,7 @@ it("keeps workspace and personal settings navigation through credential routes a
   expect(
     within(screen.getByRole("navigation", { name: "个人设置导航" })).getByRole(
       "link",
-      { name: "SSH 凭证" },
+      { name: "远程主机" },
     ),
   ).toHaveAttribute("aria-current", "page");
   expect(screen.getByRole("link", { name: "返回工作区" })).toHaveAttribute(
@@ -162,7 +162,7 @@ it("returns to the full workspace location after visiting multiple settings page
   expect(
     await screen.findByRole("heading", { name: "账号安全" }),
   ).toBeVisible();
-  await user.click(within(nav).getByRole("link", { name: "服务凭证" }));
+  await user.click(within(nav).getByRole("link", { name: "服务连接" }));
   const back = await screen.findByRole("link", { name: "返回原页面" });
   expect(back).toHaveAttribute("href", "/projects?view=recent#activity");
   await user.click(back);

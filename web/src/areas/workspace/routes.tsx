@@ -48,6 +48,11 @@ const WorkspaceTeamDetail = lazy(() =>
     default: m.WorkspaceTeamDetail,
   })),
 );
+const CredentialCatalog = lazy(() =>
+  import("@/features/credentials/catalog").then((m) => ({
+    default: m.CredentialCatalog,
+  })),
+);
 const IntegrationsPage = lazy(() =>
   import("@/areas/workspace/pages/integrations").then((m) => ({
     default: m.IntegrationsPage,
@@ -99,11 +104,16 @@ export const workspaceRoutes: RouteObject[] = [
     errorElement: <RegionError label="工作区" />,
     children: [
       { index: true, element: <Navigate to="/home" replace /> },
+      {
+        path: "projects/:projectId/credentials",
+        element: <CredentialCatalog />,
+      },
       { path: "home", element: <HomePage /> },
       {
         path: "account",
         children: [
           { index: true, element: <AccountPage /> },
+          { path: "credentials", element: <CredentialCatalog personal /> },
           { path: "security", element: <AccountPage /> },
           {
             path: "integrations/:connectionId?",

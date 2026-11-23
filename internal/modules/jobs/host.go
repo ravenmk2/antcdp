@@ -214,11 +214,11 @@ func (h *runHost) resource(ctx context.Context, args []json.RawMessage) (any, er
 			if err != nil {
 				return err
 			}
-			cred, err := ir.Credential(g.CredentialID)
+			cred, err := ir.Entry(g.CredentialID)
 			if err != nil {
 				return err
 			}
-			if conn == nil || cred == nil || !conn.Enabled || !cred.Usable() || !cred.ValidRecord() || cred.Ownership != "project" || cred.ProjectID == nil || *cred.ProjectID != h.job.ProjectID || cred.ConnectionID != conn.ID {
+			if conn == nil || cred == nil || !conn.Enabled || !cred.Usable() || !cred.Compatible(conn.Type) || !cred.Owned(integrations.CredentialOwnership{Type: "project", Owner: h.job.ProjectID}) {
 				break
 			}
 			allowed, err := integrations.ConnectionAllowed(ir, conn, integrations.CredentialOwnership{Type: "project", Owner: h.job.ProjectID})

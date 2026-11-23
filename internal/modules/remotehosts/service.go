@@ -94,25 +94,14 @@ type Authentication struct {
 	Identity json.RawMessage `json:"identity_config"`
 	Secret   *TokenSecret    `json:"secret"`
 }
-type CredentialCreate struct {
-	Code           Field[string]    `json:"code"`
-	Name           string           `json:"name"`
-	Description    Field[string]    `json:"description"`
-	Authentication *Authentication  `json:"authentication"`
-	ExpiresAt      Field[time.Time] `json:"expires_at"`
-}
-type CredentialWrite struct {
-	CommonWrite
-	ExpiresAt Field[time.Time] `json:"expires_at"`
-}
 type SelectionWrite struct {
 	CredentialID string `json:"credential_id"`
 }
 type Result struct {
-	Data          any
-	Tag           string
-	CollectionTag string
-	Location      string
+	Data any
+	Tag  string
+
+	Location string
 }
 
 func fail() error      { return httpx.E(404, "NOT_FOUND", "远程主机或凭证不存在") }
@@ -218,14 +207,14 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 				return forbidden()
 			}
 			owner.Owner = 0
-		case "personal":
+		case "user":
 			owner.Owner = a.User.ID
 		case "robot":
 			robot, err := identity.AuthorizeRobotAccount(tx, a, owner.Owner)
 			if err != nil {
 				return err
 			}
-			owner.Type, owner.Owner = "personal", robot.ID
+			owner.Type, owner.Owner = "user", robot.ID
 		case "project":
 			cr, ok := tx.(c.Repository)
 			if !ok {
@@ -263,7 +252,7 @@ func (s *Service) access(ctx context.Context, raw string, owner CredentialOwners
 			if v == nil || v.Type != s.serviceType() {
 				return fail()
 			}
-			if v.Version == 0 || v.ConfigVersion == 0 || v.CredentialsVersion == 0 || v.FallbackVersion == 0 {
+			if v.Version == 0 || v.ConfigVersion == 0 || v.CredentialsVersion == 0 {
 				return integrity()
 			}
 			g, err := config(r, v)
@@ -291,11 +280,6 @@ func (s *Service) connectionResult(v *Host) Result {
 		}
 	}
 	tag := s.connectionTag(v)
-	v.EditVersion = unquote(tag)
-	return Result{Data: v, Tag: tag}
-}
-func (s *Service) credentialResult(v *Credential) Result {
-	tag := s.credentialTag(v)
 	v.EditVersion = unquote(tag)
 	return Result{Data: v, Tag: tag}
 }
@@ -339,7 +323,7 @@ func (s *Service) Create(ctx context.Context, raw string, w ConnectionCreate, me
 		if err != nil {
 			return err
 		}
-		v := &Host{Type: s.serviceType(), ConfigSchemaVersion: 1, Code: code, Enabled: true, Version: 1, ConfigVersion: 1, CredentialsVersion: 1, FallbackVersion: 1, Creator: a.User.ID}
+		v := &Host{Type: s.serviceType(), ConfigSchemaVersion: 1, Code: code, Enabled: true, Version: 1, ConfigVersion: 1, CredentialsVersion: 1, Creator: a.User.ID}
 		v.Name = strings.TrimSpace(w.Name)
 		if err = applyCommon(CommonWrite{Description: w.Description, Enabled: w.Enabled}, &v.Name, &v.Description, &v.Enabled); err != nil {
 			return err
@@ -360,13 +344,13 @@ func (s *Service) Create(ctx context.Context, raw string, w ConnectionCreate, me
 		}
 		out = s.connectionResult(v)
 		out.Location = fmt.Sprintf("/api/v1/admin/remote-hosts/%d", v.ID)
-		return s.audit(tx, a, "remote_host", v.ID, v.Name, "created", map[string]any{}, meta)
+		return audit(tx, a, "remote_host", v.ID, v.Name, "created", map[string]any{}, meta)
 	})
 	return out, a, err
 }
 func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag string, input any, meta identity.Metadata) (Result, *identity.Auth, error) {
 	out := Result{}
-	a, err := s.access(ctx, raw, CredentialOwnership{Type: "platform"}, id, op != "get" && op != "fallback" && op != "diagnostics", func(tx identity.Tx, r Repository, a *identity.Auth, v *Host, _ CredentialOwnership) error {
+	a, err := s.access(ctx, raw, CredentialOwnership{Type: "platform"}, id, op != "get" && op != "diagnostics", func(tx identity.Tx, r Repository, a *identity.Auth, v *Host, _ CredentialOwnership) error {
 		out = s.connectionResult(v)
 		switch op {
 		case "get":
@@ -435,89 +419,22 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 				return err
 			}
 			out = s.connectionResult(v)
-			return s.audit(tx, a, "remote_host", v.ID, v.Name, "updated", map[string]any{"enabled_before": oldEnabled, "enabled_after": v.Enabled, "config_changed": configChanged}, meta)
+			return audit(tx, a, "remote_host", v.ID, v.Name, "updated", map[string]any{"enabled_before": oldEnabled, "enabled_after": v.Enabled, "config_changed": configChanged}, meta)
 		case "delete":
 			if err := check(tag, s.connectionTag(v)); err != nil {
 				return err
 			}
-			n, err := r.CredentialCount(id)
-			if err != nil {
-				return err
-			}
-			if n != 0 {
-				return httpx.E(409, "CONNECTION_NOT_EMPTY", "请先移除该连接的全部凭证")
-			}
-			if err = r.DeleteConnection(id); err != nil {
+			if err := r.DeleteConnection(id); err != nil {
 				return err
 			}
 			out = Result{}
-			return s.audit(tx, a, "remote_host", v.ID, v.Name, "deleted", map[string]any{}, meta)
-		case "fallback", "set_fallback", "clear_fallback":
-			// A broken reference is an integrity error, never an implicit absence/fallback.
-			if v.FallbackID != nil {
-				cr, err := r.Credential(*v.FallbackID)
-				if err != nil {
-					return err
-				}
-				if !owned(cr, v, CredentialOwnership{Type: "platform"}) {
-					return integrity()
-				}
-			}
-			if op != "fallback" {
-				if err := check(tag, s.fallbackTag(v)); err != nil {
-					return err
-				}
-				var target *uint64
-				if op == "set_fallback" {
-					cid, err := c.ID(input.(SelectionWrite).CredentialID)
-					if err != nil {
-						return err
-					}
-					cr, err := r.Credential(cid)
-					if err != nil {
-						return err
-					}
-					if !owned(cr, v, CredentialOwnership{Type: "platform"}) {
-						return fail()
-					}
-					if !cr.Usable() {
-						return unavailable()
-					}
-					target = &cid
-				}
-				if !sameID(v.FallbackID, target) {
-					v.FallbackID = target
-					v.FallbackVersion++
-					if err := r.SaveConnection(v); err != nil {
-						return err
-					}
-					if err := s.audit(tx, a, "remote_host", id, v.Name, "fallback_changed", map[string]any{}, meta); err != nil {
-						return err
-					}
-				}
-			}
-			out = selection(v.FallbackID, s.fallbackTag(v))
-			return nil
+			return audit(tx, a, "remote_host", v.ID, v.Name, "deleted", map[string]any{}, meta)
 		}
 		return fail()
 	})
 	return out, a, err
 }
-func sameID(a, b *uint64) bool { return a == nil && b == nil || a != nil && b != nil && *a == *b }
-func owned(cr *Credential, v *Host, o CredentialOwnership) bool {
-	if cr == nil || cr.ConnectionID != v.ID || cr.Type != v.Type || cr.Ownership != o.Type {
-		return false
-	}
-	switch o.Type {
-	case "platform":
-		return cr.UserID == nil && cr.ProjectID == nil
-	case "personal":
-		return cr.ProjectID == nil && cr.UserID != nil && *cr.UserID == o.Owner
-	case "project":
-		return cr.UserID == nil && cr.ProjectID != nil && *cr.ProjectID == o.Owner
-	}
-	return false
-}
+
 func newCredentialCode() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -526,20 +443,4 @@ func newCredentialCode() (string, error) {
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return hex.EncodeToString(b[:]), nil
-}
-
-func credentialPurpose(serviceType, kind string, connection, id uint64, method string) string {
-	return fmt.Sprintf("remote-hosts/%s/%s/%d/%d/%s/v1", serviceType, kind, connection, id, method)
-}
-
-func (s *Service) audit(tx identity.Tx, a *identity.Auth, kind string, id uint64, name, action string, detail any, meta identity.Metadata) error {
-	if s.serviceType() == "ssh" {
-		switch kind {
-		case "remote_host":
-			kind = "remote_host"
-		case "ssh_credential":
-			kind = "ssh_credential"
-		}
-	}
-	return audit(tx, a, kind, id, name, action, detail, meta)
 }

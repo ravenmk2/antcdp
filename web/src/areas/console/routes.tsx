@@ -119,6 +119,11 @@ const ProjectDescriptionEditor = lazy(() =>
     (m) => ({ default: m.ProjectDescriptionEditor }),
   ),
 );
+const CredentialCatalog = lazy(() =>
+  import("@/features/credentials/catalog").then((m) => ({
+    default: m.CredentialCatalog,
+  })),
+);
 const IntegrationsPage = lazy(() =>
   import("@/areas/console/pages/integrations").then((m) => ({
     default: m.IntegrationsPage,
@@ -275,6 +280,12 @@ export const consoleRoutes: RouteObject[] = [
       },
       { path: "settings", element: <SettingsPage /> },
       { path: "audit", element: <AuditPage /> },
+      {
+        path: "projects/:projectId/credentials",
+        element: <CredentialCatalog />,
+      },
+      { path: "credentials", element: <CredentialCatalog /> },
+      { path: "robots/:robotId/credentials", element: <CredentialCatalog /> },
       { path: "integrations/:connectionId?", element: <IntegrationsPage /> },
       { path: "remote-hosts/:hostId?", element: <RemoteHostsPage /> },
       { path: "email/:section?/:id?", element: <EmailPage /> },

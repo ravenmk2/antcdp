@@ -304,7 +304,7 @@ function Password() {
 function CredentialEntry({ kind }: { kind: "service" | "ssh" }) {
   return (
     <Panel
-      title={kind === "service" ? "个人服务凭证" : "个人 SSH 凭证"}
+      title={kind === "service" ? "个人服务连接" : "个人远程主机"}
       action={
         <Button
           render={
@@ -315,7 +315,7 @@ function CredentialEntry({ kind }: { kind: "service" | "ssh" }) {
                   : "/account/remote-hosts"
               }
             >
-              进入凭证管理
+              设置首选凭据
             </Link>
           }
           nativeButton={false}
@@ -323,10 +323,7 @@ function CredentialEntry({ kind }: { kind: "service" | "ssh" }) {
         />
       }
     >
-      <Notice>
-        个人凭证仅本人可维护，系统管理员不能代管或读取。密码、Token
-        和私钥保存后不可查看。
-      </Notice>
+      <Notice>在个人凭据页维护材料，在具体资源中设置首选。</Notice>
     </Panel>
   );
 }

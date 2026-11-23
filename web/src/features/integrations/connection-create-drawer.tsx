@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
-import { ApiError, isVersionConflict, request } from "@/api/client";
+import { ApiError, request } from "@/api/client";
 import { Button } from "@/components/button";
 import { AsyncBoundary, ErrorNotice, Notice } from "@/components/feedback";
 import {
@@ -18,16 +18,8 @@ import { WizardSteps } from "@/components/wizard";
 import { useApiQuery } from "@/hooks/use-api";
 import { useFormErrors, useSubmission } from "@/hooks/use-form";
 import { useUnsaved } from "@/hooks/use-unsaved";
-import {
-  authenticationBody,
-  defaultConfig,
-  providerFor,
-} from "@/domain/service-providers";
-import type {
-  Credential,
-  ServiceConnection,
-  ServiceType,
-} from "@/types/integrations";
+import { defaultConfig, providerFor } from "@/domain/service-providers";
+import type { ServiceConnection, ServiceType } from "@/types/integrations";
 
 // getRandomValues also works on an HTTP intranet origin. Keep these codes for
 // the lifetime of the draft, including reads after a lost write response.
@@ -70,28 +62,18 @@ export function ConnectionCreateDrawer({
     description: "",
     enabled: true,
   });
-  const [withCredential, setWithCredential] = useState(false);
-  const [credential, setCredential] = useState({
-    name: "",
-    code: "",
-    method: "",
-  });
-  const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [codes] = useState(() => ({
     connection: draftCode(),
-    credential: draftCode(),
   }));
   const [created, setCreated] = useState<ServiceConnection | null>(null);
-  const [uncertain, setUncertain] = useState<
-    "connection" | "credential" | null
-  >(null);
+  const [uncertain, setUncertain] = useState<"connection" | null>(null);
   const [checking, setChecking] = useState(false);
   const [checkMessage, setCheckMessage] = useState("");
   const [checkError, setCheckError] = useState<unknown>(null);
   const [caOpen, setCaOpen] = useState(false);
   const saving = useRef(false);
   const excludedConnections = useRef(new Set<string>());
-  const excludedCredentials = useRef(new Set<string>());
+
   const heading = useRef<HTMLHeadingElement>(null);
   const previousStep = useRef(step);
   useLayoutEffect(() => {
@@ -105,15 +87,6 @@ export function ConnectionCreateDrawer({
   const capability = types.data?.data.items.find(
     (item) => item.service_type === type,
   );
-  const methods =
-    provider?.methods.filter((item) =>
-      capability?.auth_methods.includes(item.value),
-    ) ?? [];
-  const method =
-    methods.find((item) => item.value === credential.method) ?? methods[0];
-  const credentialEnabled = Boolean(
-    withCredential && capability?.credentials && method,
-  );
   const configDirty = Boolean(
     provider &&
     Object.entries(defaultConfig(provider)).some(
@@ -121,15 +94,7 @@ export function ConnectionCreateDrawer({
     ),
   );
   const dirty = Boolean(
-    type ||
-    form.name ||
-    form.code ||
-    form.description ||
-    !form.enabled ||
-    withCredential ||
-    credential.name ||
-    credential.code ||
-    Object.values(secrets).some(Boolean),
+    type || form.name || form.code || form.description || !form.enabled,
   );
   const busy = submission.pending || checking;
   const locked = busy || Boolean(uncertain);
@@ -150,11 +115,7 @@ export function ConnectionCreateDrawer({
     const next = providerFor(value);
     setType(value);
     setConfig(next ? defaultConfig(next) : {});
-    setCredential((current) => ({
-      ...current,
-      method: next?.methods[0]?.value ?? "",
-    }));
-    setSecrets({});
+
     setCaOpen(false);
     errors.clear();
     setReplacement("");
@@ -176,7 +137,7 @@ export function ConnectionCreateDrawer({
     if (fields.custom_ca_pem) setCaOpen(true);
     return errors.validate(fields);
   }
-  function validate(includeCredential = true) {
+  function validate() {
     const fields: Record<string, string> = {};
     if (!created) {
       if (!form.name.trim()) fields.name = "请输入连接名称";
@@ -218,37 +179,13 @@ export function ConnectionCreateDrawer({
       if (new TextEncoder().encode(config.custom_ca_pem ?? "").length > 16384)
         fields.custom_ca_pem = "公共 CA 不能超过 16 KiB";
     }
-    if (includeCredential && credentialEnabled && method) {
-      if (!credential.name.trim()) fields.credential_name = "请输入凭证名称";
-      else if (Array.from(credential.name.trim()).length > 100)
-        fields.credential_name = "凭证名称不能超过 100 个字符";
-      if (!validCode(credential.code))
-        fields.credential_code =
-          "编码格式不正确，请使用 1–64 位小写字母、数字、下划线或短横线";
-      for (const field of [...method.identity, ...method.secret])
-        if (!secrets[field.key]) fields[field.key] = `请输入${field.label}`;
-    }
-    const first = Object.keys(fields)[0];
-    if (first)
-      setStep(
-        [
-          "name",
-          "code",
-          "description",
-          ...(provider?.configFields.map((field) => field.key) ?? []),
-        ].includes(first)
-          ? 1
-          : 2,
-      );
+    if (Object.keys(fields).length) setStep(1);
     return reveal(fields);
   }
   async function save() {
     if (saving.current || locked || !provider || !capability || !validate())
       return;
     saving.current = true;
-    let stage: "connection" | "credential" = created
-      ? "credential"
-      : "connection";
     errors.clear();
     setCheckMessage("");
     try {
@@ -294,89 +231,31 @@ export function ConnectionCreateDrawer({
               queryKey: ["service-directory"],
             });
           }
-          if (credentialEnabled && method) {
-            stage = "credential";
-            const base = `${apiPrefix}/service-connections/${type}/${connection.id}/credentials`;
-            const collection = await request<{ items: Credential[] }>(base);
-            excludedCredentials.current = new Set(
-              collection.data.items.map((item) => item.id),
-            );
-            if (
-              collection.data.items.some(
-                (item) =>
-                  item.code === (credential.code.trim() || codes.credential),
-              )
-            ) {
-              throw new ApiError(
-                "CREDENTIAL_CODE_CONFLICT",
-                "凭证编码已存在，请更换编码",
-                409,
-              );
-            }
-            if (!collection.etag)
-              throw new ApiError(
-                "PRECONDITION_REQUIRED",
-                "未取得凭证列表版本，请重新加载后再保存",
-                428,
-              );
-            await request(base, {
-              method: "POST",
-              etag: collection.etag,
-              body: {
-                name: credential.name.trim(),
-                code: credential.code.trim() || codes.credential,
-                description: "",
-                expires_at: null,
-                authentication: authenticationBody(method, secrets),
-              },
-            });
-            setSecrets({});
-          }
           await finish(connection);
         },
         (error) => {
           if (error.uncertain) {
-            setUncertain(stage);
+            setUncertain("connection");
             return;
           }
-          setStep(stage === "connection" ? 1 : 2);
+          setStep(1);
           const aliases: Record<string, string> = Object.fromEntries(
             provider.configFields.map((field) => [
               `config.${field.key}`,
               field.key,
             ]),
           );
-          if (stage === "credential")
-            Object.assign(aliases, {
-              name: "credential_name",
-              code: "credential_code",
-              "authentication.identity_config.username": "username",
-              "authentication.secret.token": "token",
-            });
-          const known = [
-            "name",
-            "code",
-            "description",
-            "credential_name",
-            "credential_code",
-            "username",
-            "token",
-            ...provider.configFields.map((field) => field.key),
-          ];
-          // Conflict errors have no field details; map them to the active resource.
-          if (
-            stage === "credential" &&
-            ["NAME_CONFLICT", "CREDENTIAL_CODE_CONFLICT"].includes(error.code)
-          ) {
-            reveal({
-              [error.code === "NAME_CONFLICT"
-                ? "credential_name"
-                : "credential_code"]: error.message,
-            });
-          } else {
-            setCaOpen(true);
-            errors.show(error, known, aliases);
-          }
+          setCaOpen(true);
+          errors.show(
+            error,
+            [
+              "name",
+              "code",
+              "description",
+              ...provider.configFields.map((f) => f.key),
+            ],
+            aliases,
+          );
         },
       );
     } finally {
@@ -409,27 +288,8 @@ export function ConnectionCreateDrawer({
         setUncertain(null);
         submission.setError(null);
         errors.clear();
-        setCheckMessage(
-          "已找到此编码的连接。连接已保留，请核对详情；尚未提交凭证。",
-        );
+        setCheckMessage("已找到此编码的连接。请在连接详情核对配置。");
         void queryClient.invalidateQueries({ queryKey: ["service-directory"] });
-      } else if (created) {
-        const collection = await request<{ items: Credential[] }>(
-          `${apiPrefix}/service-connections/${type}/${created.id}/credentials`,
-        );
-        const found = collection.data.items.find(
-          (item) => item.code === (credential.code.trim() || codes.credential),
-        );
-        if (!found || excludedCredentials.current.has(found.id)) {
-          setCheckMessage(
-            "暂未查到凭证，结果仍待确认。请稍后再次核实；不会重复提交。",
-          );
-          return;
-        }
-        setSecrets({});
-        setUncertain(null);
-        submission.setError(null);
-        await finish(created);
       }
     } catch (error) {
       setCheckError(error);
@@ -453,7 +313,7 @@ export function ConnectionCreateDrawer({
         description={
           created
             ? "连接已保留，关闭不会删除已创建的连接。"
-            : "配置服务地址，可同时添加访问凭证；创建后再进行验证。"
+            : "填写服务地址和连接参数。创建后可在详情中选择首选凭据。"
         }
         dirty={dirty || Boolean(uncertain)}
         pending={busy}
@@ -498,35 +358,22 @@ export function ConnectionCreateDrawer({
                   types.isPending ||
                   Boolean(types.error) ||
                   !provider ||
-                  (Boolean(created) && !credentialEnabled)
+                  Boolean(created)
                 }
               >
-                {step < 2
-                  ? "下一步"
-                  : created
-                    ? "创建访问凭证"
-                    : credentialEnabled
-                      ? "创建连接和凭证"
-                      : "创建连接"}
+                {step === 0 ? "下一步" : "创建连接"}
               </Button>
             )}
           </>
         }
       >
-        <WizardSteps
-          steps={["选择类型", "连接信息", "访问凭证"]}
-          current={step}
-        />
+        <WizardSteps steps={["选择类型", "连接信息"]} current={step} />
         <h3
           ref={heading}
           tabIndex={-1}
           className="mt-6 mb-4 text-base font-semibold outline-none"
         >
-          {step === 0
-            ? "选择要连接的服务"
-            : step === 1
-              ? `${provider?.name} 连接信息`
-              : "访问凭证（可选）"}
+          {step === 0 ? "选择要连接的服务" : `${provider?.name} 连接信息`}
         </h3>
         <form
           id="connection-create-form"
@@ -537,15 +384,13 @@ export function ConnectionCreateDrawer({
             if (locked) return;
             if (step === 0) {
               if (provider) changeStep(1);
-            } else if (step === 1) {
-              if (validate(false)) changeStep(2);
             } else void save();
           }}
           className="grid gap-5"
         >
           {uncertain ? (
             <Notice tone="warning">
-              {uncertain === "connection" ? "连接" : "凭证"}
+              连接
               创建结果尚未确认。请先核实，避免重复创建。关闭不会撤销已提交的请求。
             </Notice>
           ) : (
@@ -567,44 +412,6 @@ export function ConnectionCreateDrawer({
                   : ""}
               </p>
             </details>
-          )}
-          {created && isVersionConflict(submission.error) && (
-            <Button
-              variant="outline"
-              pending={checking}
-              onClick={() => {
-                if (checking) return;
-                setChecking(true);
-                setCheckError(null);
-                void request(
-                  `${apiPrefix}/service-connections/${type}/${created.id}/credentials`,
-                )
-                  .then((result) => {
-                    if (!result.etag)
-                      throw new Error("未取得列表版本，请稍后重新加载");
-                    errors.clear();
-                    submission.setError(null);
-                    setCheckMessage(
-                      "已重新加载凭证列表，请核对草稿后再次保存。",
-                    );
-                  })
-                  .catch(setCheckError)
-                  .finally(() => setChecking(false));
-              }}
-            >
-              重新加载凭证列表
-            </Button>
-          )}
-          {created && (
-            <Notice tone="warning">
-              连接「{created.name}」已创建，尚未验证。
-              {uncertain === "credential"
-                ? "凭证结果待核实。"
-                : credentialEnabled
-                  ? "访问凭证尚未完成，可继续创建或进入详情。"
-                  : "可进入详情查看配置。"}
-              关闭后连接仍会保留。
-            </Notice>
           )}
           {checkMessage && <Notice>{checkMessage}</Notice>}
           <ErrorNotice error={checkError} />
@@ -635,11 +442,7 @@ export function ConnectionCreateDrawer({
                         checked={type === item.service_type}
                         className="sr-only"
                         onChange={() => {
-                          if (
-                            type !== item.service_type &&
-                            (configDirty ||
-                              Object.values(secrets).some(Boolean))
-                          )
+                          if (type !== item.service_type && configDirty)
                             setReplacement(item.service_type);
                           else choose(item.service_type);
                         }}
@@ -844,120 +647,6 @@ export function ConnectionCreateDrawer({
                     创建后启用
                   </label>
                 </fieldset>
-                {step === 2 && (!capability?.credentials || !method) && (
-                  <Notice>此服务无需添加访问凭证，可以直接创建连接。</Notice>
-                )}
-                {capability?.credentials && method && (
-                  <fieldset
-                    hidden={step !== 2}
-                    disabled={locked}
-                    className={`${step === 2 ? "grid" : "hidden"} min-w-0 gap-4`}
-                  >
-                    <label className="flex items-center gap-2 text-sm font-semibold">
-                      <input
-                        type="checkbox"
-                        checked={withCredential}
-                        disabled={Boolean(created)}
-                        onChange={(event) => {
-                          setWithCredential(event.target.checked);
-                          errors.clear();
-                          submission.setError(null);
-                        }}
-                      />
-                      同时添加访问凭证（可选）
-                    </label>
-                    <p className="text-xs leading-5 text-muted">
-                      也可创建连接后添加。首选凭证需单独设置；访问凭证与 Webhook
-                      秘密独立。
-                    </p>
-                    {withCredential && (
-                      <>
-                        <Field
-                          label="凭证名称"
-                          required
-                          error={errors.fields.credential_name}
-                        >
-                          <Input
-                            name="credential_name"
-                            value={credential.name}
-                            onChange={(event) => {
-                              fieldChange("credential_name");
-                              setCredential({
-                                ...credential,
-                                name: event.target.value,
-                              });
-                            }}
-                          />
-                        </Field>
-                        <Field
-                          label="凭证编码（可选）"
-                          hint="留空自动生成，创建后不可修改。"
-                          error={errors.fields.credential_code}
-                        >
-                          <Input
-                            name="credential_code"
-                            className="font-mono"
-                            value={credential.code}
-                            onChange={(event) => {
-                              fieldChange("credential_code");
-                              setCredential({
-                                ...credential,
-                                code: event.target.value,
-                              });
-                            }}
-                          />
-                        </Field>
-                        {methods.length > 1 ? (
-                          <Field label="认证方式">
-                            <Select
-                              value={method.value}
-                              onValueChange={(value) => {
-                                setCredential({ ...credential, method: value });
-                                setSecrets({});
-                                errors.clear();
-                                submission.setError(null);
-                              }}
-                            >
-                              {methods.map((item) => (
-                                <option key={item.value} value={item.value}>
-                                  {item.label}
-                                </option>
-                              ))}
-                            </Select>
-                          </Field>
-                        ) : (
-                          <p className="text-xs text-muted">
-                            认证方式：{method.label}
-                          </p>
-                        )}
-                        {[...method.identity, ...method.secret].map((field) => (
-                          <Field
-                            key={field.key}
-                            label={field.label}
-                            required
-                            error={errors.fields[field.key]}
-                          >
-                            <Input
-                              name={field.key}
-                              type={
-                                field.type === "password" ? "password" : "text"
-                              }
-                              autoComplete="off"
-                              value={secrets[field.key] ?? ""}
-                              onChange={(event) => {
-                                fieldChange(field.key);
-                                setSecrets({
-                                  ...secrets,
-                                  [field.key]: event.target.value,
-                                });
-                              }}
-                            />
-                          </Field>
-                        ))}
-                      </>
-                    )}
-                  </fieldset>
-                )}
               </>
             )
           )}
@@ -966,7 +655,7 @@ export function ConnectionCreateDrawer({
       <ConfirmDialog
         open={Boolean(replacement)}
         title="更换服务类型？"
-        description="当前连接参数和认证材料将清空；连接名称、说明和凭证名称会保留。"
+        description="更换类型将清空已填写的连接参数。"
         confirmLabel="更换类型"
         onClose={() => setReplacement("")}
         onConfirm={() => choose(replacement)}

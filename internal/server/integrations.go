@@ -45,7 +45,7 @@ func integrationInput(c *gin.Context, input any) (any, bool) {
 	return reflect.ValueOf(input).Elem().Interface(), true
 }
 func registerIntegrations(api *gin.RouterGroup, o Options) {
-	s := &i.Service{Identity: o.Identity, Cipher: o.Installer.IntegrationSecret, ETag: o.Installer.IntegrationETag, PublicURL: o.Runtime.Origin(), Store: func() (identity.Store, error) {
+	s := &i.Service{Identity: o.Identity, CredentialCipher: o.Installer.CredentialSecret, Cipher: o.Installer.IntegrationSecret, ETag: o.Installer.IntegrationETag, PublicURL: o.Runtime.Origin(), Store: func() (identity.Store, error) {
 		st, ok := o.Installer.Backend().(identity.Store)
 		if !ok {
 			return nil, httpx.E(503, "SERVICE_UNAVAILABLE", "系统尚未就绪")
@@ -89,6 +89,52 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 			return false
 		}
 		return true
+	}
+	for _, group := range []struct{ path, kind string }{{"/admin/credentials", "platform"}, {"/projects/:id/credentials", "project"}, {"/me/credentials", "user"}, {"/admin/robots/:robot_id/credentials", "robot"}} {
+		for _, route := range []struct {
+			method, path, op string
+			status           int
+		}{{"GET", "", "list", 200}, {"POST", "", "create", 201}, {"GET", "/:credential_id", "get", 200}, {"PATCH", "/:credential_id", "update", 200}, {"DELETE", "/:credential_id", "delete", 204}} {
+			api.Handle(route.method, group.path+route.path, func(c *gin.Context) {
+				if !noQuery(c) {
+					return
+				}
+				scope := i.CredentialOwnership{Type: group.kind}
+				var ok bool
+				if group.kind == "project" {
+					scope.Owner, ok = collaborationID(c, "id")
+					if !ok {
+						return
+					}
+				}
+				if group.kind == "robot" {
+					scope.Owner, ok = collaborationID(c, "robot_id")
+					if !ok {
+						return
+					}
+				}
+				var id uint64
+				if c.Param("credential_id") != "" {
+					id, ok = collaborationID(c, "credential_id")
+					if !ok {
+						return
+					}
+				}
+				var input any
+				switch route.op {
+				case "create":
+					input = &i.CatalogCreate{}
+				case "update":
+					input = &i.CatalogEdit{}
+				}
+				input, ok = integrationInput(c, input)
+				if !ok {
+					return
+				}
+				result, actor, err := s.Catalog(c.Request.Context(), rawSession(c), scope, id, route.op, c.GetHeader("If-Match"), input, metadata(c))
+				finish(c, result, actor, err, route.status)
+			})
+		}
 	}
 	api.GET("/service-types", func(c *gin.Context) {
 		if !noQuery(c) {
@@ -276,11 +322,10 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 			r, a, err := s.Grants(c.Request.Context(), rawSession(c), id, i.CredentialOwnership{Type: c.Param("subject_kind"), Owner: subject}, c.GetHeader("If-Match"), w.Enabled, metadata(c))
 			finish(c, r, a, err, 200)
 		})
-		for _, group := range []struct{ path, ownership string }{{base, "platform"}, {"/me/service-connections/" + kind, "personal"}, {"/projects/:id/service-connections/" + kind, "project"}, {"/admin/robots/:robot_id/service-connections/" + kind, "robot"}} {
+		for _, group := range []struct{ path, ownership string }{{base, "platform"}, {"/me/service-connections/" + kind, "user"}, {"/projects/:id/service-connections/" + kind, "project"}, {"/admin/robots/:robot_id/service-connections/" + kind, "robot"}} {
 			prefix := group.path + "/:connection_id/credentials"
 			for _, route := range []struct{ method, path, op string }{
-				{"GET", "", "list"}, {"POST", "", "create"}, {"GET", "/preferred", "get_preferred"}, {"PUT", "/preferred", "preferred"}, {"DELETE", "/preferred", "clear_preferred"},
-				{"GET", "/:credential_id", "get"}, {"PATCH", "/:credential_id", "update"}, {"DELETE", "/:credential_id", "delete"}, {"PUT", "/:credential_id/authentication", "authentication"}, {"GET", "/:credential_id/diagnostics", "diagnostics"}, {"POST", "/:credential_id/verify", "verify"},
+				{"GET", "", "list"}, {"GET", "/preferred", "get_preferred"}, {"PUT", "/preferred", "preferred"}, {"DELETE", "/preferred", "clear_preferred"}, {"GET", "/:credential_id/diagnostics", "diagnostics"}, {"POST", "/:credential_id/verify", "verify"},
 			} {
 				api.Handle(route.method, prefix+route.path, func(c *gin.Context) {
 					if !noQuery(c) {
@@ -312,14 +357,8 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 					}
 					var input any
 					switch route.op {
-					case "create":
-						input = &i.CredentialCreate{}
-					case "update":
-						input = &i.CredentialWrite{}
 					case "preferred":
 						input = &i.SelectionWrite{}
-					case "authentication":
-						input = &i.Authentication{}
 					case "verify":
 						input = &struct{}{}
 					}
@@ -335,11 +374,8 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 						finish(c, r, a, err, 200)
 						return
 					}
-					r, a, err := s.Credentials(c.Request.Context(), rawSession(c), id, cid, owner, route.op, c.GetHeader("If-Match"), c.GetHeader("X-Collection-If-Match"), input, metadata(c))
+					r, a, err := s.Choices(c.Request.Context(), rawSession(c), id, cid, owner, route.op, c.GetHeader("If-Match"), input, metadata(c))
 					status := 200
-					if route.op == "create" {
-						status = 201
-					}
 					if route.method == "DELETE" {
 						status = 204
 					}

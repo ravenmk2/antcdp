@@ -575,11 +575,11 @@ func (s *Service) Resource(ctx context.Context, raw string, project, job, id, co
 			if err != nil {
 				return err
 			}
-			cred, err := ir.Credential(credential)
+			cred, err := ir.Entry(credential)
 			if err != nil {
 				return err
 			}
-			if conn == nil || cred == nil || cred.ConnectionID != connection || cred.Ownership != "project" || cred.ProjectID == nil || *cred.ProjectID != project {
+			if conn == nil || cred == nil || !cred.Compatible(conn.Type) || !cred.Owned(integrations.CredentialOwnership{Type: "project", Owner: project}) {
 				return httpx.Invalid("credential_id", "not_project_credential")
 			}
 			allowed, err := integrations.ConnectionAllowed(ir, conn, integrations.CredentialOwnership{Type: "project", Owner: project})

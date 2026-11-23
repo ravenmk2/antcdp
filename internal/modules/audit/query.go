@@ -73,6 +73,13 @@ var labels = map[string]string{
 	"service_connection.deleted":                       "删除服务连接",
 	"service_connection.grant_changed":                 "修改连接授权",
 	"service_connection.fallback_changed":              "修改兜底凭证",
+	"credential.created":                               "创建凭据",
+	"credential.updated":                               "更新凭据",
+	"credential.deleted":                               "删除凭据",
+	"credential.verified":                              "验证凭据",
+	"credential.rotated":                               "轮换凭据材料",
+	"remote_host.preferred_changed":                    "修改主机首选凭据",
+	"service_connection.preferred_changed":             "修改连接首选凭据",
 	"service_credential.created":                       "创建访问凭证",
 	"service_credential.updated":                       "更新访问凭证",
 	"service_credential.deleted":                       "删除访问凭证",
@@ -200,7 +207,7 @@ func PublicDetail(action string, raw json.RawMessage) json.RawMessage {
 			}
 		}
 	}
-	if strings.HasPrefix(action, "remote_host.") || strings.HasPrefix(action, "ssh_credential.") || strings.HasPrefix(action, "service_connection.") || strings.HasPrefix(action, "service_credential.") || strings.HasPrefix(action, "webhook_endpoint.") {
+	if strings.HasPrefix(action, "credential.") || strings.HasPrefix(action, "remote_host.") || strings.HasPrefix(action, "ssh_credential.") || strings.HasPrefix(action, "service_connection.") || strings.HasPrefix(action, "service_credential.") || strings.HasPrefix(action, "webhook_endpoint.") {
 		for _, key := range []string{"enabled", "enabled_before", "enabled_after", "config_changed"} {
 			var value bool
 			if json.Unmarshal(src[key], &value) == nil {

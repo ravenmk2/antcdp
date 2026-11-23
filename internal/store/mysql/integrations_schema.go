@@ -27,7 +27,7 @@ func (s *Store) integrationsSchemaReady(ctx context.Context) error {
 	if count != 0 {
 		return fmt.Errorf("%w: obsolete connection fallback columns", install.ErrIncompleteSchema)
 	}
-	for _, table := range []string{"service_connection", "service_credential", "remote_host_credential"} {
+	for _, table := range []string{"service_connection"} {
 		var expression string
 		if err := s.db.GetContext(ctx, &expression, `SELECT GENERATION_EXPRESSION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND COLUMN_NAME='owner_key'`, table); err != nil {
 			return err
@@ -43,7 +43,8 @@ func (s *Store) integrationsSchemaReady(ctx context.Context) error {
 	}{
 		{"service_connection", "uq_service_connection_owner_code", "ownership_type,owner_key,code", 0},
 		{"service_connection", "uq_service_connection_owner_type_name", "ownership_type,owner_key,service_type,name", 0},
-		{"service_credential", "uq_service_credential_owner_code", "connection_id,ownership_type,owner_key,code", 0},
+		{"credential", "uq_credential_scope_code", "scope_kind,scope_id,code", 0},
+		{"credential_preference", "uq_credential_preference", "resource_kind,resource_id,scope_kind,scope_id", 0},
 		{"service_connection_grant", "PRIMARY", "connection_id,subject_kind,subject_id", 0},
 		{"service_connection_grant", "idx_service_connection_grant_subject", "subject_kind,subject_id,enabled,connection_id", 1},
 		{"project_repository", "idx_project_repository_event_target", "connection_id,repo_id,project_id", 1},

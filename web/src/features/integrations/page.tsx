@@ -82,14 +82,14 @@ export function IntegrationPage({
   return (
     <div className="page">
       <PageHeader
-        title={admin ? "服务集成" : projectId ? "项目服务连接" : "个人服务凭证"}
+        title={admin ? "服务集成" : projectId ? "项目服务连接" : "个人服务连接"}
         variant={divided ? "divided" : "default"}
         description={
           admin
             ? "维护平台连接、项目与团队授权、平台凭证及 Webhook。"
             : projectId
               ? "使用平台授权的连接，或创建并维护项目自己的连接。"
-              : "维护个人访问凭证；连接可见范围随项目与团队授权变化。"
+              : "选择服务连接，配置个人首选凭据。"
         }
       />
       <Directory

@@ -261,7 +261,7 @@ func (s *Store) schemaReady(ctx context.Context, target int64) error {
 		return err
 	}
 	var tables int
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event','icon_file','project','team','project_member','team_member','project_team','role','role_binding','user_sidebar_preference','user_project_shortcut','user_team_shortcut','service_connection','service_connection_grant','service_connection_gitlab','service_credential','remote_host','remote_host_key','remote_host_credential','project_repository','project_repository_label','project_repository_label_binding','email_profile','email_sender_name','email_template','email_send_log','sms_profile','sms_template','sms_send_log','dingtalk_robot')"); err != nil {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME IN ('user','user_password','avatar_file','session','system_setting','system_instance','audit_event','icon_file','project','team','project_member','team_member','project_team','role','role_binding','user_sidebar_preference','user_project_shortcut','user_team_shortcut','service_connection','service_connection_grant','service_connection_gitlab','credential','remote_host','remote_host_key','credential_preference','project_repository','project_repository_label','project_repository_label_binding','email_profile','email_sender_name','email_template','email_send_log','sms_profile','sms_template','sms_send_log','dingtalk_robot')"); err != nil {
 		return err
 	}
 	if tables != 36 {
@@ -310,7 +310,7 @@ func (s *Store) schemaReady(ctx context.Context, target int64) error {
 		return install.ErrIncompleteSchema
 	}
 	var remoteColumns int
-	if err = s.db.GetContext(ctx, &remoteColumns, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='remote_host' AND COLUMN_NAME IN ('host','port','config_version','credentials_version')) OR (TABLE_NAME='remote_host_key' AND COLUMN_NAME IN ('host_id','algorithm','public_key','fingerprint_sha256','trusted_by_user_id','trusted_at')) OR (TABLE_NAME='remote_host_credential' AND COLUMN_NAME IN ('host_id','username','secret_ciphertext','secret_format_version','owner_key','preferred_slot')))`); err != nil {
+	if err = s.db.GetContext(ctx, &remoteColumns, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='remote_host' AND COLUMN_NAME IN ('host','port','config_version','credentials_version')) OR (TABLE_NAME='remote_host_key' AND COLUMN_NAME IN ('host_id','algorithm','public_key','fingerprint_sha256','trusted_by_user_id','trusted_at')) OR (TABLE_NAME='credential_preference' AND COLUMN_NAME IN ('id','resource_kind','resource_id','scope_kind','scope_id','credential_id')))`); err != nil {
 		return err
 	}
 	if remoteColumns != 16 {

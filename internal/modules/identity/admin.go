@@ -323,14 +323,8 @@ func (s *Service) DeleteUser(ctx context.Context, raw string, id uint64, etag, c
 				return e
 			}
 		}
-		if cleaner, ok := tx.(interface{ DeletePersonalServiceCredentials(uint64) error }); ok {
-			if e := cleaner.DeletePersonalServiceCredentials(u.ID); e != nil {
-				return e
-			}
-		}
-
-		if cleaner, ok := tx.(interface{ DeletePersonalRemoteHostCredentials(uint64) error }); ok {
-			if e := cleaner.DeletePersonalRemoteHostCredentials(u.ID); e != nil {
+		if cleaner, ok := tx.(interface{ DeletePersonalCredentials(uint64) error }); ok {
+			if e := cleaner.DeletePersonalCredentials(u.ID); e != nil {
 				return e
 			}
 		}
