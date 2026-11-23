@@ -182,11 +182,7 @@ func TestAgentApplicationIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	robot, _, err := accounts.CreateRobot(ctx, raw, identity.RobotCreate{Username: "application_robot", DisplayName: "Application robot"}, identity.Metadata{})
-	if err != nil {
-		t.Fatal("robot:", err)
-	}
-	created, err := app.Service.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: "application_agent", Name: "Application agent", Mode: "service", RobotUserID: new(strconv.FormatUint(robot.ID, 10)), ScopeKind: "platform", SandboxSpecID: &spec.Data.(*a.SandboxSpec).ID})
+	created, err := app.Service.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: "application_agent", Name: "Application agent", Mode: "chat", ExecutorKind: "robot", UsePolicy: "scope", ScopeKind: "platform", SandboxSpecID: &spec.Data.(*a.SandboxSpec).ID})
 	if err != nil {
 		t.Fatal("agent:", err)
 	}

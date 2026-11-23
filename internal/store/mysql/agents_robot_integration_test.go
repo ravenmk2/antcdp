@@ -20,7 +20,18 @@ func init() {
 
 func agentRobotIdentity(t *testing.T, f *agentIntegrationFixture) {
 	ctx, raw, svc := f.Context, f.AdminToken, f.Agents
-	created, err := svc.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: strings.Repeat("机", 100), Mode: "service", RobotUserID: new(fmt.Sprint(createTestRobot(t, f).ID)), ScopeKind: "platform"})
+	key := cryptox.ID()
+	request := a.DefinitionCreate{Code: cryptox.ID(), Name: "  " + strings.Repeat("机", 100) + "  ", Mode: "service", ScopeKind: "platform"}
+	countRobots := func() int {
+		t.Helper()
+		var n int
+		if err := f.Store.db.GetContext(ctx, &n, "SELECT COUNT(*) FROM user WHERE account_type='robot'"); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	initial := countRobots()
+	created, err := svc.CreateDefinition(ctx, raw, key, request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,8 +43,33 @@ func agentRobotIdentity(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if robot.AccountType != "robot" || robot.Status != "active" || robot.DisplayName != "独立机器人" || robot.ManagedAgentID == nil || *robot.ManagedAgentID != agent.ID {
+	if robot.AccountType != "robot" || robot.Status != "active" || robot.DisplayName != strings.TrimSpace(request.Name) || robot.ManagedAgentID == nil || *robot.ManagedAgentID != agent.ID {
 		t.Fatalf("invalid bound robot: %+v", robot)
+	}
+	replay, err := svc.CreateDefinition(ctx, raw, key, request)
+	if err != nil || !replay.Replayed || replay.Location != created.Location || countRobots() != initial+1 {
+		t.Fatal("creation replay duplicated the robot", err)
+	}
+	failed := request
+	failed.Code = cryptox.ID()
+	failed.SandboxSpecID = new(uint64(999999))
+	if _, err = svc.CreateDefinition(ctx, raw, cryptox.ID(), failed); err == nil || countRobots() != initial+1 {
+		t.Fatal("failed pool setup retained a robot", err)
+	}
+	chat := request
+	chat.Mode, chat.ExecutorKind, chat.Code = "chat", "chat_user", cryptox.ID()
+	human, err := svc.CreateDefinition(ctx, raw, cryptox.ID(), chat)
+	if err != nil || human.Data.(*a.Definition).RobotUserID != nil || countRobots() != initial+1 {
+		t.Fatal("human execution created a robot", err)
+	}
+	chat.ExecutorKind, chat.Code = "robot", cryptox.ID()
+	other, err := svc.CreateDefinition(ctx, raw, cryptox.ID(), chat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherID := other.Data.(*a.Definition).RobotUserID
+	if otherID == nil || *otherID == robot.ID || countRobots() != initial+2 {
+		t.Fatal("same-name assistants must own distinct robot accounts")
 	}
 	var passwords int
 	if err = f.Store.db.GetContext(ctx, &passwords, "SELECT COUNT(*) FROM user_password WHERE user_id=?", robot.ID); err != nil || passwords != 0 {

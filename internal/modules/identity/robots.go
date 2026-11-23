@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/ravenmk2/antcdp/internal/platform/cryptox"
 	"github.com/ravenmk2/antcdp/internal/platform/emailaddress"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
@@ -29,17 +30,31 @@ func (s *Service) CreateRobot(ctx context.Context, raw string, w RobotCreate, me
 	}
 	var robot *User
 	a, err := s.execute(ctx, raw, policy{admin: true, renew: true}, 0, func(tx Tx, a *Auth, _ *User) error {
-		now := s.now()
-		robot = &User{AccountType: "robot", Username: w.Username, DisplayName: w.DisplayName, Role: "user", Status: "active", CreatedAt: now, UpdatedAt: now}
-		if email != "" {
-			robot.Email = &email
-		}
-		if err := tx.InsertUser(robot); err != nil {
-			return err
-		}
-		return s.audit(tx, a.User, "robot.created", "user", strconv.FormatUint(robot.ID, 10), robot.DisplayName, meta, map[string]any{})
+		var err error
+		robot, err = s.insertRobot(tx, a, w.Username, w.DisplayName, email, meta)
+		return err
 	})
 	return robot, a, err
+}
+
+// CreateAgentRobot uses the validated assistant display name and participates in its creation transaction.
+func (s *Service) CreateAgentRobot(tx Tx, a *Auth, displayName string, meta Metadata) (*User, error) {
+	return s.insertRobot(tx, a, "robot_"+cryptox.ID()[:24], displayName, "", meta)
+}
+
+func (s *Service) insertRobot(tx Tx, a *Auth, username, displayName, email string, meta Metadata) (*User, error) {
+	now := s.now()
+	robot := &User{AccountType: "robot", Username: username, DisplayName: displayName, Role: "user", Status: "active", CreatedAt: now, UpdatedAt: now}
+	if email != "" {
+		robot.Email = &email
+	}
+	if err := tx.InsertUser(robot); err != nil {
+		return nil, err
+	}
+	if err := s.audit(tx, a.User, "robot.created", "user", strconv.FormatUint(robot.ID, 10), robot.DisplayName, meta, map[string]any{}); err != nil {
+		return nil, err
+	}
+	return robot, nil
 }
 
 // AuthorizeRobotAccount checks account ownership independently of Agent bindings.

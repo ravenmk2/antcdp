@@ -127,7 +127,6 @@ type DefinitionCreate struct {
 	ExecutorKind  string         `json:"executor_kind"`
 	UsePolicy     string         `json:"use_policy"`
 	Code          string         `json:"code"`
-	RobotUserID   *string        `json:"robot_user_id"`
 	SandboxSpecID *uint64        `json:"sandbox_spec_id,string"`
 	Name          string         `json:"name"`
 	Mode          string         `json:"agent_type"`

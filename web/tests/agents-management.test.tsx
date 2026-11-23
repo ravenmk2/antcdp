@@ -127,16 +127,6 @@ beforeEach(() => {
     if (result) return result;
     if (path.startsWith("/admin/agents/definitions?"))
       return { ...response([]), pagination: { total: 0 } };
-    if (path.startsWith("/admin/robots?"))
-      return response([
-        {
-          id: "9",
-          username: "review_bot",
-          display_name: "审查机器人",
-          status: "active",
-          managed_agent_id: null,
-        },
-      ]);
     if (path.endsWith("/definitions/4")) return response(agent);
     if (path.endsWith("/activation-check"))
       throw new ApiError("VALIDATION_FAILED", "请检查输入内容", 422, [
@@ -243,9 +233,13 @@ function mount(entry: string) {
   );
   return { router, cache, user: userEvent.setup() };
 }
-it.each(["chat", "service"] as const)(
-  "retains the %s create payload and original key after an unknown result",
-  async (agentType) => {
+it.each([
+  ["chat", "chat_user"],
+  ["chat", "robot"],
+  ["service", "robot"],
+] as const)(
+  "retains the %s/%s create payload and original key after an unknown result",
+  async (agentType, executorKind) => {
     let first: RequestOptions | undefined;
     override = async (path, options) => {
       if (path === "/admin/agents/definitions" && options.method === "POST") {
@@ -274,11 +268,15 @@ it.each(["chat", "service"] as const)(
       expect(
         within(drawer).queryByRole("textbox", { name: "欢迎语" }),
       ).not.toBeInTheDocument();
-      await user.click(screen.getByRole("combobox", { name: "执行机器人" }));
-      await user.click(
-        await screen.findByRole("option", { name: "审查机器人 (review_bot)" }),
-      );
     } else {
+      if (executorKind === "robot") {
+        await user.click(screen.getByRole("combobox", { name: "执行身份" }));
+        await user.click(
+          await screen.findByRole("option", {
+            name: "机器人 · 机器人云电脑池",
+          }),
+        );
+      }
       await user.type(
         screen.getByRole("textbox", { name: "欢迎语" }),
         "欢迎开启对话",
@@ -297,10 +295,11 @@ it.each(["chat", "service"] as const)(
     await waitFor(() =>
       expect(router.state.location.pathname).toBe("/admin/agents/4"),
     );
+    expect(first?.body).not.toHaveProperty("robot_user_id");
     expect(first?.body).toMatchObject({
       enabled: false,
       code: "reviewer",
-      robot_user_id: agentType === "service" ? "9" : null,
+      executor_kind: executorKind,
       name: "核查助手",
       agent_type: agentType,
       scope_kind: "platform",

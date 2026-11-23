@@ -197,7 +197,7 @@ func validateDefinition(v *Definition) error {
 	if v.UsePolicy != "scope" && v.UsePolicy != "allowlist" {
 		return httpx.Invalid("use_policy", "unsupported")
 	}
-	if v.ExecutorKind != "robot" && v.ExecutorKind != "chat_user" || v.Mode == "service" && v.ExecutorKind != "robot" || (v.ExecutorKind == "robot") != (v.RobotUserID != nil) {
+	if v.ExecutorKind != "robot" && v.ExecutorKind != "chat_user" || v.Mode == "service" && v.ExecutorKind != "robot" {
 		return httpx.Invalid("executor_kind", "invalid_identity")
 	}
 	if v.ExecutorKind == "chat_user" && v.PoolCapacity != nil {

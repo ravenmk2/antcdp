@@ -1,5 +1,4 @@
 import { resourceCodeSchema } from "@/domain/validation";
-import type { User } from "@/types/auth";
 import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import {
   Link,
@@ -401,15 +400,10 @@ export function AgentCreatePage() {
   const navigate = useNavigate(),
     errors = useFormErrors();
   const [specID, setSpecID] = useState("");
-  const robots = useApiQuery<(User & { managed_agent_id: string | null })[]>(
-    ["unbound-robots"],
-    "/admin/robots?page_size=100&unbound=true",
-  );
   const [draft, setDraft] = useState({
     code: "",
     executor_kind: "chat_user" as AgentDefinition["executor_kind"],
     use_policy: "scope" as AgentDefinition["use_policy"],
-    robot_user_id: null as string | null,
     name: "",
     description: "",
     greeting: "",
@@ -444,10 +438,6 @@ export function AgentCreatePage() {
         code: resourceCodeSchema.safeParse(draft.code).success
           ? ""
           : "请输入 1–64 位小写字母、数字、_ 或 - 的编码",
-        robot_user_id:
-          draft.executor_kind === "robot" && !draft.robot_user_id
-            ? "请选择未绑定助手的机器人"
-            : "",
         name: draft.name.trim() ? "" : "请输入助手名称",
         scope_id:
           draft.scope_kind !== "platform" && !draft.scope_id
@@ -469,8 +459,6 @@ export function AgentCreatePage() {
           ...(draft.executor_kind === "robot" && specID
             ? { sandbox_spec_id: specID }
             : {}),
-          robot_user_id:
-            draft.executor_kind === "robot" ? draft.robot_user_id : null,
           enabled: false,
         },
       },
@@ -478,7 +466,6 @@ export function AgentCreatePage() {
     if (command.getSnapshot().phase === "failed")
       errors.show(command.getSnapshot().error, [
         "code",
-        "robot_user_id",
         "name",
         "description",
         "greeting",
@@ -623,34 +610,10 @@ export function AgentCreatePage() {
             </Field>
             {draft.executor_kind === "robot" && (
               <>
-                <ErrorNotice error={robots.error} />
-                <Field
-                  label="执行机器人"
-                  required
-                  error={errors.fields.robot_user_id}
-                >
-                  <Select
-                    value={draft.robot_user_id ?? ""}
-                    onValueChange={(value) =>
-                      setDraft({ ...draft, robot_user_id: value || null })
-                    }
-                  >
-                    <option value="">选择未绑定机器人</option>
-                    {robots.data?.data
-                      .filter((u) => !u.managed_agent_id)
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.display_name} ({u.username})
-                          {u.status === "disabled" ? " · 已停用" : ""}
-                        </option>
-                      ))}
-                  </Select>
-                </Field>
-                <p className={styles.hint}>执行机器人绑定后不可更换。</p>
+                <p className={styles.hint}>
+                  创建助手时会自动创建同名机器人并绑定为执行身份。
+                </p>
                 <SpecPicker value={specID} onChange={setSpecID} />
-                <Link className="text-primary" to="/admin/robots">
-                  管理机器人账号
-                </Link>
               </>
             )}
             <Field

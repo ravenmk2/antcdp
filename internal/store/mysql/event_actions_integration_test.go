@@ -28,7 +28,7 @@ func init() {
 
 func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	ctx, raw := f.Context, f.AdminToken
-	robot, replacement, executor := createTestRobot(t, f), createTestRobot(t, f), createTestRobot(t, f)
+	robot, replacement := createTestRobot(t, f), createTestRobot(t, f)
 	_, admin, err := f.Identity.User(ctx, raw, robot.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -49,11 +49,15 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		if _, err := f.Store.db.ExecContext(ctx, "INSERT INTO project_member(project_id,user_id,role,created_at,updated_at) VALUES(?,?,'member',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", p.ID, member.ID); err != nil {
 			t.Fatal(err)
 		}
-		created, err := f.Agents.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: "lead_reviewer", Name: "Lead reviewer", Mode: "chat", ExecutorKind: "robot", RobotUserID: new(fmt.Sprint(robot.ID)), ScopeKind: "project", ScopeID: new(fmt.Sprint(p.ID)), UsePolicy: "scope"})
+		created, err := f.Agents.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: "lead_reviewer", Name: "Lead reviewer", Mode: "chat", ExecutorKind: "robot", ScopeKind: "project", ScopeID: new(fmt.Sprint(p.ID)), UsePolicy: "scope"})
 		if err != nil {
 			t.Fatal(err)
 		}
 		agent := created.Data.(*a.Definition)
+		leadRobotID := *agent.RobotUserID
+		if _, err := f.Store.db.ExecContext(ctx, "INSERT INTO project_member(project_id,user_id,role,created_at,updated_at) VALUES(?,?,'admin',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", p.ID, leadRobotID); err != nil {
+			t.Fatal(err)
+		}
 		enableChatTestAgent(t, f, agent)
 		create := a.SessionCreate{AgentID: fmt.Sprint(agent.ID)}
 		_, err = f.Agents.CreateSession(ctx, outsider, cryptox.ID(), create)
@@ -63,7 +67,7 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 			t.Fatal(err)
 		}
 		detail := opened.Data.(a.SessionDetail)
-		if detail.Configuration.ChatUserID == nil || *detail.Configuration.ChatUserID != member.ID || uint64(detail.Principal.ID) != robot.ID || !detail.Permissions.Submit {
+		if detail.Configuration.ChatUserID == nil || *detail.Configuration.ChatUserID != member.ID || uint64(detail.Principal.ID) != leadRobotID || !detail.Permissions.Submit {
 			t.Fatal("wrong requester or principal", detail.Configuration, detail.Principal)
 		}
 		_, err = f.Agents.GetSession(ctx, raw, detail.Configuration.ID)
@@ -77,7 +81,7 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 			t.Fatal("claim delegated review", err)
 		}
 		auth := claim.Execution.Authorization
-		if uint64(auth.AccountID) != robot.ID || auth.AccountType != "robot" || !auth.Allows("project", agentcore.ID(p.ID), "admin") {
+		if uint64(auth.AccountID) != leadRobotID || auth.AccountType != "robot" || !auth.Allows("project", agentcore.ID(p.ID), "admin") {
 			t.Fatal("robot project role", auth)
 		}
 		if _, err = f.Agents.EndRoot(ctx, claim.Execution.Ref, agentcore.RunEnd{Status: agentcore.Succeeded}); err != nil {
@@ -133,7 +137,7 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal("job code missing", j)
 	}
 
-	created, err := f.Agents.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: "event_reviewer", Name: "Event reviewer", Mode: "service", ScopeKind: "platform", RobotUserID: new(fmt.Sprint(executor.ID))})
+	created, err := f.Agents.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: "event_reviewer", Name: "Event reviewer", Mode: "service", ScopeKind: "platform"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +201,7 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal("atomic concurrent chat", results, errs)
 	}
 	var count int
-	if err = f.Store.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM agent_session s JOIN agent_input i ON i.session_id=s.id WHERE s.id=? AND s.executor_user_id=? AND i.actor_id=? AND i.origin_kind='trigger' AND i.source_kind='event_consumption' AND i.source_id='101'`, results[0].SessionID, executor.ID, fmt.Sprint(robot.ID)); err != nil || count != 1 {
+	if err = f.Store.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM agent_session s JOIN agent_input i ON i.session_id=s.id WHERE s.id=? AND s.executor_user_id=? AND i.actor_id=? AND i.origin_kind='trigger' AND i.source_kind='event_consumption' AND i.source_id='101'`, results[0].SessionID, *agent.RobotUserID, fmt.Sprint(robot.ID)); err != nil || count != 1 {
 		t.Fatal("execution identity/source", count, err)
 	}
 	chat.ActorID = replacement.ID
@@ -212,12 +216,12 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	// A rejected request leaves neither an empty session nor a receipt behind.
 	chat.RequestKey = "unavailable"
 	chat.Message = "retry this"
-	if _, err = f.Store.db.ExecContext(ctx, "UPDATE `user` SET status='disabled' WHERE id=?", executor.ID); err != nil {
+	if _, err = f.Store.db.ExecContext(ctx, "UPDATE `user` SET status='disabled' WHERE id=?", *agent.RobotUserID); err != nil {
 		t.Fatal(err)
 	}
 	_, err = f.Agents.ChatAutomation(ctx, chat)
 	modelsExpectCode(t, err, "PRINCIPAL_UNAVAILABLE")
-	if _, err = f.Store.db.ExecContext(ctx, "UPDATE `user` SET status='active' WHERE id=?", executor.ID); err != nil {
+	if _, err = f.Store.db.ExecContext(ctx, "UPDATE `user` SET status='active' WHERE id=?", *agent.RobotUserID); err != nil {
 		t.Fatal(err)
 	}
 	if accepted, err := f.Agents.ChatAutomation(ctx, chat); err != nil || accepted.Replayed {
@@ -237,8 +241,7 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil || len(notifications) != 1 || len(notifications[0].Ranges) != 1 || uint64(notifications[0].Ranges[0].SessionID) != retried.SessionID {
 		t.Fatal("rolled-back admission leaked a commit notification", retried, notifications, err)
 	}
-	_, err = f.Agents.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: "cannot_rebind", Name: "Duplicate", Mode: "service", ScopeKind: "platform", RobotUserID: new(fmt.Sprint(executor.ID))})
-	modelsExpectCode(t, err, "VALIDATION_FAILED")
+
 }
 
 type retryAdmissionStore struct{ identity.Store }

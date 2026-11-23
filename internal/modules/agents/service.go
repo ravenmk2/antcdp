@@ -37,11 +37,7 @@ func (s *Service) accessWithAgent(ctx context.Context, raw string, admin bool, a
 	}
 	out := &Result{Status: 200}
 	a, e := s.Identity.BusinessAccess(ctx, raw, func(tx identity.Tx) ([]uint64, error) {
-		ids, err := robotAccountLocks(tx, agentID)
-		if uid, ok := ctx.Value(robotBindingKey{}).(uint64); ok {
-			ids = append(ids, uid)
-		}
-		return ids, err
+		return robotAccountLocks(tx, agentID)
 	}, func(tx identity.Tx, a *identity.Auth) error {
 		if admin && a.User.Role != "admin" {
 			return httpx.E(403, "FORBIDDEN", "需要管理员权限")
@@ -89,7 +85,7 @@ func (s *Service) definition(v *Definition) error {
 	if v.SchemaVersion != 1 || json.Unmarshal(v.BudgetJSON, &v.RuntimePolicy) != nil {
 		return integrity()
 	}
-	if validateDefinition(v) != nil {
+	if validateDefinition(v) != nil || (v.ExecutorKind == "robot") != (v.RobotUserID != nil) {
 		return integrity()
 	}
 	v.QuestionTTL, v.ApprovalTTL = v.RuntimePolicy.QuestionTimeout, v.RuntimePolicy.ApprovalTimeout
@@ -261,8 +257,6 @@ func matchesLegacyDefinitionRequest(input any, hash []byte) bool {
 	return hmac.Equal(hash, digest[:])
 }
 
-type robotBindingKey struct{}
-
 func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w DefinitionCreate) (*Result, error) {
 	w.Mode = normalizeAgentType(w.Mode)
 	w.Greeting = strings.TrimSpace(w.Greeting)
@@ -281,21 +275,6 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 			w.UsePolicy = "allowlist"
 		}
 	}
-	var robotID uint64
-	if w.ExecutorKind == "robot" {
-		if w.RobotUserID == nil {
-			return nil, httpx.Invalid("robot_user_id", "required")
-		}
-		var err error
-		robotID, err = idValue(*w.RobotUserID, "robot_user_id")
-		if err != nil {
-			return nil, err
-		}
-		ctx = context.WithValue(ctx, robotBindingKey{}, robotID)
-	} else if w.RobotUserID != nil {
-		return nil, httpx.Invalid("robot_user_id", "robot_executor_required")
-	}
-
 	return s.command(ctx, raw, key, "agent.create", "agents", w, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
 		if w.Enabled.Null {
 			return httpx.Invalid("enabled", "null_not_allowed")
@@ -319,9 +298,6 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 		if w.Enabled.Set && w.Enabled.Value {
 			return httpx.Invalid("enabled", "default_model_required")
 		}
-		if robotID != 0 {
-			v.RobotUserID = &robotID
-		}
 		if e = validateDefinition(v); e != nil {
 			return e
 		}
@@ -333,14 +309,12 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 			return httpx.Invalid("scope_id", "unavailable")
 		}
 		if v.ExecutorKind == "robot" {
-			users, err := tx.LockUsers([]uint64{robotID})
+			meta, _ := ctx.Value(metadataKey{}).(identity.Metadata)
+			robot, err := s.Identity.CreateAgentRobot(tx, a, v.Name, meta)
 			if err != nil {
 				return err
 			}
-			robot := users[robotID]
-			if robot == nil || robot.AccountType != "robot" || robot.DeletedAt != nil || robot.ManagedAgentID != nil {
-				return httpx.Invalid("robot_user_id", "unavailable_or_already_bound")
-			}
+			v.RobotUserID = &robot.ID
 		}
 		if e = encodeDefinition(v); e != nil {
 			return e

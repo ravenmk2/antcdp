@@ -2,7 +2,6 @@ package mysql
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -201,7 +200,7 @@ func agentFavoritesAndSummary(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal("unavailable favorite disappeared", rows, total)
 	}
 
-	service, err := svc.CreateDefinition(ctx, admin, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: "Favorite service", Mode: "service", RobotUserID: new(fmt.Sprint(createTestRobot(t, f).ID)), ScopeKind: "platform"})
+	service, err := svc.CreateDefinition(ctx, admin, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: "Favorite service", Mode: "service", ScopeKind: "platform"})
 	if err != nil {
 		t.Fatal(err)
 	}
