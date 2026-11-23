@@ -150,7 +150,7 @@ export function CloudComputersPage() {
                   className="font-medium text-primary"
                   to={`/admin/cloud-computers/${v.id}`}
                 >
-                  {v.id}
+                  云电脑 #{v.id}
                 </Link>
               </td>
               <td>{v.owner_user_id}</td>
@@ -174,7 +174,7 @@ export function CloudComputersPage() {
               </td>
               <td>{new Date(v.last_activity_at).toLocaleString()}</td>
               <td>
-                <RowActions label={`云电脑 ${v.id}`}>
+                <RowActions label={`云电脑 #${v.id}`}>
                   <RowAction
                     icon={<TerminalSquare />}
                     disabled={v.state !== "ready"}

@@ -5,6 +5,7 @@ import "@xterm/xterm/css/xterm.css";
 import { TerminalSquare, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/overlays";
+import { usePortalContainer } from "@/components/platform/surface-context";
 
 const monokai = {
   background: "#000000",
@@ -38,6 +39,7 @@ export default function CloudTerminal({
   computerId: string;
   onClose: () => void;
 }) {
+  const portalContainer = usePortalContainer();
   const [host, setHost] = useState<HTMLDivElement | null>(null);
   const socket = useRef<WebSocket | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -141,7 +143,7 @@ export default function CloudTerminal({
         if (!next) onClose();
       }}
     >
-      <Dialog.Portal>
+      <Dialog.Portal container={portalContainer}>
         <Dialog.Popup
           aria-describedby={undefined}
           className="fixed inset-0 z-50 flex h-dvh w-full flex-col bg-black text-[#f8f8f2] outline-none"
