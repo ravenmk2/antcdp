@@ -110,7 +110,7 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 		if !agent.Enabled || agent.DefaultModelBindingID == nil {
 			return httpx.E(409, "AGENT_UNAVAILABLE", "助手当前不可用")
 		}
-		v := &SessionRow{AgentID: agent.ID, ExecutionMode: "service", ExecutorKind: "robot", SessionKind: "root", ExecutorUserID: *agent.RobotUserID, Title: title, NextInputOrder: 1, RowVersion: 1, CreatedByActorKind: creatorKind, CreatedByActorID: creatorID, LockedModelConfig: json.RawMessage(`null`), SelectedModelBindingID: *agent.DefaultModelBindingID}
+		v := &SessionRow{AgentID: agent.ID, ExecutionMode: "service", ExecutorKind: "robot", SessionKind: "root", RunAsUserID: *agent.RobotUserID, Title: title, NextInputOrder: 1, RowVersion: 1, CreatedByActorKind: creatorKind, CreatedByActorID: creatorID, LockedModelConfig: json.RawMessage(`null`), SelectedModelBindingID: *agent.DefaultModelBindingID}
 		executor, err := executionAccount(tx, v, true)
 		if err != nil {
 			return err
@@ -188,19 +188,24 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 }
 
 func authorizeAutomation(tx identity.Tx, r Repository, agent *Definition, w AutomationChat) error {
-	var allowed bool
-	var err error
-	if w.JobRun {
-		allowed, err = r.CanJobRunAgent(w.CallerID, w.ProjectID, agent.ID)
-	} else {
-		if _, err = tx.LockUsers([]uint64{w.ActorID, *agent.RobotUserID}); err != nil {
-			return err
-		}
-		if _, err = collaboration.AutomationProject(tx, w.ProjectID, w.ActorID); err != nil {
-			return err
-		}
-		allowed, err = r.CanUseAgent(agent.ID, w.ActorID, false)
+	actor := w.ActorID
+	users, err := tx.LockUsers([]uint64{actor, *agent.RobotUserID})
+	if err != nil {
+		return err
 	}
+	if _, err = collaboration.AutomationProject(tx, w.ProjectID, actor); err != nil {
+		return err
+	}
+	if w.JobRun {
+		id, err := r.JobRunAccount(w.CallerID, w.ProjectID, agent.ID)
+		if err != nil {
+			return err
+		}
+		if id == 0 || id != actor {
+			return missing()
+		}
+	}
+	allowed, err := r.CanUseAgent(agent.ID, actor, users[actor].Role == "admin")
 	if err != nil {
 		return err
 	}

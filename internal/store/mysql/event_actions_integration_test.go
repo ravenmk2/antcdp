@@ -99,7 +99,7 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		modelsExpectCode(t, err, "AGENT_ACCESS_REVOKED")
 	})
 	jobService := &jobs.Service{Identity: f.Identity, Store: func() (identity.Store, error) { return f.Store, nil }, Executor: jobVM.Executor{}}
-	j, _, err := jobService.Save(ctx, raw, p.ID, 0, jobs.Write{Code: "build", Name: "Build", Enabled: true, MaxConcurrency: 1, BusyPolicy: "skip", TimeoutMS: 1000, Config: &jobs.Config{Script: `function main(){return 1}`}})
+	j, _, err := jobService.Save(ctx, raw, p.ID, 0, jobs.Write{Code: "build", Name: "Build", Enabled: true, MaxConcurrency: 1, BusyPolicy: "skip", TimeoutMS: 1000, Config: &jobs.Config{RunAsUserID: robot.ID, Script: `function main(){return 1}`}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if err != nil || first.RunID == nil || first.Outcome != "accepted" {
 		t.Fatal("job acceptance", first, err)
 	}
-	start.ActorID = replacement.ID
+	start.ActorID = admin.User.ID
 	start.Trace = json.RawMessage(`{"attempt":2}`)
 	replay, err := jobService.StartAutomation(ctx, start)
 	if err != nil || replay.RunID == nil || *replay.RunID != *first.RunID || replay.Actor != robot.ID {
@@ -165,20 +165,16 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	}
 	_, err = f.Agents.CreateSession(ctx, raw, cryptox.ID(), a.SessionCreate{AgentID: fmt.Sprint(agent.ID)})
 	modelsExpectCode(t, err, "SERVICE_AUTOMATION_ONLY")
-	jobChat := a.AutomationChat{JobRun: true, ProjectID: p.ID, CallerID: *accepted.RunID, Path: resourcecode.Locator{ScopeKind: "platform", Code: agent.Code}, Message: "Review", RequestKey: "job-request"}
+	jobChat := a.AutomationChat{JobRun: true, ActorID: robot.ID, ProjectID: p.ID, CallerID: *accepted.RunID, Path: resourcecode.Locator{ScopeKind: "platform", Code: agent.Code}, Message: "Review", RequestKey: "job-request"}
+	_, err = f.Agents.ChatAutomation(ctx, jobChat)
+	modelsExpectCode(t, err, "NOT_FOUND")
 	if _, err = f.Store.db.ExecContext(ctx, "UPDATE job_run SET status='running' WHERE id=?", *accepted.RunID); err != nil {
 		t.Fatal(err)
 	}
-	_, err = f.Agents.ChatAutomation(ctx, jobChat)
+	wrong := jobChat
+	wrong.ActorID = admin.User.ID
+	_, err = f.Agents.ChatAutomation(ctx, wrong)
 	modelsExpectCode(t, err, "NOT_FOUND")
-	current, err = f.Agents.GetDefinition(ctx, raw, agent.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = f.Agents.PatchDefinition(ctx, raw, agent.ID, current.Tag, a.DefinitionPatch{UseGrants: a.Field[[]a.UseGrant]{Set: true, Value: []a.UseGrant{{Kind: "job", ID: j.ID}}}})
-	if err != nil {
-		t.Fatal(err)
-	}
 	var jobReceipts [2]a.ChatReceipt
 	var jobErrors [2]error
 	var concurrent sync.WaitGroup
@@ -201,7 +197,7 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal("atomic concurrent chat", results, errs)
 	}
 	var count int
-	if err = f.Store.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM agent_session s JOIN agent_input i ON i.session_id=s.id WHERE s.id=? AND s.executor_user_id=? AND i.actor_id=? AND i.origin_kind='trigger' AND i.source_kind='event_consumption' AND i.source_id='101'`, results[0].SessionID, *agent.RobotUserID, fmt.Sprint(robot.ID)); err != nil || count != 1 {
+	if err = f.Store.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM agent_session s JOIN agent_input i ON i.session_id=s.id WHERE s.id=? AND s.run_as_user_id=? AND i.actor_id=? AND i.origin_kind='trigger' AND i.source_kind='event_consumption' AND i.source_id='101'`, results[0].SessionID, *agent.RobotUserID, fmt.Sprint(robot.ID)); err != nil || count != 1 {
 		t.Fatal("execution identity/source", count, err)
 	}
 	chat.ActorID = replacement.ID

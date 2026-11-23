@@ -78,24 +78,21 @@ func (t *jobTx) SaveJob(v *jobs.Job) error {
 }
 func (t *jobTx) Revision(id uint64) (*jobs.Revision, error) {
 	var row struct {
-		ID         uint64    `db:"id"`
-		JobID      uint64    `db:"job_id"`
-		Hash       string    `db:"content_hash"`
-		Script     string    `db:"script"`
-		Parameters []byte    `db:"input_schema"`
-		Bindings   []byte    `db:"resource_bindings"`
-		Creator    uint64    `db:"created_by_user_id"`
-		At         time.Time `db:"created_at"`
+		ID          uint64    `db:"id"`
+		RunAsUserID uint64    `db:"run_as_user_id"`
+		JobID       uint64    `db:"job_id"`
+		Hash        string    `db:"content_hash"`
+		Script      string    `db:"script"`
+		Parameters  []byte    `db:"input_schema"`
+		Creator     uint64    `db:"created_by_user_id"`
+		At          time.Time `db:"created_at"`
 	}
 	err := t.tx.GetContext(t.ctx, &row, "SELECT * FROM job_revision WHERE id=?", id)
 	if err != nil {
 		return nil, jobMissing(err)
 	}
-	v := &jobs.Revision{ID: row.ID, JobID: row.JobID, Hash: row.Hash, Creator: row.Creator, CreatedAt: row.At, Config: jobs.Config{Script: row.Script}}
+	v := &jobs.Revision{ID: row.ID, JobID: row.JobID, Hash: row.Hash, Creator: row.Creator, CreatedAt: row.At, Config: jobs.Config{Script: row.Script, RunAsUserID: row.RunAsUserID}}
 	if err = json.Unmarshal(row.Parameters, &v.Parameters); err != nil {
-		return nil, err
-	}
-	if err = json.Unmarshal(row.Bindings, &v.Bindings); err != nil {
 		return nil, err
 	}
 	return v, nil
@@ -133,11 +130,7 @@ func (t *jobTx) SaveRevision(v *jobs.Revision) error {
 	if err != nil {
 		return err
 	}
-	bindings, err := json.Marshal(v.Bindings)
-	if err != nil {
-		return err
-	}
-	result, err := t.tx.ExecContext(t.ctx, "INSERT INTO job_revision(job_id,content_hash,script,input_schema,resource_bindings,created_by_user_id,created_at) VALUES(?,?,?,?,?,?,?)", v.JobID, v.Hash, v.Script, params, bindings, v.Creator, v.CreatedAt)
+	result, err := t.tx.ExecContext(t.ctx, "INSERT INTO job_revision(run_as_user_id,job_id,content_hash,script,input_schema,created_by_user_id,created_at) VALUES(?,?,?,?,?,?,?)", v.RunAsUserID, v.JobID, v.Hash, v.Script, params, v.Creator, v.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -167,36 +160,7 @@ func (t *jobTx) RunAllowed(job, user uint64) (bool, error) {
 	return allowed, err
 }
 
-const resourceGrantColumns = "id,job_id,connection_id,credential_id,status,created_at"
-
-func (t *jobTx) Resources(id uint64) ([]jobs.ResourceGrant, error) {
-	out := []jobs.ResourceGrant{}
-	err := t.tx.SelectContext(t.ctx, &out, "SELECT "+resourceGrantColumns+" FROM job_resource_grant WHERE job_id=? ORDER BY id", id)
-	return out, err
-}
-func (t *jobTx) Resource(id uint64) (*jobs.ResourceGrant, error) {
-	var v jobs.ResourceGrant
-	err := t.tx.GetContext(t.ctx, &v, "SELECT "+resourceGrantColumns+" FROM job_resource_grant WHERE id=? FOR UPDATE", id)
-	if err != nil {
-		return nil, jobMissing(err)
-	}
-	return &v, nil
-}
-func (t *jobTx) SaveResource(v *jobs.ResourceGrant, actor uint64) error {
-	if v.ID == 0 {
-		result, err := t.tx.ExecContext(t.ctx, "INSERT INTO job_resource_grant(job_id,connection_id,credential_id,status,created_by_user_id,created_at) VALUES(?,?,?,?,?,?)", v.JobID, v.ConnectionID, v.CredentialID, v.Status, actor, v.CreatedAt)
-		if err != nil {
-			return err
-		}
-		id, err := result.LastInsertId()
-		v.ID = uint64(id)
-		return err
-	}
-	_, err := t.tx.ExecContext(t.ctx, "UPDATE job_resource_grant SET status='revoked',revoked_by_user_id=?,revoked_at=UTC_TIMESTAMP(3) WHERE id=? AND status='active'", actor, v.ID)
-	return err
-}
-
-const runColumns = "id,job_id,revision_id,trigger_kind,actor_user_id,trigger_context,inputs,timeout_ms,state_mode,state_store_id,rerun_of_run_id,status,stop_reason,error_code,error_summary,COALESCE(result,CAST('null' AS JSON)) AS result,has_result,queued_at,started_at,finished_at,stop_requested_by_user_id,stop_requested_at,last_log_seq,script_log_count,script_log_bytes,script_logs_truncated"
+const runColumns = "id,job_id,revision_id,run_as_user_id,trigger_kind,actor_user_id,trigger_context,inputs,timeout_ms,state_mode,state_store_id,rerun_of_run_id,status,stop_reason,error_code,error_summary,COALESCE(result,CAST('null' AS JSON)) AS result,has_result,queued_at,started_at,finished_at,stop_requested_by_user_id,stop_requested_at,last_log_seq,script_log_count,script_log_bytes,script_logs_truncated"
 
 func (t *jobTx) Run(id uint64) (*jobs.Run, error) {
 	var v jobs.Run
@@ -218,12 +182,12 @@ func (t *jobTx) Active(id uint64) ([]jobs.Run, error) {
 }
 func (t *jobTx) QueuedActors(job uint64) ([]uint64, error) {
 	out := []uint64{}
-	err := t.tx.SelectContext(t.ctx, &out, "SELECT DISTINCT actor_user_id FROM job_run WHERE job_id=? AND status='queued' AND actor_user_id IS NOT NULL ORDER BY actor_user_id", job)
+	err := t.tx.SelectContext(t.ctx, &out, "SELECT DISTINCT actor_user_id FROM job_run WHERE job_id=? AND status='queued' AND actor_user_id IS NOT NULL UNION SELECT run_as_user_id FROM job_run WHERE job_id=? AND status='queued' ORDER BY 1", job, job)
 	return out, err
 }
 func (t *jobTx) SaveRun(v *jobs.Run) error {
 	if v.ID == 0 {
-		result, err := t.tx.NamedExecContext(t.ctx, `INSERT INTO job_run(job_id,revision_id,trigger_kind,actor_user_id,trigger_context,inputs,timeout_ms,state_mode,rerun_of_run_id,status,stop_reason,error_code,error_summary,queued_at) VALUES(:job_id,:revision_id,:trigger_kind,:actor_user_id,:trigger_context,:inputs,:timeout_ms,:state_mode,:rerun_of_run_id,:status,:stop_reason,:error_code,:error_summary,:queued_at)`, v)
+		result, err := t.tx.NamedExecContext(t.ctx, `INSERT INTO job_run(job_id,revision_id,run_as_user_id,trigger_kind,actor_user_id,trigger_context,inputs,timeout_ms,state_mode,rerun_of_run_id,status,stop_reason,error_code,error_summary,queued_at) VALUES(:job_id,:revision_id,:run_as_user_id,:trigger_kind,:actor_user_id,:trigger_context,:inputs,:timeout_ms,:state_mode,:rerun_of_run_id,:status,:stop_reason,:error_code,:error_summary,:queued_at)`, v)
 		if err != nil {
 			return err
 		}
@@ -322,7 +286,7 @@ func (t *jobTx) Fires(id, before uint64) ([]jobs.Fire, error) {
 }
 func (t *jobTx) SaveCall(v *jobs.Call) error {
 	if v.ID == 0 {
-		result, err := t.tx.NamedExecContext(t.ctx, `INSERT INTO job_resource_call(job_run_id,resource_kind,resource_id,authorization_kind,binding_name,grant_id,connection_id,configured_credential_id,credential_id,credential_material_version,robot_material_version,resource_snapshot,target,operation,outcome,error_code,external_ref,created_at,finished_at) VALUES(:job_run_id,:resource_kind,:resource_id,:authorization_kind,:binding_name,:grant_id,:connection_id,:configured_credential_id,:credential_id,:credential_material_version,:robot_material_version,:resource_snapshot,:target,:operation,:outcome,:error_code,:external_ref,:created_at,:finished_at)`, v)
+		result, err := t.tx.NamedExecContext(t.ctx, `INSERT INTO job_resource_call(job_run_id,resource_kind,resource_id,authorization_kind,connection_id,configured_credential_id,credential_id,credential_material_version,robot_material_version,resource_snapshot,target,operation,outcome,error_code,external_ref,created_at,finished_at) VALUES(:job_run_id,:resource_kind,:resource_id,:authorization_kind,:connection_id,:configured_credential_id,:credential_id,:credential_material_version,:robot_material_version,:resource_snapshot,:target,:operation,:outcome,:error_code,:external_ref,:created_at,:finished_at)`, v)
 		if err != nil {
 			return err
 		}

@@ -257,7 +257,7 @@ func coreError(err error) error {
 	return httpx.E(status, code, fmt.Sprintf("助手操作未完成（%s）", code))
 }
 func coreSession(v *SessionRow) (agentcore.Session, error) {
-	out := agentcore.Session{ID: agentcore.ID(v.ID), AgentID: agentcore.ID(v.AgentID), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.ExecutorUserID)}, ExecutionMode: v.ExecutionMode, Title: v.Title, ModelLockedAt: v.ModelLockedAt, ArchivedAt: v.ArchivedAt, QueuePaused: v.QueuePaused, NextInputOrder: v.NextInputOrder, LastSeq: agentcore.Seq(v.LastSeq), SurfaceRevision: agentcore.Version(v.SurfaceRevision), Version: agentcore.Version(v.RowVersion)}
+	out := agentcore.Session{ID: agentcore.ID(v.ID), AgentID: agentcore.ID(v.AgentID), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.RunAsUserID)}, ExecutionMode: v.ExecutionMode, Title: v.Title, ModelLockedAt: v.ModelLockedAt, ArchivedAt: v.ArchivedAt, QueuePaused: v.QueuePaused, NextInputOrder: v.NextInputOrder, LastSeq: agentcore.Seq(v.LastSeq), SurfaceRevision: agentcore.Version(v.SurfaceRevision), Version: agentcore.Version(v.RowVersion)}
 	if v.RootSessionID != nil {
 		id := agentcore.ID(*v.RootSessionID)
 		out.RootSessionID = &id

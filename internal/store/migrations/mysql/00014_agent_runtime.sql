@@ -44,7 +44,7 @@ CREATE TABLE `agent_session` (
     session_kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     root_session_id BIGINT UNSIGNED NULL,
     parent_run_id BIGINT UNSIGNED NULL,
-    executor_user_id BIGINT UNSIGNED NOT NULL,
+    run_as_user_id BIGINT UNSIGNED NOT NULL,
     title VARCHAR(200) NOT NULL,
     title_source VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'default',
     title_source_event_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
@@ -158,7 +158,7 @@ CREATE TABLE `agent_run` (
     parent_run_id BIGINT UNSIGNED NULL,
     trigger_input_id BIGINT UNSIGNED NULL,
     retry_of_run_id BIGINT UNSIGNED NULL,
-    executor_user_id BIGINT UNSIGNED NOT NULL,
+    run_as_user_id BIGINT UNSIGNED NOT NULL,
     origin_kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     actor_kind VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     actor_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
@@ -207,7 +207,7 @@ CREATE TABLE `agent_run` (
 CREATE TABLE `agent_run_context` (
     root_run_id BIGINT UNSIGNED NOT NULL,
     agent_id BIGINT UNSIGNED NOT NULL,
-    executor_user_id BIGINT UNSIGNED NOT NULL,
+    run_as_user_id BIGINT UNSIGNED NOT NULL,
     agent_config_version BIGINT UNSIGNED NOT NULL,
     schema_version SMALLINT UNSIGNED NOT NULL DEFAULT 1,
     cloud_computer_id BIGINT UNSIGNED NULL,
@@ -224,7 +224,7 @@ CREATE TABLE `agent_run_context` (
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (root_run_id),
     KEY idx_agent_run_context_agent (agent_id, root_run_id),
-    KEY idx_agent_run_context_executor (executor_user_id, root_run_id)
+    KEY idx_agent_run_context_executor (run_as_user_id, root_run_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `agent_event` (

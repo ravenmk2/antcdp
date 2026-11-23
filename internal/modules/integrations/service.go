@@ -567,13 +567,6 @@ func (s *Service) Admin(ctx context.Context, raw string, id uint64, op, tag stri
 					return httpx.E(409, "CONNECTION_REFERENCED", "请先解除项目仓库关联")
 				}
 			}
-			refs, err := r.ConnectionJobReferences(id, 0)
-			if err != nil {
-				return err
-			}
-			if refs > 0 {
-				return httpx.E(409, "CONNECTION_REFERENCED", "请先撤销作业资源授权")
-			}
 			grants, err := r.ConnectionGrants(id)
 			if err != nil {
 				return err

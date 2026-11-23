@@ -24,7 +24,7 @@ import {
   triggerLabel,
 } from "./presentation";
 import { RunView, StartForm } from "./runs";
-import { Schedules, Resources } from "./settings";
+import { Schedules } from "./settings";
 import type { Job, Receipt, Run } from "./types";
 
 export function JobsPage({ project }: { project: Resource }) {
@@ -235,7 +235,6 @@ function JobDetail({ job, base }: { job: Job; base: string }) {
     { value: "runs", label: "运行记录" },
     { value: "triggers", label: "触发记录" },
     { value: "schedules", label: "定时计划" },
-    ...(job.can_manage ? [{ value: "resources", label: "资源授权" }] : []),
   ];
   const tab =
     items.find((item) => item.value === params.get("tab"))?.value ?? "runs";
@@ -307,11 +306,6 @@ function JobDetail({ job, base }: { job: Job; base: string }) {
         <TabPanel value="schedules" className="pt-5">
           <Schedules job={job} base={base} />
         </TabPanel>
-        {job.can_manage && (
-          <TabPanel value="resources" className="pt-5">
-            <Resources job={job} base={base} />
-          </TabPanel>
-        )}
       </Tabs>
     </>
   );

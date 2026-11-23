@@ -23,10 +23,10 @@ CREATE TABLE job (
 CREATE TABLE job_revision (
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
  job_id BIGINT UNSIGNED NOT NULL,
+ run_as_user_id BIGINT UNSIGNED NOT NULL,
  content_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
  script MEDIUMTEXT NOT NULL,
  input_schema JSON NOT NULL,
- resource_bindings JSON NOT NULL,
  created_by_user_id BIGINT UNSIGNED NOT NULL,
  created_at DATETIME(3) NOT NULL,
  PRIMARY KEY(id), UNIQUE KEY uq_job_revision_content(job_id,content_hash)
@@ -41,32 +41,11 @@ CREATE TABLE job_run_grant (
  PRIMARY KEY(job_id,subject_kind,subject_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE TABLE job_agent_grant (
- job_id BIGINT UNSIGNED NOT NULL,
- agent_id BIGINT UNSIGNED NOT NULL,
- granted_by_user_id BIGINT UNSIGNED NOT NULL,
- created_at DATETIME(3) NOT NULL,
- PRIMARY KEY(job_id,agent_id), KEY idx_job_agent_target(agent_id,job_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-CREATE TABLE job_resource_grant (
- id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
- job_id BIGINT UNSIGNED NOT NULL,
- connection_id BIGINT UNSIGNED NOT NULL,
- credential_id BIGINT UNSIGNED NOT NULL,
- status VARCHAR(16) NOT NULL DEFAULT 'active',
- active_slot TINYINT UNSIGNED GENERATED ALWAYS AS (CASE WHEN status='active' THEN 1 ELSE NULL END) STORED,
- created_by_user_id BIGINT UNSIGNED NOT NULL,
- created_at DATETIME(3) NOT NULL,
- revoked_by_user_id BIGINT UNSIGNED NULL,
- revoked_at DATETIME(3) NULL,
- PRIMARY KEY(id), UNIQUE KEY uq_job_resource_active(job_id,connection_id,credential_id,active_slot), KEY idx_job_resource(job_id,id), KEY idx_job_resource_connection(connection_id,status,job_id), KEY idx_job_resource_credential(credential_id,status,job_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
 CREATE TABLE job_run (
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
  job_id BIGINT UNSIGNED NOT NULL,
  revision_id BIGINT UNSIGNED NOT NULL,
+ run_as_user_id BIGINT UNSIGNED NOT NULL,
  trigger_kind VARCHAR(16) NOT NULL,
  actor_user_id BIGINT UNSIGNED NULL,
  trigger_context JSON NOT NULL,
@@ -111,8 +90,6 @@ CREATE TABLE job_resource_call (
  resource_kind VARCHAR(32) NOT NULL,
  resource_id BIGINT UNSIGNED NULL,
  authorization_kind VARCHAR(16) NOT NULL,
- binding_name VARCHAR(64) NOT NULL DEFAULT '',
- grant_id BIGINT UNSIGNED NULL,
  connection_id BIGINT UNSIGNED NULL,
  configured_credential_id BIGINT UNSIGNED NULL,
  credential_id BIGINT UNSIGNED NULL,

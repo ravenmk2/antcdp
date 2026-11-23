@@ -1,5 +1,6 @@
+import { RunAccountField } from "@/features/projects/run-account-field";
 import { useId, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { BookOpen, Bug, Plus, Save, X } from "lucide-react";
 import { ApiError, errorMessage, request } from "@/api/client";
@@ -18,7 +19,6 @@ import { resourceCodeSchema } from "@/domain/validation";
 import { useApiQuery } from "@/hooks/use-api";
 import { useUnsaved } from "@/hooks/use-unsaved";
 import type { Resource, MemberPage, ScopedRole } from "@/types/collaboration";
-import { Bindings } from "./bindings";
 import { Inputs, JobSection, JobStatus } from "./presentation";
 import { StartForm, RunView } from "./runs";
 import { ScriptEditor } from "./script-editor";
@@ -32,8 +32,8 @@ import {
 
 const saveFieldLabels = new Map([
   ["execution", "运行设置"],
+  ["run_as_user_id", "运行账号"],
   ["parameters", "输入参数"],
-  ["bindings", "资源绑定"],
   ["code", "作业编码"],
   ["name", "作业名称与说明"],
 ]);
@@ -48,7 +48,6 @@ export function JobEditor({
   base: string;
 }) {
   const [job, setJob] = useState(initialJob);
-  const [params] = useSearchParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const nameInputId = useId();
@@ -64,8 +63,13 @@ export function JobEditor({
   }));
   const [config, setConfig] = useState<Config>(
     () =>
-      job?.config ?? { script: exampleScript, parameters: [], bindings: [] },
+      job?.config ?? {
+        run_as_user_id: "",
+        script: exampleScript,
+        parameters: [],
+      },
   );
+  const [accountRequired, setAccountRequired] = useState(false);
   const [grants, setGrants] = useState<Grant[]>(job?.grants ?? []);
   const [pending, setPending] = useState<"save" | "draft">();
   const [error, setError] = useState<unknown>();
@@ -132,6 +136,10 @@ export function JobEditor({
       return;
     }
     if (!validateCode()) return;
+    if (!config.run_as_user_id) {
+      setAccountRequired(true);
+      return;
+    }
     setPending("save");
     try {
       const r = await request<Job>(job ? `${base}/${job.id}` : base, {
@@ -154,7 +162,6 @@ export function JobEditor({
     }
   }
 
-  const detailPath = job ? `${base}/${job.id}` : undefined;
   const invalidField =
     error instanceof ApiError &&
     error.details.find((item) => item.field)?.field;
@@ -338,6 +345,12 @@ export function JobEditor({
                 }}
               />
             </Field>
+            <RunAccountField
+              attempted={accountRequired}
+              base={`/projects/${project.id}`}
+              value={config.run_as_user_id}
+              onChange={(id) => setConfig({ ...config, run_as_user_id: id })}
+            />
             <Field label="说明">
               <Textarea
                 rows={2}
@@ -443,25 +456,6 @@ export function JobEditor({
               onChange={setGrants}
             />
           </JobSection>
-          <JobSection
-            title="资源绑定"
-            detail={
-              config.bindings.length ? `${config.bindings.length} 项` : "无"
-            }
-            initiallyOpen={params.get("section") === "resources"}
-          >
-            <Bindings
-              projectId={project.id}
-              value={config.bindings}
-              grants={job?.resource_grants ?? []}
-              onChange={(bindings) => setConfig((c) => ({ ...c, bindings }))}
-            />
-            {detailPath && (
-              <Link className="link text-sm" to={`${detailPath}?tab=resources`}>
-                管理资源授权
-              </Link>
-            )}
-          </JobSection>
         </aside>
       </div>
       {showReference && (
@@ -479,6 +473,10 @@ export function JobEditor({
               ['ctx.state.get("key")', "读取状态，返回值与 etag 或 null"],
               ['ctx.state.put("key", value, { ifMatch: etag })', "更新状态"],
               ['ctx.state.delete("key", { ifMatch: etag })', "删除状态"],
+              [
+                'await ctx.resources.call("platform/build", { target: "app", operation: "build" })',
+                "服务连接路径支持 platform/连接编码 和 project/当前项目编码/连接编码。",
+              ],
               [
                 'await ctx.dingtalk.send("robot_code", { format: "text", body: "完成" })',
                 "按编码发送项目钉钉通知",

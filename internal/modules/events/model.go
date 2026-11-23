@@ -68,7 +68,7 @@ type Revision struct {
 	SubscriptionID  uint64          `db:"subscription_id" json:"subscription_id,string"`
 	Number          uint64          `db:"revision_no" json:"revision_no"`
 	EventTypes      json.RawMessage `db:"event_types" json:"event_types"`
-	ExecutorID      uint64          `db:"executor_user_id" json:"executor_user_id,string"`
+	RunAsUserID     uint64          `db:"run_as_user_id" json:"run_as_user_id,string"`
 	APIVersion      uint32          `db:"script_api_version" json:"script_api_version"`
 	Script          string          `db:"script" json:"-"`
 	TimeoutMS       uint64          `db:"timeout_ms" json:"timeout_ms"`
@@ -84,7 +84,7 @@ type Write struct {
 	Enabled     bool     `json:"enabled"`
 	Version     string   `json:"version"`
 	EventTypes  []string `json:"event_types"`
-	ExecutorID  uint64   `json:"executor_user_id,string"`
+	RunAsUserID uint64   `json:"run_as_user_id,string"`
 	Script      string   `json:"script"`
 	TimeoutMS   uint64   `json:"timeout_ms"`
 	MaxRetries  *uint32  `json:"max_retries"`
@@ -168,13 +168,6 @@ type Repository interface {
 	CancelQueued(uint64, time.Time) error
 	WorkSubscriptions(bool) ([]uint64, error)
 	ActiveConsumptions() ([]Consumption, error)
-	RobotOptions(uint64) ([]RobotOption, error)
-}
-
-type RobotOption struct {
-	ID       uint64 `db:"id" json:"id,string"`
-	Name     string `db:"display_name" json:"name"`
-	Username string `db:"username" json:"username"`
 }
 
 // Action is constructed only by the consumer host, never decoded from script input.

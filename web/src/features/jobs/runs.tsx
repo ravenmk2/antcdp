@@ -114,6 +114,10 @@ export function StartForm({
     setError(undefined);
     setReceipt(undefined);
     setAttempted(true);
+    if (config && !config.run_as_user_id) {
+      setError(new Error("请先在作业配置中选择运行账号"));
+      return;
+    }
     if (missing.size) return;
     setPending(true);
     try {
@@ -607,8 +611,9 @@ export function RunView({
                   "状态存储",
                   run.state_mode === "debug" ? "调试状态" : "正式状态",
                 ],
+                ["运行账号", `账号 #${run.run_as_user_id}`],
                 [
-                  "发起人",
+                  "发起方",
                   run.actor_user_id
                     ? `用户 #${run.actor_user_id}`
                     : triggerLabel(run.trigger_kind),

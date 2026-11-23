@@ -30,7 +30,7 @@ const subscription: Subscription = {
     id: "4",
     revision_no: 2,
     event_types: ["gitlab.merge_request.created"],
-    executor_user_id: "9",
+    run_as_user_id: "9",
     timeout_ms: 60000,
     max_retries: 3,
     retry_interval_ms: 30000,
@@ -108,9 +108,16 @@ function mount(query: string, manage = false, archived = false) {
       });
     if (url.endsWith("/event-subscriptions"))
       return response({ items: [{ ...subscription, can_manage: manage }] });
-    if (url.endsWith("/robot-options"))
+    if (url.endsWith("/run-account-options"))
       return response({
-        items: [{ id: "9", name: "审查机器人", username: "reviewer" }],
+        items: [
+          {
+            id: "9",
+            name: "审查机器人",
+            username: "reviewer",
+            account_type: "robot",
+          },
+        ],
       });
     if (url.endsWith("/retry"))
       return response({
@@ -187,7 +194,7 @@ function mount(query: string, manage = false, archived = false) {
 it("shows members public subscription configuration without requesting script source", async () => {
   const { calls } = mount("tab=subscriptions");
   expect(await screen.findByText("MR 自动审查")).toBeVisible();
-  expect(screen.getByText("机器人 #9")).toBeVisible();
+  expect(screen.getByText("运行账号 #9")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "新建订阅" }),
   ).not.toBeInTheDocument();
@@ -195,7 +202,7 @@ it("shows members public subscription configuration without requesting script so
     screen.queryByRole("button", { name: "编辑" }),
   ).not.toBeInTheDocument();
   expect(
-    calls.some(({ url }) => /source|revisions|robot-options/.test(url)),
+    calls.some(({ url }) => /source|revisions|run-account-options/.test(url)),
   ).toBe(false);
 });
 
@@ -276,14 +283,14 @@ it("opens on subscriptions and saves the selected event and executor behind requ
   await user.clear(dialog.getByRole("textbox", { name: "搜索事件类型" }));
   await user.click(dialog.getByRole("checkbox", { name: /MR 创建/ }));
   expect(dialog.getByText("已选 1 项")).toBeVisible();
-  await user.click(dialog.getByRole("combobox", { name: "执行机器人" }));
+  await user.click(dialog.getByRole("combobox", { name: "运行账号" }));
   await user.click(await screen.findByRole("option", { name: /审查机器人/ }));
   await user.click(dialog.getByRole("button", { name: "保存订阅" }));
   await waitFor(() =>
     expect(writes[0]).toMatchObject({
       name: "检查合并请求",
       event_types: ["gitlab.merge_request.created"],
-      executor_user_id: "9",
+      run_as_user_id: "9",
       enabled: false,
     }),
   );

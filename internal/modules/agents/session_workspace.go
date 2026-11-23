@@ -287,7 +287,7 @@ func resolveWorkspaceUploads(tx identity.Tx, session *SessionRow, actor uint64, 
 }
 
 func sessionMatchesComputer(s *SessionRow, c *CloudComputerRow) bool {
-	return c != nil && c.OwnerUserID == s.ExecutorUserID && (s.ExecutorKind == "robot" && c.AllocationKind == "robot_pool" && sameWorkspaceUser(s.ChatUserID, c.WorkspaceUserID) || s.ExecutorKind == "chat_user" && c.AllocationKind == "personal")
+	return c != nil && c.OwnerUserID == s.RunAsUserID && (s.ExecutorKind == "robot" && c.AllocationKind == "robot_pool" && sameWorkspaceUser(s.ChatUserID, c.WorkspaceUserID) || s.ExecutorKind == "chat_user" && c.AllocationKind == "personal")
 }
 
 func sameWorkspaceUser(a, b *uint64) bool {

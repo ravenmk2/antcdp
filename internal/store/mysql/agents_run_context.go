@@ -12,7 +12,7 @@ import (
 
 func (t *agentsTx) RunContext(root uint64) (*a.RunContextRow, error) {
 	v := &a.RunContextRow{}
-	err := t.tx.GetContext(t.ctx, v, "SELECT root_run_id,agent_id,executor_user_id,agent_config_version,schema_version,cloud_computer_id,cwd,system_prompt,model_snapshot,runtime_policy,builtin_tools,mcp_bindings,resource_grants,skill_manifest,COALESCE(mcp_surface,CAST('null' AS JSON)) AS mcp_surface,mcp_prepared_at,created_at FROM agent_run_context WHERE root_run_id=?", root)
+	err := t.tx.GetContext(t.ctx, v, "SELECT root_run_id,agent_id,run_as_user_id,agent_config_version,schema_version,cloud_computer_id,cwd,system_prompt,model_snapshot,runtime_policy,builtin_tools,mcp_bindings,resource_grants,skill_manifest,COALESCE(mcp_surface,CAST('null' AS JSON)) AS mcp_surface,mcp_prepared_at,created_at FROM agent_run_context WHERE root_run_id=?", root)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -20,7 +20,7 @@ func (t *agentsTx) RunContext(root uint64) (*a.RunContextRow, error) {
 }
 
 func (t *agentsTx) InsertRunContext(v *a.RunContextRow) error {
-	_, err := t.named("INSERT INTO agent_run_context(root_run_id,agent_id,executor_user_id,agent_config_version,schema_version,cloud_computer_id,cwd,system_prompt,model_snapshot,runtime_policy,builtin_tools,mcp_bindings,resource_grants,skill_manifest,created_at) VALUES(:root_run_id,:agent_id,:executor_user_id,:agent_config_version,:schema_version,:cloud_computer_id,:cwd,:system_prompt,:model_snapshot,:runtime_policy,:builtin_tools,:mcp_bindings,:resource_grants,:skill_manifest,:created_at)", v)
+	_, err := t.named("INSERT INTO agent_run_context(root_run_id,agent_id,run_as_user_id,agent_config_version,schema_version,cloud_computer_id,cwd,system_prompt,model_snapshot,runtime_policy,builtin_tools,mcp_bindings,resource_grants,skill_manifest,created_at) VALUES(:root_run_id,:agent_id,:run_as_user_id,:agent_config_version,:schema_version,:cloud_computer_id,:cwd,:system_prompt,:model_snapshot,:runtime_policy,:builtin_tools,:mcp_bindings,:resource_grants,:skill_manifest,:created_at)", v)
 	return err
 }
 

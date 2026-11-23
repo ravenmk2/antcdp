@@ -11,18 +11,21 @@ import (
 	"unicode/utf8"
 
 	"github.com/ravenmk2/antcdp/internal/jobcore"
+	"github.com/ravenmk2/antcdp/internal/modules/collaboration"
+	"github.com/ravenmk2/antcdp/internal/modules/credentials"
 	"github.com/ravenmk2/antcdp/internal/modules/dingtalk"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/integrations"
+	"github.com/ravenmk2/antcdp/internal/platform/httpx"
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
 	"github.com/ravenmk2/antcdp/internal/statestore"
 )
 
 type runHost struct {
-	s        *Service
-	job      Job
-	run      Run
-	revision Revision
-	kv       statestore.KV
+	s   *Service
+	job Job
+	run Run
+	kv  statestore.KV
 }
 
 func decode(raw json.RawMessage, target any) error {
@@ -82,23 +85,42 @@ func cut(s string, max int) string {
 	}
 	return s
 }
-func (h *runHost) withRun(ctx context.Context, fn func(identity.Tx, Repository, *Run) error) error {
+func (h *runHost) lockRun(r Repository) (*Run, error) {
+	j, err := r.Job(h.job.ID)
+	if err != nil {
+		return nil, err
+	}
+	if j == nil {
+		return nil, missing()
+	}
+	v, err := r.Run(h.run.ID)
+	if err != nil {
+		return nil, err
+	}
+	if v == nil || v.Status != "running" {
+		return nil, jobcore.Failure("RUN_STOPPING", "运行正在停止")
+	}
+	return v, nil
+}
+func (h *runHost) withResource(ctx context.Context, call *Call, fn func(identity.Tx, Repository, *Run, *collaboration.Resource) error) error {
+	initial := *call
 	return h.s.transaction(ctx, func(tx identity.Tx, r Repository) error {
-		j, err := r.Job(h.job.ID)
+		*call = initial
+		project, authErr := collaboration.AutomationProject(tx, h.job.ProjectID, h.run.RunAsUserID)
+		v, err := h.lockRun(r)
 		if err != nil {
 			return err
 		}
-		if j == nil {
-			return missing()
+		if authErr != nil {
+			var failure *httpx.Error
+			if !errors.As(authErr, &failure) || failure.Status >= 500 {
+				return authErr
+			}
+			call.ErrorCode = failure.Code
+			call.FinishedAt = ptr(now())
+			return callLog(r, v, call)
 		}
-		v, err := r.Run(h.run.ID)
-		if err != nil {
-			return err
-		}
-		if v == nil || v.Status != "running" {
-			return jobcore.Failure("RUN_STOPPING", "运行正在停止")
-		}
-		return fn(tx, r, v)
+		return fn(tx, r, v, project)
 	})
 }
 func (h *runHost) Log(ctx context.Context, level, message string, fields json.RawMessage) error {
@@ -107,7 +129,11 @@ func (h *runHost) Log(ctx context.Context, level, message string, fields json.Ra
 		return jobcore.Failure("INVALID_LOG_FIELDS", "日志字段必须是 JSON 对象")
 	}
 	message, fields = boundedLog(message, object)
-	return h.withRun(ctx, func(_ identity.Tx, r Repository, v *Run) error {
+	return h.s.transaction(ctx, func(_ identity.Tx, r Repository) error {
+		v, err := h.lockRun(r)
+		if err != nil {
+			return err
+		}
 		if v.Truncated {
 			return nil
 		}
@@ -166,7 +192,7 @@ func (h *runHost) Call(ctx context.Context, kind string, args []json.RawMessage)
 		if len(args) != 2 || decode(args[0], &path) != nil || decode(args[1], &opts) != nil || h.s.AgentChat == nil {
 			return nil, jobcore.Failure("INVALID_ARGUMENT", "助手调用参数无效")
 		}
-		return h.s.AgentChat(ctx, h.job.ProjectID, h.run.ID, path, opts)
+		return h.s.AgentChat(ctx, h.job.ProjectID, h.run.ID, h.run.RunAsUserID, path, opts)
 	}
 	if kind == "dingtalk" {
 		return h.send(ctx, args)
@@ -183,59 +209,27 @@ func callError(c Call) error {
 	return &jobcore.Error{Code: c.ErrorCode, Message: c.ErrorCode, CallID: fmt.Sprint(c.ID)}
 }
 func (h *runHost) resource(ctx context.Context, args []json.RawMessage) (any, error) {
-	var connection, binding string
+	var path string
 	var request struct {
 		Target    string          `json:"target"`
 		Operation string          `json:"operation"`
 		Params    json.RawMessage `json:"params"`
 	}
-	if len(args) != 3 || decode(args[0], &connection) != nil || decode(args[1], &binding) != nil || decode(args[2], &request) != nil || len(binding) > 64 || len(request.Target) > 1000 || len(request.Operation) > 64 || request.Operation == "" {
+	if len(args) != 2 || decode(args[0], &path) != nil || decode(args[1], &request) != nil || len(request.Target) > 1000 || len(request.Operation) > 64 || request.Operation == "" {
 		return nil, jobcore.Failure("INVALID_ARGUMENT", "资源调用参数无效")
 	}
-	var call Call
-	err := h.withRun(ctx, func(tx identity.Tx, r Repository, v *Run) error {
-		call = Call{RunID: v.ID, Kind: "service_connection", Authorization: "grant", Binding: binding, Target: request.Target, Operation: request.Operation, Outcome: "denied", ErrorCode: "RESOURCE_ACCESS_DENIED", Snapshot: json.RawMessage(`{}`), CreatedAt: now(), FinishedAt: ptr(now())}
-		for _, b := range h.revision.Bindings {
-			if b.Name != binding || b.ConnectionCode != connection {
-				continue
-			}
-			g, err := r.Resource(b.GrantID)
-			if err != nil {
-				return err
-			}
-			if g == nil || g.JobID != h.job.ID || g.Status != "active" {
-				break
-			}
-			ir, ok := tx.(integrations.Repository)
-			if !ok {
-				return errors.New("missing integrations repository")
-			}
-			conn, err := ir.Connection(g.ConnectionID)
-			if err != nil {
-				return err
-			}
-			cred, err := ir.Entry(g.CredentialID)
-			if err != nil {
-				return err
-			}
-			if conn == nil || cred == nil || !conn.Enabled || !cred.Usable() || !cred.Compatible(conn.Type) || !cred.Owned(integrations.CredentialOwnership{Type: "project", Owner: h.job.ProjectID}) {
-				break
-			}
-			allowed, err := integrations.ConnectionAllowed(ir, conn, integrations.CredentialOwnership{Type: "project", Owner: h.job.ProjectID})
-			if err != nil {
-				return err
-			}
-			if !allowed {
-				break
-			}
-			call.ResourceID = &conn.ID
-			call.ConnectionID = &conn.ID
-			call.GrantID = &g.ID
-			call.ConfiguredCredential = &cred.ID
-			call.Snapshot = safeJSON(map[string]string{"name": conn.Name, "code": conn.Code})
-			call.Outcome = "failed"
-			call.ErrorCode = "RESOURCE_NOT_IMPLEMENTED"
-			break
+	locator, err := resourcecode.Parse(path)
+	if err != nil || (locator.ScopeKind != "platform" && locator.ScopeKind != "project") {
+		return nil, jobcore.Failure("INVALID_RESOURCE_PATH", "连接路径应为 platform/连接编码 或 project/项目编码/连接编码")
+	}
+	call := Call{RunID: h.run.ID, Kind: "service_connection", Authorization: "account", Target: request.Target, Operation: request.Operation, Outcome: "denied", ErrorCode: "RESOURCE_ACCESS_DENIED", Snapshot: safeJSON(map[string]string{"path": locator.String()}), CreatedAt: now(), FinishedAt: ptr(now())}
+	err = h.withResource(ctx, &call, func(tx identity.Tx, r Repository, v *Run, project *collaboration.Resource) error {
+		ir, ok := tx.(integrations.Repository)
+		if !ok {
+			return errors.New("missing integrations repository")
+		}
+		if err := resolveResourceCall(ir, project, v.RunAsUserID, locator, &call); err != nil {
+			return err
 		}
 		return callLog(r, v, &call)
 	})
@@ -243,6 +237,34 @@ func (h *runHost) resource(ctx context.Context, args []json.RawMessage) (any, er
 		return nil, err
 	}
 	return nil, callError(call)
+}
+func resolveResourceCall(ir integrations.Repository, project *collaboration.Resource, account uint64, locator resourcecode.Locator, call *Call) error {
+	var owner uint64
+	if locator.ScopeKind == "project" {
+		if locator.ScopeCode != project.Code {
+			return nil
+		}
+		owner = project.ID
+	}
+	conn, err := ir.ConnectionByCode(locator.ScopeKind, owner, locator.Code)
+	if err != nil || conn == nil || !conn.Enabled {
+		return err
+	}
+	allowed, err := integrations.JobConnectionAllowed(ir, conn, project.ID, account)
+	if err != nil || !allowed {
+		return err
+	}
+	call.ResourceID = &conn.ID
+	call.ConnectionID = &conn.ID
+	call.Snapshot = safeJSON(map[string]string{"path": locator.String(), "name": conn.Name, "code": conn.Code})
+	cred, _, err := credentials.Selected(ir, "service_connection", conn.ID, credentials.Scope{Type: "user", Owner: account}, conn.Type)
+	if err != nil || !cred.Usable() {
+		return err
+	}
+	call.ConfiguredCredential = &cred.ID
+	call.Outcome = "failed"
+	call.ErrorCode = "RESOURCE_NOT_IMPLEMENTED"
+	return nil
 }
 func (h *runHost) send(ctx context.Context, args []json.RawMessage) (any, error) {
 	var code string
@@ -261,16 +283,20 @@ func (h *runHost) send(ctx context.Context, args []json.RawMessage) (any, error)
 	if err := dingtalk.ValidateMessage(message); err != nil {
 		return nil, jobcore.Failure("INVALID_MESSAGE", "消息内容无效")
 	}
-	var call Call
 	var auth dingtalk.Authentication
 	var robot *dingtalk.Robot
-	err := h.withRun(ctx, func(tx identity.Tx, r Repository, v *Run) error {
-		call = Call{RunID: v.ID, Kind: "dingtalk_robot", Authorization: "scope", Target: code, Operation: "send", Outcome: "denied", ErrorCode: "ROBOT_NOT_FOUND", Snapshot: json.RawMessage(`{}`), CreatedAt: now()}
+	call := Call{RunID: h.run.ID, Kind: "dingtalk_robot", Authorization: "account", Target: code, Operation: "send", Outcome: "denied", ErrorCode: "ROBOT_NOT_FOUND", Snapshot: json.RawMessage(`{}`), CreatedAt: now()}
+	err := h.withResource(ctx, &call, func(tx identity.Tx, r Repository, v *Run, project *collaboration.Resource) error {
+		var err error
+		if !project.CanManage {
+			call.ErrorCode = "RESOURCE_ACCESS_DENIED"
+			call.FinishedAt = ptr(now())
+			return callLog(r, v, &call)
+		}
 		source, ok := tx.(interface{ DingTalk() dingtalk.Repository })
 		if !ok {
 			return errors.New("missing robot repository")
 		}
-		var err error
 		robot, err = source.DingTalk().RobotByCode("project", h.job.ProjectID, code)
 		if err != nil {
 			return err

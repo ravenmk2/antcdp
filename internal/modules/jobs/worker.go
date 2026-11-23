@@ -157,6 +157,9 @@ func (s *Service) Work(ctx context.Context, logger *slog.Logger) {
 					if v.Status != "queued" {
 						continue
 					}
+					if !locked[v.RunAsUserID] {
+						break
+					}
 					var actor *identity.User
 					if v.Actor != nil {
 						if !locked[*v.Actor] {
@@ -164,7 +167,7 @@ func (s *Service) Work(ctx context.Context, logger *slog.Logger) {
 						}
 						actor = users[*v.Actor]
 					}
-					allowed, e := s.startAllowed(tx, r, j, v, actor)
+					allowed, e := s.startAllowed(tx, r, j, v, actor, users[v.RunAsUserID])
 					if e != nil {
 						return e
 					}
@@ -213,13 +216,19 @@ func (s *Service) Work(ctx context.Context, logger *slog.Logger) {
 		}
 	}
 }
-func (s *Service) startAllowed(tx identity.Tx, r Repository, j *Job, v *Run, u *identity.User) (bool, error) {
+func (s *Service) startAllowed(tx identity.Tx, r Repository, j *Job, v *Run, u, account *identity.User) (bool, error) {
+	if account == nil || account.DeletedAt != nil || account.Status != "active" {
+		return false, nil
+	}
+	project, err := tx.(collaboration.Repository).Resource(collaboration.Project, j.ProjectID, v.RunAsUserID)
+	if err != nil || project == nil || !project.IsMember || project.EndedAt != nil {
+		return false, err
+	}
 	if !j.Enabled && v.Trigger != "debug" {
 		return false, nil
 	}
 	if v.Trigger == "schedule" {
-		p, err := tx.(collaboration.Repository).Resource(collaboration.Project, j.ProjectID, 0)
-		return p != nil && p.EndedAt == nil, err
+		return true, nil
 	}
 	if v.Actor == nil {
 		return false, nil
@@ -373,12 +382,12 @@ func (s *Service) execute(ctx, lifecycle context.Context, run Run, logger *slog.
 					})
 				}
 				if err == nil {
-					host := &runHost{s: s, job: *job, run: run, revision: *revision, kv: kv}
+					host := &runHost{s: s, job: *job, run: run, kv: kv}
 					var actor any
 					if run.Actor != nil {
 						actor = fmt.Sprint(*run.Actor)
 					}
-					result, err = s.Executor.Execute(work, jobcore.Input{Script: revision.Script, Inputs: values, Run: map[string]any{"id": fmt.Sprint(run.ID), "jobId": fmt.Sprint(run.JobID), "revisionId": fmt.Sprint(run.RevisionID), "triggerKind": run.Trigger, "actorUserId": actor, "triggerContext": run.TriggerContext, "stateMode": run.StateMode}, OnStopping: func(cause error) {
+					result, err = s.Executor.Execute(work, jobcore.Input{Script: revision.Script, Inputs: values, Run: map[string]any{"id": fmt.Sprint(run.ID), "jobId": fmt.Sprint(run.JobID), "revisionId": fmt.Sprint(run.RevisionID), "triggerKind": run.Trigger, "actorUserId": actor, "runAsUserId": fmt.Sprint(run.RunAsUserID), "triggerContext": run.TriggerContext, "stateMode": run.StateMode}, OnStopping: func(cause error) {
 						code := errorCode(cause)
 						if errors.Is(work.Err(), context.DeadlineExceeded) {
 							code = "RUN_TIMEOUT"

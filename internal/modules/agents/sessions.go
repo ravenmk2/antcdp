@@ -27,7 +27,7 @@ func contentAccess(v *SessionRow, a *identity.Auth) error {
 	if v == nil {
 		return missing()
 	}
-	if v.ExecutorUserID == 0 {
+	if v.RunAsUserID == 0 {
 		return integrity()
 	}
 	if v.ExecutionMode == "chat" {
@@ -60,7 +60,7 @@ func (s *Service) sessionAccess(st StateRepository, id uint64, a *identity.Auth,
 		if e = contentAccess(root, a); e != nil {
 			return nil, e
 		}
-		if v.ExecutorKind != root.ExecutorKind || !same(v.ChatUserID, root.ChatUserID) || v.ExecutorUserID != root.ExecutorUserID || v.AgentID != root.AgentID {
+		if v.ExecutorKind != root.ExecutorKind || !same(v.ChatUserID, root.ChatUserID) || v.RunAsUserID != root.RunAsUserID || v.AgentID != root.AgentID {
 			return nil, integrity()
 		}
 		if write {
@@ -255,7 +255,7 @@ func activeSessionRun(st StateRepository, session *SessionRow) (*RunRow, error) 
 func sessionPermissions(tx identity.Tx, r Repository, v *SessionRow, agent *Definition, selection EffectiveSelection, user *identity.User) (Permissions, bool, error) {
 	executor := user
 	var err error
-	if user.ID != v.ExecutorUserID {
+	if user.ID != v.RunAsUserID {
 		executor, err = executionAccount(tx, v, false)
 		if err != nil {
 			return Permissions{}, false, err
@@ -300,7 +300,7 @@ func (s *Service) detail(ctx context.Context, tx identity.Tx, r Repository, st S
 	if e != nil {
 		return SessionDetail{}, e
 	}
-	out := SessionDetail{Configuration: s.configuration(v), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.ExecutorUserID)}, RootSessionID: v.RootSessionID, Selection: selection, State: SessionState{LastSeq: v.LastSeq, ActiveRunID: v.ActiveRunID, QueuePaused: v.QueuePaused, PendingInputCount: counts.Inputs, PendingInteractionCount: counts.Interactions, LastActivityAt: v.LastActivityAt, ScopeKind: agent.ScopeKind, Workspace: WorkspaceState{CWD: cwd, Availability: "not_allocated"}}, Permissions: Permissions{Read: true}}
+	out := SessionDetail{Configuration: s.configuration(v), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.RunAsUserID)}, RootSessionID: v.RootSessionID, Selection: selection, State: SessionState{LastSeq: v.LastSeq, ActiveRunID: v.ActiveRunID, QueuePaused: v.QueuePaused, PendingInputCount: counts.Inputs, PendingInteractionCount: counts.Interactions, LastActivityAt: v.LastActivityAt, ScopeKind: agent.ScopeKind, Workspace: WorkspaceState{CWD: cwd, Availability: "not_allocated"}}, Permissions: Permissions{Read: true}}
 	var activeRootID *uint64
 	run, e := activeSessionRun(st, v)
 	if e != nil {
@@ -671,12 +671,12 @@ func (s *Service) createSessionTx(ctx context.Context, tx identity.Tx, r Reposit
 	if title == "" || utf8.RuneCountInString(title) > 200 {
 		return httpx.Invalid("title", "invalid_length")
 	}
-	v := &SessionRow{AgentID: id, ExecutionMode: agent.Mode, ChatUserID: &a.User.ID, ExecutorKind: agent.ExecutorKind, SessionKind: "root", Title: title, ExecutorUserID: a.User.ID, NextInputOrder: 1, RowVersion: 1, CreatedByActorKind: "user", CreatedByActorID: strconv.FormatUint(a.User.ID, 10), LockedModelConfig: json.RawMessage(`null`)}
+	v := &SessionRow{AgentID: id, ExecutionMode: agent.Mode, ChatUserID: &a.User.ID, ExecutorKind: agent.ExecutorKind, SessionKind: "root", Title: title, RunAsUserID: a.User.ID, NextInputOrder: 1, RowVersion: 1, CreatedByActorKind: "user", CreatedByActorID: strconv.FormatUint(a.User.ID, 10), LockedModelConfig: json.RawMessage(`null`)}
 	if agent.ExecutorKind == "robot" {
 		if agent.RobotUserID == nil {
 			return integrity()
 		}
-		v.ExecutorUserID = *agent.RobotUserID
+		v.RunAsUserID = *agent.RobotUserID
 		_, e = executionAccount(tx, v, true)
 		if e != nil {
 			return e

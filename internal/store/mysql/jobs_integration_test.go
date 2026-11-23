@@ -44,7 +44,7 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	base := project + "/jobs"
 	script := `async function main(ctx){const prev=ctx.state.get("计数");const n=(prev?.value??0)+1;ctx.state.put("计数",n,prev?{ifMatch:prev.etag}:{ifAbsent:true});await Promise.all([ctx.sleep(10),ctx.sleep(15)]);ctx.log.info("已完成",{n});return {n,actor:ctx.run.actorUserId};}`
 	config := func(source string) map[string]any {
-		return map[string]any{"script": source, "parameters": []any{}, "bindings": []any{}}
+		return map[string]any{"run_as_user_id": adminID, "script": source, "parameters": []any{}}
 	}
 	body := map[string]any{"code": "parallel", "name": "并行任务", "description": "测试", "enabled": true, "max_concurrency": 1, "busy_policy": "queue", "timeout_ms": 5000, "config": config(script), "grants": []any{}}
 	job := testData(admin.call(t, "POST", base, body, 200, nil))
@@ -129,7 +129,7 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	}
 	observed := wait(first, "succeeded")
 	result := observed["run"].(map[string]any)["result"].(map[string]any)
-	if result["n"] != float64(1) || result["actor"] != memberID {
+	if result["n"] != float64(1) || result["actor"] != memberID || observed["run"].(map[string]any)["run_as_user_id"] != adminID {
 		t.Fatal("state or read-only actor", result)
 	}
 	formalStore := observed["run"].(map[string]any)["state_store_id"]
@@ -149,15 +149,16 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 		t.Fatal("real-state debug used a different store")
 	}
 	admin.call(t, "POST", path+"/clear-debug-state", map[string]any{}, 200, nil)
-	// Service access validates the exact project credential but never decrypts it.
+	// Service access resolves the running member's preferred credential but never decrypts it.
 	conn := testData(admin.call(t, "POST", "/admin/service-connections/jenkins", map[string]any{"name": "Job 未实现适配器", "code": "job-jenkins", "config": map[string]string{"base_url": "https://jenkins.example.com"}}, 201, nil))
 	grantServiceConnection(t, admin, "/admin/service-connections/jenkins/"+conn["id"].(string), "project", strings.TrimPrefix(project, "/projects/"), true)
-	cred := testData(admin.call(t, "POST", project+"/credentials", map[string]any{"name": "Job 凭证", "kind": "username_password", "identifier": "build-bot", "material": map[string]string{"value": "must-never-be-decrypted"}}, 201, nil))
-	grantBody := map[string]any{"connection_id": conn["id"], "credential_id": cred["id"]}
-	grant := testData(admin.call(t, "POST", path+"/resource-grants", grantBody, 200, nil))
-	bound := config(`async function main(ctx){try {await ctx.resources.call("job-jenkins","build",{target:"example",operation:"build",params:{}})}catch(e){return e.code}}`)
-	bound["bindings"] = []any{map[string]any{"name": "build", "grant_id": grant["id"], "connection_id": conn["id"], "connection_code": conn["code"]}}
-	resourceID := submit(admin, "unimplemented", true, map[string]any{"config": bound})["run_id"].(string)
+	cred := testData(member.call(t, "POST", "/me/credentials", map[string]any{"name": "Job 凭证", "kind": "username_password", "identifier": "build-bot", "material": map[string]string{"value": "must-never-be-decrypted"}}, 201, nil))
+	preferred := "/me/service-connections/jenkins/" + conn["id"].(string) + "/credentials/preferred"
+	member.call(t, "GET", preferred, nil, 200, nil)
+	member.call(t, "PUT", preferred, map[string]any{"credential_id": cred["id"]}, 200, map[string]string{"If-Match": member.last.Header().Get("ETag")})
+	resourceScript := config(`async function main(ctx){try {await ctx.resources.call("platform/job-jenkins",{target:"example",operation:"build",params:{}})}catch(e){return e.code}}`)
+	resourceScript["run_as_user_id"] = memberID
+	resourceID := submit(admin, "unimplemented", true, map[string]any{"config": resourceScript})["run_id"].(string)
 	resourceRun := wait(resourceID, "succeeded")
 	if resourceRun["run"].(map[string]any)["result"] != "RESOURCE_NOT_IMPLEMENTED" {
 		t.Fatal("adapter boundary", resourceRun)
@@ -166,24 +167,48 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	if err := db.db.Get(&actual, "SELECT COUNT(*) FROM job_resource_call WHERE job_run_id=? AND (credential_id IS NOT NULL OR credential_material_version IS NOT NULL)", resourceID); err != nil || actual != 0 {
 		t.Fatal("unused credential marked used", err)
 	}
+	var platformAudit int
+	if err := db.db.Get(&platformAudit, "SELECT COUNT(*) FROM job_resource_call WHERE job_run_id=? AND connection_id=? AND configured_credential_id=? AND resource_snapshot->>'$.path'=?", resourceID, conn["id"], cred["id"], "platform/job-jenkins"); err != nil || platformAudit != 1 {
+		t.Fatal("platform path or selected account credential missing from audit", platformAudit, err)
+	}
+	projectConn := testData(admin.call(t, "POST", project+"/service-connections/jenkins", map[string]any{"name": "Project Jenkins", "code": "job-jenkins", "config": map[string]string{"base_url": "https://jenkins.example.com"}}, 201, nil))
+	paths := config(`async function main(ctx){
+		const request = {target:"example", operation:"build"};
+		const codes = [];
+		for (const args of [
+			["/project/job-tests/job-jenkins", request],
+			["project/other/job-jenkins", request],
+			["job-jenkins", request],
+			["team/other/job-jenkins", request],
+			["job-jenkins", "build", request]
+		]) {
+			try { await ctx.resources.call(...args) } catch(e) { codes.push(e.code) }
+		}
+		return codes;
+	}`)
+	paths["run_as_user_id"] = memberID
+	pathRun := submit(admin, "connection-paths", true, map[string]any{"config": paths})["run_id"].(string)
+	if result := wait(pathRun, "succeeded")["run"].(map[string]any)["result"]; fmt.Sprint(result) != "[RESOURCE_ACCESS_DENIED RESOURCE_ACCESS_DENIED INVALID_RESOURCE_PATH INVALID_RESOURCE_PATH INVALID_ARGUMENT]" {
+		t.Fatal("project path without a preferred credential, foreign scope or invalid signature", result)
+	}
+	var projectAudit int
+	if err := db.db.Get(&projectAudit, "SELECT COUNT(*) FROM job_resource_call WHERE job_run_id=? AND connection_id=? AND configured_credential_id IS NULL AND resource_snapshot->>'$.path'=?", pathRun, projectConn["id"], "project/job-tests/job-jenkins"); err != nil || projectAudit != 1 {
+		t.Fatal("same-code project connection did not resolve independently", projectAudit, err)
+	}
 	// Revocation is checked at the call, including runs accepted before revocation.
-	delayed := config(`async function main(ctx){await ctx.sleep(2000);try {await ctx.resources.call("job-jenkins","build",{target:"example",operation:"build",params:{}})}catch(e){return e.code}}`)
-	delayed["bindings"] = bound["bindings"]
+	delayed := config(`async function main(ctx){await ctx.sleep(2000);try {await ctx.resources.call("platform/job-jenkins",{target:"example",operation:"build",params:{}})}catch(e){return e.code}}`)
+	delayed["run_as_user_id"] = memberID
 	pending := submit(admin, "connection-revoked", true, map[string]any{"config": delayed})["run_id"].(string)
 	wait(pending, "running")
 	grantServiceConnection(t, admin, "/admin/service-connections/jenkins/"+conn["id"].(string), "project", p, false)
 	if result := wait(pending, "succeeded")["run"].(map[string]any)["result"]; result != "RESOURCE_ACCESS_DENIED" {
 		t.Fatal("revoked connection remained callable", result)
 	}
-	admin.call(t, "POST", path+"/debug", map[string]any{"request_key": "connection-revoked-new", "config": bound, "inputs": map[string]any{}}, 422, nil)
-	grantServiceConnection(t, admin, "/admin/service-connections/jenkins/"+conn["id"].(string), "project", p, true)
-	admin.call(t, "DELETE", path+"/resource-grants/"+grant["id"].(string), nil, 200, nil)
-	newGrant := testData(admin.call(t, "POST", path+"/resource-grants", grantBody, 200, nil))
-	if newGrant["id"] == grant["id"] {
-		t.Fatal("revoked grant resurrected")
+	revokedRun := submit(admin, "connection-revoked-new", true, map[string]any{"config": resourceScript})["run_id"].(string)
+	if result := wait(revokedRun, "succeeded")["run"].(map[string]any)["result"]; result != "RESOURCE_ACCESS_DENIED" {
+		t.Fatal("new run retained revoked access", result)
 	}
-	// A revoked binding cannot be accepted into a fresh debug revision.
-	admin.call(t, "POST", path+"/debug", map[string]any{"request_key": "revoked", "config": bound, "inputs": map[string]any{}}, 422, nil)
+	grantServiceConnection(t, admin, "/admin/service-connections/jenkins/"+conn["id"].(string), "project", p, true)
 	// Project-scoped code uniqueness and real host send via injected transport.
 	robotBody := map[string]any{"code": "notify", "name": "通知机器人", "description": "", "enabled": true, "authentication": map[string]string{"access_token": "abcdefghijklmnopqrstuvwx", "secret": "SECabcdefghijklmnopqrstuvwx"}}
 	robot := testData(admin.call(t, "POST", project+"/dingtalk/robots", robotBody, 201, nil))
@@ -219,6 +244,12 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	deniedObservation := wait(denied, "succeeded")
 	if deniedObservation["calls"].([]any)[0].(map[string]any)["outcome"] != "denied" {
 		t.Fatal("missing denial audit")
+	}
+	ordinary := config(`async function main(ctx){try{await ctx.dingtalk.send("notify",{format:"text",body:"x"})}catch(e){return e.code}}`)
+	ordinary["run_as_user_id"] = memberID
+	rejected := submit(admin, "member-send", true, map[string]any{"config": ordinary})["run_id"].(string)
+	if wait(rejected, "succeeded")["run"].(map[string]any)["result"] != "RESOURCE_ACCESS_DENIED" || sends.Load() != 1 {
+		t.Fatal("caller privileges leaked into the run")
 	}
 	// Cancellation stops a long host wait and releases the same concurrency slot.
 	long := submit(admin, "cancel", true, map[string]any{"config": config(`async function main(ctx){await ctx.sleep(60000)}`)})["run_id"].(string)

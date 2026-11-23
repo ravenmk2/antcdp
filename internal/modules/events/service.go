@@ -39,21 +39,21 @@ func project(tx identity.Tx, projectID, userID uint64, lock bool) (*collaboratio
 	}
 	return r.Resource(collaboration.Project, projectID, userID)
 }
-func robot(tx identity.Tx, projectID, userID uint64, active bool) error {
+func runAccount(tx identity.Tx, projectID, userID uint64, active bool) error {
 	users, err := tx.LockUsers([]uint64{userID})
 	if err != nil {
 		return err
 	}
 	u := users[userID]
-	if u == nil || u.AccountType != "robot" || u.DeletedAt != nil || (active && u.Status != "active") {
-		return httpx.E(409, "EXECUTOR_UNAVAILABLE", "执行机器人不可用")
+	if u == nil || (u.AccountType != "human" && u.AccountType != "robot") || u.DeletedAt != nil || (active && u.Status != "active") {
+		return httpx.E(409, "EXECUTOR_UNAVAILABLE", "运行账号不可用")
 	}
 	p, err := project(tx, projectID, userID, false)
 	if err != nil {
 		return err
 	}
 	if p == nil || !p.IsMember || p.EndedAt != nil {
-		return httpx.E(409, "EXECUTOR_ACCESS_REVOKED", "机器人已无当前项目的执行资格")
+		return httpx.E(409, "EXECUTOR_ACCESS_REVOKED", "运行账号已无当前项目的执行资格")
 	}
 	return nil
 }
@@ -139,7 +139,7 @@ func (s *Service) ReceiveGitLab(_ context.Context, tx identity.Tx, connection ui
 	// Do not lock projects while holding the source connection: repository
 	// management locks projects before connections. Subscription locks below
 	// serialize configuration changes and FIFO admission; execution separately
-	// rechecks project status and robot permissions.
+	// rechecks project status and run account permissions.
 	active := targets
 	if e.Type != "" && len(active) > 0 {
 		e.RoutingResult = "routed"
@@ -300,16 +300,6 @@ func (s *Service) Revisions(ctx context.Context, raw string, pid, id uint64) ([]
 	})
 	return rows, a, err
 }
-func (s *Service) RobotOptions(ctx context.Context, raw string, pid uint64) ([]RobotOption, *identity.Auth, error) {
-	var rows []RobotOption
-	a, err := s.access(ctx, raw, pid, true, false, nil, func(_ identity.Tx, r Repository, _ *identity.Auth, _ bool) error {
-		var err error
-		rows, err = r.RobotOptions(pid)
-		return err
-	})
-	return rows, a, err
-}
-
 func (s *Service) Save(ctx context.Context, raw string, pid, id uint64, w Write) (*Subscription, *identity.Auth, error) {
 	w.Name = strings.TrimSpace(w.Name)
 	if w.Name == "" || utf8.RuneCountInString(w.Name) > 100 || utf8.RuneCountInString(w.Description) > 1000 {
@@ -334,16 +324,16 @@ func (s *Service) Save(ctx context.Context, raw string, pid, id uint64, w Write)
 			return nil, nil, httpx.Invalid("event_types", "unsupported")
 		}
 	}
-	if w.ExecutorID == 0 {
-		return nil, nil, httpx.Invalid("executor_user_id", "required")
+	if w.RunAsUserID == 0 {
+		return nil, nil, httpx.Invalid("run_as_user_id", "required")
 	}
 	// Compilation errors are returned only after project administrator authorization.
 	var out *Subscription
-	a, err := s.access(ctx, raw, pid, true, true, func(identity.Tx) ([]uint64, error) { return []uint64{w.ExecutorID}, nil }, func(tx identity.Tx, r Repository, a *identity.Auth, _ bool) error {
+	a, err := s.access(ctx, raw, pid, true, true, func(identity.Tx) ([]uint64, error) { return []uint64{w.RunAsUserID}, nil }, func(tx identity.Tx, r Repository, a *identity.Auth, _ bool) error {
 		if err := s.Executor.Validate(w.Script, "consumer.js", "main"); err != nil {
 			return httpx.E(422, "INVALID_SCRIPT", err.Error())
 		}
-		if err := robot(tx, pid, w.ExecutorID, w.Enabled); err != nil {
+		if err := runAccount(tx, pid, w.RunAsUserID, w.Enabled); err != nil {
 			return err
 		}
 		created := id == 0
@@ -384,13 +374,13 @@ func (s *Service) Save(ctx context.Context, raw string, pid, id uint64, w Write)
 				return integrity()
 			}
 		}
-		changed := previous == nil || previous.Script != w.Script || previous.ExecutorID != w.ExecutorID || previous.TimeoutMS != w.TimeoutMS || previous.MaxRetries != *w.MaxRetries || !slices.Equal(oldTypes, w.EventTypes)
+		changed := previous == nil || previous.Script != w.Script || previous.RunAsUserID != w.RunAsUserID || previous.TimeoutMS != w.TimeoutMS || previous.MaxRetries != *w.MaxRetries || !slices.Equal(oldTypes, w.EventTypes)
 		if changed {
 			number := uint64(1)
 			if previous != nil {
 				number = previous.Number + 1
 			}
-			rev := &Revision{SubscriptionID: sub.ID, Number: number, EventTypes: safeJSON(w.EventTypes), ExecutorID: w.ExecutorID, APIVersion: 1, Script: w.Script, TimeoutMS: w.TimeoutMS, MaxRetries: *w.MaxRetries, RetryIntervalMS: 30000, Creator: a.User.ID, CreatedAt: now()}
+			rev := &Revision{SubscriptionID: sub.ID, Number: number, EventTypes: safeJSON(w.EventTypes), RunAsUserID: w.RunAsUserID, APIVersion: 1, Script: w.Script, TimeoutMS: w.TimeoutMS, MaxRetries: *w.MaxRetries, RetryIntervalMS: 30000, Creator: a.User.ID, CreatedAt: now()}
 			if err := r.InsertRevision(rev); err != nil {
 				return err
 			}
@@ -429,7 +419,7 @@ func (s *Service) SetEnabled(ctx context.Context, raw string, pid, id uint64, ve
 		if rev == nil {
 			return nil, integrity()
 		}
-		return []uint64{rev.ExecutorID}, nil
+		return []uint64{rev.RunAsUserID}, nil
 	}
 	a, err := s.access(ctx, raw, pid, true, true, discover, func(tx identity.Tx, r Repository, a *identity.Auth, _ bool) error {
 		sub, err := requireSubscription(r, pid, id, true)
@@ -450,7 +440,7 @@ func (s *Service) SetEnabled(ctx context.Context, raw string, pid, id uint64, ve
 			return integrity()
 		}
 		if enabled {
-			if err = robot(tx, pid, rev.ExecutorID, true); err != nil {
+			if err = runAccount(tx, pid, rev.RunAsUserID, true); err != nil {
 				return err
 			}
 		}
@@ -555,8 +545,8 @@ func (s *Service) Retry(ctx context.Context, raw string, pid, id uint64) (*Consu
 		if rev == nil {
 			return nil, integrity()
 		}
-		lockedExecutor = rev.ExecutorID
-		return []uint64{rev.ExecutorID}, nil
+		lockedExecutor = rev.RunAsUserID
+		return []uint64{rev.RunAsUserID}, nil
 	}
 	a, err := s.access(ctx, raw, pid, true, true, discover, func(tx identity.Tx, r Repository, a *identity.Auth, _ bool) error {
 		original, err := scopedConsumption(r, pid, id, true)
@@ -588,10 +578,10 @@ func (s *Service) Retry(ctx context.Context, raw string, pid, id uint64) (*Consu
 		if rev == nil {
 			return integrity()
 		}
-		if rev.ExecutorID != lockedExecutor {
-			return httpx.E(412, "VERSION_CONFLICT", "订阅执行身份已变化，请重新加载后重试")
+		if rev.RunAsUserID != lockedExecutor {
+			return httpx.E(412, "VERSION_CONFLICT", "订阅运行账号已变化，请重新加载后重试")
 		}
-		if err = robot(tx, pid, rev.ExecutorID, true); err != nil {
+		if err = runAccount(tx, pid, rev.RunAsUserID, true); err != nil {
 			return err
 		}
 		out, err = enqueue(r, sub, rev.ID, original.ReferenceID, &original.ID, &a.User.ID)

@@ -65,15 +65,3 @@ func (t *identityTx) ConnectionUserScopes(uid uint64) ([]i.CredentialOwnership, 
             WHERE u.id=? AND u.deleted_at IS NULL AND u.account_type='robot' AND a.deleted_at IS NULL`, uid, uid, uid, uid)
 	return rows, err
 }
-
-func (t *identityTx) ConnectionJobReferences(connection, credential uint64) (int, error) {
-	var count int
-	query := "SELECT COUNT(*) FROM job_resource_grant WHERE connection_id=? AND status='active'"
-	args := []any{connection}
-	if credential != 0 {
-		query += " AND credential_id=?"
-		args = append(args, credential)
-	}
-	err := t.tx.GetContext(t.ctx, &count, query, args...)
-	return count, err
-}

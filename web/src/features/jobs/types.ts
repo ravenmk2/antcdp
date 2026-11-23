@@ -6,26 +6,14 @@ export interface Parameter {
   default?: string | string[];
   options?: string[];
 }
-export interface Binding {
-  name: string;
-  grant_id: string;
-  connection_id: string;
-  connection_code: string;
-}
 export interface Config {
+  run_as_user_id: string;
   script: string;
   parameters: Parameter[];
-  bindings: Binding[];
 }
 export interface Grant {
   kind: string;
   id: string;
-}
-export interface ResourceGrant {
-  id: string;
-  connection_id: string;
-  credential_id: string;
-  status: string;
 }
 export interface Job {
   code: string;
@@ -47,9 +35,9 @@ export interface Job {
   config?: Config;
   parameters: Parameter[];
   grants?: Grant[];
-  resource_grants?: ResourceGrant[];
 }
 export interface Run {
+  run_as_user_id: string;
   id: string;
   status: string;
   trigger_kind: string;

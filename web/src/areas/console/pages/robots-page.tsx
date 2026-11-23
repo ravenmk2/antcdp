@@ -40,7 +40,7 @@ export function RobotsPage() {
     <ConsoleListPage>
       <PageHeader
         title="机器人账号"
-        description="独立管理执行身份、项目权限和账号凭据。机器人不能登录，可被订阅使用；服务型助手绑定后不可换绑。"
+        description="独立管理运行账号、项目权限和账号凭据。机器人不能登录，可作为作业和事件订阅的运行账号；服务型助手绑定后不可换绑。"
       />
       <TableToolbar
         refreshing={query.isFetching}

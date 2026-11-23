@@ -11,7 +11,6 @@ import (
 	"github.com/ravenmk2/antcdp/internal/jobcore"
 	"github.com/ravenmk2/antcdp/internal/modules/collaboration"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
-	"github.com/ravenmk2/antcdp/internal/modules/integrations"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
 )
@@ -40,7 +39,19 @@ func projectAccess(tx identity.Tx, project, user uint64) (*collaboration.Resourc
 func missing() error   { return httpx.E(404, "NOT_FOUND", "作业对象不存在或不可见") }
 func forbidden() error { return httpx.E(403, "FORBIDDEN", "没有此操作权限") }
 func (s *Service) access(ctx context.Context, raw string, project, job uint64, manage bool, fn func(identity.Tx, Repository, *identity.Auth, *Job, *collaboration.Resource) error) (*identity.Auth, error) {
-	return s.Identity.BusinessAccess(ctx, raw, nil, func(tx identity.Tx, a *identity.Auth) error {
+	return s.accessAccount(ctx, raw, project, job, manage, 0, fn)
+}
+func (s *Service) accessAccount(ctx context.Context, raw string, project, job uint64, manage bool, account uint64, fn func(identity.Tx, Repository, *identity.Auth, *Job, *collaboration.Resource) error) (*identity.Auth, error) {
+	var discover func(identity.Tx) ([]uint64, error)
+	if account != 0 {
+		discover = func(identity.Tx) ([]uint64, error) { return []uint64{account}, nil }
+	}
+	return s.Identity.BusinessAccess(ctx, raw, discover, func(tx identity.Tx, a *identity.Auth) error {
+		if account != 0 {
+			if err := tx.(collaboration.Repository).LockCollaboration(collaboration.Project, project, 0); err != nil {
+				return err
+			}
+		}
 		p, err := projectAccess(tx, project, a.User.ID)
 		if err != nil {
 			return err
@@ -120,10 +131,6 @@ func detail(r Repository, j *Job) (Detail, error) {
 		if err != nil {
 			return out, err
 		}
-		out.Resources, err = r.Resources(j.ID)
-		if err != nil {
-			return out, err
-		}
 	}
 	return out, nil
 }
@@ -136,43 +143,20 @@ func (s *Service) Get(ctx context.Context, raw string, project, job uint64) (Det
 	})
 	return out, a, err
 }
+
 func (s *Service) configure(tx identity.Tx, r Repository, j *Job, actor uint64, c Config) (*Revision, error) {
+	if c.RunAsUserID == 0 {
+		return nil, httpx.Invalid("run_as_user_id", "required")
+	}
+	if _, err := collaboration.AutomationProject(tx, j.ProjectID, c.RunAsUserID); err != nil {
+		return nil, err
+	}
 	normalize(&c)
 	if err := validateConfig(c); err != nil {
 		return nil, err
 	}
 	if err := s.Executor.Validate(c.Script); err != nil {
 		return nil, httpx.E(422, "INVALID_SCRIPT", err.Error())
-	}
-	ir, ok := tx.(integrations.Repository)
-	if !ok && len(c.Bindings) > 0 {
-		return nil, forbidden()
-	}
-	for i := range c.Bindings {
-		b := &c.Bindings[i]
-		g, err := r.Resource(b.GrantID)
-		if err != nil {
-			return nil, err
-		}
-		if g == nil || g.JobID != j.ID || g.Status != "active" {
-			return nil, httpx.Invalid("bindings", "invalid_grant")
-		}
-		conn, err := ir.Connection(g.ConnectionID)
-		if err != nil {
-			return nil, err
-		}
-		if conn == nil {
-			return nil, httpx.Invalid("bindings", "missing_connection")
-		}
-		allowed, err := integrations.ConnectionAllowed(ir, conn, integrations.CredentialOwnership{Type: "project", Owner: j.ProjectID})
-		if err != nil {
-			return nil, err
-		}
-		if !allowed || !conn.Enabled {
-			return nil, httpx.Invalid("bindings", "connection_unavailable")
-		}
-		b.ConnectionID = conn.ID
-		b.ConnectionCode = conn.Code
 	}
 	digest, err := hash(c)
 	if err != nil {
@@ -192,7 +176,7 @@ func (s *Service) Save(ctx context.Context, raw string, project, job uint64, w W
 	if w.MaxConcurrency == 0 || w.TimeoutMS == 0 || w.TimeoutMS > 9223372036854 || (w.BusyPolicy != "queue" && w.BusyPolicy != "skip") {
 		return out, nil, httpx.Invalid("execution", "invalid_settings")
 	}
-	a, err := s.access(ctx, raw, project, job, true, func(tx identity.Tx, r Repository, a *identity.Auth, j *Job, _ *collaboration.Resource) error {
+	a, err := s.accessAccount(ctx, raw, project, job, true, w.Config.accountID(), func(tx identity.Tx, r Repository, a *identity.Auth, j *Job, _ *collaboration.Resource) error {
 		created := j == nil
 		wasEnabled := false
 		if created {
@@ -368,7 +352,7 @@ func (s *Service) Start(ctx context.Context, raw string, project, job uint64, w 
 	if err != nil {
 		return out, nil, err
 	}
-	a, err := s.access(ctx, raw, project, job, false, func(tx identity.Tx, r Repository, a *identity.Auth, j *Job, p *collaboration.Resource) error {
+	a, err := s.accessAccount(ctx, raw, project, job, false, w.Config.accountID(), func(tx identity.Tx, r Repository, a *identity.Auth, j *Job, p *collaboration.Resource) error {
 		prior, err := r.Receipt(job, a.User.ID, w.RequestKey)
 		if err != nil {
 			return err
@@ -436,7 +420,7 @@ func (s *Service) Start(ctx context.Context, raw string, project, job uint64, w 
 				timeout = w.TimeoutMS
 			}
 		}
-		v := &Run{JobID: job, RevisionID: rev.ID, Trigger: trigger, Actor: &a.User.ID, TriggerContext: json.RawMessage(`{}`), Inputs: values, TimeoutMS: timeout, StateMode: mode, RerunOf: w.RerunOf, Status: "queued", QueuedAt: now()}
+		v := &Run{RunAsUserID: rev.RunAsUserID, JobID: job, RevisionID: rev.ID, Trigger: trigger, Actor: &a.User.ID, TriggerContext: json.RawMessage(`{}`), Inputs: values, TimeoutMS: timeout, StateMode: mode, RerunOf: w.RerunOf, Status: "queued", QueuedAt: now()}
 		accepted, err := admit(r, j, v)
 		if err != nil {
 			return err
@@ -550,66 +534,6 @@ func (s *Service) Receipts(ctx context.Context, raw string, project, job, before
 		var err error
 		out, err = r.Receipts(job, before)
 		return err
-	})
-	return out, a, err
-}
-func (s *Service) Resource(ctx context.Context, raw string, project, job, id, connection, credential uint64) (ResourceGrant, *identity.Auth, error) {
-	var out ResourceGrant
-	a, err := s.access(ctx, raw, project, job, true, func(tx identity.Tx, r Repository, a *identity.Auth, j *Job, _ *collaboration.Resource) error {
-		if id != 0 {
-			g, err := r.Resource(id)
-			if err != nil {
-				return err
-			}
-			if g == nil || g.JobID != job {
-				return missing()
-			}
-			out = *g
-			out.Status = "revoked"
-		} else {
-			ir, ok := tx.(integrations.Repository)
-			if !ok {
-				return forbidden()
-			}
-			conn, err := ir.Connection(connection)
-			if err != nil {
-				return err
-			}
-			cred, err := ir.Entry(credential)
-			if err != nil {
-				return err
-			}
-			if conn == nil || cred == nil || !cred.Compatible(conn.Type) || !cred.Owned(integrations.CredentialOwnership{Type: "project", Owner: project}) {
-				return httpx.Invalid("credential_id", "not_project_credential")
-			}
-			allowed, err := integrations.ConnectionAllowed(ir, conn, integrations.CredentialOwnership{Type: "project", Owner: project})
-			if err != nil {
-				return err
-			}
-			if !allowed || !conn.Enabled || !cred.Usable() {
-				return forbidden()
-			}
-			existing, err := r.Resources(job)
-			if err != nil {
-				return err
-			}
-			for _, g := range existing {
-				if g.ConnectionID == connection && g.CredentialID == credential && g.Status == "active" {
-					out = g
-					return nil
-				}
-			}
-			out = ResourceGrant{JobID: job, ConnectionID: connection, CredentialID: credential, Status: "active", CreatedAt: now()}
-		}
-		if err := r.SaveResource(&out, a.User.ID); err != nil {
-			return err
-		}
-		j.Version++
-		j.UpdatedAt = now()
-		if err := r.SaveJob(j); err != nil {
-			return err
-		}
-		return audit(tx, a, j, "resource_authorization_changed")
 	})
 	return out, a, err
 }

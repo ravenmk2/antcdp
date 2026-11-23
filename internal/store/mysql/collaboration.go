@@ -403,3 +403,9 @@ func collaborationDuplicate(message string) error {
 	}
 	return httpx.E(409, "USERNAME_TAKEN", "用户名已被使用")
 }
+
+func (t *identityTx) RunAccountOptions(project uint64) ([]c.RunAccountOption, error) {
+	rows := []c.RunAccountOption{}
+	err := t.tx.SelectContext(t.ctx, &rows, `SELECT u.id,u.display_name,u.username,u.account_type FROM user u WHERE u.account_type IN ('human','robot') AND u.deleted_at IS NULL AND u.status='active' AND (EXISTS(SELECT 1 FROM project_member pm WHERE pm.project_id=? AND pm.user_id=u.id) OR EXISTS(SELECT 1 FROM project_team pt JOIN team tm ON tm.id=pt.team_id AND tm.dissolved_at IS NULL JOIN team_member m ON m.team_id=tm.id WHERE pt.project_id=? AND m.user_id=u.id)) ORDER BY u.display_name,u.id`, project, project)
+	return rows, err
+}

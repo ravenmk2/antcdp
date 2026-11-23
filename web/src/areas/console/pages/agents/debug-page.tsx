@@ -28,7 +28,7 @@ export function AgentDebugPage() {
           }
           description={
             query.data?.data.agent_type === "service"
-              ? `执行身份：专属机器人 ${query.data.data.robot_user_id} · 由作业或事件订阅发起。`
+              ? `运行账号：专属机器人 ${query.data.data.robot_user_id} · 由作业或事件订阅发起。`
               : undefined
           }
           actions={

@@ -24,7 +24,7 @@ type FrozenTool struct {
 type RunContextRow struct {
 	RootRunID          uint64          `db:"root_run_id"`
 	AgentID            uint64          `db:"agent_id"`
-	ExecutorUserID     uint64          `db:"executor_user_id"`
+	RunAsUserID        uint64          `db:"run_as_user_id"`
 	AgentConfigVersion uint64          `db:"agent_config_version"`
 	SchemaVersion      uint64          `db:"schema_version"`
 	CloudComputerID    *uint64         `db:"cloud_computer_id"`
@@ -79,7 +79,7 @@ func readRunContext(st StateRepository, root uint64) (*frozenRunContext, error) 
 		}
 		x.MCPTools = surface.Tools
 	}
-	if x.Authorization.AccountID != agentcore.ID(row.ExecutorUserID) {
+	if x.Authorization.AccountID != agentcore.ID(row.RunAsUserID) {
 		return nil, integrity()
 	}
 	return x, nil
@@ -147,7 +147,7 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 	if err != nil {
 		return nil, err
 	}
-	row := &RunContextRow{CloudComputerID: session.CloudComputerID, CWD: cwd, RootRunID: run.ID, AgentID: agent.ID, ExecutorUserID: owner.ID, AgentConfigVersion: agent.RowVersion, SchemaVersion: 1, SystemPrompt: agent.SystemPrompt, RuntimePolicy: run.ExecutionPolicySnapshot, SkillManifest: json.RawMessage(`[]`), CreatedAt: run.CreatedAt}
+	row := &RunContextRow{CloudComputerID: session.CloudComputerID, CWD: cwd, RootRunID: run.ID, AgentID: agent.ID, RunAsUserID: owner.ID, AgentConfigVersion: agent.RowVersion, SchemaVersion: 1, SystemPrompt: agent.SystemPrompt, RuntimePolicy: run.ExecutionPolicySnapshot, SkillManifest: json.RawMessage(`[]`), CreatedAt: run.CreatedAt}
 	for _, part := range []struct {
 		Value  any
 		Target *json.RawMessage

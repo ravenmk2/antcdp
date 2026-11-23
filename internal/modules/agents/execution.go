@@ -82,7 +82,7 @@ func (s *Service) lockExecution(tx identity.Tx, r Repository, st StateRepository
 	if e != nil {
 		return out, e
 	}
-	if frozen.Row.AgentID != agent.ID || frozen.Row.ExecutorUserID != v.ExecutorUserID {
+	if frozen.Row.AgentID != agent.ID || frozen.Row.RunAsUserID != v.RunAsUserID {
 		return out, integrity()
 	}
 	agent.SystemPrompt, agent.RowVersion = frozen.Row.SystemPrompt, frozen.Row.AgentConfigVersion
@@ -113,7 +113,7 @@ func (s *Service) lockExecution(tx identity.Tx, r Repository, st StateRepository
 	if json.Unmarshal(run.ExecutionPolicySnapshot, &policy) != nil {
 		return out, integrity()
 	}
-	out = executionRows{Session: v, RootSession: rootSession, Run: run, Root: root, Agent: agent, Context: frozen, Execution: agentcore.ExecutionContext{Ref: ref, AgentID: agentcore.ID(v.AgentID), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.ExecutorUserID)}, ContentSessionID: agentcore.ID(rootSessionID), Policy: policy, Authorization: frozen.Authorization, Model: frozen.Model, Deadline: run.DeadlineAt}}
+	out = executionRows{Session: v, RootSession: rootSession, Run: run, Root: root, Agent: agent, Context: frozen, Execution: agentcore.ExecutionContext{Ref: ref, AgentID: agentcore.ID(v.AgentID), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.RunAsUserID)}, ContentSessionID: agentcore.ID(rootSessionID), Policy: policy, Authorization: frozen.Authorization, Model: frozen.Model, Deadline: run.DeadlineAt}}
 	out.Execution.PAPIGrants = frozen.PAPIGrants
 	out.Execution.Binding, e = s.executionBinding(tx, root)
 	if e != nil {

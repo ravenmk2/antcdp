@@ -18,7 +18,7 @@ type SessionRow struct {
 	SessionKind               string          `db:"session_kind"`
 	RootSessionID             *uint64         `db:"root_session_id"`
 	ParentRunID               *uint64         `db:"parent_run_id"`
-	ExecutorUserID            uint64          `db:"executor_user_id"`
+	RunAsUserID               uint64          `db:"run_as_user_id"`
 	Title                     string          `db:"title"`
 	CloudComputerID           *uint64         `db:"cloud_computer_id"`
 	SelectedModelBindingID    uint64          `db:"selected_model_binding_id"`
@@ -81,7 +81,7 @@ type RunRow struct {
 	ParentRunID             *uint64         `db:"parent_run_id"`
 	TriggerInputID          *uint64         `db:"trigger_input_id"`
 	RetryOfRunID            *uint64         `db:"retry_of_run_id"`
-	ExecutorUserID          uint64          `db:"executor_user_id"`
+	RunAsUserID             uint64          `db:"run_as_user_id"`
 	OriginKind              string          `db:"origin_kind"`
 	ActorKind               string          `db:"actor_kind"`
 	ActorID                 string          `db:"actor_id"`

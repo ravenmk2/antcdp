@@ -15,7 +15,7 @@ export const reasonNames: Record<string, string> = {
   deadline_exceeded: "达到运行期限",
   user_stopped: "操作者已停止",
   agent_disabled: "助手已停用",
-  principal_disabled: "执行身份已停用",
+  principal_disabled: "运行账号已停用",
   executor_restarted: "执行服务重启",
   model_unavailable: "模型当前不可用",
   workspace_unavailable: "工作空间当前不可用",

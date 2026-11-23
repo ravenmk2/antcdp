@@ -8,10 +8,10 @@ import (
 
 func (s *Store) jobsSchemaReady(ctx context.Context) error {
 	var count int
-	if err := s.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('job','job_revision','job_run_grant','job_agent_grant','job_resource_grant','job_run','job_run_log','job_resource_call','job_trigger_request','job_schedule','job_schedule_fire')`); err != nil {
+	if err := s.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME IN ('job','job_revision','job_run_grant','job_run','job_run_log','job_resource_call','job_trigger_request','job_schedule','job_schedule_fire')`); err != nil {
 		return err
 	}
-	if count != 11 {
+	if count != 9 {
 		return install.ErrIncompleteSchema
 	}
 	if err := s.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='dingtalk_robot' AND COLUMN_NAME IN ('scope_kind','scope_id','material_version')`); err != nil {
@@ -26,10 +26,16 @@ func (s *Store) jobsSchemaReady(ctx context.Context) error {
 	if count != 1 {
 		return install.ErrIncompleteSchema
 	}
-	if err := s.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='job' AND COLUMN_NAME='code' AND IS_NULLABLE='NO') OR (TABLE_NAME='job_trigger_request' AND COLUMN_NAME IN ('caller_kind','caller_id') AND IS_NULLABLE='NO'))`); err != nil {
+	if err := s.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME IN ('job_revision','job_run') AND COLUMN_NAME='run_as_user_id' AND COLUMN_TYPE='bigint unsigned' AND IS_NULLABLE='NO') OR (TABLE_NAME='job' AND COLUMN_NAME='code' AND IS_NULLABLE='NO') OR (TABLE_NAME='job_trigger_request' AND COLUMN_NAME IN ('caller_kind','caller_id') AND IS_NULLABLE='NO'))`); err != nil {
 		return err
 	}
-	if count != 3 {
+	if count != 5 {
+		return install.ErrIncompleteSchema
+	}
+	if err := s.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='job_revision' AND COLUMN_NAME='resource_bindings') OR (TABLE_NAME='job_resource_call' AND COLUMN_NAME IN ('binding_name','grant_id')))`); err != nil {
+		return err
+	}
+	if count != 0 {
 		return install.ErrIncompleteSchema
 	}
 	for _, expected := range []struct{ table, index, columns string }{{"job", "uq_job_scope_code", "scope_kind,scope_id,code"}, {"job_trigger_request", "uq_job_trigger_request", "job_id,caller_kind,caller_id,request_key"}} {

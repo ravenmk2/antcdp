@@ -7,7 +7,7 @@ CREATE TABLE `agent_run` (
     parent_run_id BIGINT UNSIGNED NULL,
     trigger_input_id BIGINT UNSIGNED NULL,
     retry_of_run_id BIGINT UNSIGNED NULL,
-    executor_user_id BIGINT UNSIGNED NOT NULL,
+    run_as_user_id BIGINT UNSIGNED NOT NULL,
     origin_kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     actor_kind VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     actor_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,

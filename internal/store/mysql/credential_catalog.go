@@ -47,12 +47,12 @@ func (t *identityTx) StoreMaterial(id uint64, v string) error {
 }
 func (t *identityTx) RemoveEntry(id uint64) error {
 	var used bool
-	err := t.tx.GetContext(t.ctx, &used, "SELECT EXISTS(SELECT 1 FROM credential_preference WHERE credential_id=?) OR EXISTS(SELECT 1 FROM job_resource_grant WHERE credential_id=? AND status='active')", id, id)
+	err := t.tx.GetContext(t.ctx, &used, "SELECT EXISTS(SELECT 1 FROM credential_preference WHERE credential_id=?)", id)
 	if err != nil {
 		return err
 	}
 	if used {
-		return httpx.E(409, "CREDENTIAL_REFERENCED", "请先清除资源首选或撤销作业授权")
+		return httpx.E(409, "CREDENTIAL_REFERENCED", "请先清除资源首选")
 	}
 	_, err = t.tx.ExecContext(t.ctx, "DELETE FROM credential WHERE id=?", id)
 	return err

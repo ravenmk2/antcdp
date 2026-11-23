@@ -47,17 +47,17 @@ func (h *consumerHost) withAttempt(ctx context.Context, authorize bool, fn func(
 	}
 	return h.s.transaction(ctx, func(tx identity.Tx, r Repository) error {
 		if authorize {
-			if _, err := tx.LockUsers([]uint64{h.attempt.Revision.ExecutorID}); err != nil {
+			if _, err := tx.LockUsers([]uint64{h.attempt.Revision.RunAsUserID}); err != nil {
 				return err
 			}
-			p, err := project(tx, h.attempt.Subscription.ScopeID, h.attempt.Revision.ExecutorID, true)
+			p, err := project(tx, h.attempt.Subscription.ScopeID, h.attempt.Revision.RunAsUserID, true)
 			if err != nil {
 				return err
 			}
 			if p == nil || !p.IsMember || p.EndedAt != nil {
-				return httpx.E(409, "EXECUTOR_ACCESS_REVOKED", "机器人已无当前项目的执行资格")
+				return httpx.E(409, "EXECUTOR_ACCESS_REVOKED", "运行账号已无当前项目的执行资格")
 			}
-			if err = robot(tx, h.attempt.Subscription.ScopeID, h.attempt.Revision.ExecutorID, true); err != nil {
+			if err = runAccount(tx, h.attempt.Subscription.ScopeID, h.attempt.Revision.RunAsUserID, true); err != nil {
 				return err
 			}
 		}
@@ -128,7 +128,7 @@ func (h *consumerHost) action(ctx context.Context, kind string, args []json.RawM
 	}); err != nil {
 		return nil, scriptError(err)
 	}
-	out, actionErr := h.s.Dispatch(ctx, Action{Kind: kind, Path: path, Args: args[1], ProjectID: h.attempt.Subscription.ScopeID, ActorID: h.attempt.Revision.ExecutorID, SubscriptionID: h.attempt.Subscription.ID, ConsumptionID: h.attempt.Consumption.ID, Attempt: h.attempt.Consumption.Attempt})
+	out, actionErr := h.s.Dispatch(ctx, Action{Kind: kind, Path: path, Args: args[1], ProjectID: h.attempt.Subscription.ScopeID, ActorID: h.attempt.Revision.RunAsUserID, SubscriptionID: h.attempt.Subscription.ID, ConsumptionID: h.attempt.Consumption.ID, Attempt: h.attempt.Consumption.Attempt})
 	persist, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	logErr := h.withAttempt(persist, false, func(_ identity.Tx, r Repository, c *Consumption) error {

@@ -6,8 +6,6 @@ CREATE TABLE job_resource_call (
  resource_kind VARCHAR(32) NOT NULL,
  resource_id BIGINT UNSIGNED NULL,
  authorization_kind VARCHAR(16) NOT NULL,
- binding_name VARCHAR(64) NOT NULL DEFAULT '',
- grant_id BIGINT UNSIGNED NULL,
  connection_id BIGINT UNSIGNED NULL,
  configured_credential_id BIGINT UNSIGNED NULL,
  credential_id BIGINT UNSIGNED NULL,

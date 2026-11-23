@@ -3,7 +3,7 @@
 CREATE TABLE `agent_run_context` (
     root_run_id BIGINT UNSIGNED NOT NULL,
     agent_id BIGINT UNSIGNED NOT NULL,
-    executor_user_id BIGINT UNSIGNED NOT NULL,
+    run_as_user_id BIGINT UNSIGNED NOT NULL,
     agent_config_version BIGINT UNSIGNED NOT NULL,
     schema_version SMALLINT UNSIGNED NOT NULL DEFAULT 1,
     cloud_computer_id BIGINT UNSIGNED NULL,
@@ -20,5 +20,5 @@ CREATE TABLE `agent_run_context` (
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (root_run_id),
     KEY idx_agent_run_context_agent (agent_id, root_run_id),
-    KEY idx_agent_run_context_executor (executor_user_id, root_run_id)
+    KEY idx_agent_run_context_executor (run_as_user_id, root_run_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

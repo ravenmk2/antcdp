@@ -159,33 +159,44 @@ it("lets project members inspect schedule history without management actions", a
   );
 });
 
-it("saves a new binding with numeric ID strings alongside the script", async () => {
+it("saves a script with its selected run account", async () => {
   const definition = {
     ...job,
     can_manage: true,
-    config: { script: "function main(){}", parameters: [], bindings: [] },
-    resource_grants: [
-      { id: "4", connection_id: "5", credential_id: "6", status: "active" },
-    ],
+    config: {
+      run_as_user_id: "",
+      script: "function main(){}",
+      parameters: [],
+    },
   };
-  const { user, writes } = mount("/projects/1/jobs/2?edit=1", definition);
-  await user.click(
-    await screen.findByText("资源绑定", { selector: "summary" }),
+  const { user, writes } = mount(
+    "/projects/1/jobs/2?edit=1",
+    definition,
+    (url) => {
+      if (url.endsWith("/run-account-options"))
+        return response({
+          items: [
+            {
+              id: "3",
+              name: "发布成员",
+              username: "release",
+              account_type: "human",
+            },
+          ],
+        });
+      return undefined;
+    },
   );
-  await user.click(await screen.findByRole("button", { name: "添加绑定" }));
-  await user.type(screen.getByRole("textbox", { name: "绑定名称" }), "build");
-  await user.click(screen.getByRole("combobox", { name: "服务连接授权" }));
+  await user.click(await screen.findByRole("combobox", { name: "运行账号" }));
   await user.click(
-    await screen.findByRole("option", { name: "授权 #4 · 连接 #5 / 凭证 #6" }),
+    await screen.findByRole("option", { name: /发布成员.*成员/ }),
   );
   await user.click(screen.getByRole("button", { name: "保存作业" }));
   await waitFor(() => expect(writes).toHaveLength(1));
   expect(writes[0]!.body.config).toEqual({
+    run_as_user_id: "3",
     script: "function main(){}",
     parameters: [],
-    bindings: [
-      { name: "build", grant_id: "4", connection_id: "5", connection_code: "" },
-    ],
   });
 });
 
@@ -296,7 +307,15 @@ it("validates required rerun inputs and drops choices that the current configura
 it("names the configuration section rejected by the server in the editor feedback", async () => {
   const { user } = mount(
     "/projects/1/jobs/2?edit=1",
-    { ...job, can_manage: true },
+    {
+      ...job,
+      can_manage: true,
+      config: {
+        run_as_user_id: "1",
+        script: "function main(){}",
+        parameters: [],
+      },
+    },
     (_url, options) => {
       if (options?.method !== "PUT") return;
       return new Response(

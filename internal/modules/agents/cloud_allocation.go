@@ -53,18 +53,18 @@ func (s *CloudService) allocateSession(cr CloudRepository, st StateRepository, c
 			return nil, integrity()
 		}
 	} else if session.ExecutorKind == "chat_user" {
-		computer, e = cr.PersonalComputer(session.ExecutorUserID, true)
+		computer, e = cr.PersonalComputer(session.RunAsUserID, true)
 		if e != nil {
 			return nil, e
 		}
 		if computer == nil {
-			computer, e = newComputer(cr, c, session.ExecutorUserID, "personal", nil, now)
+			computer, e = newComputer(cr, c, session.RunAsUserID, "personal", nil, now)
 			if e != nil {
 				return nil, e
 			}
 		}
 	} else {
-		if agent.RobotUserID == nil || *agent.RobotUserID != session.ExecutorUserID || agent.PoolCapacity == nil {
+		if agent.RobotUserID == nil || *agent.RobotUserID != session.RunAsUserID || agent.PoolCapacity == nil {
 			return nil, integrity()
 		}
 		binding, e := cr.SpecBinding(agent.RobotUserID, true)
@@ -74,7 +74,7 @@ func (s *CloudService) allocateSession(cr CloudRepository, st StateRepository, c
 		if binding == nil || binding.PoolCapacity == nil {
 			return nil, integrity()
 		}
-		pool, e := cr.PoolComputers(session.ExecutorUserID, true)
+		pool, e := cr.PoolComputers(session.RunAsUserID, true)
 		if e != nil {
 			return nil, e
 		}
@@ -98,7 +98,7 @@ func (s *CloudService) allocateSession(cr CloudRepository, st StateRepository, c
 			}
 		}
 		if computer == nil && len(pool) < *binding.PoolCapacity {
-			computer, e = newComputer(cr, c, session.ExecutorUserID, "robot_pool", session.ChatUserID, now)
+			computer, e = newComputer(cr, c, session.RunAsUserID, "robot_pool", session.ChatUserID, now)
 			if e != nil {
 				return nil, e
 			}

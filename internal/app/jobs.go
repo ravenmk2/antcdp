@@ -14,12 +14,12 @@ import (
 )
 
 func newJobService(installer *install.Service, accounts *identity.Service, agentService *agents.Service) *jobs.Service {
-	return &jobs.Service{Identity: accounts, AgentChat: func(ctx context.Context, project, run uint64, path string, opts jobs.AgentChatOptions) (any, error) {
+	return &jobs.Service{Identity: accounts, AgentChat: func(ctx context.Context, project, run, account uint64, path string, opts jobs.AgentChatOptions) (any, error) {
 		locator, err := resourcecode.Parse(path)
 		if err != nil {
 			return nil, httpx.Invalid("path", "invalid")
 		}
-		return agentService.ChatAutomation(ctx, agents.AutomationChat{JobRun: true, ProjectID: project, CallerID: run, Path: locator, Message: opts.Message, Title: opts.Title, RequestKey: opts.RequestKey})
+		return agentService.ChatAutomation(ctx, agents.AutomationChat{JobRun: true, ActorID: account, ProjectID: project, CallerID: run, Path: locator, Message: opts.Message, Title: opts.Title, RequestKey: opts.RequestKey})
 	}, Executor: sobek.Executor{}, Cipher: installer.DingTalkSecret, Store: func() (identity.Store, error) {
 		if store, ok := installer.Backend().(identity.Store); ok {
 			return store, nil

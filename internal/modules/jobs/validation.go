@@ -30,9 +30,6 @@ func normalize(c *Config) {
 	if c.Parameters == nil {
 		c.Parameters = []Parameter{}
 	}
-	if c.Bindings == nil {
-		c.Bindings = []Binding{}
-	}
 }
 func validateConfig(c Config) error {
 	names := map[string]bool{}
@@ -59,13 +56,6 @@ func validateConfig(c Config) error {
 				return err
 			}
 		}
-	}
-	names = map[string]bool{}
-	for _, b := range c.Bindings {
-		if !parameterName.MatchString(b.Name) || names[b.Name] || b.GrantID == 0 {
-			return httpx.Invalid("bindings", "invalid_binding")
-		}
-		names[b.Name] = true
 	}
 	return nil
 }

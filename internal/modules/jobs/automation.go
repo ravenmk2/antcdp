@@ -21,7 +21,7 @@ type AutomationStart struct {
 
 var automationRequestKey = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,128}$`)
 
-// StartAutomation admits a run as the robot, independently of console sessions.
+// StartAutomation admits a run as the subscription account, independently of console sessions.
 // Only accepted commands consume a key; busy/validation failures remain retryable.
 func (s *Service) StartAutomation(ctx context.Context, w AutomationStart) (Receipt, error) {
 	var out Receipt
@@ -54,7 +54,7 @@ func (s *Service) StartAutomation(ctx context.Context, w AutomationStart) (Recei
 		if j == nil {
 			return missing()
 		}
-		allowed := p.Role == "admin"
+		allowed := p.CanManage
 		if !allowed {
 			allowed, err = r.RunAllowed(j.ID, w.ActorID)
 		}
@@ -100,7 +100,7 @@ func (s *Service) StartAutomation(ctx context.Context, w AutomationStart) (Recei
 		if err != nil {
 			return err
 		}
-		v := &Run{JobID: j.ID, RevisionID: rev.ID, Trigger: "event", Actor: &w.ActorID, TriggerContext: w.Trace, Inputs: values, TimeoutMS: j.TimeoutMS, StateMode: "default", Status: "queued", QueuedAt: now()}
+		v := &Run{RunAsUserID: rev.RunAsUserID, JobID: j.ID, RevisionID: rev.ID, Trigger: "event", Actor: &w.ActorID, TriggerContext: w.Trace, Inputs: values, TimeoutMS: j.TimeoutMS, StateMode: "default", Status: "queued", QueuedAt: now()}
 		if len(v.TriggerContext) == 0 {
 			v.TriggerContext = json.RawMessage(`{}`)
 		}

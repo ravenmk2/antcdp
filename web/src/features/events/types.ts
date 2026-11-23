@@ -33,7 +33,7 @@ export interface Revision {
   id: string;
   revision_no: number;
   event_types: string[];
-  executor_user_id: string;
+  run_as_user_id: string;
   timeout_ms: number;
   max_retries: number;
   retry_interval_ms: number;

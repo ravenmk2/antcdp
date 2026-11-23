@@ -53,17 +53,19 @@ type Parameter struct {
 	Default  json.RawMessage `json:"default,omitempty"`
 	Options  []string        `json:"options,omitempty"`
 }
-type Binding struct {
-	Name           string `json:"name"`
-	GrantID        uint64 `json:"grant_id,string"`
-	ConnectionID   uint64 `json:"connection_id,string"`
-	ConnectionCode string `json:"connection_code"`
-}
 type Config struct {
-	Script     string      `json:"script"`
-	Parameters []Parameter `json:"parameters"`
-	Bindings   []Binding   `json:"bindings"`
+	RunAsUserID uint64      `json:"run_as_user_id,string"`
+	Script      string      `json:"script"`
+	Parameters  []Parameter `json:"parameters"`
 }
+
+func (c *Config) accountID() uint64 {
+	if c == nil {
+		return 0
+	}
+	return c.RunAsUserID
+}
+
 type Revision struct {
 	ID    uint64 `json:"id,string"`
 	JobID uint64 `json:"job_id,string"`
@@ -75,14 +77,6 @@ type Revision struct {
 type Grant struct {
 	Kind string `db:"subject_kind" json:"kind"`
 	ID   uint64 `db:"subject_id" json:"id,string"`
-}
-type ResourceGrant struct {
-	ID           uint64    `db:"id" json:"id,string"`
-	JobID        uint64    `db:"job_id" json:"job_id,string"`
-	ConnectionID uint64    `db:"connection_id" json:"connection_id,string"`
-	CredentialID uint64    `db:"credential_id" json:"credential_id,string"`
-	Status       string    `db:"status" json:"status"`
-	CreatedAt    time.Time `db:"created_at" json:"created_at"`
 }
 type Write struct {
 	Code           string  `json:"code"`
@@ -98,12 +92,12 @@ type Write struct {
 }
 type Detail struct {
 	*Job
-	Config     *Config         `json:"config,omitempty"`
-	Parameters []Parameter     `json:"parameters"`
-	Grants     []Grant         `json:"grants,omitempty"`
-	Resources  []ResourceGrant `json:"resource_grants,omitempty"`
+	Config     *Config     `json:"config,omitempty"`
+	Parameters []Parameter `json:"parameters"`
+	Grants     []Grant     `json:"grants,omitempty"`
 }
 type Run struct {
+	RunAsUserID    uint64          `db:"run_as_user_id" json:"run_as_user_id,string"`
 	ID             uint64          `db:"id" json:"id,string"`
 	JobID          uint64          `db:"job_id" json:"job_id,string"`
 	RevisionID     uint64          `db:"revision_id" json:"revision_id,string"`
@@ -197,8 +191,6 @@ type Call struct {
 	Kind                 string          `db:"resource_kind" json:"resource_kind"`
 	ResourceID           *uint64         `db:"resource_id" json:"resource_id,string"`
 	Authorization        string          `db:"authorization_kind" json:"authorization_kind"`
-	Binding              string          `db:"binding_name" json:"binding_name,omitempty"`
-	GrantID              *uint64         `db:"grant_id" json:"grant_id,string,omitempty"`
 	ConnectionID         *uint64         `db:"connection_id" json:"connection_id,string,omitempty"`
 	ConfiguredCredential *uint64         `db:"configured_credential_id" json:"configured_credential_id,string,omitempty"`
 	Credential           *uint64         `db:"credential_id" json:"credential_id,string,omitempty"`
@@ -224,9 +216,6 @@ type Repository interface {
 	Grants(uint64) ([]Grant, error)
 	SetGrants(uint64, uint64, []Grant) error
 	RunAllowed(uint64, uint64) (bool, error)
-	Resources(uint64) ([]ResourceGrant, error)
-	Resource(uint64) (*ResourceGrant, error)
-	SaveResource(*ResourceGrant, uint64) error
 	Run(uint64) (*Run, error)
 	Runs(uint64, uint64) ([]Run, error)
 	Active(uint64) ([]Run, error)
@@ -251,7 +240,7 @@ type Repository interface {
 	RecoveryJobs() ([]uint64, error)
 }
 type Service struct {
-	AgentChat func(context.Context, uint64, uint64, string, AgentChatOptions) (any, error)
+	AgentChat func(context.Context, uint64, uint64, uint64, string, AgentChatOptions) (any, error)
 	Identity  *identity.Service
 	Store     func() (identity.Store, error)
 	State     func() (statestore.Backend, error)

@@ -533,7 +533,7 @@ export function AgentCreatePage() {
               </Field>
             </div>
             <fieldset className={styles.identity}>
-              <legend>执行身份</legend>
+              <legend>助手类型</legend>
               <div className={styles.fieldPair}>
                 {(
                   [
@@ -578,7 +578,7 @@ export function AgentCreatePage() {
               <p className={styles.hint}>助手类型创建后固定。</p>
             </fieldset>
             {draft.agent_type === "chat" && (
-              <Field label="执行身份">
+              <Field label="运行账号">
                 <Select
                   value={draft.executor_kind}
                   onValueChange={(value) =>
@@ -594,7 +594,7 @@ export function AgentCreatePage() {
                 </Select>
               </Field>
             )}
-            <Field label="使用权限">
+            <Field label="谁可以使用">
               <Select
                 value={draft.use_policy}
                 onValueChange={(value) =>
@@ -611,7 +611,7 @@ export function AgentCreatePage() {
             {draft.executor_kind === "robot" && (
               <>
                 <p className={styles.hint}>
-                  创建助手时会自动创建同名机器人并绑定为执行身份。
+                  创建助手时会自动创建同名机器人并绑定为运行账号。
                 </p>
                 <SpecPicker value={specID} onChange={setSpecID} />
               </>
@@ -653,7 +653,7 @@ export function AgentCreatePage() {
                 </Button>
               </Field>
             )}
-            <p className="text-sm text-muted">资源访问权限由执行账号决定。</p>
+            <p className="text-sm text-muted">资源访问权限由运行账号决定。</p>
             <Field label="说明" error={errors.fields.description}>
               <Textarea
                 name="description"
@@ -1099,7 +1099,7 @@ function AgentBasicRead({ agent }: { agent: AgentDefinition }) {
     <Panel bodyClassName="p-6">
       <dl className="agent-read-facts grid grid-cols-2 gap-6">
         <div>
-          <dt>执行身份</dt>
+          <dt>运行账号</dt>
           <dd>
             {agent.executor_kind === "robot"
               ? `机器人 #${agent.robot_user_id}`
@@ -1223,7 +1223,7 @@ function AgentBasicEditor({
                 }
               />
             </Field>
-            <Field label="使用权限">
+            <Field label="谁可以使用">
               <Select
                 value={draft.use_policy}
                 onValueChange={(value) =>
@@ -1237,8 +1237,7 @@ function AgentBasicEditor({
                 <option value="allowlist">指定账号或项目角色</option>
               </Select>
             </Field>
-            {(draft.use_policy === "allowlist" ||
-              initial.data.agent_type === "service") && (
+            {draft.use_policy === "allowlist" && (
               <div className="space-y-2">
                 {draft.use_grants.map((grant, index) => (
                   <div className="flex items-center gap-2" key={index}>
@@ -1259,9 +1258,6 @@ function AgentBasicEditor({
                       <option value="user">账号</option>
                       {initial.data.scope_kind === "project" && (
                         <option value="role">项目角色</option>
-                      )}
-                      {initial.data.agent_type === "service" && (
-                        <option value="job">作业</option>
                       )}
                     </Select>
                     <Input
@@ -1307,10 +1303,7 @@ function AgentBasicEditor({
                       use_grants: [
                         ...draft.use_grants,
                         {
-                          kind:
-                            initial.data.agent_type === "service"
-                              ? "job"
-                              : "user",
+                          kind: "user",
                           id: "",
                         },
                       ],

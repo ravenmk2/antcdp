@@ -48,8 +48,6 @@ func (s *Store) integrationsSchemaReady(ctx context.Context) error {
 		{"service_connection_grant", "PRIMARY", "connection_id,subject_kind,subject_id", 0},
 		{"service_connection_grant", "idx_service_connection_grant_subject", "subject_kind,subject_id,enabled,connection_id", 1},
 		{"project_repository", "idx_project_repository_event_target", "connection_id,repo_id,project_id", 1},
-		{"job_resource_grant", "idx_job_resource_connection", "connection_id,status,job_id", 1},
-		{"job_resource_grant", "idx_job_resource_credential", "credential_id,status,job_id", 1},
 	} {
 		var columns string
 		if err := s.db.GetContext(ctx, &columns, `SELECT COALESCE(GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX SEPARATOR ','),'') FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND INDEX_NAME=? AND NON_UNIQUE=?`, spec.table, spec.index, spec.nonUnique); err != nil {

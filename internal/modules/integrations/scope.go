@@ -77,6 +77,13 @@ func ConnectionAllowed(r Repository, v *ServiceConnection, scope CredentialOwner
 	return r.ConnectionGranted(v.ID, scope, true)
 }
 
+// JobConnectionAllowed confines project-owned targets to the job's project.
+func JobConnectionAllowed(r Repository, v *ServiceConnection, project, account uint64) (bool, error) {
+	if v.Ownership == "project" && !sameID(v.ProjectID, &project) {
+		return false, nil
+	}
+	return userConnectionAllowed(r, v, account)
+}
 func userConnectionAllowed(r Repository, v *ServiceConnection, uid uint64) (bool, error) {
 	scopes, err := r.ConnectionUserScopes(uid)
 	if err != nil {

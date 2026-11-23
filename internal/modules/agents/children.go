@@ -81,7 +81,7 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		rootSessionID, parentRunID := x.Session.ID, x.Run.ID
-		v := &SessionRow{AgentID: x.Session.AgentID, ExecutionMode: x.Session.ExecutionMode, ExecutorKind: x.Session.ExecutorKind, ChatUserID: x.Session.ChatUserID, SessionKind: "child", RootSessionID: &rootSessionID, ParentRunID: &parentRunID, ExecutorUserID: x.Session.ExecutorUserID, Title: "子任务", CloudComputerID: x.RootSession.CloudComputerID, SelectedModelBindingID: x.Session.SelectedModelBindingID, SelectedThinkingOptionKey: x.Session.SelectedThinkingOptionKey, LockedModelConfig: x.Session.LockedModelConfig, ModelSelectionHash: x.Session.ModelSelectionHash, ModelLockedAt: x.Session.ModelLockedAt, NextInputOrder: 1, SurfaceRevision: 1, RowVersion: 1, CreatedByActorKind: "system", CreatedByActorID: "system", CreatedAt: now, UpdatedAt: now, LastActivityAt: now}
+		v := &SessionRow{AgentID: x.Session.AgentID, ExecutionMode: x.Session.ExecutionMode, ExecutorKind: x.Session.ExecutorKind, ChatUserID: x.Session.ChatUserID, SessionKind: "child", RootSessionID: &rootSessionID, ParentRunID: &parentRunID, RunAsUserID: x.Session.RunAsUserID, Title: "子任务", CloudComputerID: x.RootSession.CloudComputerID, SelectedModelBindingID: x.Session.SelectedModelBindingID, SelectedThinkingOptionKey: x.Session.SelectedThinkingOptionKey, LockedModelConfig: x.Session.LockedModelConfig, ModelSelectionHash: x.Session.ModelSelectionHash, ModelLockedAt: x.Session.ModelLockedAt, NextInputOrder: 1, SurfaceRevision: 1, RowVersion: 1, CreatedByActorKind: "system", CreatedByActorID: "system", CreatedAt: now, UpdatedAt: now, LastActivityAt: now}
 		// A session's next-turn thinking may have changed since this root run
 		// started. Children inherit the executing root snapshot, including metadata.
 		if v.SelectedThinkingOptionKey != x.Execution.Model.ThinkingKey {
@@ -113,7 +113,7 @@ func (s *Service) CreateChild(ctx context.Context, request agentcore.ChildReques
 			return e
 		}
 		zero, _ := json.Marshal(agentcore.Budget{})
-		child := &RunRow{SessionID: v.ID, RootRunID: &parentRunID, ParentRunID: &parentRunID, ExecutorUserID: v.ExecutorUserID, OriginKind: "system", ActorKind: "system", ActorID: "system", Status: "preparing", AgentConfigVersion: x.Agent.RowVersion, ResourceConfigVersion: x.Agent.RowVersion, ExecutionPolicySnapshot: x.Run.ExecutionPolicySnapshot, ModelSelectionHash: v.ModelSelectionHash, BudgetLimit: x.Root.BudgetLimit, BudgetReserved: zero, BudgetUsed: zero, BudgetRevision: 1, ExecutorEpoch: x.Run.ExecutorEpoch, FenceVersion: 1, UsageCompleteness: "complete", CreatedAt: now, DeadlineAt: x.Run.DeadlineAt, UpdatedAt: now}
+		child := &RunRow{SessionID: v.ID, RootRunID: &parentRunID, ParentRunID: &parentRunID, RunAsUserID: v.RunAsUserID, OriginKind: "system", ActorKind: "system", ActorID: "system", Status: "preparing", AgentConfigVersion: x.Agent.RowVersion, ResourceConfigVersion: x.Agent.RowVersion, ExecutionPolicySnapshot: x.Run.ExecutionPolicySnapshot, ModelSelectionHash: v.ModelSelectionHash, BudgetLimit: x.Root.BudgetLimit, BudgetReserved: zero, BudgetUsed: zero, BudgetRevision: 1, ExecutorEpoch: x.Run.ExecutorEpoch, FenceVersion: 1, UsageCompleteness: "complete", CreatedAt: now, DeadlineAt: x.Run.DeadlineAt, UpdatedAt: now}
 		if e = st.InsertRun(child); e != nil {
 			return e
 		}

@@ -114,7 +114,15 @@ type TeamOption struct {
 	Name    string `json:"name"`
 	Summary string `json:"summary"`
 }
+type RunAccountOption struct {
+	AccountType string `db:"account_type" json:"account_type"`
+	ID          uint64 `db:"id" json:"id,string"`
+	Name        string `db:"display_name" json:"name"`
+	Username    string `db:"username" json:"username"`
+}
+
 type Repository interface {
+	RunAccountOptions(uint64) ([]RunAccountOption, error)
 	RoleRepository
 	CollaborationUsers(Kind, uint64) ([]uint64, error)
 	LockCollaboration(Kind, uint64, uint64) error

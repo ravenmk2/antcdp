@@ -56,7 +56,7 @@ func (s *Service) compactionExecution(tx identity.Tx, r Repository, st StateRepo
 		if v == nil || v.RowVersion != initial.RowVersion || v.ArchivedAt != nil || v.ActiveRunID != nil {
 			return x, nil, httpx.E(409, "COMPACTION_SOURCE_CHANGED", "会话状态已变化")
 		}
-		x = executionRows{Session: v, RootSession: v, Agent: agent, Execution: agentcore.ExecutionContext{AgentID: agentcore.ID(v.AgentID), ContentSessionID: agentcore.ID(v.ID), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.ExecutorUserID)}, Model: model}}
+		x = executionRows{Session: v, RootSession: v, Agent: agent, Execution: agentcore.ExecutionContext{AgentID: agentcore.ID(v.AgentID), ContentSessionID: agentcore.ID(v.ID), Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.RunAsUserID)}, Model: model}}
 	}
 	row, e := st.Compaction(uint64(record.ID), true)
 	if e != nil {

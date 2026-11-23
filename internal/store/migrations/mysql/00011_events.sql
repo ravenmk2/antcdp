@@ -64,7 +64,7 @@ CREATE TABLE `event_subscription_revision` (
  subscription_id BIGINT UNSIGNED NOT NULL,
  revision_no BIGINT UNSIGNED NOT NULL,
  event_types JSON NOT NULL,
- executor_user_id BIGINT UNSIGNED NOT NULL,
+ run_as_user_id BIGINT UNSIGNED NOT NULL,
  script_api_version INT UNSIGNED NOT NULL,
  script MEDIUMTEXT NOT NULL,
  timeout_ms BIGINT UNSIGNED NOT NULL,
@@ -73,7 +73,7 @@ CREATE TABLE `event_subscription_revision` (
  created_by_user_id BIGINT UNSIGNED NOT NULL,
  created_at DATETIME(3) NOT NULL,
  PRIMARY KEY(id), UNIQUE KEY uq_event_subscription_revision(subscription_id,revision_no),
- KEY idx_event_revision_executor(executor_user_id,id)
+ KEY idx_event_revision_executor(run_as_user_id,id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `event_consumption` (

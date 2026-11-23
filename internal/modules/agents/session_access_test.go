@@ -73,7 +73,7 @@ func TestToolProjectUsesActualTargetAndPrincipal(t *testing.T) {
 }
 
 func TestRobotPoolWorkspaceBelongsToOneRequester(t *testing.T) {
-	session := &SessionRow{ExecutorKind: "robot", ExecutorUserID: 8, ChatUserID: new(uint64(7))}
+	session := &SessionRow{ExecutorKind: "robot", RunAsUserID: 8, ChatUserID: new(uint64(7))}
 	computer := &CloudComputerRow{OwnerUserID: 8, AllocationKind: "robot_pool", WorkspaceUserID: new(uint64(7))}
 	if !sessionMatchesComputer(session, computer) {
 		t.Fatal("requester's private workspace rejected")

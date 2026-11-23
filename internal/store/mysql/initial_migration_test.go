@@ -118,7 +118,7 @@ func TestInitialMigration(t *testing.T) {
 		`INSERT INTO agent (code,name,agent_type,executor_kind,use_policy,robot_user_id,scope_kind,system_prompt,runtime_policy,created_by_user_id,created_at,updated_at)
 		  VALUES ('chat','Chat','interactive','chat_user','scope',NULL,'platform','',JSON_OBJECT(),1,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3)),
 		         ('service','Service','service','robot','scope',2,'platform','',JSON_OBJECT(),1,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`,
-		`INSERT INTO agent_session (agent_id,agent_type,executor_kind,chat_user_id,session_kind,executor_user_id,title,selected_model_binding_id,selected_thinking_option_key,created_by_actor_kind,created_by_actor_id,created_at,updated_at,last_activity_at)
+		`INSERT INTO agent_session (agent_id,agent_type,executor_kind,chat_user_id,session_kind,run_as_user_id,title,selected_model_binding_id,selected_thinking_option_key,created_by_actor_kind,created_by_actor_id,created_at,updated_at,last_activity_at)
 		  SELECT id,agent_type,executor_kind,IF(agent_type='interactive',1,NULL),'root',COALESCE(robot_user_id,1),name,1,'fixed','user','1',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3),UTC_TIMESTAMP(3) FROM agent`,
 		`INSERT INTO agent_file (purpose,content_domain,storage_key,writer_token,state,integrity_state,media_type,created_at,updated_at)
 		  VALUES ('user_attachment','interactive','test-file','test-writer','bound','verified','text/plain',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))`,
@@ -172,7 +172,7 @@ func TestInitialMigration(t *testing.T) {
 		t.Fatal("unexpected baseline migration history", versions, err)
 	}
 	var tables int
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 105 {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 103 {
 		t.Fatal("expected baseline tables and goose history", tables, err)
 	}
 	t.Run("state store", func(t *testing.T) { stateStoreIntegration(t, ctx, s) })

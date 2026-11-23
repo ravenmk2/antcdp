@@ -291,7 +291,7 @@ func agentFavoriteHistoryAccess(t *testing.T, f *agentIntegrationFixture, user *
 		t.Fatal("deleted favorite cleanup", err)
 	}
 	var count int
-	if err = f.Store.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM agent_session WHERE agent_id=? AND executor_user_id=?", agent.ID, user.ID); err != nil || count != 1 {
+	if err = f.Store.db.GetContext(ctx, &count, "SELECT COUNT(*) FROM agent_session WHERE agent_id=? AND run_as_user_id=?", agent.ID, user.ID); err != nil || count != 1 {
 		t.Fatal("favorite operations changed history", count, err)
 	}
 }

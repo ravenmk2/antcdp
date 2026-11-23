@@ -239,7 +239,7 @@ export function EventsPage({ project }: { project: Resource }) {
                 emptyTitle="暂无订阅"
                 emptyDescription={
                   manage
-                    ? "点击右上角的新建订阅，选择事件和执行机器人。"
+                    ? "点击右上角的新建订阅，选择事件和运行账号。"
                     : "项目管理员可为仓库事件创建订阅。"
                 }
                 emptyIcon={Rss}
@@ -269,7 +269,7 @@ export function EventsPage({ project }: { project: Resource }) {
                         </div>
                       </td>
                       <td>
-                        机器人 #{sub.config.executor_user_id}
+                        运行账号 #{sub.config.run_as_user_id}
                         <p className="text-xs text-muted">
                           超时 {sub.config.timeout_ms / 1000} 秒 · 最多重试{" "}
                           {sub.config.max_retries} 次

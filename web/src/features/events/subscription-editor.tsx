@@ -1,3 +1,4 @@
+import { RunAccountField } from "@/features/projects/run-account-field";
 import { useId, useRef, useState, type FormEvent } from "react";
 import { request } from "@/api/client";
 import { Button } from "@/components/button";
@@ -66,7 +67,7 @@ function Editor({
     description: subscription?.description ?? "",
     enabled: subscription?.enabled ?? false,
     event_types: source?.revision.event_types ?? ([] as string[]),
-    executor_user_id: source?.revision.executor_user_id ?? "",
+    run_as_user_id: source?.revision.run_as_user_id ?? "",
     script: source?.script ?? exampleScript,
     timeout_ms: source?.revision.timeout_ms ?? 60000,
     max_retries: source?.revision.max_retries ?? 3,
@@ -79,9 +80,6 @@ function Editor({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<unknown>();
   const [historic, setHistoric] = useState("");
-  const robots = useApiQuery<{
-    items: { id: string; name: string; username: string }[];
-  }>(["event-robots", base], `${base}/event-subscriptions/robot-options`);
   const jobs = useApiQuery<{
     items: { id: string; code: string; name: string }[];
   }>(["event-job-paths", base], `${base}/jobs`);
@@ -102,7 +100,7 @@ function Editor({
     setAttempted(true);
     if (
       !draft.name.trim() ||
-      !draft.executor_user_id ||
+      !draft.run_as_user_id ||
       !draft.event_types.length
     )
       return;
@@ -134,7 +132,6 @@ function Editor({
       ),
     }))
     .filter((group) => group.types.length);
-  const robotOptions = robots.data?.data.items ?? [];
   return (
     <Modal
       open
@@ -317,45 +314,14 @@ await ctx.sleep(1000);`}</pre>
                   }
                 />
               </Field>
-              <Field
-                label="执行机器人"
-                required
-                error={
-                  attempted && !draft.executor_user_id
-                    ? "请选择执行机器人"
-                    : undefined
+              <RunAccountField
+                base={base}
+                value={draft.run_as_user_id}
+                onChange={(value) =>
+                  setDraft({ ...draft, run_as_user_id: value })
                 }
-                hint={
-                  robots.isPending
-                    ? "正在读取项目机器人…"
-                    : !robots.error && !robotOptions.length
-                      ? "暂无可用的项目机器人成员。"
-                      : undefined
-                }
-              >
-                <Select
-                  value={draft.executor_user_id}
-                  onValueChange={(value) =>
-                    setDraft({ ...draft, executor_user_id: value })
-                  }
-                >
-                  <option value="">选择项目机器人成员</option>
-                  {draft.executor_user_id &&
-                    !robotOptions.some(
-                      (robot) => robot.id === draft.executor_user_id,
-                    ) && (
-                      <option value={draft.executor_user_id}>
-                        机器人 #{draft.executor_user_id}（当前不可用）
-                      </option>
-                    )}
-                  {robotOptions.map((robot) => (
-                    <option key={robot.id} value={robot.id}>
-                      {robot.name} ({robot.username})
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              <ErrorNotice error={robots.error} />
+                attempted={attempted}
+              />
             </div>
             <section
               className="space-y-2 border-t border-border px-4 py-3"

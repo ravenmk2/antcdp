@@ -299,7 +299,7 @@ type Repository interface {
 	AgentSessionIDs(uint64) ([]uint64, error)
 	ModelReferenced(string, uint64) (bool, error)
 	Receipt(actor, scopeKind, scopeID, command, key string) (*Receipt, error)
-	CanJobRunAgent(run, project, agent uint64) (bool, error)
+	JobRunAccount(run, project, agent uint64) (uint64, error)
 	AutomationReceipt(kind, caller, scopeID, key string) (*Receipt, error)
 	InsertReceipt(*Receipt) error
 	SaveReceipt(*Receipt) error

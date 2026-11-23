@@ -146,10 +146,10 @@ func (g *gitPlatformAPI) initRepo(ctx context.Context, x agentcore.ExecutionCont
 		return nil, err
 	}
 	if remote.Email == "" {
-		return nil, httpx.E(409, "GIT_EMAIL_REQUIRED", "请先在个人资料或机器人管理中填写执行账号的邮箱")
+		return nil, httpx.E(409, "GIT_EMAIL_REQUIRED", "请先在个人资料或机器人管理中填写运行账号的邮箱")
 	}
 	if strings.ContainsFunc(remote.DisplayName, unicode.IsControl) {
-		return nil, httpx.E(409, "GIT_IDENTITY_INVALID", "请移除执行账号显示名称中的控制字符")
+		return nil, httpx.E(409, "GIT_IDENTITY_INVALID", "请移除运行账号显示名称中的控制字符")
 	}
 	return g.withComputer(ctx, x, call, func(a *gitSandbox) (json.RawMessage, error) {
 		target := args.Path
@@ -252,7 +252,7 @@ func (i credentialInstall) install(ctx context.Context, meta integrations.GitMat
 	}
 	n, err := strconv.ParseUint(uid, 10, 32)
 	if status != 0 || err != nil {
-		return httpx.E(409, "SANDBOX_IDENTITY_UNAVAILABLE", "沙箱执行身份不可用")
+		return httpx.E(409, "SANDBOX_IDENTITY_UNAVAILABLE", "沙箱运行账号不可用")
 	}
 	i.uid = strconv.FormatUint(n, 10)
 	status, err = i.step(ctx, "prepare", meta)

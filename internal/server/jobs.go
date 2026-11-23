@@ -9,12 +9,12 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-type jobIDs struct{ Project, Job, Run, Schedule, Grant uint64 }
+type jobIDs struct{ Project, Job, Run, Schedule uint64 }
 
 func jobRoute(o Options, status int, fn func(*gin.Context, jobIDs) (any, *identity.Auth, error)) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var ids jobIDs
-		for key, dst := range map[string]*uint64{"id": &ids.Project, "jobID": &ids.Job, "runID": &ids.Run, "scheduleID": &ids.Schedule, "grantID": &ids.Grant} {
+		for key, dst := range map[string]*uint64{"id": &ids.Project, "jobID": &ids.Job, "runID": &ids.Run, "scheduleID": &ids.Schedule} {
 			if c.Param(key) == "" {
 				continue
 			}
@@ -118,19 +118,6 @@ func registerJobs(api *gin.RouterGroup, o Options) {
 		}
 		items, a, err := s.Receipts(c.Request.Context(), rawSession(c), id.Project, id.Job, before)
 		return gin.H{"items": items}, a, err
-	}))
-	api.POST(base+"/:jobID/resource-grants", jobRoute(o, 200, func(c *gin.Context, id jobIDs) (any, *identity.Auth, error) {
-		var w struct {
-			Connection uint64 `json:"connection_id,string"`
-			Credential uint64 `json:"credential_id,string"`
-		}
-		if !httpx.Decode(c, &w) {
-			return nil, nil, nil
-		}
-		return s.Resource(c.Request.Context(), rawSession(c), id.Project, id.Job, 0, w.Connection, w.Credential)
-	}))
-	api.DELETE(base+"/:jobID/resource-grants/:grantID", jobRoute(o, 200, func(c *gin.Context, id jobIDs) (any, *identity.Auth, error) {
-		return s.Resource(c.Request.Context(), rawSession(c), id.Project, id.Job, id.Grant, 0, 0)
 	}))
 	api.GET(base+"/:jobID/schedules", jobRoute(o, 200, func(c *gin.Context, id jobIDs) (any, *identity.Auth, error) {
 		items, a, err := s.Schedules(c.Request.Context(), rawSession(c), id.Project, id.Job)

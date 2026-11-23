@@ -50,6 +50,16 @@ func collaborationFinish(c *gin.Context, o Options, a *identity.Auth, err error)
 }
 func registerCollaboration(b *gin.RouterGroup, o Options) {
 	s := &collab.Service{Identity: o.Identity}
+	b.GET("/projects/:id/run-account-options", func(c *gin.Context) {
+		id, ok := collaborationID(c, "id")
+		if !ok {
+			return
+		}
+		items, a, err := s.RunAccountOptions(c.Request.Context(), rawSession(c), id)
+		if collaborationFinish(c, o, a, err) {
+			httpx.Data(c, 200, gin.H{"items": items})
+		}
+	})
 	registerIcons(b, o, s)
 	registerProjectRoles(b, o, s)
 	b.GET("/icon-catalog", func(c *gin.Context) {

@@ -106,10 +106,10 @@ func (s *Service) claim(ctx context.Context, id uint64) (*attempt, error) {
 			return integrity()
 		}
 		// Match request lock order: execution account, project, subscription, task.
-		if _, err = tx.LockUsers([]uint64{rev.ExecutorID}); err != nil {
+		if _, err = tx.LockUsers([]uint64{rev.RunAsUserID}); err != nil {
 			return err
 		}
-		p, err := project(tx, peek.ScopeID, rev.ExecutorID, true)
+		p, err := project(tx, peek.ScopeID, rev.RunAsUserID, true)
 		if err != nil {
 			return err
 		}
@@ -139,7 +139,7 @@ func (s *Service) claim(ctx context.Context, id uint64) (*attempt, error) {
 		if err = r.AppendLog(c, &Log{Kind: "execution", Level: "info", Message: "开始消费", Fields: safeJSON(map[string]any{"revisionId": fmt.Sprint(rev.ID)})}); err != nil {
 			return err
 		}
-		if err = robot(tx, sub.ScopeID, rev.ExecutorID, true); err != nil {
+		if err = runAccount(tx, sub.ScopeID, rev.RunAsUserID, true); err != nil {
 			return settle(r, sub, c, rev, scriptcore.Result{}, err)
 		}
 		ref, err := r.Reference(c.ReferenceID)

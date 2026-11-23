@@ -270,7 +270,7 @@ it.each([
       ).not.toBeInTheDocument();
     } else {
       if (executorKind === "robot") {
-        await user.click(screen.getByRole("combobox", { name: "执行身份" }));
+        await user.click(screen.getByRole("combobox", { name: "运行账号" }));
         await user.click(
           await screen.findByRole("option", {
             name: "机器人 · 机器人云电脑池",

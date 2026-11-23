@@ -63,10 +63,6 @@ func registerEvents(api *gin.RouterGroup, o Options) {
 		items, a, err := s.Subscriptions(c.Request.Context(), rawSession(c), id.Project)
 		return gin.H{"items": items}, a, err
 	}))
-	api.GET(base+"/robot-options", eventRoute(o, func(c *gin.Context, id eventIDs) (any, *identity.Auth, error) {
-		items, a, err := s.RobotOptions(c.Request.Context(), rawSession(c), id.Project)
-		return gin.H{"items": items}, a, err
-	}))
 	for _, create := range []bool{true, false} {
 		path, method := base, "POST"
 		if !create {

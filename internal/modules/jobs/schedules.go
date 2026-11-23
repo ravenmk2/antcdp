@@ -140,7 +140,7 @@ func (s *Service) fire(r Repository, j *Job, plan *Schedule, at time.Time) error
 		if validation != nil {
 			fire.Reason = "INVALID_INPUTS"
 		} else {
-			run := &Run{JobID: j.ID, RevisionID: rev.ID, Trigger: "schedule", TriggerContext: safeJSON(map[string]any{"schedule_id": fmt.Sprint(plan.ID), "scheduled_at": fire.ScheduledAt}), Inputs: values, TimeoutMS: j.TimeoutMS, StateMode: "default", Status: "queued", QueuedAt: at}
+			run := &Run{RunAsUserID: rev.RunAsUserID, JobID: j.ID, RevisionID: rev.ID, Trigger: "schedule", TriggerContext: safeJSON(map[string]any{"schedule_id": fmt.Sprint(plan.ID), "scheduled_at": fire.ScheduledAt}), Inputs: values, TimeoutMS: j.TimeoutMS, StateMode: "default", Status: "queued", QueuedAt: at}
 			accepted, err := admit(r, j, run)
 			if err != nil {
 				return err

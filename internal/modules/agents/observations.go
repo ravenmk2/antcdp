@@ -212,7 +212,7 @@ func (s *Service) GetRun(ctx context.Context, raw string, id uint64) (*Result, e
 		if e != nil {
 			return e
 		}
-		d := RunDetail{RunSummary: runSummary(*v, counts), Origin: v.OriginKind, Actor: actor, Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.ExecutorUserID)}, LastSeq: v.ProjectionSeq, EndSeq: v.EndedSeq, Budget: v.BudgetUsed, Physical: PhysicalActivity{State: "none", Unknown: counts.UnknownTools, Transfers: counts.PendingTransfers}}
+		d := RunDetail{RunSummary: runSummary(*v, counts), Origin: v.OriginKind, Actor: actor, Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.RunAsUserID)}, LastSeq: v.ProjectionSeq, EndSeq: v.EndedSeq, Budget: v.BudgetUsed, Physical: PhysicalActivity{State: "none", Unknown: counts.UnknownTools, Transfers: counts.PendingTransfers}}
 		if v.SourceKind != nil && v.SourceID != nil {
 			n, err := strconv.ParseUint(*v.SourceID, 10, 64)
 			if err != nil || n == 0 {

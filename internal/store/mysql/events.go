@@ -117,7 +117,7 @@ func (t *eventTx) Revisions(id uint64) ([]e.Revision, error) {
 	return rows, err
 }
 func (t *eventTx) InsertRevision(v *e.Revision) error {
-	return t.insert(`INSERT INTO event_subscription_revision(subscription_id,revision_no,event_types,executor_user_id,script_api_version,script,timeout_ms,max_retries,retry_interval_ms,created_by_user_id,created_at) VALUES(:subscription_id,:revision_no,:event_types,:executor_user_id,:script_api_version,:script,:timeout_ms,:max_retries,:retry_interval_ms,:created_by_user_id,:created_at)`, v, &v.ID)
+	return t.insert(`INSERT INTO event_subscription_revision(subscription_id,revision_no,event_types,run_as_user_id,script_api_version,script,timeout_ms,max_retries,retry_interval_ms,created_by_user_id,created_at) VALUES(:subscription_id,:revision_no,:event_types,:run_as_user_id,:script_api_version,:script,:timeout_ms,:max_retries,:retry_interval_ms,:created_by_user_id,:created_at)`, v, &v.ID)
 }
 func (t *eventTx) Consumptions(project uint64, f e.Filter) ([]e.Consumption, error) {
 	rows := []e.Consumption{}
@@ -205,10 +205,5 @@ func (t *eventTx) WorkSubscriptions(includeDisabled bool) ([]uint64, error) {
 func (t *eventTx) ActiveConsumptions() ([]e.Consumption, error) {
 	rows := []e.Consumption{}
 	err := t.tx.SelectContext(t.ctx, &rows, "SELECT * FROM event_consumption WHERE status IN ('running','stopping') ORDER BY id")
-	return rows, err
-}
-func (t *eventTx) RobotOptions(project uint64) ([]e.RobotOption, error) {
-	rows := []e.RobotOption{}
-	err := t.tx.SelectContext(t.ctx, &rows, `SELECT u.id,u.display_name,u.username FROM user u WHERE u.account_type='robot' AND u.deleted_at IS NULL AND u.status='active' AND (EXISTS(SELECT 1 FROM project_member pm WHERE pm.project_id=? AND pm.user_id=u.id) OR EXISTS(SELECT 1 FROM project_team pt JOIN team tm ON tm.id=pt.team_id AND tm.dissolved_at IS NULL JOIN team_member m ON m.team_id=tm.id WHERE pt.project_id=? AND m.user_id=u.id)) ORDER BY u.display_name,u.id`, project, project)
 	return rows, err
 }

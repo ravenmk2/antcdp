@@ -98,6 +98,7 @@ func (s *Service) grantsTag(v *ServiceConnection) string {
 
 type Repository interface {
 	Connections() ([]ServiceConnection, error)
+	ConnectionByCode(ownership string, ownerID uint64, code string) (*ServiceConnection, error)
 	Connection(uint64) (*ServiceConnection, error) // locks parent before child access
 	InsertConnection(*ServiceConnection) error
 	SaveConnection(*ServiceConnection) error
@@ -106,7 +107,6 @@ type Repository interface {
 	SaveConnectionGrant(*ConnectionGrant) error
 	ConnectionGranted(uint64, CredentialOwnership, bool) (bool, error)
 	ConnectionUserScopes(uint64) ([]CredentialOwnership, error)
-	ConnectionJobReferences(uint64, uint64) (int, error)
 	credentials.Reader
 	WebhookSettings(uint64) (*WebhookSettings, error)
 	SaveWebhookSettings(*WebhookSettings) error

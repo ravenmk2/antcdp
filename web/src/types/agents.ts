@@ -4,7 +4,7 @@ import type { JsonObject, ModelProtocol } from "./models";
 export type AgentExecutor = "chat_user" | "robot";
 export type UsePolicy = "scope" | "allowlist";
 export interface AgentUseGrant {
-  kind: "user" | "role" | "job";
+  kind: "user" | "role";
   id: string;
 }
 export type AgentType = "chat" | "service";

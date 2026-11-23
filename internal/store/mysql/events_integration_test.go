@@ -64,7 +64,22 @@ func eventSubscriptionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 			t.Fatal(err)
 		}
 	}
-	w := events.Write{Name: "顺序消费", Enabled: true, ExecutorID: robot.ID, EventTypes: []string{"gitlab.push", "gitlab.merge_request.created"}, MaxRetries: new(uint32(1)), Script: `async function main(ctx){ if(ctx.event.raw.fail) throw new Error("SECRET_SOURCE_LITERAL");const old=await ctx.state.get("count"); const value=(old?.value??0)+1; await ctx.state.put("count",value); ctx.log.info("processed",{value}); return "v1"; }`}
+	options, _, err := collab.RunAccountOptions(ctx, raw, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[uint64]string{}
+	for _, v := range options {
+		found[v.ID] = v.AccountType
+	}
+	if found[member.ID] != "human" || found[robot.ID] != "robot" {
+		t.Fatal("missing project accounts", found)
+	}
+	human, _, err := s.Save(ctx, raw, p.ID, 0, events.Write{Name: "Member account", RunAsUserID: member.ID, EventTypes: []string{"gitlab.push"}, Script: "function main(){}"})
+	if err != nil || human.Config.RunAsUserID != member.ID {
+		t.Fatal("member run account", err)
+	}
+	w := events.Write{Name: "顺序消费", Enabled: true, RunAsUserID: robot.ID, EventTypes: []string{"gitlab.push", "gitlab.merge_request.created"}, MaxRetries: new(uint32(1)), Script: `async function main(ctx){ if(ctx.event.raw.fail) throw new Error("SECRET_SOURCE_LITERAL");const old=await ctx.state.get("count"); const value=(old?.value??0)+1; await ctx.state.put("count",value); ctx.log.info("processed",{value}); return "v1"; }`}
 	sub, _, err := s.Save(ctx, raw, p.ID, 0, w)
 	if err != nil {
 		t.Fatal(err)
@@ -175,6 +190,7 @@ func eventSubscriptionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	failedID, tailID := queued[1].ID, queued[0].ID
 	// A new configuration applies only to newly enqueued/manual records.
 	w.Version = fmt.Sprint(sub.Version)
+	w.RunAsUserID = member.ID
 	w.Script = `function main(){return "v2"}`
 	sub, _, err = s.Save(ctx, raw, p.ID, sub.ID, w)
 	if err != nil {

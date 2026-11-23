@@ -44,12 +44,12 @@ func runtimeOwner(tx identity.Tx, v *SessionRow) (*identity.User, error) {
 }
 
 func executionAccount(tx identity.Tx, v *SessionRow, active bool) (*identity.User, error) {
-	if v.ExecutorUserID == 0 || v.ExecutorKind != "chat_user" && v.ExecutorKind != "robot" {
+	if v.RunAsUserID == 0 || v.ExecutorKind != "chat_user" && v.ExecutorKind != "robot" {
 		return nil, integrity()
 	}
 	switch v.ExecutionMode {
 	case "chat":
-		if v.ChatUserID == nil || *v.ChatUserID == 0 || (v.ExecutorKind == "chat_user") != (*v.ChatUserID == v.ExecutorUserID) {
+		if v.ChatUserID == nil || *v.ChatUserID == 0 || (v.ExecutorKind == "chat_user") != (*v.ChatUserID == v.RunAsUserID) {
 			return nil, integrity()
 		}
 	case "service":
@@ -59,11 +59,11 @@ func executionAccount(tx identity.Tx, v *SessionRow, active bool) (*identity.Use
 	default:
 		return nil, integrity()
 	}
-	users, err := tx.LockUsers([]uint64{v.ExecutorUserID})
+	users, err := tx.LockUsers([]uint64{v.RunAsUserID})
 	if err != nil {
 		return nil, err
 	}
-	user := users[v.ExecutorUserID]
+	user := users[v.RunAsUserID]
 	if user == nil {
 		return nil, integrity()
 	}
@@ -71,7 +71,7 @@ func executionAccount(tx identity.Tx, v *SessionRow, active bool) (*identity.Use
 		return nil, integrity()
 	}
 	if active && (user.Status != "active" || user.DeletedAt != nil) {
-		return nil, httpx.E(409, "PRINCIPAL_UNAVAILABLE", "执行账号当前不可用")
+		return nil, httpx.E(409, "PRINCIPAL_UNAVAILABLE", "运行账号当前不可用")
 	}
 	return user, nil
 }
@@ -226,7 +226,7 @@ func (s *Service) ClaimRoot(ctx context.Context, request agentcore.ClaimRequest)
 		if e != nil {
 			return e
 		}
-		row := &RunRow{SessionID: v.ID, TriggerInputID: &input.ID, RetryOfRunID: input.RetryOfRunID, ExecutorUserID: v.ExecutorUserID, OriginKind: input.OriginKind, ActorKind: input.ActorKind, ActorID: input.ActorID, SourceKind: input.SourceKind, SourceID: input.SourceID, Status: "preparing", AgentConfigVersion: agent.RowVersion, ResourceConfigVersion: agent.RowVersion, ExecutionPolicySnapshot: snapshotJSON, ModelSelectionHash: v.ModelSelectionHash, BudgetLimit: limits, BudgetReserved: zero, BudgetUsed: zero, BudgetRevision: 1, ExecutorEpoch: request.Epoch, FenceVersion: 1, UsageCompleteness: "complete", CreatedAt: now, DeadlineAt: now.Add(time.Duration(snapshot.RunTimeoutSeconds) * time.Second), UpdatedAt: now, ContinuationSeq: input.ContinuationSeq}
+		row := &RunRow{SessionID: v.ID, TriggerInputID: &input.ID, RetryOfRunID: input.RetryOfRunID, RunAsUserID: v.RunAsUserID, OriginKind: input.OriginKind, ActorKind: input.ActorKind, ActorID: input.ActorID, SourceKind: input.SourceKind, SourceID: input.SourceID, Status: "preparing", AgentConfigVersion: agent.RowVersion, ResourceConfigVersion: agent.RowVersion, ExecutionPolicySnapshot: snapshotJSON, ModelSelectionHash: v.ModelSelectionHash, BudgetLimit: limits, BudgetReserved: zero, BudgetUsed: zero, BudgetRevision: 1, ExecutorEpoch: request.Epoch, FenceVersion: 1, UsageCompleteness: "complete", CreatedAt: now, DeadlineAt: now.Add(time.Duration(snapshot.RunTimeoutSeconds) * time.Second), UpdatedAt: now, ContinuationSeq: input.ContinuationSeq}
 		if request.Epoch == "" {
 			return httpx.Invalid("epoch", "required")
 		}

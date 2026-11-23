@@ -114,7 +114,7 @@ func coreRun(v *RunRow) (agentcore.Run, error) {
 	if v.RootRunID != nil {
 		root = *v.RootRunID
 	}
-	out := agentcore.Run{Ref: agentcore.ExecutionRef{SessionID: agentcore.ID(v.SessionID), RunID: agentcore.ID(v.ID), RootRunID: agentcore.ID(root), Epoch: v.ExecutorEpoch, Fence: v.FenceVersion}, Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.ExecutorUserID)}, Status: agentcore.RunStatus(v.Status), Step: uint32(v.CurrentStepNo), Deadline: v.DeadlineAt, StopDeadline: v.StopDeadlineAt, Reason: ""}
+	out := agentcore.Run{Ref: agentcore.ExecutionRef{SessionID: agentcore.ID(v.SessionID), RunID: agentcore.ID(v.ID), RootRunID: agentcore.ID(root), Epoch: v.ExecutorEpoch, Fence: v.FenceVersion}, Principal: agentcore.PrincipalRef{Kind: "user", ID: agentcore.ID(v.RunAsUserID)}, Status: agentcore.RunStatus(v.Status), Step: uint32(v.CurrentStepNo), Deadline: v.DeadlineAt, StopDeadline: v.StopDeadlineAt, Reason: ""}
 	if v.TriggerInputID != nil {
 		out.TriggerInputID = agentcore.ID(*v.TriggerInputID)
 	}
