@@ -3,7 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { TerminalSquare, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/overlays";
 import { usePortalContainer } from "@/components/platform/surface-context";
 
@@ -30,7 +30,7 @@ const monokai = {
   brightWhite: "#f8f8f2",
 };
 
-type Phase = "connecting" | "ready" | "disconnected" | "ended";
+type Phase = "connecting" | "ready" | "disconnected";
 
 export default function CloudTerminal({
   computerId,
@@ -46,6 +46,8 @@ export default function CloudTerminal({
   const [phase, setPhase] = useState<Phase>("connecting");
   const [message, setMessage] = useState("正在连接");
   const [confirmEnd, setConfirmEnd] = useState(false);
+
+  const onSessionExit = useEffectEvent(onClose);
 
   useEffect(() => {
     if (!host) return;
@@ -110,7 +112,11 @@ export default function CloudTerminal({
           finalMessage = true;
           ready = false;
           term.options.disableStdin = true;
-          setPhase(event.type === "exit" ? "ended" : "disconnected");
+          if (event.type === "exit") {
+            onSessionExit();
+            return;
+          }
+          setPhase("disconnected");
           setMessage(event.message);
         }
       };
@@ -158,7 +164,7 @@ export default function CloudTerminal({
               {message}
             </span>
             <div className="ml-auto flex items-center gap-3">
-              {(phase === "disconnected" || phase === "ended") && (
+              {phase === "disconnected" && (
                 <button
                   className="rounded px-2 py-1 text-sm hover:bg-white/15"
                   onClick={() => {
@@ -167,7 +173,7 @@ export default function CloudTerminal({
                     setAttempt((v) => v + 1);
                   }}
                 >
-                  {phase === "ended" ? "新建终端" : "重新连接"}
+                  重新连接
                 </button>
               )}
               {phase === "ready" && (
