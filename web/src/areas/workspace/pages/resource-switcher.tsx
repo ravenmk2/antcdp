@@ -83,7 +83,7 @@ export function ResourceSwitcher({
       <DropdownMenuContent
         side="bottom"
         align="start"
-        className="w-80 overflow-hidden p-0"
+        className="w-(--anchor-width) min-w-0 overflow-hidden p-0"
       >
         <div className="border-b border-b-border-subtle p-2">
           <StandaloneInput

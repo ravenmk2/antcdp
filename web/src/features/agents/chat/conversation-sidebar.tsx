@@ -80,7 +80,7 @@ export function ConversationSidebar({
           <PopoverContent
             align="start"
             sideOffset={4}
-            className="conversation-agent-menu w-80 p-1"
+            className="conversation-agent-menu w-(--anchor-width) p-1"
             aria-label="选择助手"
           >
             {favorites.isPending && (
