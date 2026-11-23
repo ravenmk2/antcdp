@@ -245,11 +245,12 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	if deniedObservation["calls"].([]any)[0].(map[string]any)["outcome"] != "denied" {
 		t.Fatal("missing denial audit")
 	}
-	ordinary := config(`async function main(ctx){try{await ctx.dingtalk.send("notify",{format:"text",body:"x"})}catch(e){return e.code}}`)
+	ordinary := config(`async function main(ctx){return await ctx.dingtalk.send("notify",{format:"text",body:"x"})}`)
 	ordinary["run_as_user_id"] = memberID
-	rejected := submit(admin, "member-send", true, map[string]any{"config": ordinary})["run_id"].(string)
-	if wait(rejected, "succeeded")["run"].(map[string]any)["result"] != "RESOURCE_ACCESS_DENIED" || sends.Load() != 1 {
-		t.Fatal("caller privileges leaked into the run")
+	memberSend := submit(admin, "member-send", true, map[string]any{"config": ordinary})["run_id"].(string)
+	sendResult := wait(memberSend, "succeeded")["run"].(map[string]any)["result"].(map[string]any)
+	if sendResult["status"] != "accepted" || sendResult["robot"].(map[string]any)["id"] != robot["id"] || sends.Load() != 2 {
+		t.Fatal("member run did not send through the project robot", sendResult)
 	}
 	// Cancellation stops a long host wait and releases the same concurrency slot.
 	long := submit(admin, "cancel", true, map[string]any{"config": config(`async function main(ctx){await ctx.sleep(60000)}`)})["run_id"].(string)

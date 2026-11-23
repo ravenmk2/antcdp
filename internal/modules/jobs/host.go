@@ -288,16 +288,11 @@ func (h *runHost) send(ctx context.Context, args []json.RawMessage) (any, error)
 	call := Call{RunID: h.run.ID, Kind: "dingtalk_robot", Authorization: "account", Target: code, Operation: "send", Outcome: "denied", ErrorCode: "ROBOT_NOT_FOUND", Snapshot: json.RawMessage(`{}`), CreatedAt: now()}
 	err := h.withResource(ctx, &call, func(tx identity.Tx, r Repository, v *Run, project *collaboration.Resource) error {
 		var err error
-		if !project.CanManage {
-			call.ErrorCode = "RESOURCE_ACCESS_DENIED"
-			call.FinishedAt = ptr(now())
-			return callLog(r, v, &call)
-		}
 		source, ok := tx.(interface{ DingTalk() dingtalk.Repository })
 		if !ok {
 			return errors.New("missing robot repository")
 		}
-		robot, err = source.DingTalk().RobotByCode("project", h.job.ProjectID, code)
+		robot, err = source.DingTalk().RobotByCode("project", project.ID, code)
 		if err != nil {
 			return err
 		}
