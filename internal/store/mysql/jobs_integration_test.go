@@ -37,18 +37,28 @@ func testJobService(installer *install.Service) *jobs.Service {
 func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, outsider *apiClient, adminID, memberID string) {
 	p := testData(admin.call(t, "POST", "/projects", map[string]any{"code": "job-tests", "name": "任务测试", "admin_user_ids": []string{adminID}}, 201, nil))["id"].(string)
 	project := "/projects/" + p
+	runner := testData(admin.call(t, "POST", "/admin/robots", map[string]string{"username": "job_runner", "display_name": "作业机器人"}, 201, nil))["id"].(string)
+	runnerPath := "/admin/robots/" + runner
 	// Fixture membership, then all job behavior is exercised through authenticated HTTP.
 	if _, err := db.db.Exec("INSERT INTO project_member(project_id,user_id,role,created_at,updated_at) VALUES(?,?,'member',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", p, memberID); err != nil {
 		t.Fatal(err)
 	}
+	projectInfo := testData(admin.call(t, "GET", project, nil, 200, nil))
+	admin.call(t, "PUT", runnerPath+"/grants"+project, map[string]string{"role": "member"}, 204, map[string]string{"If-Match": projectInfo["membership_etag"].(string)})
 	base := project + "/jobs"
 	script := `async function main(ctx){const prev=ctx.state.get("计数");const n=(prev?.value??0)+1;ctx.state.put("计数",n,prev?{ifMatch:prev.etag}:{ifAbsent:true});await Promise.all([ctx.sleep(10),ctx.sleep(15)]);ctx.log.info("已完成",{n});return {n,actor:ctx.run.actorUserId};}`
 	config := func(source string) map[string]any {
-		return map[string]any{"run_as_user_id": adminID, "script": source, "parameters": []any{}}
+		return map[string]any{"run_as_user_id": runner, "script": source, "parameters": []any{}}
 	}
 	body := map[string]any{"code": "parallel", "name": "并行任务", "description": "测试", "enabled": true, "max_concurrency": 1, "busy_policy": "queue", "timeout_ms": 5000, "config": config(script), "grants": []any{}}
 	job := testData(admin.call(t, "POST", base, body, 200, nil))
 	path := base + "/" + job["id"].(string)
+	humanConfig := config(script)
+	humanConfig["run_as_user_id"] = adminID
+	body["version"], body["config"] = job["version"], humanConfig
+	admin.call(t, "PUT", path, body, 409, nil)
+	admin.call(t, "POST", path+"/debug", map[string]any{"request_key": "human-debug", "config": humanConfig}, 409, nil)
+	body["config"] = config(script)
 	member.call(t, "GET", path, nil, 200, nil)
 	outsider.call(t, "GET", path, nil, 404, nil)
 	if _, visible := testData(member.call(t, "GET", path, nil, 200, nil))["config"]; visible {
@@ -129,7 +139,7 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	}
 	observed := wait(first, "succeeded")
 	result := observed["run"].(map[string]any)["result"].(map[string]any)
-	if result["n"] != float64(1) || result["actor"] != memberID || observed["run"].(map[string]any)["run_as_user_id"] != adminID {
+	if result["n"] != float64(1) || result["actor"] != memberID || observed["run"].(map[string]any)["run_as_user_id"] != runner {
 		t.Fatal("state or read-only actor", result)
 	}
 	formalStore := observed["run"].(map[string]any)["state_store_id"]
@@ -152,12 +162,11 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	// Service access resolves the running member's preferred credential but never decrypts it.
 	conn := testData(admin.call(t, "POST", "/admin/service-connections/jenkins", map[string]any{"name": "Job 未实现适配器", "code": "job-jenkins", "config": map[string]string{"base_url": "https://jenkins.example.com"}}, 201, nil))
 	grantServiceConnection(t, admin, "/admin/service-connections/jenkins/"+conn["id"].(string), "project", strings.TrimPrefix(project, "/projects/"), true)
-	cred := testData(member.call(t, "POST", "/me/credentials", map[string]any{"name": "Job 凭证", "kind": "username_password", "identifier": "build-bot", "material": map[string]string{"value": "must-never-be-decrypted"}}, 201, nil))
-	preferred := "/me/service-connections/jenkins/" + conn["id"].(string) + "/credentials/preferred"
-	member.call(t, "GET", preferred, nil, 200, nil)
-	member.call(t, "PUT", preferred, map[string]any{"credential_id": cred["id"]}, 200, map[string]string{"If-Match": member.last.Header().Get("ETag")})
+	cred := testData(admin.call(t, "POST", runnerPath+"/credentials", map[string]any{"name": "Job 凭证", "kind": "username_password", "identifier": "build-bot", "material": map[string]string{"value": "must-never-be-decrypted"}}, 201, nil))
+	preferred := runnerPath + "/service-connections/jenkins/" + conn["id"].(string) + "/credentials/preferred"
+	admin.call(t, "GET", preferred, nil, 200, nil)
+	admin.call(t, "PUT", preferred, map[string]any{"credential_id": cred["id"]}, 200, map[string]string{"If-Match": admin.last.Header().Get("ETag")})
 	resourceScript := config(`async function main(ctx){try {await ctx.resources.call("platform/job-jenkins",{target:"example",operation:"build",params:{}})}catch(e){return e.code}}`)
-	resourceScript["run_as_user_id"] = memberID
 	resourceID := submit(admin, "unimplemented", true, map[string]any{"config": resourceScript})["run_id"].(string)
 	resourceRun := wait(resourceID, "succeeded")
 	if resourceRun["run"].(map[string]any)["result"] != "RESOURCE_NOT_IMPLEMENTED" {
@@ -186,7 +195,6 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 		}
 		return codes;
 	}`)
-	paths["run_as_user_id"] = memberID
 	pathRun := submit(admin, "connection-paths", true, map[string]any{"config": paths})["run_id"].(string)
 	if result := wait(pathRun, "succeeded")["run"].(map[string]any)["result"]; fmt.Sprint(result) != "[RESOURCE_ACCESS_DENIED RESOURCE_ACCESS_DENIED INVALID_RESOURCE_PATH INVALID_RESOURCE_PATH INVALID_ARGUMENT]" {
 		t.Fatal("project path without a preferred credential, foreign scope or invalid signature", result)
@@ -197,7 +205,6 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	}
 	// Revocation is checked at the call, including runs accepted before revocation.
 	delayed := config(`async function main(ctx){await ctx.sleep(2000);try {await ctx.resources.call("platform/job-jenkins",{target:"example",operation:"build",params:{}})}catch(e){return e.code}}`)
-	delayed["run_as_user_id"] = memberID
 	pending := submit(admin, "connection-revoked", true, map[string]any{"config": delayed})["run_id"].(string)
 	wait(pending, "running")
 	grantServiceConnection(t, admin, "/admin/service-connections/jenkins/"+conn["id"].(string), "project", p, false)
@@ -246,7 +253,6 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 		t.Fatal("missing denial audit")
 	}
 	ordinary := config(`async function main(ctx){return await ctx.dingtalk.send("notify",{format:"text",body:"x"})}`)
-	ordinary["run_as_user_id"] = memberID
 	memberSend := submit(admin, "member-send", true, map[string]any{"config": ordinary})["run_id"].(string)
 	sendResult := wait(memberSend, "succeeded")["run"].(map[string]any)["result"].(map[string]any)
 	if sendResult["status"] != "accepted" || sendResult["robot"].(map[string]any)["id"] != robot["id"] || sends.Load() != 2 {
@@ -321,6 +327,10 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	// A stale editor cannot replace the saved configuration.
 	admin.call(t, "PUT", path, body, 412, nil)
 	revoked := submit(member, "role-revoked", false, nil)["run_id"].(string)
+	legacy := submit(admin, "legacy-human", false, nil)["run_id"].(string)
+	if _, err := db.db.Exec("UPDATE job_run SET run_as_user_id=? WHERE id=?", adminID, legacy); err != nil {
+		t.Fatal(err)
+	}
 	role = testData(admin.call(t, "GET", rolePath, nil, 200, nil))
 	admin.call(t, "PUT", rolePath+"/members", map[string]any{"user_ids": []string{}}, 204, map[string]string{"If-Match": role["etag"].(string)})
 	member.call(t, "POST", path+"/runs", map[string]any{"request_key": "after-revoke", "inputs": map[string]any{}}, 403, nil)
@@ -332,6 +342,9 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	go func() { defer close(done3); service.Work(ctx3, logger) }()
 	defer func() { cancel3(); <-done3 }()
 	wait(debugQueued, "succeeded")
+	if wait(legacy, "cancelled")["run"].(map[string]any)["error_code"] != "START_NOT_ALLOWED" {
+		t.Fatal("legacy human run passed the execution gate")
+	}
 	if wait(revoked, "cancelled")["run"].(map[string]any)["error_code"] != "START_NOT_ALLOWED" {
 		t.Fatal("role revocation was not rechecked")
 	}

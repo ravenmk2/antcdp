@@ -217,7 +217,7 @@ func (s *Service) Work(ctx context.Context, logger *slog.Logger) {
 	}
 }
 func (s *Service) startAllowed(tx identity.Tx, r Repository, j *Job, v *Run, u, account *identity.User) (bool, error) {
-	if account == nil || account.DeletedAt != nil || account.Status != "active" {
+	if account == nil || account.AccountType != "robot" || account.DeletedAt != nil || account.Status != "active" {
 		return false, nil
 	}
 	project, err := tx.(collaboration.Repository).Resource(collaboration.Project, j.ProjectID, v.RunAsUserID)

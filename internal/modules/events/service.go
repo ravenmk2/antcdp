@@ -45,8 +45,8 @@ func runAccount(tx identity.Tx, projectID, userID uint64, active bool) error {
 		return err
 	}
 	u := users[userID]
-	if u == nil || (u.AccountType != "human" && u.AccountType != "robot") || u.DeletedAt != nil || (active && u.Status != "active") {
-		return httpx.E(409, "EXECUTOR_UNAVAILABLE", "运行账号不可用")
+	if u == nil || u.AccountType != "robot" || u.DeletedAt != nil || (active && u.Status != "active") {
+		return httpx.E(409, "EXECUTOR_UNAVAILABLE", "请选择项目内已启用的机器人作为运行账号")
 	}
 	p, err := project(tx, projectID, userID, false)
 	if err != nil {

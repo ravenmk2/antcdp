@@ -109,6 +109,9 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal("job acceptance", first, err)
 	}
 	start.ActorID = admin.User.ID
+	_, err = jobService.StartAutomation(ctx, start)
+	modelsExpectCode(t, err, "EXECUTOR_UNAVAILABLE")
+	start.ActorID = replacement.ID
 	start.Trace = json.RawMessage(`{"attempt":2}`)
 	replay, err := jobService.StartAutomation(ctx, start)
 	if err != nil || replay.RunID == nil || *replay.RunID != *first.RunID || replay.Actor != robot.ID {
@@ -172,7 +175,7 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 		t.Fatal(err)
 	}
 	wrong := jobChat
-	wrong.ActorID = admin.User.ID
+	wrong.ActorID = replacement.ID
 	_, err = f.Agents.ChatAutomation(ctx, wrong)
 	modelsExpectCode(t, err, "NOT_FOUND")
 	var jobReceipts [2]a.ChatReceipt

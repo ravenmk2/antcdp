@@ -15,8 +15,8 @@ func AutomationProject(tx identity.Tx, projectID, actorID uint64) (*Resource, er
 		return nil, err
 	}
 	u := users[actorID]
-	if u == nil || (u.AccountType != "human" && u.AccountType != "robot") || u.Status != "active" || u.DeletedAt != nil {
-		return nil, httpx.E(409, "EXECUTOR_UNAVAILABLE", "运行账号不可用")
+	if u == nil || u.AccountType != "robot" || u.Status != "active" || u.DeletedAt != nil {
+		return nil, httpx.E(409, "EXECUTOR_UNAVAILABLE", "请选择项目内已启用的机器人作为运行账号")
 	}
 	r, ok := tx.(Repository)
 	if !ok {

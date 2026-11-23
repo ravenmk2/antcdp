@@ -178,9 +178,9 @@ it("saves a script with its selected run account", async () => {
           items: [
             {
               id: "3",
-              name: "发布成员",
+              name: "发布机器人",
               username: "release",
-              account_type: "human",
+              account_type: "robot",
             },
           ],
         });
@@ -189,7 +189,7 @@ it("saves a script with its selected run account", async () => {
   );
   await user.click(await screen.findByRole("combobox", { name: "运行账号" }));
   await user.click(
-    await screen.findByRole("option", { name: /发布成员.*成员/ }),
+    await screen.findByRole("option", { name: /发布机器人/ }),
   );
   await user.click(screen.getByRole("button", { name: "保存作业" }));
   await waitFor(() => expect(writes).toHaveLength(1));
