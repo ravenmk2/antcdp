@@ -133,7 +133,7 @@ func testAdminSpecBindings(t *testing.T, f *agentIntegrationFixture, s *a.CloudS
 		t.Fatal(err)
 	}
 	initial := binding.Data.(*a.SpecBinding).Spec
-	agent := sandboxServiceAgent(t, f, "shared")
+	agent := sandboxRobotChatAgent(t, f, "shared")
 	shared, err := s.GetSpec(ctx, raw, initial.ID, true)
 	if err != nil || len(shared.Data.([]a.SpecReference)) != 2 {
 		t.Fatal("missing shared spec owner", err)

@@ -27,12 +27,11 @@ func (s *CloudService) lockWorkspaceSession(tx identity.Tx, r Repository, st Sta
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	owner := auth.User
-	if initial.ExecutionMode == "service" {
-		owner, err = executionAccount(tx, initial, true)
-		if err != nil {
-			return nil, nil, nil, err
-		}
+	if initial.ExecutionMode != "chat" {
+		return nil, nil, nil, serviceAutomationOnly()
+	}
+	if _, err = executionAccount(tx, initial, true); err != nil {
+		return nil, nil, nil, err
 	}
 	agent, err := r.Definition(initial.AgentID, prepare)
 	if err != nil {
@@ -44,7 +43,7 @@ func (s *CloudService) lockWorkspaceSession(tx identity.Tx, r Repository, st Sta
 	if !agent.Enabled {
 		return nil, nil, nil, httpx.E(409, "AGENT_UNAVAILABLE", "助手当前不可用")
 	}
-	if err = requireSessionAgent(r, agent, owner); err != nil {
+	if err = requireSessionAgent(r, agent, auth.User); err != nil {
 		return nil, nil, nil, err
 	}
 	connection, err := s.Connection()
@@ -80,7 +79,7 @@ func (s *CloudService) PrepareSessionWorkspace(ctx context.Context, raw string, 
 			return err
 		}
 		if computer == nil {
-			return httpx.E(409, "CLOUD_COMPUTER_BUSY", "服务型助手的云电脑池当前已满")
+			return httpx.E(409, "CLOUD_COMPUTER_BUSY", "机器人的云电脑池当前已满")
 		}
 		if computer.BackendGeneration != connection.BackendGeneration {
 			return workspacePreparationRequired()
@@ -199,10 +198,10 @@ func (s *CloudService) reserveSessionUpload(st StateRepository, repo CloudReposi
 	if err != nil {
 		return nil, err
 	}
-	if err = workspaceContentAccess(computer, auth); err != nil {
+	if err = contentAccess(session, auth); err != nil {
 		return nil, err
 	}
-	if computer.OwnerUserID != session.ExecutorUserID || (computer.PoolAgentID == nil) != (session.ExecutionMode == "chat") || computer.PoolAgentID != nil && *computer.PoolAgentID != session.AgentID {
+	if !sessionMatchesComputer(session, computer) {
 		return nil, integrity()
 	}
 	if computer.DeletedAt == nil && (computer.State == "uninitialized" || computer.State == "paused" || computer.State == "provisioning") {
@@ -285,4 +284,15 @@ func resolveWorkspaceUploads(tx identity.Tx, session *SessionRow, actor uint64, 
 		files = append(files, agentcore.WorkspaceFile{OperationID: agentcore.ID(op.ID), Filename: path.Base(name), Path: name})
 	}
 	return files, nil
+}
+
+func sessionMatchesComputer(s *SessionRow, c *CloudComputerRow) bool {
+	return c != nil && c.OwnerUserID == s.ExecutorUserID && (s.ExecutorKind == "robot" && c.AllocationKind == "robot_pool" && sameWorkspaceUser(s.ChatUserID, c.WorkspaceUserID) || s.ExecutorKind == "chat_user" && c.AllocationKind == "personal")
+}
+
+func sameWorkspaceUser(a, b *uint64) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return *a == *b
 }

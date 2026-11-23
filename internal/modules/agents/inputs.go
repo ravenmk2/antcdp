@@ -97,11 +97,14 @@ func (s *Service) executionTarget(ctx context.Context, tx identity.Tx, r Reposit
 	if !selection.Availability.Available {
 		return nil, nil, model, selection, httpx.E(409, "MODEL_UNAVAILABLE", "所选模型当前不可用")
 	}
-	executor, e := runtimeOwner(tx, locked)
+	if locked.ExecutionMode != "chat" {
+		return nil, nil, model, selection, serviceAutomationOnly()
+	}
+	_, e = runtimeOwner(tx, locked)
 	if e != nil {
 		return nil, nil, model, selection, e
 	}
-	if e = requireSessionAgent(r, agent, executor); e != nil {
+	if e = requireSessionAgent(r, agent, a.User); e != nil {
 		return nil, nil, model, selection, e
 	}
 	return locked, agent, model, selection, nil
@@ -310,7 +313,12 @@ func (s *Service) admitInput(st StateRepository, out *Result, rec *Receipt, v *S
 	policy := corePolicy(agent)
 	user := agentcore.ID(actorID)
 	author := agentcore.ActorRef{Kind: "user", ID: &user}
-	row := &InputRow{SessionID: id, CommandReceiptID: &rec.ID, InputKind: "message", OriginKind: origin, ActorKind: "user", ActorID: strconv.FormatUint(actorID, 10), LastModifiedByKind: "user", LastModifiedByID: strconv.FormatUint(actorID, 10), Status: "pending", QueueOrder: v.NextInputOrder, ContentRevision: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now, QueueDeadlineAt: now.Add(time.Duration(policy.QueueTimeoutSeconds) * time.Second)}
+	actorText := idString(actorID)
+	if actorID == 0 {
+		author = agentcore.ActorRef{Kind: "system"}
+		actorText = "system"
+	}
+	row := &InputRow{SessionID: id, CommandReceiptID: &rec.ID, InputKind: "message", OriginKind: origin, ActorKind: author.Kind, ActorID: actorText, LastModifiedByKind: author.Kind, LastModifiedByID: actorText, Status: "pending", QueueOrder: v.NextInputOrder, ContentRevision: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now, QueueDeadlineAt: now.Add(time.Duration(policy.QueueTimeoutSeconds) * time.Second)}
 	if source != nil {
 		sourceID := strconv.FormatUint(uint64(source.ID), 10)
 		row.SourceKind = &source.Kind

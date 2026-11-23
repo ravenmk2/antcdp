@@ -32,8 +32,8 @@ func (t *agentsTx) SandboxSpec(id uint64, lock bool) (*a.SandboxSpec, error) {
 	}
 	return t.readSandboxSpec(q, id)
 }
-func (t *agentsTx) BoundSandboxSpec(agent *uint64) (*a.SandboxSpec, error) {
-	return t.readSandboxSpec("SELECT "+specColumns+" FROM cloud_computer_spec_binding b JOIN sandbox_spec s ON s.id=b.spec_id WHERE b.owner_key=COALESCE(?,0)", agent)
+func (t *agentsTx) BoundSandboxSpec(robot *uint64) (*a.SandboxSpec, error) {
+	return t.readSandboxSpec("SELECT "+specColumns+" FROM cloud_computer_spec_binding b JOIN sandbox_spec s ON s.id=b.spec_id WHERE b.owner_key=COALESCE(?,0)", robot)
 }
 func (t *agentsTx) InsertSandboxSpec(s *a.SandboxSpec, user uint64) error {
 	r, err := t.tx.ExecContext(t.ctx, "INSERT INTO sandbox_spec(name,image,cpu_millicores,memory_mib,network_policy,config_version,row_version,created_by_user_id,updated_by_user_id,created_at,updated_at) VALUES(?,?,?,?,?,1,1,?,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", s.Name, s.Image, s.CPU, s.Memory, s.Network, user, user)
@@ -49,31 +49,27 @@ func (t *agentsTx) DeleteSandboxSpec(id uint64) error {
 }
 func (t *agentsTx) SpecReferences(id uint64) ([]a.SpecReference, error) {
 	rows := []a.SpecReference{}
-	err := t.tx.SelectContext(t.ctx, &rows, "SELECT b.agent_id,COALESCE(a.name,'个人云电脑默认规格') AS name FROM cloud_computer_spec_binding b LEFT JOIN agent a ON a.id=b.agent_id WHERE b.spec_id=? ORDER BY b.owner_key FOR SHARE OF b", id)
+	err := t.tx.SelectContext(t.ctx, &rows, "SELECT a.id AS agent_id,COALESCE(a.name,'个人云电脑默认规格') AS name FROM cloud_computer_spec_binding b LEFT JOIN agent a ON a.robot_user_id=b.robot_user_id WHERE b.spec_id=? ORDER BY b.owner_key FOR SHARE OF b", id)
 	return rows, err
 }
-func (t *agentsTx) SpecBinding(agent *uint64, lock bool) (*a.SpecBinding, error) {
-	q := "SELECT id,agent_id,spec_id,row_version FROM cloud_computer_spec_binding WHERE owner_key=COALESCE(?,0)"
+func (t *agentsTx) SpecBinding(robot *uint64, lock bool) (*a.SpecBinding, error) {
+	q := "SELECT id,robot_user_id,pool_capacity,spec_id,row_version FROM cloud_computer_spec_binding WHERE owner_key=COALESCE(?,0)"
 	if lock {
 		q += " FOR UPDATE"
 	}
 	var b a.SpecBinding
-	err := t.tx.GetContext(t.ctx, &b, q, agent)
+	err := t.tx.GetContext(t.ctx, &b, q, robot)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	return &b, err
 }
-func (t *agentsTx) InsertSpecBinding(agent, spec *uint64, user uint64) error {
-	_, err := t.tx.ExecContext(t.ctx, "INSERT INTO cloud_computer_spec_binding(agent_id,spec_id,row_version,updated_by_user_id,created_at,updated_at) VALUES(?,?,1,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", agent, spec, user)
+func (t *agentsTx) InsertSpecBinding(robot, spec *uint64, capacity *int, user uint64) error {
+	_, err := t.tx.ExecContext(t.ctx, "INSERT INTO cloud_computer_spec_binding(robot_user_id,spec_id,pool_capacity,row_version,updated_by_user_id,created_at,updated_at) VALUES(?,?,?,1,?,UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", robot, spec, capacity, user)
 	return err
 }
 func (t *agentsTx) UpdateSpecBinding(b *a.SpecBinding, user uint64) error {
-	_, err := t.tx.ExecContext(t.ctx, "UPDATE cloud_computer_spec_binding SET spec_id=?,row_version=?,updated_by_user_id=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?", b.SpecID, b.RowVersion, user, b.ID)
-	return err
-}
-func (t *agentsTx) DeleteSpecBinding(agent uint64) error {
-	_, err := t.tx.ExecContext(t.ctx, "DELETE FROM cloud_computer_spec_binding WHERE owner_key=?", agent)
+	_, err := t.tx.ExecContext(t.ctx, "UPDATE cloud_computer_spec_binding SET spec_id=?,pool_capacity=?,row_version=?,updated_by_user_id=?,updated_at=UTC_TIMESTAMP(3) WHERE id=?", b.SpecID, b.PoolCapacity, b.RowVersion, user, b.ID)
 	return err
 }
 func specNameError(err error) error {

@@ -7,7 +7,9 @@ CREATE TABLE `agent` (
     name VARCHAR(100) NOT NULL,
     description VARCHAR(1000) NOT NULL DEFAULT '',
     greeting VARCHAR(1000) NOT NULL DEFAULT '',
-    agent_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'interactive | service',
+    agent_type VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL COMMENT 'chat | service',
+    executor_kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    use_policy VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     scope_kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     scope_id BIGINT UNSIGNED NULL,
     robot_user_id BIGINT UNSIGNED NULL,
@@ -17,7 +19,6 @@ CREATE TABLE `agent` (
     config_schema_version INT UNSIGNED NOT NULL DEFAULT 1,
     default_model_binding_id BIGINT UNSIGNED NULL,
     runtime_policy JSON NOT NULL,
-    pool_capacity SMALLINT UNSIGNED NULL,
     config_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     row_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
     created_by_user_id BIGINT UNSIGNED NOT NULL,
@@ -31,6 +32,16 @@ CREATE TABLE `agent` (
     KEY idx_agent_scope (scope_kind, scope_id, deleted_at, id),
     KEY idx_agent_model (default_model_binding_id)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE agent_use_grant (
+    agent_id BIGINT UNSIGNED NOT NULL,
+    subject_kind VARCHAR(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    subject_id BIGINT UNSIGNED NOT NULL,
+    granted_by_user_id BIGINT UNSIGNED NOT NULL,
+    created_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (agent_id,subject_kind,subject_id),
+    KEY idx_agent_use_subject (subject_kind,subject_id,agent_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `agent_favorite` (
     user_id BIGINT UNSIGNED NOT NULL,

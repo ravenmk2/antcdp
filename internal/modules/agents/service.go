@@ -202,7 +202,7 @@ func (s *Service) ListDefinitions(ctx context.Context, raw string, q Query) (*Re
 			if e = s.definition(v); e != nil {
 				return e
 			}
-			items = append(items, DefinitionSummary{ID: v.ID, Code: v.Code, Name: v.Name, Description: v.Description, Mode: v.Mode, Enabled: v.Enabled, DefaultModelBindingID: v.DefaultModelBindingID, ScopeKind: v.ScopeKind, ScopeID: v.ScopeID, RobotUserID: v.RobotUserID, PoolCapacity: v.PoolCapacity, ModelCount: v.ModelCount, ToolCount: v.ToolCount, MCPCount: v.MCPCount, Version: v.Version, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt})
+			items = append(items, DefinitionSummary{ID: v.ID, Code: v.Code, Name: v.Name, Description: v.Description, Mode: v.Mode, ExecutorKind: v.ExecutorKind, UsePolicy: v.UsePolicy, Enabled: v.Enabled, DefaultModelBindingID: v.DefaultModelBindingID, ScopeKind: v.ScopeKind, ScopeID: v.ScopeID, RobotUserID: v.RobotUserID, PoolCapacity: v.PoolCapacity, ModelCount: v.ModelCount, ToolCount: v.ToolCount, MCPCount: v.MCPCount, Version: v.Version, CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt})
 		}
 		out.Data = items
 		out.Pagination = &Pagination{Page: q.Page, PageSize: q.PageSize, Total: total}
@@ -269,8 +269,20 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 	if !resourcecode.Valid(w.Code) {
 		return nil, httpx.Invalid("code", "invalid_format")
 	}
+	if w.ExecutorKind == "" {
+		w.ExecutorKind = "chat_user"
+		if w.Mode == "service" {
+			w.ExecutorKind = "robot"
+		}
+	}
+	if w.UsePolicy == "" {
+		w.UsePolicy = "scope"
+		if w.Mode == "chat" && w.ExecutorKind == "robot" {
+			w.UsePolicy = "allowlist"
+		}
+	}
 	var robotID uint64
-	if w.Mode == "service" {
+	if w.ExecutorKind == "robot" {
 		if w.RobotUserID == nil {
 			return nil, httpx.Invalid("robot_user_id", "required")
 		}
@@ -281,7 +293,7 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 		}
 		ctx = context.WithValue(ctx, robotBindingKey{}, robotID)
 	} else if w.RobotUserID != nil {
-		return nil, httpx.Invalid("robot_user_id", "service_agent_required")
+		return nil, httpx.Invalid("robot_user_id", "robot_executor_required")
 	}
 
 	return s.command(ctx, raw, key, "agent.create", "agents", w, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
@@ -290,7 +302,7 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 		}
 		code := w.Code
 		var e error
-		v := &Definition{Code: code, Name: w.Name, Description: w.Description, Greeting: w.Greeting, Mode: w.Mode, SystemPrompt: w.SystemPrompt, RuntimePolicy: defaultRuntimePolicy(), SchemaVersion: 1, RowVersion: 1, Creator: a.User.ID, ScopeKind: w.ScopeKind, PoolCapacity: w.PoolCapacity}
+		v := &Definition{Code: code, Name: w.Name, Description: w.Description, Greeting: w.Greeting, Mode: w.Mode, ExecutorKind: w.ExecutorKind, UsePolicy: w.UsePolicy, SystemPrompt: w.SystemPrompt, RuntimePolicy: defaultRuntimePolicy(), SchemaVersion: 1, RowVersion: 1, Creator: a.User.ID, ScopeKind: w.ScopeKind, PoolCapacity: w.PoolCapacity}
 		if w.RuntimePolicy != nil {
 			v.RuntimePolicy = *w.RuntimePolicy
 		}
@@ -301,11 +313,14 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 			}
 			v.ScopeID = &scopeID
 		}
-		if v.Mode == "service" && v.PoolCapacity == nil {
+		if v.ExecutorKind == "robot" && v.PoolCapacity == nil {
 			v.PoolCapacity = new(1)
 		}
 		if w.Enabled.Set && w.Enabled.Value {
 			return httpx.Invalid("enabled", "default_model_required")
+		}
+		if robotID != 0 {
+			v.RobotUserID = &robotID
 		}
 		if e = validateDefinition(v); e != nil {
 			return e
@@ -317,7 +332,7 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 		if !exists {
 			return httpx.Invalid("scope_id", "unavailable")
 		}
-		if v.Mode == "service" {
+		if v.ExecutorKind == "robot" {
 			users, err := tx.LockUsers([]uint64{robotID})
 			if err != nil {
 				return err
@@ -326,7 +341,6 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 			if robot == nil || robot.AccountType != "robot" || robot.DeletedAt != nil || robot.ManagedAgentID != nil {
 				return httpx.Invalid("robot_user_id", "unavailable_or_already_bound")
 			}
-			v.RobotUserID = &robotID
 		}
 		if e = encodeDefinition(v); e != nil {
 			return e
@@ -334,7 +348,7 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 		if e = r.InsertDefinition(v); e != nil {
 			return e
 		}
-		if e = insertServiceSpecBinding(tx, v, w.SandboxSpecID); e != nil {
+		if e = insertRobotSpecBinding(tx, v, w.SandboxSpecID); e != nil {
 			return e
 		}
 		if e = s.definition(v); e != nil {
@@ -347,10 +361,10 @@ func (s *Service) CreateDefinition(ctx context.Context, raw, key string, w Defin
 }
 func (s *Service) PatchDefinition(ctx context.Context, raw string, id uint64, tag string, w DefinitionPatch) (*Result, error) {
 	return s.agentAccess(ctx, raw, id, func(tx identity.Tx, r Repository, a *identity.Auth, out *Result) error {
-		if !w.Name.Set && !w.Description.Set && !w.Greeting.Set && !w.SystemPrompt.Set && !w.Enabled.Set && !w.RuntimePolicy.Set && !w.PoolCapacity.Set {
+		if !w.Name.Set && !w.Description.Set && !w.Greeting.Set && !w.SystemPrompt.Set && !w.Enabled.Set && !w.RuntimePolicy.Set && !w.PoolCapacity.Set && !w.UsePolicy.Set && !w.UseGrants.Set {
 			return httpx.Invalid("body", "empty_patch")
 		}
-		if w.Name.Null || w.Description.Null || w.Greeting.Null || w.SystemPrompt.Null || w.Enabled.Null || w.RuntimePolicy.Null || w.PoolCapacity.Null {
+		if w.Name.Null || w.Description.Null || w.Greeting.Null || w.SystemPrompt.Null || w.Enabled.Null || w.RuntimePolicy.Null || w.PoolCapacity.Null || w.UsePolicy.Null || w.UseGrants.Null {
 			return httpx.Invalid("body", "null_not_allowed")
 		}
 		// The parent/model locks precede the Agent lock when enabling execution.
@@ -373,6 +387,14 @@ func (s *Service) PatchDefinition(ctx context.Context, raw string, id uint64, ta
 			return missing()
 		}
 		old := *v
+		if w.UsePolicy.Set {
+			v.UsePolicy = w.UsePolicy.Value
+		}
+		if w.UseGrants.Set {
+			if e = r.ReplaceUseGrants(v, w.UseGrants.Value, a.User.ID); e != nil {
+				return e
+			}
+		}
 		if w.Name.Set {
 			v.Name = w.Name.Value
 		}
@@ -397,7 +419,25 @@ func (s *Service) PatchDefinition(ctx context.Context, raw string, id uint64, ta
 		if e = validateDefinition(v); e != nil {
 			return e
 		}
-		if !same(old, v) {
+		if !same(old, v) || w.UseGrants.Set {
+			if w.PoolCapacity.Set {
+				cr, err := CloudStateFor(tx)
+				if err != nil {
+					return err
+				}
+				b, err := cr.SpecBinding(v.RobotUserID, true)
+				if err != nil {
+					return err
+				}
+				if b == nil {
+					return integrity()
+				}
+				b.PoolCapacity = v.PoolCapacity
+				b.RowVersion++
+				if err = cr.UpdateSpecBinding(b, a.User.ID); err != nil {
+					return err
+				}
+			}
 			v.RowVersion++
 			if e = encodeDefinition(v); e != nil {
 				return e
@@ -421,7 +461,7 @@ func (s *Service) PatchDefinition(ctx context.Context, raw string, id uint64, ta
 	})
 }
 func (s *Service) DeleteDefinition(ctx context.Context, raw string, id uint64, tag, key string) (*Result, error) {
-	return s.command(ctx, raw, key, "agent.delete", fmt.Sprintf("agent:%d", id), struct{}{}, func(tx identity.Tx, r Repository, _ *identity.Auth, out *Result) error {
+	return s.command(ctx, raw, key, "agent.delete", fmt.Sprintf("agent:%d", id), struct{}{}, func(tx identity.Tx, r Repository, auth *identity.Auth, out *Result) error {
 		v, e := r.Definition(id, true)
 		if e != nil {
 			return e
@@ -443,15 +483,6 @@ func (s *Service) DeleteDefinition(ctx context.Context, raw string, id uint64, t
 			return e
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
-		if v.Mode == "service" {
-			cr, err := CloudStateFor(tx)
-			if err != nil {
-				return err
-			}
-			if err = cr.DeleteSpecBinding(v.ID); err != nil {
-				return err
-			}
-		}
 		v.Enabled, v.DeletedAt = false, &now
 		v.RowVersion++
 		if e = encodeDefinition(v); e != nil {
@@ -459,6 +490,24 @@ func (s *Service) DeleteDefinition(ctx context.Context, raw string, id uint64, t
 		}
 		if e = r.SaveDefinition(v); e != nil {
 			return e
+		}
+		if v.RobotUserID != nil {
+			cr, err := CloudStateFor(tx)
+			if err != nil {
+				return err
+			}
+			binding, err := cr.SpecBinding(v.RobotUserID, true)
+			if err != nil {
+				return err
+			}
+			if binding == nil {
+				return integrity()
+			}
+			binding.SpecID = nil
+			binding.RowVersion++
+			if err = cr.UpdateSpecBinding(binding, auth.User.ID); err != nil {
+				return err
+			}
 		}
 		out.Status = 204
 		return nil

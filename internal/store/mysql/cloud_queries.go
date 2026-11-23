@@ -43,13 +43,13 @@ func (t *agentsTx) PersonalComputer(owner uint64, lock bool) (*a.CloudComputerRo
 	}
 	return v, e
 }
-func (t *agentsTx) PoolComputers(agent uint64, lock bool) ([]a.CloudComputerRow, error) {
-	q := "SELECT " + computerColumns + " FROM cloud_computer WHERE pool_agent_id=? AND deleted_at IS NULL ORDER BY idle_since,id"
+func (t *agentsTx) PoolComputers(robot uint64, lock bool) ([]a.CloudComputerRow, error) {
+	q := "SELECT " + computerColumns + " FROM cloud_computer WHERE owner_user_id=? AND allocation_kind='robot_pool' AND deleted_at IS NULL ORDER BY idle_since,id"
 	if lock {
 		q += " FOR UPDATE"
 	}
 	v := []a.CloudComputerRow{}
-	e := t.tx.SelectContext(t.ctx, &v, q, agent)
+	e := t.tx.SelectContext(t.ctx, &v, q, robot)
 	if e == nil {
 		for i := range v {
 			if e = t.hydrateComputer(&v[i], lock); e != nil {
@@ -65,9 +65,9 @@ func (t *agentsTx) Computers(q a.CloudQuery) ([]a.CloudComputerRow, int, error) 
 		where += " AND owner_user_id=?"
 		args = append(args, q.OwnerUserID)
 	}
-	if q.PoolAgentID != 0 {
-		where += " AND pool_agent_id=?"
-		args = append(args, q.PoolAgentID)
+	if q.PoolRobotID != 0 {
+		where += " AND owner_user_id=? AND allocation_kind='robot_pool'"
+		args = append(args, q.PoolRobotID)
 	}
 	if q.State != "" {
 		where += " AND state=?"

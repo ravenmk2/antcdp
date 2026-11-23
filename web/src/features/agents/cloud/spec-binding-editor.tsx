@@ -42,7 +42,7 @@ export function CloudSpecBindingEditor({
             </dl>
             <Link
               className="mt-4 inline-block text-sm text-primary"
-              to={`/admin/cloud-computers?pool_agent_id=${agent.data.id}`}
+              to={`/admin/cloud-computers?pool_robot_id=${agent.data.robot_user_id}`}
             >
               查看云电脑
             </Link>
@@ -63,6 +63,7 @@ export function CloudSpecBindingEditor({
           ) : (
             <BindingForm
               key={path}
+              agentId={agent?.data.id}
               path={path}
               initial={query.data}
               onSaved={refresh}
@@ -111,7 +112,7 @@ function PoolCapacity({
           <Button
             render={
               <Link
-                to={`/admin/cloud-computers?pool_agent_id=${initial.data.id}`}
+                to={`/admin/cloud-computers?pool_robot_id=${initial.data.robot_user_id}`}
               >
                 查看云电脑
               </Link>
@@ -207,11 +208,13 @@ export function SpecPicker({
   );
 }
 function BindingForm({
+  agentId,
   path,
   initial,
   onSaved,
 }: {
   path: string;
+  agentId?: string;
   initial: ApiResponse<SpecBinding>;
   onSaved: () => void;
 }) {
@@ -224,9 +227,7 @@ function BindingForm({
     onSaved,
     dirty,
     commandName: "cloud_spec_binding.update",
-    scope:
-      "cloud_spec_binding" +
-      (initial.data.agent_id ? ":" + initial.data.agent_id : ""),
+    scope: agentId ? `cloud_spec_binding:${agentId}` : "cloud_spec_binding",
     adopt(v) {
       setValue(v.spec_id ?? "");
       setBaseline(v.spec_id ?? "");

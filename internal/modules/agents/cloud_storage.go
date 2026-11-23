@@ -94,9 +94,8 @@ type CloudRepository interface {
 	SpecReferences(uint64) ([]SpecReference, error)
 	BoundSandboxSpec(*uint64) (*SandboxSpec, error)
 	SpecBinding(*uint64, bool) (*SpecBinding, error)
-	InsertSpecBinding(*uint64, *uint64, uint64) error
+	InsertSpecBinding(*uint64, *uint64, *int, uint64) error
 	UpdateSpecBinding(*SpecBinding, uint64) error
-	DeleteSpecBinding(uint64) error
 	Computer(uint64, bool) (*CloudComputerRow, error)
 	PersonalComputer(uint64, bool) (*CloudComputerRow, error)
 	PoolComputers(uint64, bool) ([]CloudComputerRow, error)

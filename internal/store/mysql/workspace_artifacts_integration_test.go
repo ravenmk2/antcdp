@@ -62,7 +62,7 @@ func workspaceArtifactTransfers(t *testing.T, f *agentIntegrationFixture) {
 	svc.EndpointTargets = func(string) ([]string, error) { return []string{"192.0.2.19"}, nil }
 	host.Sandboxes = svc
 	configureTestCloud(t, f, svc)
-	agent := sandboxServiceAgent(t, f, "per_run")
+	agent := sandboxRobotChatAgent(t, f, "per_run")
 	bindings, e := host.GetToolBindings(ctx, f.AdminToken, agent.ID)
 	if e != nil {
 		t.Fatal(e)
@@ -315,7 +315,7 @@ func workspaceToolImage(t *testing.T, f *agentIntegrationFixture, svc *a.CloudSe
 			t.Error(e)
 		}
 	})
-	agent := sandboxServiceAgent(t, f, "per_run")
+	agent := sandboxRobotChatAgent(t, f, "per_run")
 	bindings, e := host.GetToolBindings(ctx, f.AdminToken, agent.ID)
 	if e != nil {
 		t.Fatal(e)

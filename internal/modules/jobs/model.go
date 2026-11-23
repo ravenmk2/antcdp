@@ -12,6 +12,11 @@ import (
 	"github.com/ravenmk2/antcdp/internal/statestore"
 )
 
+type AgentChatOptions struct {
+	Message    string `json:"message"`
+	Title      string `json:"title"`
+	RequestKey string `json:"requestKey"`
+}
 type Job struct {
 	Code           string     `db:"code" json:"code"`
 	ID             uint64     `db:"id" json:"id,string"`
@@ -246,10 +251,11 @@ type Repository interface {
 	RecoveryJobs() ([]uint64, error)
 }
 type Service struct {
-	Identity *identity.Service
-	Store    func() (identity.Store, error)
-	State    func() (statestore.Backend, error)
-	Executor jobcore.Executor
-	Cipher   func(string, string, bool) (string, error)
-	Send     func(context.Context, dingtalk.Authentication, dingtalk.TestInput) dingtalk.Diagnostic
+	AgentChat func(context.Context, uint64, uint64, string, AgentChatOptions) (any, error)
+	Identity  *identity.Service
+	Store     func() (identity.Store, error)
+	State     func() (statestore.Backend, error)
+	Executor  jobcore.Executor
+	Cipher    func(string, string, bool) (string, error)
+	Send      func(context.Context, dingtalk.Authentication, dingtalk.TestInput) dingtalk.Diagnostic
 }

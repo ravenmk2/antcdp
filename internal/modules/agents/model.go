@@ -63,7 +63,14 @@ type NetworkPolicy struct {
 	AllowTargets  []string `json:"allow_targets"`
 	DenyTargets   []string `json:"deny_targets"`
 }
+type UseGrant struct {
+	Kind string `db:"subject_kind" json:"kind"`
+	ID   uint64 `db:"subject_id" json:"id,string"`
+}
 type Definition struct {
+	UseGrants             []UseGrant      `db:"-" json:"use_grants,omitempty"`
+	ExecutorKind          string          `db:"executor_kind" json:"executor_kind"`
+	UsePolicy             string          `db:"use_policy" json:"use_policy"`
 	ScopeKind             string          `db:"scope_kind" json:"scope_kind"`
 	ScopeID               *uint64         `db:"scope_id" json:"scope_id,string"`
 	RobotUserID           *uint64         `db:"robot_user_id" json:"robot_user_id,string"`
@@ -96,6 +103,8 @@ type Definition struct {
 	MCPCount              int             `db:"mcp_binding_count" json:"-"`
 }
 type DefinitionSummary struct {
+	ExecutorKind          string    `json:"executor_kind"`
+	UsePolicy             string    `json:"use_policy"`
 	ID                    uint64    `json:"id,string"`
 	Code                  string    `json:"code"`
 	Name                  string    `json:"name"`
@@ -115,6 +124,8 @@ type DefinitionSummary struct {
 	UpdatedAt             time.Time `json:"updated_at"`
 }
 type DefinitionCreate struct {
+	ExecutorKind  string         `json:"executor_kind"`
+	UsePolicy     string         `json:"use_policy"`
 	Code          string         `json:"code"`
 	RobotUserID   *string        `json:"robot_user_id"`
 	SandboxSpecID *uint64        `json:"sandbox_spec_id,string"`
@@ -130,6 +141,8 @@ type DefinitionCreate struct {
 	RuntimePolicy *RuntimePolicy `json:"runtime_policy"`
 }
 type DefinitionPatch struct {
+	UsePolicy     Field[string]        `json:"use_policy"`
+	UseGrants     Field[[]UseGrant]    `json:"use_grants"`
 	Name          Field[string]        `json:"name"`
 	Description   Field[string]        `json:"description"`
 	Greeting      Field[string]        `json:"greeting"`
@@ -278,6 +291,8 @@ type Repository interface {
 	DeletePAPIGrant(uint64, string) error
 	SkillBindings(uint64) ([]SkillBinding, error)
 	SaveSkillBindings(uint64, []SkillBinding, time.Time) error
+	UseGrants(agentID uint64) ([]UseGrant, error)
+	ReplaceUseGrants(*Definition, []UseGrant, uint64) error
 	CanUseAgent(agentID, userID uint64, admin bool) (bool, error)
 	ScopeExists(kind string, id *uint64) (bool, error)
 	AccountResourceGrants(userID uint64, admin bool) ([]agentcore.ResourceGrant, error)
@@ -285,7 +300,8 @@ type Repository interface {
 	AgentSessionIDs(uint64) ([]uint64, error)
 	ModelReferenced(string, uint64) (bool, error)
 	Receipt(actor, scopeKind, scopeID, command, key string) (*Receipt, error)
-	AutomationReceipt(caller, scopeID, key string) (*Receipt, error)
+	CanJobRunAgent(run, project, agent uint64) (bool, error)
+	AutomationReceipt(kind, caller, scopeID, key string) (*Receipt, error)
 	InsertReceipt(*Receipt) error
 	SaveReceipt(*Receipt) error
 }

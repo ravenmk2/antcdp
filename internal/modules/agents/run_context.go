@@ -3,6 +3,7 @@ package agents
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
@@ -89,6 +90,10 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 	if err != nil {
 		return nil, err
 	}
+	// Project members can request a privileged robot action only inside its configured project.
+	if agent.Mode == "chat" && agent.ExecutorKind == "robot" && agent.ScopeKind == "project" && agent.ScopeID != nil {
+		grants = slices.DeleteFunc(grants, func(g agentcore.ResourceGrant) bool { return g.Kind == "project" && uint64(g.ID) != *agent.ScopeID })
+	}
 	authorization := agentcore.Authorization{AccountID: agentcore.ID(owner.ID), AccountType: owner.AccountType, AccountVersion: agentcore.Version(owner.AuthVersion), Grants: grants}
 	bindings, err := r.ToolBindings(agent.ID, false)
 	if err != nil {
@@ -109,7 +114,7 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 		if err != nil {
 			return nil, err
 		}
-		if d == nil || !d.Availability.Available {
+		if d == nil || !d.Availability.Available || agent.Mode == "service" && d.ExecutionClass == "question" {
 			continue
 		}
 		tools = append(tools, FrozenTool{Binding: binding, RequiresSandbox: d.RequiresSandbox, Spec: agentcore.ToolSpec{Key: binding.ToolKey, Definition: d.Definition, ExecutionClass: d.ExecutionClass, ParallelSafe: d.ParallelSafe, Policy: binding.Policy, ResultLimit: toolOutputInlineLimit(binding.ToolKey)}})

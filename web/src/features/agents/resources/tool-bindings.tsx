@@ -476,6 +476,7 @@ function ToolBindingsForm({
                 : item.description
             }
             disabled={(tool) =>
+              (mode === "service" && tool.tool_key === "ask_question") ||
               !tool.availability.available ||
               draft.some((item) => item.tool_key === tool.tool_key)
             }

@@ -10,6 +10,8 @@ import (
 // Persistence rows stay inside platform adapters. They are never API DTOs or
 // agentcore contracts. Every mutation is enclosed by a semantic host transaction.
 type SessionRow struct {
+	ExecutorKind              string          `db:"executor_kind"`
+	ChatUserID                *uint64         `db:"chat_user_id"`
 	ID                        uint64          `db:"id"`
 	AgentID                   uint64          `db:"agent_id"`
 	ExecutionMode             string          `db:"agent_type"`

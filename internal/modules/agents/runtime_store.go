@@ -44,7 +44,19 @@ func runtimeOwner(tx identity.Tx, v *SessionRow) (*identity.User, error) {
 }
 
 func executionAccount(tx identity.Tx, v *SessionRow, active bool) (*identity.User, error) {
-	if v.ExecutorUserID == 0 || v.ExecutionMode != "chat" && v.ExecutionMode != "service" {
+	if v.ExecutorUserID == 0 || v.ExecutorKind != "chat_user" && v.ExecutorKind != "robot" {
+		return nil, integrity()
+	}
+	switch v.ExecutionMode {
+	case "chat":
+		if v.ChatUserID == nil || *v.ChatUserID == 0 || (v.ExecutorKind == "chat_user") != (*v.ChatUserID == v.ExecutorUserID) {
+			return nil, integrity()
+		}
+	case "service":
+		if v.ExecutorKind != "robot" || v.ChatUserID != nil {
+			return nil, integrity()
+		}
+	default:
 		return nil, integrity()
 	}
 	users, err := tx.LockUsers([]uint64{v.ExecutorUserID})
@@ -55,7 +67,7 @@ func executionAccount(tx identity.Tx, v *SessionRow, active bool) (*identity.Use
 	if user == nil {
 		return nil, integrity()
 	}
-	if (user.AccountType == "robot") != (v.ExecutionMode == "service") {
+	if (user.AccountType == "robot") != (v.ExecutorKind == "robot") {
 		return nil, integrity()
 	}
 	if active && (user.Status != "active" || user.DeletedAt != nil) {
@@ -160,7 +172,7 @@ func (s *Service) ClaimRoot(ctx context.Context, request agentcore.ClaimRequest)
 		if !now.Before(input.QueueDeadlineAt) {
 			return nil
 		}
-		allowed, e := canUseSessionAgent(r, agent, owner)
+		allowed, e := sessionCallerAllowed(tx, r, v, agent, owner)
 		if e != nil {
 			return e
 		}

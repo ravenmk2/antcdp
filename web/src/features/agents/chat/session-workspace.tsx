@@ -112,7 +112,11 @@ export function SessionWorkspace({
       </Tabs.Root>
       <div className="agent-workspace-privacy">
         <LockKeyhole />
-        {service ? "机器人执行 · 管理员调试" : "个人会话 · 仅本人可见"}
+        {service
+          ? "机器人执行 · 自动化运行"
+          : session.configuration.executor_kind === "robot"
+            ? "机器人执行 · 私人对话"
+            : "个人会话 · 仅本人可见"}
       </div>
     </aside>
   );

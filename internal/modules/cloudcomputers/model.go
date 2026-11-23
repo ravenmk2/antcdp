@@ -13,7 +13,8 @@ import (
 type Computer struct {
 	ID                   uint64          `db:"id"`
 	OwnerUserID          uint64          `db:"owner_user_id"`
-	PoolAgentID          *uint64         `db:"pool_agent_id"`
+	WorkspaceUserID      *uint64         `db:"workspace_user_id"`
+	AllocationKind       string          `db:"allocation_kind"`
 	State                string          `db:"state"`
 	BackendGeneration    uint64          `db:"backend_generation"`
 	InstanceID           uint64          `db:"sandbox_instance_id"`
@@ -143,4 +144,11 @@ type Service struct {
 	EndpointProtection func(string) ([]string, error)
 	PrepareWorkspace   func(context.Context, *Access, uint64) error
 	VerifyEnvironment  func(context.Context, *Access) (Capabilities, []DiagnosticCheck, error)
+}
+
+func (c *Computer) PoolOwner() *uint64 {
+	if c.AllocationKind == "robot_pool" {
+		return &c.OwnerUserID
+	}
+	return nil
 }

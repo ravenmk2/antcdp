@@ -51,7 +51,7 @@ func (Executor) Execute(ctx context.Context, input jobcore.Input, host jobcore.H
 			return nil, host.Log(ctx, level, message, args[1])
 		}}
 	}
-	for _, name := range []string{"resources", "dingtalk"} {
+	for _, name := range []string{"resources", "dingtalk", "agentChat"} {
 		functions[name] = scriptcore.Function{Async: true, Call: func(ctx context.Context, args []json.RawMessage) (any, error) { return host.Call(ctx, name, args) }}
 	}
 	return (runtime.Executor{}).Execute(ctx, scriptcore.Input{Script: input.Script, SourceName: "job.js", EntryPoint: "main", Values: map[string]any{"inputs": input.Inputs, "run": input.Run}, Functions: functions, Bootstrap: bootstrap, OnStopping: input.OnStopping})

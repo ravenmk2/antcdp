@@ -3,6 +3,7 @@ package integrations
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -20,10 +21,11 @@ import (
 )
 
 type GitLabMRClient struct {
-	client    *http.Client
-	endpoint  string
-	projectID string
-	token     string
+	reviewToken func(uint64, string, string) string
+	client      *http.Client
+	endpoint    string
+	projectID   string
+	token       string
 }
 
 func (s *Service) AgentGitLabMRClient(ctx context.Context, auth agentcore.Authorization, id uint64) (*GitLabMRClient, error) {
@@ -86,6 +88,7 @@ type GitLabMRUpdate struct {
 }
 
 type GitLabMRMerge struct {
+	ReviewToken        string `json:"-"`
 	SHA                string `json:"sha"`
 	Squash             *bool  `json:"squash,omitempty"`
 	RemoveSourceBranch *bool  `json:"should_remove_source_branch,omitempty"`
@@ -237,6 +240,73 @@ func (g *GitLabMRClient) Get(ctx context.Context, iid uint64) (GitLabMR, error) 
 	return row.result(true), nil
 }
 
+type MRDiffFile struct {
+	OldPath   string `json:"old_path"`
+	NewPath   string `json:"new_path"`
+	OldMode   string `json:"a_mode"`
+	NewMode   string `json:"b_mode"`
+	Diff      string `json:"diff"`
+	Collapsed bool   `json:"collapsed"`
+	TooLarge  bool   `json:"too_large"`
+}
+
+type MRDiff struct {
+	SHA         string       `json:"head_commit_sha"`
+	Files       []MRDiffFile `json:"diffs"`
+	ReviewToken string       `json:"review_token,omitempty"`
+}
+
+// BindReview ties proof of a complete diff read to this execution's robot and conversation.
+func (g *GitLabMRClient) BindReview(sign func(uint64, string, string) string) { g.reviewToken = sign }
+
+func (g *GitLabMRClient) Diff(ctx context.Context, iid uint64) (MRDiff, error) {
+	mr, err := g.Get(ctx, iid)
+	if err != nil {
+		return MRDiff{}, err
+	}
+	var versions []struct {
+		ID  uint64 `json:"id"`
+		SHA string `json:"head_commit_sha"`
+	}
+	suffix := mrPath(iid) + "/versions"
+	if _, err = g.request(ctx, http.MethodGet, suffix, url.Values{"per_page": {"1"}}, http.StatusOK, nil, &versions); err != nil {
+		return MRDiff{}, err
+	}
+	if len(versions) != 1 || versions[0].ID == 0 || mr.SHA == "" || versions[0].SHA != mr.SHA {
+		return MRDiff{}, mrError("DIFF_NOT_READY", "MR 差异尚未对应当前提交，请稍后重新读取。")
+	}
+	var version struct {
+		MRDiff
+		ID    uint64 `json:"id"`
+		State string `json:"state"`
+		Size  string `json:"real_size"`
+	}
+	if _, err = g.request(ctx, http.MethodGet, suffix+"/"+strconv.FormatUint(versions[0].ID, 10), nil, http.StatusOK, nil, &version); err != nil {
+		return MRDiff{}, err
+	}
+	size, err := strconv.Atoi(version.Size)
+	if err != nil || size == 0 || version.State != "collected" || version.ID != versions[0].ID || version.SHA != mr.SHA || size != len(version.Files) {
+		return MRDiff{}, mrError("DIFF_INCOMPLETE", "GitLab 未返回完整差异，无法完成代码审查。")
+	}
+	for _, file := range version.Files {
+		if file.OldPath == "" || file.NewPath == "" || file.Diff == "" || file.Collapsed || file.TooLarge || strings.HasPrefix(file.Diff, "Binary files ") {
+			return MRDiff{}, mrError("DIFF_INCOMPLETE", "文件缺少完整文本差异，请由维护者审查。")
+		}
+	}
+	result := MRDiff{SHA: version.SHA, Files: version.Files}
+	if g.reviewToken != nil {
+		result.ReviewToken = g.reviewToken(iid, mr.SHA, mr.TargetBranch)
+		encoded, err := json.Marshal(result)
+		if err != nil {
+			return MRDiff{}, err
+		}
+		if len(encoded) > agentcore.ToolOutputMaxBytes {
+			return MRDiff{}, mrError("DIFF_INCOMPLETE", "差异超出助手可保留的完整工具输出大小，无法完成代码审查。")
+		}
+	}
+	return result, nil
+}
+
 func (g *GitLabMRClient) Update(ctx context.Context, iid uint64, input GitLabMRUpdate) (GitLabMR, error) {
 	if input == (GitLabMRUpdate{}) {
 		return GitLabMR{}, mrError("INVALID_ARGUMENTS", "请至少提供一个 MR 更新字段。")
@@ -254,8 +324,15 @@ func (g *GitLabMRClient) Merge(ctx context.Context, iid uint64, input GitLabMRMe
 	if _, err := hex.DecodeString(input.SHA); err != nil || (len(input.SHA) != 40 && len(input.SHA) != 64) {
 		return GitLabMR{}, mrError("INVALID_ARGUMENTS", "请提供已确认的完整源分支提交 SHA。")
 	}
-	if _, err := g.Get(ctx, iid); err != nil {
+	mr, err := g.Get(ctx, iid)
+	if err != nil {
 		return GitLabMR{}, err
+	}
+	if g.reviewToken != nil {
+		expected := g.reviewToken(iid, input.SHA, mr.TargetBranch)
+		if expected == "" || mr.SHA != input.SHA || !hmac.Equal([]byte(expected), []byte(input.ReviewToken)) {
+			return GitLabMR{}, mrError("REVIEW_REQUIRED", "请在当前会话读取并审查此 MR 当前提交的完整差异。")
+		}
 	}
 	out, err := g.write(ctx, http.MethodPut, mrPath(iid)+"/merge", http.StatusOK, iid, input)
 	if err == nil && out.State != "merged" {

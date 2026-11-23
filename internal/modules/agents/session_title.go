@@ -292,8 +292,12 @@ func (s *Service) startSessionTitle(ctx context.Context, id uint64) (titleWork, 
 		if agent == nil || !agent.Enabled || !selection.Availability.Available {
 			return unavailable()
 		}
-		if err = requireSessionAgent(r, agent, owner); err != nil {
+		allowed, err := sessionCallerAllowed(tx, r, initial, agent, owner)
+		if err != nil {
 			return err
+		}
+		if !allowed {
+			return unavailable()
 		}
 		v, err := st.Session(id, true)
 		if err != nil {

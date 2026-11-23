@@ -24,12 +24,13 @@ type BindingWrite struct {
 	SpecID Field[string] `json:"spec_id"`
 }
 type SpecBinding struct {
-	ID         uint64       `db:"id" json:"-"`
-	AgentID    *uint64      `db:"agent_id" json:"agent_id,string"`
-	SpecID     *uint64      `db:"spec_id" json:"spec_id,string"`
-	RowVersion uint64       `db:"row_version" json:"-"`
-	Spec       *SandboxSpec `json:"spec"`
-	Version    string       `json:"version"`
+	PoolCapacity *int         `db:"pool_capacity" json:"pool_capacity"`
+	ID           uint64       `db:"id" json:"-"`
+	RobotUserID  *uint64      `db:"robot_user_id" json:"robot_user_id,string"`
+	SpecID       *uint64      `db:"spec_id" json:"spec_id,string"`
+	RowVersion   uint64       `db:"row_version" json:"-"`
+	Spec         *SandboxSpec `json:"spec"`
+	Version      string       `json:"version"`
 }
 type SpecReference struct {
 	AgentID *uint64 `db:"agent_id" json:"agent_id,string"`
@@ -166,7 +167,7 @@ func (s *CloudService) DeleteSpec(ctx context.Context, raw, tag, key string, id 
 		return nil
 	})
 }
-func serviceDefinition(r Repository, agent *uint64, lock bool) (*Definition, error) {
+func robotPoolDefinition(r Repository, agent *uint64, lock bool) (*Definition, error) {
 	if agent == nil {
 		return nil, nil
 	}
@@ -174,7 +175,7 @@ func serviceDefinition(r Repository, agent *uint64, lock bool) (*Definition, err
 	if e != nil {
 		return nil, e
 	}
-	if v == nil || v.DeletedAt != nil || v.Mode != "service" {
+	if v == nil || v.DeletedAt != nil || v.ExecutorKind != "robot" {
 		return nil, missing()
 	}
 	return v, nil
@@ -186,10 +187,15 @@ func (s *CloudService) bindingResult(out *Result, b *SpecBinding) {
 }
 func (s *CloudService) GetBinding(ctx context.Context, raw string, agent *uint64) (*Result, error) {
 	return s.cloudAccess(ctx, raw, true, func(_ identity.Tx, r Repository, _ StateRepository, cr CloudRepository, _ *identity.Auth, out *Result) error {
-		if _, e := serviceDefinition(r, agent, false); e != nil {
+		definition, e := robotPoolDefinition(r, agent, false)
+		if e != nil {
 			return e
 		}
-		b, e := cr.SpecBinding(agent, false)
+		var robot *uint64
+		if definition != nil {
+			robot = definition.RobotUserID
+		}
+		b, e := cr.SpecBinding(robot, false)
 		if e != nil {
 			return e
 		}
@@ -224,7 +230,7 @@ func (s *CloudService) SaveBinding(ctx context.Context, raw, tag, key string, ag
 		scope += ":" + idString(*agent)
 	}
 	return s.cloudCommand(ctx, raw, key, "cloud_spec_binding.update", scope, w, func(_ identity.Tx, r Repository, _ StateRepository, cr CloudRepository, a *identity.Auth, out *Result, _ *Receipt) error {
-		definition, e := serviceDefinition(r, agent, true)
+		definition, e := robotPoolDefinition(r, agent, true)
 		if e != nil {
 			return e
 		}
@@ -236,7 +242,11 @@ func (s *CloudService) SaveBinding(ctx context.Context, raw, tag, key string, ag
 			}
 			s.specTag(spec)
 		}
-		b, e := cr.SpecBinding(agent, true)
+		var robot *uint64
+		if definition != nil {
+			robot = definition.RobotUserID
+		}
+		b, e := cr.SpecBinding(robot, true)
 		if e != nil {
 			return e
 		}
@@ -266,10 +276,10 @@ func (s *CloudService) SaveBinding(ctx context.Context, raw, tag, key string, ag
 		return nil
 	})
 }
-func insertServiceSpecBinding(tx identity.Tx, agent *Definition, spec *uint64) error {
-	if agent.Mode != "service" {
+func insertRobotSpecBinding(tx identity.Tx, agent *Definition, spec *uint64) error {
+	if agent.ExecutorKind != "robot" {
 		if spec != nil {
-			return httpx.Invalid("sandbox_spec_id", "service_agent_required")
+			return httpx.Invalid("sandbox_spec_id", "robot_executor_required")
 		}
 		return nil
 	}
@@ -282,5 +292,5 @@ func insertServiceSpecBinding(tx identity.Tx, agent *Definition, spec *uint64) e
 			return e
 		}
 	}
-	return cr.InsertSpecBinding(&agent.ID, spec, agent.Creator)
+	return cr.InsertSpecBinding(agent.RobotUserID, spec, agent.PoolCapacity, agent.Creator)
 }

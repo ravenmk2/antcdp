@@ -25,6 +25,7 @@ vi.mock("@/app/auth", () => ({
 }));
 const mock = vi.mocked(request);
 const agent: CatalogAgent = {
+  executor_kind: "chat_user",
   favorited: false,
   scope_kind: "platform",
   id: "1",

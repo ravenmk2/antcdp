@@ -158,7 +158,7 @@ func TestWorkspaceUnknownRemainsOccupiedPastDeadline(t *testing.T) {
 func TestWorkspaceMutationAuthorizationRechecksOwnerAccountAndFence(t *testing.T) {
 	now := time.Now()
 	user := &identity.User{ID: 1, Status: "active", Role: "admin"}
-	w := &CloudComputerRow{ID: 2, OwnerUserID: 1, State: "ready", FenceVersion: 9}
+	w := &CloudComputerRow{ID: 2, AllocationKind: "personal", OwnerUserID: 1, State: "ready", FenceVersion: 9}
 	intent := workspaceFileIntent{WorkspaceFence: 9}
 	if err := authorizeWorkspaceMutation(user, w, intent, now.Add(time.Minute), now); err != nil {
 		t.Fatal(err)
@@ -266,7 +266,7 @@ func TestWorkspaceQueuedMutationDispatchesOnceAndSettlesBothRecords(t *testing.T
 	m.public.Status = "queued"
 	m.refs = nil
 	m.actor = identity.User{ID: 1, Status: "active", Role: "user"}
-	m.w = CloudComputerRow{ID: 4, BackendGeneration: 1, OwnerUserID: 1, State: "ready", FenceVersion: 9}
+	m.w = CloudComputerRow{ID: 4, BackendGeneration: 1, AllocationKind: "personal", OwnerUserID: 1, State: "ready", FenceVersion: 9}
 	remote := "sandbox"
 	m.w.RuntimeID = &remote
 	m.w.RuntimeCreationToken = new("fixture-token")

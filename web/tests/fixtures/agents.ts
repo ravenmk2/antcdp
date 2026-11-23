@@ -6,6 +6,8 @@ export const session: SessionDetail = {
     id: "10",
     agent_id: "4",
     agent_type: "chat",
+    executor_kind: "chat_user",
+    chat_user_id: "1",
     title: "版本问题排查",
     model_selection: { model_binding_id: "8", thinking_option_key: "default" },
     model_locked_at: time,

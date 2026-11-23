@@ -96,7 +96,7 @@ func (s *CloudService) cloudView(cr CloudRepository, v *CloudComputerRow) (Cloud
 	if e != nil {
 		return CloudView{}, e
 	}
-	out := CloudView{TerminalSessions: activity.Terminals, ID: v.ID, OwnerUserID: v.OwnerUserID, PoolAgentID: v.PoolAgentID, State: v.State, BackendGeneration: v.BackendGeneration, InstanceID: v.InstanceID, StorageGeneration: v.StorageGeneration, Environment: v.EffectiveEnvironment, AppliedSpecID: v.AppliedSpecID, AppliedSpecVersion: v.AppliedSpecVersion, AppliedTemplateVersion: v.AppliedSpecVersion, VolumeState: v.VolumeState, RuntimeID: v.RuntimeID, VolumeID: v.VolumeID, VolumeName: v.VolumeName, VolumeCleanupState: v.VolumeCleanupState, ActiveLeases: activity.Leases, PendingTransfers: activity.Transfers, UnknownExecutions: activity.Unknown, IdleSince: v.IdleSince, LastActivityAt: v.LastActivityAt, ErrorCode: v.ErrorCode, Version: strings.Trim(s.tag("computer", v.ID, v.RowVersion), `"`)}
+	out := CloudView{TerminalSessions: activity.Terminals, ID: v.ID, OwnerUserID: v.OwnerUserID, AllocationKind: v.AllocationKind, State: v.State, BackendGeneration: v.BackendGeneration, InstanceID: v.InstanceID, StorageGeneration: v.StorageGeneration, Environment: v.EffectiveEnvironment, AppliedSpecID: v.AppliedSpecID, AppliedSpecVersion: v.AppliedSpecVersion, AppliedTemplateVersion: v.AppliedSpecVersion, VolumeState: v.VolumeState, RuntimeID: v.RuntimeID, VolumeID: v.VolumeID, VolumeName: v.VolumeName, VolumeCleanupState: v.VolumeCleanupState, ActiveLeases: activity.Leases, PendingTransfers: activity.Transfers, UnknownExecutions: activity.Unknown, IdleSince: v.IdleSince, LastActivityAt: v.LastActivityAt, ErrorCode: v.ErrorCode, Version: strings.Trim(s.tag("computer", v.ID, v.RowVersion), `"`)}
 	if latest != nil {
 		out.LatestOperationID = &latest.ID
 	}
@@ -195,7 +195,7 @@ func (s *CloudService) ActivatePersonal(ctx context.Context, raw string) (*Resul
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		if v == nil {
-			v, e = newComputer(cr, c, a.User.ID, nil, now)
+			v, e = newComputer(cr, c, a.User.ID, "personal", nil, now)
 			if e != nil {
 				return e
 			}

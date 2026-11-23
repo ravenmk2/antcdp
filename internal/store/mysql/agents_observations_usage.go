@@ -51,7 +51,7 @@ func agentUsageWhere(q a.UsageQuery, call bool) (string, []any) {
 	for _, filter := range []struct {
 		col   string
 		value uint64
-	}{{"s.agent_id", q.AgentID}, {"s.executor_user_id", q.OwnerID}, {"s.id", q.SessionID}} {
+	}{{"s.agent_id", q.AgentID}, {"s.chat_user_id", q.OwnerID}, {"s.id", q.SessionID}} {
 		if filter.value > 0 {
 			parts = append(parts, filter.col+"=?")
 			args = append(args, filter.value)
@@ -162,6 +162,6 @@ func (t *agentsTx) RunMetadataPage(q a.UsageQuery) ([]a.RunMetadataRow, int, err
 	}
 	rows := []a.RunMetadataRow{}
 	args = append(args, q.PageSize, (q.Page-1)*q.PageSize)
-	e := t.tx.SelectContext(t.ctx, &rows, "SELECT r.*,s.agent_id,s.agent_type,IF(s.agent_type='chat',s.executor_user_id,NULL) AS owner_user_id"+from+" ORDER BY r.id DESC LIMIT ? OFFSET ?", args...)
+	e := t.tx.SelectContext(t.ctx, &rows, "SELECT r.*,s.agent_id,s.agent_type,s.chat_user_id AS owner_user_id"+from+" ORDER BY r.id DESC LIMIT ? OFFSET ?", args...)
 	return rows, total, e
 }

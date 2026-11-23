@@ -20,6 +20,7 @@ import (
 )
 
 type AutomationChat struct {
+	JobRun                                      bool
 	ProjectID, ActorID, CallerID, ConsumptionID uint64
 	Path                                        resourcecode.Locator
 	Message, Title, RequestKey                  string
@@ -69,18 +70,15 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 		if agent.ScopeKind == "project" && (agent.ScopeID == nil || *agent.ScopeID != w.ProjectID) {
 			return missing()
 		}
-		if _, err = tx.LockUsers([]uint64{w.ActorID, *agent.RobotUserID}); err != nil {
-			return err
+		callerKind := "event_subscription"
+		originKind, originID := "event_consumption", w.ConsumptionID
+		creatorKind, creatorID := "user", idString(w.ActorID)
+		if w.JobRun {
+			callerKind, originKind, originID = "job_run", "job_run", w.CallerID
+			creatorKind, creatorID = "job_run", idString(w.CallerID)
 		}
-		if _, err = collaboration.AutomationProject(tx, w.ProjectID, w.ActorID); err != nil {
+		if err = authorizeAutomation(tx, r, agent, w); err != nil {
 			return err
-		}
-		allowed, err := r.CanUseAgent(agent.ID, w.ActorID, false)
-		if err != nil {
-			return err
-		}
-		if !allowed {
-			return missing()
 		}
 		if err = s.definition(agent); err != nil {
 			return err
@@ -94,8 +92,8 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 		}
 		digest := sha256.Sum256(payload)
 		caller, scope := strconv.FormatUint(w.CallerID, 10), strconv.FormatUint(w.ProjectID, 10)
-		// The project lock serializes missing receipt keys, including concurrent callers.
-		old, err := r.AutomationReceipt(caller, scope, key)
+		// Authorization locks the project for an event or the run for a job before checking its receipt.
+		old, err := r.AutomationReceipt(callerKind, caller, scope, key)
 		if err != nil {
 			return err
 		}
@@ -112,7 +110,7 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 		if !agent.Enabled || agent.DefaultModelBindingID == nil {
 			return httpx.E(409, "AGENT_UNAVAILABLE", "助手当前不可用")
 		}
-		v := &SessionRow{AgentID: agent.ID, ExecutionMode: "service", SessionKind: "root", ExecutorUserID: *agent.RobotUserID, Title: title, NextInputOrder: 1, RowVersion: 1, CreatedByActorKind: "user", CreatedByActorID: strconv.FormatUint(w.ActorID, 10), LockedModelConfig: json.RawMessage(`null`), SelectedModelBindingID: *agent.DefaultModelBindingID}
+		v := &SessionRow{AgentID: agent.ID, ExecutionMode: "service", ExecutorKind: "robot", SessionKind: "root", ExecutorUserID: *agent.RobotUserID, Title: title, NextInputOrder: 1, RowVersion: 1, CreatedByActorKind: creatorKind, CreatedByActorID: creatorID, LockedModelConfig: json.RawMessage(`null`), SelectedModelBindingID: *agent.DefaultModelBindingID}
 		executor, err := executionAccount(tx, v, true)
 		if err != nil {
 			return err
@@ -144,7 +142,7 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 			return err
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
-		rec := &Receipt{ActorKind: "event_subscription", ActorID: caller, ScopeKind: "project", ScopeID: scope, Command: "automation.chat", Key: key, Hash: digest[:], Status: "pending", Result: json.RawMessage(`{}`), CreatedAt: now}
+		rec := &Receipt{ActorKind: callerKind, ActorID: caller, ScopeKind: "project", ScopeID: scope, Command: "automation.chat", Key: key, Hash: digest[:], Status: "pending", Result: json.RawMessage(`{}`), CreatedAt: now}
 		if err = r.InsertReceipt(rec); err != nil {
 			return err
 		}
@@ -161,7 +159,7 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 		if err = s.pinSessionTitle(st, v, titleSource, now); err != nil {
 			return err
 		}
-		source := &agentcore.SourceRef{Kind: "event_consumption", ID: agentcore.ID(w.ConsumptionID)}
+		source := &agentcore.SourceRef{Kind: originKind, ID: agentcore.ID(originID)}
 		if err = s.admitInput(st, out, rec, v, agent, model, selection, w.ActorID, "trigger", source, nil, InputCreate{Content: content, ExpectedHash: model.SelectionHash}); err != nil {
 			return err
 		}
@@ -187,4 +185,27 @@ func (s *Service) ChatAutomation(ctx context.Context, w AutomationChat) (ChatRec
 		}
 	}
 	return accepted, err
+}
+
+func authorizeAutomation(tx identity.Tx, r Repository, agent *Definition, w AutomationChat) error {
+	var allowed bool
+	var err error
+	if w.JobRun {
+		allowed, err = r.CanJobRunAgent(w.CallerID, w.ProjectID, agent.ID)
+	} else {
+		if _, err = tx.LockUsers([]uint64{w.ActorID, *agent.RobotUserID}); err != nil {
+			return err
+		}
+		if _, err = collaboration.AutomationProject(tx, w.ProjectID, w.ActorID); err != nil {
+			return err
+		}
+		allowed, err = r.CanUseAgent(agent.ID, w.ActorID, false)
+	}
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return missing()
+	}
+	return nil
 }

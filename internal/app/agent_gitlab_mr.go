@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	"github.com/ravenmk2/antcdp/internal/modules/collaboration"
@@ -35,6 +36,11 @@ func gitLabMRHandler[Args, Result any](s *integrations.Service, run func(*integr
 		if err != nil {
 			return nil, err
 		}
+		if x.Authorization.AccountType == "robot" {
+			client.BindReview(func(iid uint64, sha, branch string) string {
+				return s.ETag(fmt.Sprintf("mr-review/%d/%d/%d/%d/%d/%s/%s", x.ContentSessionID, x.AgentID, x.Authorization.AccountID, id, iid, sha, branch))
+			})
+		}
 		result, err := run(client, ctx, args)
 		if err != nil {
 			return nil, err
@@ -53,6 +59,7 @@ type gitLabMRUpdateArgs struct {
 }
 
 type gitLabMRMergeArgs struct {
+	ReviewToken string `json:"review_token"`
 	gitLabMRTarget
 	SHA                string `json:"sha"`
 	Squash             *bool  `json:"squash"`
@@ -66,12 +73,15 @@ func gitLabMROperations(s *integrations.Service) papi.GitLabMROperations {
 		Get: gitLabMRHandler(s, func(g *integrations.GitLabMRClient, ctx context.Context, in gitLabMRTarget) (integrations.GitLabMR, error) {
 			return g.Get(ctx, in.IID)
 		}),
+		Diff: gitLabMRHandler(s, func(g *integrations.GitLabMRClient, ctx context.Context, in gitLabMRTarget) (integrations.MRDiff, error) {
+			return g.Diff(ctx, in.IID)
+		}),
 		Update: gitLabMRHandler(s, func(g *integrations.GitLabMRClient, ctx context.Context, in gitLabMRUpdateArgs) (integrations.GitLabMR, error) {
 			return g.Update(ctx, in.IID, in.GitLabMRUpdate)
 		}),
 		Merge: gitLabMRHandler(s, func(g *integrations.GitLabMRClient, ctx context.Context, in gitLabMRMergeArgs) (integrations.GitLabMR, error) {
 			return g.Merge(ctx, in.IID, integrations.GitLabMRMerge{
-				SHA: in.SHA, Squash: in.Squash, RemoveSourceBranch: in.RemoveSourceBranch,
+				ReviewToken: in.ReviewToken, SHA: in.SHA, Squash: in.Squash, RemoveSourceBranch: in.RemoveSourceBranch,
 			})
 		}),
 	}

@@ -10,9 +10,11 @@ import (
 
 func TestPolicyIdentityAndNetwork(t *testing.T) {
 	for _, mode := range []string{"chat", "service"} {
-		v := Definition{Name: "测试", Mode: mode, ScopeKind: "platform", RuntimePolicy: defaultRuntimePolicy()}
+		v := Definition{Name: "测试", Mode: mode, UsePolicy: "scope", ExecutorKind: "chat_user", ScopeKind: "platform", RuntimePolicy: defaultRuntimePolicy()}
 		if mode == "service" {
 			v.PoolCapacity = new(1)
+			v.RobotUserID = new(uint64(7))
+			v.ExecutorKind = "robot"
 		}
 		if e := validateDefinition(&v); e != nil {
 			t.Fatal(e)
@@ -97,7 +99,7 @@ func TestModelSelectionHashUsesEffectiveRoute(t *testing.T) {
 	if err != nil || string(independent.Parameters["max_output_tokens"]) != "128" || independent.Parameters["temperature"] != nil || string(third.Parameters["temperature"]) != "0.2" || third.Parameters["max_output_tokens"] != nil {
 		t.Fatal("assistant bindings mixed generation parameters", err)
 	}
-	w := Definition{Name: strings.Repeat("名", 100), Mode: "chat", ScopeKind: "platform", RuntimePolicy: defaultRuntimePolicy(), SystemPrompt: strings.Repeat("a", 128*1024)}
+	w := Definition{Name: strings.Repeat("名", 100), Mode: "chat", ExecutorKind: "chat_user", UsePolicy: "scope", ScopeKind: "platform", RuntimePolicy: defaultRuntimePolicy(), SystemPrompt: strings.Repeat("a", 128*1024)}
 	if e = validateDefinition(&w); e != nil {
 		t.Fatal(e)
 	}

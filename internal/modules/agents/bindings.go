@@ -386,7 +386,7 @@ func (s *Service) PutToolBindings(ctx context.Context, raw string, id uint64, ta
 		}
 		rows := []ToolBinding{}
 		for i, item := range w.Items {
-			if v.Mode == "service" && item.Policy == "confirm" {
+			if v.Mode == "service" && (item.Policy == "confirm" || item.ToolKey == "ask_question" && item.Policy != "deny") {
 				return httpx.E(422, "SERVICE_APPROVAL_UNSUPPORTED", "服务型助手只允许预授权工具")
 			}
 			spec := specs[item.ToolKey]
@@ -477,7 +477,7 @@ func (s *Service) validateEnabled(ctx context.Context, tx identity.Tx, r Reposit
 		if b.Policy != "deny" {
 			needsTools = true
 		}
-		if v.Mode == "service" && b.Policy == "confirm" {
+		if v.Mode == "service" && (b.Policy == "confirm" || b.ToolKey == "ask_question" && b.Policy != "deny") {
 			return httpx.E(422, "SERVICE_APPROVAL_UNSUPPORTED", "服务型助手不支持审批")
 		}
 	}

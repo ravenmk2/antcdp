@@ -28,8 +28,8 @@ func sessionCWD(session *SessionRow) (string, error) {
 	}
 	return "/data/sessions/" + idString(id), nil
 }
-func newComputer(cr CloudRepository, connection *SandboxConnection, owner uint64, agent *uint64, now time.Time) (*CloudComputerRow, error) {
-	v := &CloudComputerRow{OwnerUserID: owner, PoolAgentID: agent, State: "uninitialized", BackendGeneration: connection.BackendGeneration, StorageGeneration: 1, VolumeState: "absent", VolumeCleanupState: "not_requested", EffectiveEnvironment: json.RawMessage(`null`), Capabilities: json.RawMessage(`null`), IdleSince: now, LastActivityAt: now, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
+func newComputer(cr CloudRepository, connection *SandboxConnection, owner uint64, kind string, chatUser *uint64, now time.Time) (*CloudComputerRow, error) {
+	v := &CloudComputerRow{OwnerUserID: owner, AllocationKind: kind, WorkspaceUserID: chatUser, State: "uninitialized", BackendGeneration: connection.BackendGeneration, StorageGeneration: 1, VolumeState: "absent", VolumeCleanupState: "not_requested", EffectiveEnvironment: json.RawMessage(`null`), Capabilities: json.RawMessage(`null`), IdleSince: now, LastActivityAt: now, FenceVersion: 1, RowVersion: 1, CreatedAt: now, UpdatedAt: now}
 	if e := cr.InsertComputer(v); e != nil {
 		return nil, e
 	}
@@ -49,16 +49,16 @@ func (s *CloudService) allocateSession(cr CloudRepository, st StateRepository, c
 		if computer == nil || computer.DeletedAt != nil || computer.State == "deleting" {
 			return nil, httpx.E(409, "CLOUD_COMPUTER_DELETED", "原云电脑已删除或正在删除，不能继续此会话")
 		}
-		if computer.OwnerUserID != session.ExecutorUserID || (agent.Mode == "service" && (computer.PoolAgentID == nil || *computer.PoolAgentID != agent.ID)) || (agent.Mode == "chat" && computer.PoolAgentID != nil) {
+		if !sessionMatchesComputer(session, computer) {
 			return nil, integrity()
 		}
-	} else if agent.Mode == "chat" {
+	} else if session.ExecutorKind == "chat_user" {
 		computer, e = cr.PersonalComputer(session.ExecutorUserID, true)
 		if e != nil {
 			return nil, e
 		}
 		if computer == nil {
-			computer, e = newComputer(cr, c, session.ExecutorUserID, nil, now)
+			computer, e = newComputer(cr, c, session.ExecutorUserID, "personal", nil, now)
 			if e != nil {
 				return nil, e
 			}
@@ -67,12 +67,24 @@ func (s *CloudService) allocateSession(cr CloudRepository, st StateRepository, c
 		if agent.RobotUserID == nil || *agent.RobotUserID != session.ExecutorUserID || agent.PoolCapacity == nil {
 			return nil, integrity()
 		}
-		pool, e := cr.PoolComputers(agent.ID, true)
+		binding, e := cr.SpecBinding(agent.RobotUserID, true)
 		if e != nil {
 			return nil, e
 		}
+		if binding == nil || binding.PoolCapacity == nil {
+			return nil, integrity()
+		}
+		pool, e := cr.PoolComputers(session.ExecutorUserID, true)
+		if e != nil {
+			return nil, e
+		}
+		hasPrivateWorkspace := false
 		for i := range pool {
 			v := &pool[i]
+			if !sessionMatchesComputer(session, v) {
+				continue
+			}
+			hasPrivateWorkspace = true
 			if v.State != "ready" && v.State != "paused" && v.State != "uninitialized" {
 				continue
 			}
@@ -85,13 +97,16 @@ func (s *CloudService) allocateSession(cr CloudRepository, st StateRepository, c
 				break
 			}
 		}
-		if computer == nil && len(pool) < *agent.PoolCapacity {
-			computer, e = newComputer(cr, c, session.ExecutorUserID, &agent.ID, now)
+		if computer == nil && len(pool) < *binding.PoolCapacity {
+			computer, e = newComputer(cr, c, session.ExecutorUserID, "robot_pool", session.ChatUserID, now)
 			if e != nil {
 				return nil, e
 			}
 		}
 		if computer == nil {
+			if session.ChatUserID != nil && !hasPrivateWorkspace {
+				return nil, httpx.E(409, "ROBOT_WORKSPACE_CAPACITY", "机器人云电脑池已分配给其他对话用户，请联系管理员调整容量")
+			}
 			return nil, nil
 		}
 	}
@@ -142,6 +157,18 @@ func (s *CloudService) requiresEnvironment(ctx context.Context, tx identity.Tx, 
 	return false, nil
 }
 func (s *CloudService) prepareCloudAdmission(ctx context.Context, tx identity.Tx, r Repository, st StateRepository, agent *Definition, session *SessionRow) (*CloudComputerRow, bool, error) {
+	skills, e := s.Host.freezeSkills(tx, r, agent.ID)
+	if e != nil {
+		return nil, false, e
+	}
+	needed, e := s.requiresEnvironment(ctx, tx, r, agent.ID)
+	if e != nil {
+		return nil, false, e
+	}
+	// Pure API calls (including GitLab review) need no private workspace.
+	if session.ExecutorKind == "robot" && session.ExecutionMode == "chat" && session.CloudComputerID == nil && !needed && len(skills) == 0 {
+		return nil, true, nil
+	}
 	cr, e := CloudStateFor(tx)
 	if e != nil {
 		return nil, false, e
@@ -168,14 +195,14 @@ func (s *CloudService) prepareCloudAdmission(ctx context.Context, tx identity.Tx
 	if e != nil {
 		return nil, false, e
 	}
-	if agent.Mode == "service" && (activity.Leases > 0 || activity.References > 0 || activity.Transfers > 0 || activity.Unknown > 0) {
+	if agent.ExecutorKind == "robot" && (activity.Leases > 0 || activity.References > 0 || activity.Transfers > 0 || activity.Unknown > 0) {
 		return v, false, nil
 	}
 	lifecycle, e := cr.ActiveCloudOperation(v.ID)
 	if e != nil {
 		return v, false, e
 	}
-	if lifecycle != nil || v.State == "provisioning" || agent.Mode == "service" && activity.Operations > 0 {
+	if lifecycle != nil || v.State == "provisioning" || agent.ExecutorKind == "robot" && activity.Operations > 0 {
 		return v, false, nil
 	}
 	if v.State == "unavailable" {
@@ -203,10 +230,6 @@ func (s *CloudService) prepareCloudAdmission(ctx context.Context, tx identity.Tx
 		}
 		// Keep the admission control code; the cause is explanatory only.
 		return v, false, diagnostic.Attach(cause, detail)
-	}
-	skills, e := s.Host.freezeSkills(tx, r, agent.ID)
-	if e != nil {
-		return v, false, e
 	}
 	hash, e := skillSetHash(skills)
 	if e != nil {
@@ -241,10 +264,6 @@ func (s *CloudService) prepareCloudAdmission(ctx context.Context, tx identity.Tx
 			return v, false, nil
 		}
 	}
-	needed, e := s.requiresEnvironment(ctx, tx, r, agent.ID)
-	if e != nil {
-		return v, false, e
-	}
 	if !needed && len(skills) == 0 {
 		return v, true, nil
 	}
@@ -264,7 +283,7 @@ func (s *CloudService) createCloudLease(tx identity.Tx, computer *CloudComputerR
 		return nil, e
 	}
 	mode := "shared"
-	if agent.Mode == "service" {
+	if agent.ExecutorKind == "robot" {
 		mode = "exclusive"
 	}
 	st, e := StateFor(tx)
@@ -332,7 +351,7 @@ func (s *CloudService) queueCloudOperation(cr CloudRepository, connection *Sandb
 	op := &CloudOperationRow{ComputerID: v.ID, Kind: kind, Status: "queued", OperationToken: cryptox.ID(), CommandReceiptID: receipt, BackendGeneration: v.BackendGeneration, InstanceID: v.InstanceID, StorageGeneration: v.StorageGeneration, Intent: json.RawMessage(`{}`), Observation: json.RawMessage(`{}`), ActorKind: actorKind, ActorID: actorID, ExecutorEpoch: s.Epoch, FenceVersion: 1, CreatedAt: now, UpdatedAt: now, DeadlineAt: now.Add(5 * time.Minute)}
 	switch kind {
 	case "create", "rebuild":
-		spec, e := cr.BoundSandboxSpec(v.PoolAgentID)
+		spec, e := cr.BoundSandboxSpec(v.PoolOwner())
 		if e != nil {
 			return nil, e
 		}

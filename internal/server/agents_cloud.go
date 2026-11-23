@@ -116,7 +116,7 @@ func registerAgentSandboxes(user, admin, infra *gin.RouterGroup, o Options) {
 }
 
 func cloudComputerQuery(c *gin.Context) (agents.CloudQuery, bool) {
-	q, ok := modelQuery(c, "page", "page_size", "owner_user_id", "pool_agent_id", "state")
+	q, ok := modelQuery(c, "page", "page_size", "owner_user_id", "pool_robot_id", "state")
 	if !ok {
 		return agents.CloudQuery{}, false
 	}
@@ -128,11 +128,11 @@ func cloudComputerQuery(c *gin.Context) (agents.CloudQuery, bool) {
 	if !ok {
 		return agents.CloudQuery{}, false
 	}
-	pool, ok := agentQueryID(c, q, "pool_agent_id")
+	pool, ok := agentQueryID(c, q, "pool_robot_id")
 	if !ok {
 		return agents.CloudQuery{}, false
 	}
-	return agents.CloudQuery{Page: page, PageSize: size, OwnerUserID: owner, PoolAgentID: pool, State: q.Get("state")}, true
+	return agents.CloudQuery{Page: page, PageSize: size, OwnerUserID: owner, PoolRobotID: pool, State: q.Get("state")}, true
 }
 
 func registerSandboxSpecs(g *gin.RouterGroup, o Options) {

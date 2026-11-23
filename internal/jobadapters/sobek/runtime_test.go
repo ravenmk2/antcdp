@@ -47,6 +47,7 @@ func TestLifecycle(t *testing.T) {
 		{"unawaited", "function main(ctx){ctx.sleep(1000)}", "UNAWAITED_HOST_CALL"},
 		{"pending forever", "async function main(ctx){await new Promise(()=>{})}", "UNSETTLED_PROMISE"},
 		{"rejected", "async function main(ctx){await ctx.dingtalk.send('x')}", "DENIED"},
+		{"agent access denied", "async function main(ctx){await ctx.agents.get('review').chat({message:'Review',requestKey:'mr-42'})}", "DENIED"},
 		{"unhandled", "async function main(ctx){Promise.reject('bad');await ctx.sleep(10)}", "UNHANDLED_REJECTION"},
 		{"cycle", "function main(){let x={};x.x=x;return x}", "INVALID_RESULT"},
 		{"non json", "function main(){return {bad:undefined}}", "INVALID_RESULT"},

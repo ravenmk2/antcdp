@@ -65,7 +65,7 @@ func (s *Service) stageToolOutput(ctx context.Context, ref agentcore.ExecutionRe
 		}
 		now := time.Now().UTC().Truncate(time.Millisecond)
 		expires := now.Add(time.Hour)
-		file = &FileRow{Purpose: "tool_output", ContentDomain: x.RootSession.ExecutionMode, ContentSessionID: &x.RootSession.ID, OwnerUserID: &x.RootSession.ExecutorUserID, AgentID: &x.Agent.ID, CreatedByToolCallID: &call.ID, StorageKey: NewStorageKey(), WriterToken: NewStorageKey(), State: "uploading", IntegrityState: "pending", MediaType: "text/plain; charset=utf-8", MediaProperties: json.RawMessage(`{}`), CreatedAt: now, UpdatedAt: now, ExpiresAt: &expires}
+		file = &FileRow{Purpose: "tool_output", ContentDomain: x.RootSession.ExecutionMode, ContentSessionID: &x.RootSession.ID, OwnerUserID: x.RootSession.personalOwnerID(), AgentID: &x.Agent.ID, CreatedByToolCallID: &call.ID, StorageKey: NewStorageKey(), WriterToken: NewStorageKey(), State: "uploading", IntegrityState: "pending", MediaType: "text/plain; charset=utf-8", MediaProperties: json.RawMessage(`{}`), CreatedAt: now, UpdatedAt: now, ExpiresAt: &expires}
 		if err = st.InsertFile(file); err != nil {
 			return err
 		}

@@ -45,15 +45,21 @@ func favoriteTestUser(t *testing.T, f *agentIntegrationFixture, username string)
 func favoriteTestAgent(t *testing.T, f *agentIntegrationFixture) *a.Definition {
 	t.Helper()
 	ctx, raw, svc := f.Context, f.AdminToken, f.Agents
-	var modelID uint64
-	if err := f.Store.db.GetContext(ctx, &modelID, "SELECT id FROM model_definition WHERE model_id='agent-test' LIMIT 1"); err != nil {
-		t.Fatal(err)
-	}
 	created, err := svc.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: "Favorite agent", Mode: "chat", ScopeKind: "platform"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	agent := created.Data.(*a.Definition)
+	enableChatTestAgent(t, f, agent)
+	return agent
+}
+func enableChatTestAgent(t *testing.T, f *agentIntegrationFixture, agent *a.Definition) {
+	t.Helper()
+	ctx, raw, svc := f.Context, f.AdminToken, f.Agents
+	var modelID uint64
+	if err := f.Store.db.GetContext(ctx, &modelID, "SELECT id FROM model_definition WHERE model_id='agent-test' LIMIT 1"); err != nil {
+		t.Fatal(err)
+	}
 	bindings, err := svc.GetModelBindings(ctx, raw, agent.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +77,6 @@ func favoriteTestAgent(t *testing.T, f *agentIntegrationFixture) *a.Definition {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return agent
 }
 
 func agentFavoritesAndSummary(t *testing.T, f *agentIntegrationFixture) {

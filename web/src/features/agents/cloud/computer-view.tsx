@@ -1,4 +1,3 @@
-import { Link } from "react-router";
 import { StatusBadge, ErrorNotice } from "@/components/feedback";
 import { DescriptionList } from "@/components/layout";
 import type { CloudComputer, CloudState } from "@/types/cloud-computer";
@@ -51,16 +50,10 @@ export function ComputerFacts({
             ? [
                 {
                   label: "归属",
-                  value: computer.pool_agent_id ? (
-                    <Link
-                      className="text-primary"
-                      to={`/admin/agents/${computer.pool_agent_id}?tab=computer`}
-                    >
-                      服务型助手 {computer.pool_agent_id}
-                    </Link>
-                  ) : (
-                    `真人用户 ${computer.owner_user_id}`
-                  ),
+                  value:
+                    computer.allocation_kind === "robot_pool"
+                      ? `机器人 ${computer.owner_user_id}`
+                      : `真人用户 ${computer.owner_user_id}`,
                 },
               ]
             : []),

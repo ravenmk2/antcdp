@@ -9,7 +9,7 @@ import (
 
 type CloudQuery struct {
 	Page, PageSize           int
-	OwnerUserID, PoolAgentID uint64
+	OwnerUserID, PoolRobotID uint64
 	State                    string
 }
 
@@ -39,7 +39,7 @@ type CloudView struct {
 	TerminalSessions       int                 `json:"terminal_sessions"`
 	ID                     uint64              `json:"id,string"`
 	OwnerUserID            uint64              `json:"owner_user_id,string"`
-	PoolAgentID            *uint64             `json:"pool_agent_id,string"`
+	AllocationKind         string              `json:"allocation_kind"`
 	State                  string              `json:"state"`
 	BackendGeneration      uint64              `json:"backend_generation,string"`
 	InstanceID             uint64              `json:"sandbox_instance_id,string"`

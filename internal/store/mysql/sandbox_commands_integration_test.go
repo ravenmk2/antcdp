@@ -102,7 +102,7 @@ func sandboxCommandsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	host.Sandboxes = svc
 	configureTestCloud(t, f, svc)
 	var e error
-	agent := sandboxServiceAgent(t, f, "per_run")
+	agent := sandboxRobotChatAgent(t, f, "per_run")
 	commandSetPolicies(t, f, agent.ID, "allow")
 	x := runtimeClaim(t, f, runtimeSession(t, f, agent.ID).Configuration.ID, "background process lifecycle")
 	binding, e := svc.Acquire(ctx, x)

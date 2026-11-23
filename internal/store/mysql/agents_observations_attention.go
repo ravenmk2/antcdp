@@ -18,7 +18,7 @@ func (t *agentsTx) AttentionFor(session, user uint64) (a.SessionAttention, error
 }
 func (t *agentsTx) AttentionPage(user uint64, kind string, q a.ObservationQuery) ([]a.AttentionRow, int, error) {
 	columns := `s.id AS session_id,s.agent_id,s.title,s.last_activity_at,COALESCE(p.viewed_through_seq,0) AS viewed,` + agentAttentionCounts + `,(SELECT MIN(i.created_at) FROM agent_interaction i WHERE i.session_id=s.id AND ((i.kind='question' AND i.status IN ('waiting','continued')) OR (i.kind='approval' AND i.status='pending' AND i.wait_deadline_at>UTC_TIMESTAMP(3)))) AS first_response_at,(SELECT MIN(i.wait_deadline_at) FROM agent_interaction i WHERE i.session_id=s.id AND i.kind='approval' AND i.status='pending' AND i.wait_deadline_at>UTC_TIMESTAMP(3)) AS next_approval_expires_at`
-	from := ` FROM agent_session s LEFT JOIN agent_session_preference p ON p.session_id=s.id AND p.user_id=? WHERE s.agent_type='chat' AND s.session_kind='root' AND s.executor_user_id=? AND s.archived_at IS NULL`
+	from := ` FROM agent_session s LEFT JOIN agent_session_preference p ON p.session_id=s.id AND p.user_id=? WHERE s.agent_type='chat' AND s.session_kind='root' AND s.chat_user_id=? AND s.archived_at IS NULL`
 	filter, order := "unviewed>0", "(SELECT ar.finished_at FROM agent_run ar WHERE ar.session_id=x.session_id AND ar.root_run_id IS NULL AND ar.ended_seq IS NOT NULL ORDER BY ar.ended_seq DESC LIMIT 1) DESC,(SELECT ar.id FROM agent_run ar WHERE ar.session_id=x.session_id AND ar.root_run_id IS NULL AND ar.ended_seq IS NOT NULL ORDER BY ar.ended_seq DESC LIMIT 1) DESC,session_id DESC"
 	if kind == "response_required" {
 		filter = "questions+approvals>0"

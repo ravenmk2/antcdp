@@ -103,12 +103,12 @@ func Run(ctx context.Context, args []string, version string, out, errOut io.Writ
 	})
 	modelService := newModelService(installer, accounts)
 	webAccessService := newWebAccessService(installer, accounts)
-	jobService := newJobService(installer, accounts)
 	agentApp, err := newAgentApplication(r.DataDir, installer, accounts, modelService, webAccessService)
 	if err != nil {
 		return err
 	}
 	defer agentApp.streams.Close()
+	jobService := newJobService(installer, accounts, agentApp.Service)
 	eventService := newEventService(installer, accounts, jobService, agentApp.Service)
 	handler := server.New(server.Options{Runtime: r, Installer: installer, Static: web.DistFS(), Version: version, Identity: accounts, Media: files, Icons: icons, Models: modelService, WebAccess: webAccessService, Agents: agentApp.Service, AgentResources: agentApp.Resources, AgentHub: agentApp.Hub, Sandboxes: agentApp.Sandboxes, Jobs: jobService, Events: eventService})
 	listener, err := net.Listen("tcp", r.Server.Listen)

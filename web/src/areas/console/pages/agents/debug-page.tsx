@@ -5,7 +5,6 @@ import { AsyncBoundary, Notice } from "@/components/feedback";
 import { PageHeader } from "@/components/layout";
 import { useApiQuery } from "@/hooks/use-api";
 import { Conversation } from "@/features/agents/chat/conversation";
-import { NewConversation } from "@/features/agents/chat/new-conversation";
 import { agentAdminRoot } from "@/features/agents/data/agent-api";
 import type { AgentDefinition } from "@/types/agents";
 
@@ -29,7 +28,7 @@ export function AgentDebugPage() {
           }
           description={
             query.data?.data.agent_type === "service"
-              ? `执行身份：专属机器人 ${query.data.data.robot_user_id} · 使用已保存的配置，工具调用会实际执行。`
+              ? `执行身份：专属机器人 ${query.data.data.robot_user_id} · 由作业或事件订阅发起。`
               : undefined
           }
           actions={
@@ -57,10 +56,10 @@ export function AgentDebugPage() {
               expectedAgentId={agentId}
             />
           ) : (
-            <NewConversation service agentId={agentId} />
+            <Notice>从作业或事件订阅发起运行，在运行记录中查看详情。</Notice>
           )
         ) : query.data ? (
-          <Notice>对话型助手请从工作台使用本人身份开始对话。</Notice>
+          <Notice>对话型助手请从工作台开始对话。</Notice>
         ) : null}
       </AsyncBoundary>
     </div>

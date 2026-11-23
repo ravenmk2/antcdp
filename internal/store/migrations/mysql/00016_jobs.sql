@@ -41,6 +41,14 @@ CREATE TABLE job_run_grant (
  PRIMARY KEY(job_id,subject_kind,subject_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE job_agent_grant (
+ job_id BIGINT UNSIGNED NOT NULL,
+ agent_id BIGINT UNSIGNED NOT NULL,
+ granted_by_user_id BIGINT UNSIGNED NOT NULL,
+ created_at DATETIME(3) NOT NULL,
+ PRIMARY KEY(job_id,agent_id), KEY idx_job_agent_target(agent_id,job_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE job_resource_grant (
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
  job_id BIGINT UNSIGNED NOT NULL,

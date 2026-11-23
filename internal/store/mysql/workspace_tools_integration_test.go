@@ -69,7 +69,7 @@ func workspaceToolsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	svc.PrepareWorkspace, svc.VerifyEnvironment = svc.InitializeComputer, svc.VerifyWorkspaceEnvironment
 	host.Sandboxes = svc
 	configureTestCloud(t, f, svc)
-	agent := sandboxServiceAgent(t, f, "per_run")
+	agent := sandboxRobotChatAgent(t, f, "per_run")
 	bindings, err := host.GetToolBindings(ctx, f.AdminToken, agent.ID)
 	if err != nil {
 		t.Fatal(err)

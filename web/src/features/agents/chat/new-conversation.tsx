@@ -11,13 +11,8 @@ import {
   Notice,
 } from "@/components/feedback";
 import { useApiQuery } from "@/hooks/use-api";
-import type {
-  AgentDefinition,
-  AgentSummary,
-  CatalogAgent,
-  StartOptions,
-} from "@/types/agents";
-import { agentAdminRoot, agentRoot } from "../data/agent-api";
+import type { CatalogAgent } from "@/types/agents";
+import { agentRoot } from "../data/agent-api";
 import {
   useConversationDraft,
   useConversationSend,
@@ -26,49 +21,30 @@ import { ResourcePicker } from "@/features/agents/resources/resource-picker";
 import { ChatComposer } from "./composer";
 import { ModelSelectionControls } from "./model-selection";
 
-export function NewConversation({
-  service = false,
-  agentId,
-}: {
-  service?: boolean;
-  agentId?: string;
-}) {
+export function NewConversation({ agentId }: { agentId?: string }) {
   const { user } = useSession();
   const cache = useQueryClient();
   const [params] = useSearchParams(),
     navigate = useNavigate();
   const routeAgent = agentId || params.get("agent") || "";
-  const id = service
-    ? `new:service:${agentId}`
-    : `new:chat:${routeAgent || "default"}`;
+  const id = `new:chat:${routeAgent || "default"}`;
   const { state: draft, draft: editor } = useConversationDraft(id),
     send = useConversationSend(id);
   const [picking, setPicking] = useState(false);
-  const fixedAgent = !service && Boolean(agentId);
-  const catalog = useApiQuery<(CatalogAgent | AgentSummary)[]>(
-    ["agent-start-catalog", service],
-    service
-      ? `${agentAdminRoot}/definitions?agent_type=service&enabled=true&page=1&page_size=20`
-      : `${agentRoot}/catalog?page=1&page_size=20`,
+  const fixedAgent = Boolean(agentId);
+  const catalog = useApiQuery<CatalogAgent[]>(
+    ["agent-start-catalog"],
+    `${agentRoot}/catalog?page=1&page_size=20`,
     { enabled: !fixedAgent },
   );
   const requested =
     routeAgent || draft.agentId || catalog.data?.data[0]?.id || "";
-  const agent = useApiQuery<CatalogAgent | AgentDefinition>(
-    ["agent-start-detail", service, requested],
-    service
-      ? `${agentAdminRoot}/definitions/${requested}`
-      : `${agentRoot}/catalog/${requested}`,
+  const agent = useApiQuery<CatalogAgent>(
+    ["agent-start-detail", requested],
+    `${agentRoot}/catalog/${requested}`,
     { enabled: Boolean(requested) },
   );
-  const options = useApiQuery<StartOptions>(
-    ["agent-start-options", requested],
-    `${agentAdminRoot}/definitions/${requested}/start-options`,
-    { enabled: service && Boolean(requested) },
-  );
-  const defaults = service
-    ? options.data?.data
-    : (agent.data?.data as CatalogAgent | undefined);
+  const defaults = agent.data?.data;
   const modelOptions = defaults?.model_options;
   const selected =
     modelOptions?.find((model) => model.binding_id === draft.modelId) ??
@@ -88,20 +64,13 @@ export function NewConversation({
     selected?.thinking_options[0]?.key ??
     "";
   const value = agent.data?.data;
-  const greeting = service
-    ? undefined
-    : value?.greeting
-        ?.trim()
-        .replace(/\{user\}|\{assistant\}/g, (token) =>
-          token === "{user}" ? user.display_name : value.name,
-        );
+  const greeting = value?.greeting
+    ?.trim()
+    .replace(/\{user\}|\{assistant\}/g, (token) =>
+      token === "{user}" ? user.display_name : value.name,
+    );
   const locked = send.state.phase !== "idle";
-  const available =
-    value &&
-    (service
-      ? (value as AgentDefinition).enabled &&
-        (value as AgentDefinition).agent_type === "service"
-      : (value as CatalogAgent).availability.available);
+  const available = value?.availability.available;
   const target =
     value && selected
       ? {
@@ -120,11 +89,7 @@ export function NewConversation({
     send.release();
     void cache.invalidateQueries({ queryKey: ["agent-sessions"] });
     void cache.invalidateQueries({ queryKey: ["workspace-attention"] });
-    navigate(
-      service
-        ? `/admin/agents/${requested}/debug/${sessionId}`
-        : `/chats/${sessionId}`,
-    );
+    navigate(`/chats/${sessionId}`);
   };
   const selectionControls = (
     <ModelSelectionControls
@@ -179,18 +144,13 @@ export function NewConversation({
     );
   return (
     <section className="agent-start-panel" aria-label="开始新对话">
-      {(service || greeting) && (
+      {greeting && (
         <header className="agent-start-heading">
           <span className="agent-start-mark">
             <Sparkles className="size-5" />
           </span>
           <div>
-            <h1 className="whitespace-pre-wrap wrap-break-word">
-              {service ? "调试服务型助手" : greeting}
-            </h1>
-            {service && (
-              <p>使用专属机器人和其云电脑池执行，权限来自机器人账号。</p>
-            )}
+            <h1 className="whitespace-pre-wrap wrap-break-word">{greeting}</h1>
           </div>
         </header>
       )}
@@ -219,7 +179,7 @@ export function NewConversation({
               onOpenSession={openSession}
             >
               <div className="agent-start-options">
-                {(!agentId || service) && (
+                {!agentId && (
                   <div className="agent-start-field">
                     <p>助手</p>
                     <Button
@@ -243,7 +203,7 @@ export function NewConversation({
                 )}
               </div>
             </ChatComposer>
-            <ErrorNotice error={agent.error || options.error} />
+            <ErrorNotice error={agent.error} />
             {value && !available && (
               <Notice tone="warning">
                 当前助手暂不可开始会话。请重新选择，或联系管理员核对模型及授权配置。
@@ -260,13 +220,9 @@ export function NewConversation({
         )}
       </AsyncBoundary>
       {picking && (
-        <ResourcePicker<CatalogAgent | AgentSummary>
+        <ResourcePicker<CatalogAgent>
           title="选择助手"
-          path={
-            service
-              ? `${agentAdminRoot}/definitions?agent_type=service&enabled=true`
-              : `${agentRoot}/catalog`
-          }
+          path={`${agentRoot}/catalog`}
           identify={(item) => item.id}
           label={(item) => item.name}
           description={(item) => item.description}

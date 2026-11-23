@@ -225,12 +225,14 @@ export function AgentOverview({ agent }: { agent: AgentDefinition }) {
         </h2>
         <p className="text-sm text-muted">
           {agent.agent_type === "service"
-            ? "使用专属机器人身份、已授权的资源与独立云电脑池。调试使用已保存的配置，也会执行实际工具操作。"
-            : "使用当前对话用户的身份和个人云电脑。启用后可前往工作台，以本人身份验证已保存的配置。"}
+            ? "由作业或事件订阅发起，使用机器人的权限和云电脑池。"
+            : agent.executor_kind === "robot"
+              ? "通过工作台对话，使用机器人的资源权限与云电脑池。"
+              : "使用当前对话用户的身份和个人云电脑。启用后可前往工作台，以本人身份验证已保存的配置。"}
         </p>
         <div className="flex flex-wrap gap-4 text-sm text-primary">
           <Link to="?tab=runtime">查看执行预算</Link>
-          {agent.agent_type === "service" && (
+          {agent.executor_kind === "robot" && (
             <>
               <Link to="?tab=resources">检查权限与凭据</Link>
               <Link to="?tab=computer">查看云电脑池</Link>
@@ -238,9 +240,7 @@ export function AgentOverview({ agent }: { agent: AgentDefinition }) {
           )}
         </div>
         {!agent.enabled && (
-          <p className="text-sm text-muted">
-            当前已停用，检查并启用后可开始调试对话。
-          </p>
+          <p className="text-sm text-muted">当前已停用，请检查配置后启用。</p>
         )}
       </Panel>
     </div>

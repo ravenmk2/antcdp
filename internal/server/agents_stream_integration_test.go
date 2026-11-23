@@ -71,7 +71,7 @@ type streamAgentRepo struct{ a.Repository }
 func (streamAgentRepo) CanUseAgent(_, userID uint64, _ bool) (bool, error) { return userID == 1, nil }
 
 func (streamAgentRepo) Definition(uint64, bool) (*a.Definition, error) {
-	return &a.Definition{ID: 1, Enabled: true, Mode: "chat", ScopeKind: "platform"}, nil
+	return &a.Definition{ID: 1, Enabled: true, Mode: "chat", UsePolicy: "scope", ExecutorKind: "chat_user", ScopeKind: "platform"}, nil
 }
 func (streamAgentRepo) ModelBindings(uint64, bool) ([]a.ModelBinding, error) {
 	return []a.ModelBinding{{ID: 1, AgentID: 1, ModelID: 1, ThinkingJSON: json.RawMessage(`[]`), DefaultThinking: "", GenerationParameters: json.RawMessage(`{}`)}}, nil
@@ -150,7 +150,7 @@ func streamEvent(t *testing.T, seq uint64) a.EventRow {
 }
 func TestAgentWebSocketSnapshotCatchupResyncAndRevocation(t *testing.T) {
 	now := time.Now().UTC()
-	store := &streamTestStore{user: identity.User{ID: 1, Role: "admin", Status: "active", AuthVersion: 1}, session: identity.Session{ID: 1, UserID: 1, AuthVersion: 1, ExpiresAt: now.Add(time.Hour)}, chat: a.SessionRow{ID: 1, AgentID: 1, ExecutionMode: "chat", SessionKind: "root", ExecutorUserID: 1, SelectedModelBindingID: 1, SelectedThinkingOptionKey: "", ModelLockedAt: &now, LockedModelConfig: json.RawMessage(`{"schema_version":1,"selection_hash":"locked","thinking_option_key":"","display":{}}`), LastSeq: 1}, events: []a.EventRow{streamEvent(t, 1)}}
+	store := &streamTestStore{user: identity.User{ID: 1, Role: "admin", Status: "active", AuthVersion: 1}, session: identity.Session{ID: 1, UserID: 1, AuthVersion: 1, ExpiresAt: now.Add(time.Hour)}, chat: a.SessionRow{ID: 1, AgentID: 1, ExecutionMode: "chat", ExecutorKind: "chat_user", ChatUserID: new(uint64(1)), SessionKind: "root", ExecutorUserID: 1, SelectedModelBindingID: 1, SelectedThinkingOptionKey: "", ModelLockedAt: &now, LockedModelConfig: json.RawMessage(`{"schema_version":1,"selection_hash":"locked","thinking_option_key":"","display":{}}`), LastSeq: 1}, events: []a.EventRow{streamEvent(t, 1)}}
 	ident := identity.New(func() (identity.Store, error) { return store, nil })
 	models := &m.Service{ETag: func(v string) string { return v }}
 	svc := &a.Service{Identity: ident, ETag: func(v string) string { return v }, Models: models}

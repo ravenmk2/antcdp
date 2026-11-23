@@ -26,7 +26,7 @@ export interface SandboxSpec extends CloudEnvironment, Versioned {
   config_version: string;
 }
 export interface SpecBinding extends Versioned {
-  agent_id: string | null;
+  robot_user_id: string | null;
   spec_id: string | null;
   spec: SandboxSpec | null;
 }
@@ -64,7 +64,7 @@ export interface CloudComputer extends Versioned {
   terminal_sessions?: number;
   id: string;
   owner_user_id: string;
-  pool_agent_id: string | null;
+  allocation_kind: "personal" | "robot_pool";
   state: CloudState;
   backend_generation: string;
   sandbox_instance_id: string;

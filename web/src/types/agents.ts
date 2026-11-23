@@ -1,6 +1,12 @@
 import type { DiagnosticDetail } from "./agent-events";
 import type { JsonObject, ModelProtocol } from "./models";
 
+export type AgentExecutor = "chat_user" | "robot";
+export type UsePolicy = "scope" | "allowlist";
+export interface AgentUseGrant {
+  kind: "user" | "role" | "job";
+  id: string;
+}
 export type AgentType = "chat" | "service";
 export type AgentScope = "platform" | "team" | "project";
 export type ActorRef =
@@ -41,12 +47,15 @@ export interface SandboxNetworkPolicy {
   deny_targets: string[];
 }
 export interface AgentDefinition extends Versioned, Timestamped {
+  use_grants?: AgentUseGrant[];
   id: string;
   code: string;
   name: string;
   description: string;
   greeting?: string;
   agent_type: AgentType;
+  executor_kind: AgentExecutor;
+  use_policy: UsePolicy;
   scope_kind: AgentScope;
   scope_id: string | null;
   robot_user_id: string | null;
@@ -68,6 +77,8 @@ export interface AgentSummary extends Omit<
 export interface AgentCreate {
   name: string;
   agent_type: AgentType;
+  executor_kind: AgentExecutor;
+  use_policy: UsePolicy;
   scope_kind: AgentScope;
   scope_id?: string | null;
   pool_capacity?: number;
@@ -86,6 +97,8 @@ export type AgentPatch = Partial<
     | "enabled"
     | "system_prompt"
     | "runtime_policy"
+    | "use_policy"
+    | "use_grants"
     | "pool_capacity"
   >
 >;
@@ -156,6 +169,7 @@ export interface ModelOption {
   }[];
 }
 export interface CatalogAgent {
+  executor_kind: AgentExecutor;
   favorited: boolean;
   scope_kind: AgentScope;
   id: string;
@@ -248,6 +262,8 @@ export interface SessionCreate {
   model_selection?: ModelSelection;
 }
 export interface SessionConfiguration extends Versioned, Timestamped {
+  executor_kind: AgentExecutor;
+  chat_user_id: string | null;
   id: string;
   agent_id: string;
   agent_type: AgentType;

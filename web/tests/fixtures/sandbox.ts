@@ -30,7 +30,7 @@ export const sandboxConnection: SandboxConnection = {
 export const computer: CloudComputer = {
   id: "9",
   owner_user_id: "4",
-  pool_agent_id: null,
+  allocation_kind: "personal",
   state: "ready",
   backend_generation: "1",
   sandbox_instance_id: "1",

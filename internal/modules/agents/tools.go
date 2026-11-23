@@ -211,6 +211,9 @@ func (s *Service) PrepareDispatch(ctx context.Context, ref agentcore.ExecutionRe
 			return e
 		}
 		call.Spec.Policy = binding.Policy
+		if x.Session.ExecutionMode == "service" && call.Spec.ExecutionClass == "question" {
+			call.Spec.Policy = "deny"
+		}
 		action, e := agentcore.CheckToolPolicy(x.Execution, call.Spec)
 		if e != nil {
 			return coreError(e)

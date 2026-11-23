@@ -407,6 +407,8 @@ export function AgentCreatePage() {
   );
   const [draft, setDraft] = useState({
     code: "",
+    executor_kind: "chat_user" as AgentDefinition["executor_kind"],
+    use_policy: "scope" as AgentDefinition["use_policy"],
     robot_user_id: null as string | null,
     name: "",
     description: "",
@@ -424,6 +426,7 @@ export function AgentCreatePage() {
     draft.name ||
     draft.description ||
     (draft.agent_type === "chat" && draft.greeting) ||
+    draft.executor_kind !== "chat_user" ||
     draft.agent_type !== "chat" ||
     draft.scope_kind !== "platform",
   );
@@ -442,7 +445,7 @@ export function AgentCreatePage() {
           ? ""
           : "请输入 1–64 位小写字母、数字、_ 或 - 的编码",
         robot_user_id:
-          draft.agent_type === "service" && !draft.robot_user_id
+          draft.executor_kind === "robot" && !draft.robot_user_id
             ? "请选择未绑定助手的机器人"
             : "",
         name: draft.name.trim() ? "" : "请输入助手名称",
@@ -463,11 +466,11 @@ export function AgentCreatePage() {
         body: {
           ...draft,
           greeting: draft.agent_type === "chat" ? draft.greeting : undefined,
-          ...(draft.agent_type === "service" && specID
+          ...(draft.executor_kind === "robot" && specID
             ? { sandbox_spec_id: specID }
             : {}),
           robot_user_id:
-            draft.agent_type === "service" ? draft.robot_user_id : null,
+            draft.executor_kind === "robot" ? draft.robot_user_id : null,
           enabled: false,
         },
       },
@@ -550,13 +553,13 @@ export function AgentCreatePage() {
                     {
                       value: "chat",
                       title: "对话型",
-                      hint: "使用对话用户的身份与个人云电脑",
+                      hint: "允许用户从工作台发起对话",
                       Icon: UserRound,
                     },
                     {
                       value: "service",
                       title: "服务型",
-                      hint: "使用专属机器人身份与云电脑池",
+                      hint: "仅供作业和事件订阅调用",
                       Icon: Bot,
                     },
                   ] as const
@@ -567,7 +570,15 @@ export function AgentCreatePage() {
                       name="agent_type"
                       value={value}
                       checked={draft.agent_type === value}
-                      onChange={() => setDraft({ ...draft, agent_type: value })}
+                      onChange={() =>
+                        setDraft({
+                          ...draft,
+                          agent_type: value,
+                          executor_kind:
+                            value === "service" ? "robot" : "chat_user",
+                          use_policy: "scope",
+                        })
+                      }
                     />
                     <Icon aria-hidden />
                     <span>
@@ -579,7 +590,38 @@ export function AgentCreatePage() {
               </div>
               <p className={styles.hint}>助手类型创建后固定。</p>
             </fieldset>
-            {draft.agent_type === "service" && (
+            {draft.agent_type === "chat" && (
+              <Field label="执行身份">
+                <Select
+                  value={draft.executor_kind}
+                  onValueChange={(value) =>
+                    setDraft({
+                      ...draft,
+                      executor_kind: value === "robot" ? "robot" : "chat_user",
+                      use_policy: value === "robot" ? "allowlist" : "scope",
+                    })
+                  }
+                >
+                  <option value="chat_user">对话用户 · 个人云电脑</option>
+                  <option value="robot">机器人 · 机器人云电脑池</option>
+                </Select>
+              </Field>
+            )}
+            <Field label="使用权限">
+              <Select
+                value={draft.use_policy}
+                onValueChange={(value) =>
+                  setDraft({
+                    ...draft,
+                    use_policy: value === "scope" ? "scope" : "allowlist",
+                  })
+                }
+              >
+                <option value="scope">归属范围内的成员</option>
+                <option value="allowlist">指定账号或项目角色</option>
+              </Select>
+            </Field>
+            {draft.executor_kind === "robot" && (
               <>
                 <ErrorNotice error={robots.error} />
                 <Field
@@ -766,7 +808,7 @@ export function AgentDetailPage() {
           label: "执行预算",
           icon: ShieldCheck,
         },
-        ...(agent.data?.data.agent_type === "service"
+        ...(agent.data?.data.executor_kind === "robot"
           ? [
               {
                 value: "resources",
@@ -826,24 +868,19 @@ export function AgentDetailPage() {
               role="link"
               variant="outline"
             />
-            {agent.data?.data.enabled && (
-              <Button
-                render={
-                  <Link
-                    to={
-                      agent.data.data.agent_type === "service"
-                        ? `/admin/agents/${agentId}/debug`
-                        : `/home?agent=${agentId}`
-                    }
-                  >
-                    <Play className="size-4" />
-                    调试对话
-                  </Link>
-                }
-                nativeButton={false}
-                role="link"
-              />
-            )}
+            {agent.data?.data.enabled &&
+              agent.data.data.agent_type === "chat" && (
+                <Button
+                  render={
+                    <Link to={`/home?agent=${agentId}`}>
+                      <Play className="size-4" />
+                      调试对话
+                    </Link>
+                  }
+                  nativeButton={false}
+                  role="link"
+                />
+              )}
             {agent.data && (
               <Button
                 render={
@@ -965,7 +1002,7 @@ export function AgentDetailPage() {
                     <AgentBasicRead agent={agent.data.data} />
                   ))}
                 {tab === "resources" &&
-                  agent.data.data.agent_type === "service" && (
+                  agent.data.data.executor_kind === "robot" && (
                     <RobotResources
                       key={String(editing)}
                       robotId={agent.data.data.robot_user_id!}
@@ -973,7 +1010,7 @@ export function AgentDetailPage() {
                     />
                   )}
                 {tab === "computer" &&
-                  agent.data.data.agent_type === "service" && (
+                  agent.data.data.executor_kind === "robot" && (
                     <CloudSpecBindingEditor
                       key={String(editing)}
                       agent={agent.data}
@@ -1030,9 +1067,9 @@ export function AgentDetailPage() {
                   />
                 )}
                 {(tab === "resources" || tab === "computer") &&
-                  agent.data.data.agent_type !== "service" && (
+                  agent.data.data.executor_kind !== "robot" && (
                     <Notice>
-                      此配置仅适用于服务型助手。对话型助手使用对话用户的身份与个人云电脑。
+                      此助手由对话用户执行，使用该用户的权限和个人云电脑。
                     </Notice>
                   )}
               </div>
@@ -1099,6 +1136,22 @@ function AgentBasicRead({ agent }: { agent: AgentDefinition }) {
     <Panel bodyClassName="p-6">
       <dl className="agent-read-facts grid grid-cols-2 gap-6">
         <div>
+          <dt>执行身份</dt>
+          <dd>
+            {agent.executor_kind === "robot"
+              ? `机器人 #${agent.robot_user_id}`
+              : "对话用户"}
+          </dd>
+        </div>
+        <div>
+          <dt>使用权限</dt>
+          <dd>
+            {agent.use_policy === "scope"
+              ? "归属范围内的成员"
+              : "指定账号或项目角色"}
+          </dd>
+        </div>
+        <div>
           <dt>助手名称</dt>
           <dd>{agent.name}</dd>
         </div>
@@ -1149,6 +1202,8 @@ function AgentBasicEditor({
   const fields = (agent: AgentDefinition) => ({
     name: agent.name,
     description: agent.description,
+    use_policy: agent.use_policy,
+    use_grants: agent.use_grants ?? [],
     ...(agent.agent_type === "chat" ? { greeting: agent.greeting ?? "" } : {}),
   });
   const [draft, setDraft] = useState(() => fields(initial.data));
@@ -1205,6 +1260,104 @@ function AgentBasicEditor({
                 }
               />
             </Field>
+            <Field label="使用权限">
+              <Select
+                value={draft.use_policy}
+                onValueChange={(value) =>
+                  setDraft({
+                    ...draft,
+                    use_policy: value === "scope" ? "scope" : "allowlist",
+                  })
+                }
+              >
+                <option value="scope">归属范围内的成员</option>
+                <option value="allowlist">指定账号或项目角色</option>
+              </Select>
+            </Field>
+            {(draft.use_policy === "allowlist" ||
+              initial.data.agent_type === "service") && (
+              <div className="space-y-2">
+                {draft.use_grants.map((grant, index) => (
+                  <div className="flex items-center gap-2" key={index}>
+                    <Select
+                      aria-label="授权对象类型"
+                      value={grant.kind}
+                      onValueChange={(value) =>
+                        setDraft({
+                          ...draft,
+                          use_grants: draft.use_grants.map((g, i) =>
+                            i === index
+                              ? { ...g, kind: value as typeof g.kind, id: "" }
+                              : g,
+                          ),
+                        })
+                      }
+                    >
+                      <option value="user">账号</option>
+                      {initial.data.scope_kind === "project" && (
+                        <option value="role">项目角色</option>
+                      )}
+                      {initial.data.agent_type === "service" && (
+                        <option value="job">作业</option>
+                      )}
+                    </Select>
+                    <Input
+                      aria-label="授权对象 ID"
+                      placeholder="对象 ID"
+                      value={grant.id}
+                      onChange={(event) =>
+                        setDraft({
+                          ...draft,
+                          use_grants: draft.use_grants.map((g, i) =>
+                            i === index
+                              ? {
+                                  ...g,
+                                  id: event.target.value.replace(/\D/g, ""),
+                                }
+                              : g,
+                          ),
+                        })
+                      }
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setDraft({
+                          ...draft,
+                          use_grants: draft.use_grants.filter(
+                            (_, i) => index !== i,
+                          ),
+                        })
+                      }
+                    >
+                      移除
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      use_grants: [
+                        ...draft.use_grants,
+                        {
+                          kind:
+                            initial.data.agent_type === "service"
+                              ? "job"
+                              : "user",
+                          id: "",
+                        },
+                      ],
+                    })
+                  }
+                >
+                  添加调用授权
+                </Button>
+              </div>
+            )}
             {draft.greeting !== undefined && (
               <AgentGreetingField
                 value={draft.greeting}

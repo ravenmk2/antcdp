@@ -31,7 +31,7 @@ func contentAccess(v *SessionRow, a *identity.Auth) error {
 		return integrity()
 	}
 	if v.ExecutionMode == "chat" {
-		if v.ExecutorUserID != a.User.ID {
+		if v.ChatUserID == nil || *v.ChatUserID != a.User.ID {
 			return missing()
 		}
 		return nil
@@ -60,7 +60,7 @@ func (s *Service) sessionAccess(st StateRepository, id uint64, a *identity.Auth,
 		if e = contentAccess(root, a); e != nil {
 			return nil, e
 		}
-		if v.ExecutorUserID != root.ExecutorUserID || v.AgentID != root.AgentID {
+		if v.ExecutorKind != root.ExecutorKind || !same(v.ChatUserID, root.ChatUserID) || v.ExecutorUserID != root.ExecutorUserID || v.AgentID != root.AgentID {
 			return nil, integrity()
 		}
 		if write {
@@ -87,7 +87,7 @@ func lockSessionContent(st StateRepository, id uint64, auth *identity.Auth) (*Se
 }
 
 func (s *Service) configuration(v *SessionRow) SessionConfiguration {
-	return SessionConfiguration{ID: v.ID, AgentID: v.AgentID, Mode: v.ExecutionMode, Title: v.Title, Selection: ModelSelection{strconv.FormatUint(v.SelectedModelBindingID, 10), v.SelectedThinkingOptionKey}, ModelLockedAt: v.ModelLockedAt, ArchivedAt: v.ArchivedAt, Version: strings.Trim(s.tag("session", v.ID, v.RowVersion), `"`), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
+	return SessionConfiguration{ID: v.ID, AgentID: v.AgentID, Mode: v.ExecutionMode, ExecutorKind: v.ExecutorKind, ChatUserID: v.ChatUserID, Title: v.Title, Selection: ModelSelection{strconv.FormatUint(v.SelectedModelBindingID, 10), v.SelectedThinkingOptionKey}, ModelLockedAt: v.ModelLockedAt, ArchivedAt: v.ArchivedAt, Version: strings.Trim(s.tag("session", v.ID, v.RowVersion), `"`), CreatedAt: v.CreatedAt, UpdatedAt: v.UpdatedAt}
 }
 func (s *Service) selection(tx identity.Tx, r Repository, v *SessionRow) (agentcore.LockedModel, EffectiveSelection, error) {
 	if s.Models == nil {
@@ -254,14 +254,17 @@ func activeSessionRun(st StateRepository, session *SessionRow) (*RunRow, error) 
 
 func sessionPermissions(tx identity.Tx, r Repository, v *SessionRow, agent *Definition, selection EffectiveSelection, user *identity.User) (Permissions, bool, error) {
 	executor := user
-	if v.ExecutionMode != "chat" || v.ExecutorUserID != user.ID {
-		var err error
+	var err error
+	if user.ID != v.ExecutorUserID {
 		executor, err = executionAccount(tx, v, false)
 		if err != nil {
 			return Permissions{}, false, err
 		}
 	}
-	allowed, err := canUseSessionAgent(r, agent, executor)
+	allowed, err := canUseSessionAgent(r, agent, user)
+	if executor.DeletedAt != nil || executor.Status != "active" {
+		allowed = false
+	}
 	if err != nil {
 		return Permissions{}, false, err
 	}
@@ -269,7 +272,7 @@ func sessionPermissions(tx identity.Tx, r Repository, v *SessionRow, agent *Defi
 	if v.RootSessionID == nil {
 		permissions.Manage = true
 		permissions.Control = v.ArchivedAt == nil
-		permissions.Submit = permissions.Control && agent.Enabled && selection.Availability.Available && allowed
+		permissions.Submit = v.ExecutionMode == "chat" && permissions.Control && agent.Enabled && selection.Availability.Available && allowed
 		permissions.Answer = permissions.Submit
 		permissions.Approve = permissions.Submit && v.ExecutionMode == "chat"
 	}
@@ -655,8 +658,8 @@ func (s *Service) createSessionTx(ctx context.Context, tx identity.Tx, r Reposit
 	if e = s.definition(agent); e != nil {
 		return e
 	}
-	if agent.Mode == "service" && a.User.Role != "admin" {
-		return httpx.E(403, "FORBIDDEN", "需要管理员权限")
+	if agent.Mode == "service" {
+		return serviceAutomationOnly()
 	}
 	title := "新会话"
 	if w.Title.Set {
@@ -668,19 +671,18 @@ func (s *Service) createSessionTx(ctx context.Context, tx identity.Tx, r Reposit
 	if title == "" || utf8.RuneCountInString(title) > 200 {
 		return httpx.Invalid("title", "invalid_length")
 	}
-	v := &SessionRow{AgentID: id, ExecutionMode: agent.Mode, SessionKind: "root", Title: title, ExecutorUserID: a.User.ID, NextInputOrder: 1, RowVersion: 1, CreatedByActorKind: "user", CreatedByActorID: strconv.FormatUint(a.User.ID, 10), LockedModelConfig: json.RawMessage(`null`)}
-	executor := a.User
-	if agent.Mode == "service" {
+	v := &SessionRow{AgentID: id, ExecutionMode: agent.Mode, ChatUserID: &a.User.ID, ExecutorKind: agent.ExecutorKind, SessionKind: "root", Title: title, ExecutorUserID: a.User.ID, NextInputOrder: 1, RowVersion: 1, CreatedByActorKind: "user", CreatedByActorID: strconv.FormatUint(a.User.ID, 10), LockedModelConfig: json.RawMessage(`null`)}
+	if agent.ExecutorKind == "robot" {
 		if agent.RobotUserID == nil {
 			return integrity()
 		}
 		v.ExecutorUserID = *agent.RobotUserID
-		executor, e = executionAccount(tx, v, false)
+		_, e = executionAccount(tx, v, true)
 		if e != nil {
 			return e
 		}
 	}
-	allowed, e := canUseSessionAgent(r, agent, executor)
+	allowed, e := canUseSessionAgent(r, agent, a.User)
 	if e != nil {
 		return e
 	}
@@ -721,7 +723,7 @@ func (s *Service) createSessionTx(ctx context.Context, tx identity.Tx, r Reposit
 	if !selection.Availability.Available {
 		return httpx.E(409, "MODEL_UNAVAILABLE", "所选模型当前不可用")
 	}
-	if e = requireSessionAgent(r, current, executor); e != nil {
+	if e = requireSessionAgent(r, current, a.User); e != nil {
 		return e
 	}
 	now := time.Now().UTC().Truncate(time.Millisecond)

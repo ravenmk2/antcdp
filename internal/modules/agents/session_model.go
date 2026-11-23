@@ -21,6 +21,8 @@ type SessionPatch struct {
 	Selection Field[ModelSelection] `json:"model_selection"`
 }
 type SessionConfiguration struct {
+	ExecutorKind  string         `json:"executor_kind"`
+	ChatUserID    *uint64        `json:"chat_user_id,string"`
 	ID            uint64         `json:"id,string"`
 	AgentID       uint64         `json:"agent_id,string"`
 	Mode          string         `json:"agent_type"`

@@ -47,6 +47,8 @@ const agent: AgentDefinition = {
   name: "服务核查",
   description: "权限明确的核查助手",
   agent_type: "service",
+  executor_kind: "robot",
+  use_policy: "scope",
   enabled: false,
   system_prompt: "先核验再行动",
   default_model_binding_id: null,
@@ -761,7 +763,12 @@ it("does not offer human confirmation for a service identity", async () => {
 it("restores a chat tool's draft policy and constraints when toggled back on", async () => {
   override = async (path) => {
     if (path.endsWith("/definitions/4"))
-      return response({ ...agent, agent_type: "chat", robot_user_id: null });
+      return response({
+        ...agent,
+        agent_type: "chat",
+        executor_kind: "chat_user",
+        robot_user_id: null,
+      });
     if (path.endsWith("/tool-bindings"))
       return response({
         items: [

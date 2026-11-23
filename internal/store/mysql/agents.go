@@ -21,7 +21,7 @@ type agentsTx struct {
 
 func (t *identityTx) Agents() a.Repository { return &agentsTx{t.ctx, t.tx} }
 
-const agentDefinitionColumns = "id,code,name,description,greeting,agent_type,scope_kind,scope_id,robot_user_id,enabled,system_prompt,config_schema_version,default_model_binding_id,runtime_policy,pool_capacity,config_version,row_version,created_by_user_id,created_at,updated_at,deleted_at"
+const agentDefinitionColumns = "agent.id,agent.code,agent.name,agent.description,agent.greeting,agent.agent_type,agent.executor_kind,agent.use_policy,agent.scope_kind,agent.scope_id,agent.robot_user_id,agent.enabled,agent.system_prompt,agent.config_schema_version,agent.default_model_binding_id,agent.runtime_policy,agent.config_version,agent.row_version,agent.created_by_user_id,agent.created_at,agent.updated_at,agent.deleted_at,(SELECT b.pool_capacity FROM cloud_computer_spec_binding b WHERE b.robot_user_id=agent.robot_user_id) AS pool_capacity"
 const agentModelBindingColumns = "id,agent_id,model_definition_id,thinking_options,COALESCE(default_thinking,'') AS default_thinking,generation_parameters,sort_order,created_at,updated_at,removed_at"
 
 func (t *agentsTx) DefinitionByPath(project uint64, path resourcecode.Locator) (*a.Definition, error) {
@@ -46,9 +46,9 @@ func (t *agentsTx) DefinitionByPath(project uint64, path resourcecode.Locator) (
 	return &v, err
 }
 
-func (t *agentsTx) AutomationReceipt(caller, project, key string) (*a.Receipt, error) {
+func (t *agentsTx) AutomationReceipt(kind, caller, project, key string) (*a.Receipt, error) {
 	v := &a.Receipt{}
-	err := t.tx.GetContext(t.ctx, v, "SELECT "+agentReceiptColumns+" FROM agent_command_receipt WHERE actor_kind='event_subscription' AND actor_id=? AND scope_kind='project' AND scope_id=? AND command_kind='automation.chat' AND idempotency_key=? FOR UPDATE", caller, project, key)
+	err := t.tx.GetContext(t.ctx, v, "SELECT "+agentReceiptColumns+" FROM agent_command_receipt WHERE actor_kind=? AND actor_id=? AND scope_kind='project' AND scope_id=? AND command_kind='automation.chat' AND idempotency_key=? FOR UPDATE", kind, caller, project, key)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -90,6 +90,8 @@ func (t *agentsTx) Definitions(q a.Query) ([]a.Definition, int, error) {
 	args := []any{}
 	if q.CatalogUserID != 0 {
 		conditions = append(conditions, "EXISTS(SELECT 1 FROM agent_model_binding b JOIN model_definition m ON m.id=b.model_definition_id JOIN model_provider p ON p.id=m.provider_id WHERE b.id=agent.default_model_binding_id AND b.removed_at IS NULL AND m.enabled=1 AND p.enabled=1 AND (p.auth_method='none' OR p.secret_ciphertext IS NOT NULL))")
+		conditions = append(conditions, agentAllowlistPredicate)
+		args = append(args, q.CatalogUserID, q.CatalogUserID)
 		if !q.CatalogAdmin {
 			conditions = append(conditions, agentUsagePredicate)
 			args = append(args, q.CatalogUserID, q.CatalogUserID, q.CatalogUserID)
@@ -141,12 +143,12 @@ func (t *agentsTx) Definition(id uint64, lock bool) (*a.Definition, error) {
 func (t *agentsTx) InsertDefinition(v *a.Definition) error {
 	v.CreatedAt = time.Now().UTC().Truncate(time.Millisecond)
 	v.UpdatedAt = v.CreatedAt
-	r, e := t.named("INSERT INTO agent(code,name,description,greeting,agent_type,scope_kind,scope_id,robot_user_id,enabled,system_prompt,config_schema_version,default_model_binding_id,runtime_policy,pool_capacity,config_version,row_version,created_by_user_id,created_at,updated_at,deleted_at) VALUES(:code,:name,:description,:greeting,:agent_type,:scope_kind,:scope_id,:robot_user_id,:enabled,:system_prompt,:config_schema_version,:default_model_binding_id,:runtime_policy,:pool_capacity,:config_version,:row_version,:created_by_user_id,:created_at,:updated_at,:deleted_at)", v)
+	r, e := t.named("INSERT INTO agent(code,name,description,greeting,agent_type,executor_kind,use_policy,scope_kind,scope_id,robot_user_id,enabled,system_prompt,config_schema_version,default_model_binding_id,runtime_policy,config_version,row_version,created_by_user_id,created_at,updated_at,deleted_at) VALUES(:code,:name,:description,:greeting,:agent_type,:executor_kind,:use_policy,:scope_kind,:scope_id,:robot_user_id,:enabled,:system_prompt,:config_schema_version,:default_model_binding_id,:runtime_policy,:config_version,:row_version,:created_by_user_id,:created_at,:updated_at,:deleted_at)", v)
 	return modelID(r, e, &v.ID)
 }
 func (t *agentsTx) SaveDefinition(v *a.Definition) error {
 	v.UpdatedAt = time.Now().UTC().Truncate(time.Millisecond)
-	_, e := t.named("UPDATE agent SET name=:name,description=:description,greeting=:greeting,enabled=:enabled,system_prompt=:system_prompt,default_model_binding_id=:default_model_binding_id,runtime_policy=:runtime_policy,pool_capacity=:pool_capacity,config_version=:config_version,row_version=:row_version,updated_at=:updated_at,deleted_at=:deleted_at WHERE id=:id", v)
+	_, e := t.named("UPDATE agent SET name=:name,description=:description,greeting=:greeting,enabled=:enabled,system_prompt=:system_prompt,default_model_binding_id=:default_model_binding_id,runtime_policy=:runtime_policy,use_policy=:use_policy,config_version=:config_version,row_version=:row_version,updated_at=:updated_at,deleted_at=:deleted_at WHERE id=:id", v)
 	return e
 }
 func (t *agentsTx) DefinitionReferenced(id uint64) (bool, error) {
@@ -210,9 +212,16 @@ func (t *agentsTx) SaveToolBindings(id uint64, rows []a.ToolBinding, now time.Ti
 // Agent scope grants entry only. Projects include direct and team membership.
 const agentUsagePredicate = "(scope_kind='platform' OR (scope_kind='team' AND EXISTS(SELECT 1 FROM team t JOIN team_member m ON m.team_id=t.id WHERE t.id=agent.scope_id AND t.dissolved_at IS NULL AND m.user_id=?)) OR (scope_kind='project' AND EXISTS(SELECT 1 FROM project o WHERE o.id=agent.scope_id AND o.archived_at IS NULL AND " + projectMembership + ")))"
 
+const agentAllowlistPredicate = `(agent.use_policy='scope' OR EXISTS (
+ SELECT 1 FROM agent_use_grant g WHERE g.agent_id=agent.id AND (
+ (g.subject_kind='user' AND g.subject_id=?) OR (g.subject_kind='role' AND EXISTS (
+ SELECT 1 FROM role_binding rb JOIN role r ON r.id=rb.role_id WHERE rb.role_id=g.subject_id
+ AND rb.user_id=? AND r.scope_kind=agent.scope_kind AND r.scope_id=agent.scope_id)))))`
+
 func (t *agentsTx) CanUseAgent(id, userID uint64, admin bool) (bool, error) {
 	q := "SELECT EXISTS(SELECT 1 FROM agent WHERE id=? AND deleted_at IS NULL"
-	args := []any{id}
+	q += " AND " + agentAllowlistPredicate
+	args := []any{id, userID, userID}
 	if !admin {
 		q += " AND " + agentUsagePredicate
 		args = append(args, userID, userID, userID)

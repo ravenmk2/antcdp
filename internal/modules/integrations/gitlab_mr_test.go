@@ -96,6 +96,65 @@ func TestGitLabMRWriteRequests(t *testing.T) {
 	}
 }
 
+func TestGitLabMRRobotReview(t *testing.T) {
+	var changed, incomplete atomic.Bool
+	var writes atomic.Int32
+	g := mrTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		sha := mrTestSHA
+		if changed.Load() {
+			sha = strings.Repeat("a", 40)
+		}
+		switch strings.TrimPrefix(r.URL.Path, mrTestPath) {
+		case "/14":
+			_, _ = io.WriteString(w, strings.Replace(mrTestResponse, `"iid":14`, `"sha":"`+sha+`","target_branch":"main","iid":14`, 1))
+		case "/14/versions":
+			_, _ = io.WriteString(w, `[{"id":8,"head_commit_sha":"`+sha+`"}]`)
+		case "/14/versions/8":
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 8, "state": "collected", "real_size": "1", "head_commit_sha": sha, "diffs": []MRDiffFile{{OldPath: "file.go", NewPath: "file.go", Diff: "@@ -1 +1 @@\n-old\n+new", TooLarge: incomplete.Load()}}})
+		case "/14/merge":
+			var body map[string]any
+			if r.Method != http.MethodPut || json.NewDecoder(r.Body).Decode(&body) != nil || body["sha"] != sha || body["review_token"] != nil {
+				t.Error("unexpected merge request")
+			}
+			writes.Add(1)
+			_, _ = io.WriteString(w, strings.Replace(mrTestResponse, "opened", "merged", 1))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+	g.BindReview(func(_ uint64, sha, branch string) string { return sha + "-" + branch })
+	ctx := t.Context()
+	_, err := g.Merge(ctx, 14, GitLabMRMerge{SHA: mrTestSHA})
+	requireMRFailure(t, err, "REVIEW_REQUIRED", false)
+	incomplete.Store(true)
+	diff, err := g.Diff(ctx, 14)
+	requireMRFailure(t, err, "DIFF_INCOMPLETE", false)
+	if diff.ReviewToken != "" {
+		t.Fatal("token issued for partial data")
+	}
+	incomplete.Store(false)
+	diff, err = g.Diff(ctx, 14)
+	if err != nil || diff.ReviewToken == "" || len(diff.Files) != 1 {
+		t.Fatal(diff, err)
+	}
+	changed.Store(true)
+	for _, sha := range []string{mrTestSHA, strings.Repeat("a", 40)} {
+		_, err = g.Merge(ctx, 14, GitLabMRMerge{SHA: sha, ReviewToken: diff.ReviewToken})
+		requireMRFailure(t, err, "REVIEW_REQUIRED", false)
+	}
+	if writes.Load() != 0 {
+		t.Fatal("merged before fresh review")
+	}
+	fresh, err := g.Diff(ctx, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = g.Merge(ctx, 14, GitLabMRMerge{SHA: fresh.SHA, ReviewToken: fresh.ReviewToken})
+	if err != nil || writes.Load() != 1 {
+		t.Fatal("fresh review merge", err)
+	}
+}
+
 func TestGitLabMRProjectBoundaryAndPagination(t *testing.T) {
 	const fork = `{"iid":14,"source_project_id":98,"target_project_id":97,"state":"opened"}`
 	g := mrTestClient(t, func(w http.ResponseWriter, r *http.Request) {

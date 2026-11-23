@@ -10,7 +10,7 @@ import (
 
 func (t *identityTx) CloudState() a.CloudRepository { return &agentsTx{t.ctx, t.tx} }
 
-const computerColumns = "`id`,`owner_user_id`,`pool_agent_id`,`state`,`backend_generation`,COALESCE(sandbox_instance_id,0) AS sandbox_instance_id,`storage_generation`,`volume_id`,`volume_name`,`volume_state`,`volume_cleanup_state`,`applied_spec_id`,`applied_spec_version`,`idle_since`,`last_activity_at`,`error_code`,`fence_version`,`row_version`,`deleted_at`,`created_at`,`updated_at`"
+const computerColumns = "`id`,`owner_user_id`,`workspace_user_id`,`allocation_kind`,`state`,`backend_generation`,COALESCE(sandbox_instance_id,0) AS sandbox_instance_id,`storage_generation`,`volume_id`,`volume_name`,`volume_state`,`volume_cleanup_state`,`applied_spec_id`,`applied_spec_version`,`idle_since`,`last_activity_at`,`error_code`,`fence_version`,`row_version`,`deleted_at`,`created_at`,`updated_at`"
 
 func (t *agentsTx) hydrateComputer(v *a.CloudComputerRow, lock bool) error {
 	if v.InstanceID == 0 {
@@ -47,7 +47,7 @@ func (t *agentsTx) Computer(id uint64, lock bool) (*a.CloudComputerRow, error) {
 	return v, e
 }
 func (t *agentsTx) InsertComputer(v *a.CloudComputerRow) error {
-	r, e := t.named("INSERT INTO cloud_computer(`owner_user_id`,`pool_agent_id`,`state`,`backend_generation`,`sandbox_instance_id`,`storage_generation`,`volume_id`,`volume_name`,`volume_state`,`volume_cleanup_state`,`applied_spec_id`,`applied_spec_version`,`idle_since`,`last_activity_at`,`error_code`,`fence_version`,`row_version`,`deleted_at`,`created_at`,`updated_at`) VALUES(:owner_user_id,:pool_agent_id,:state,:backend_generation,NULLIF(:sandbox_instance_id,0),:storage_generation,:volume_id,:volume_name,:volume_state,:volume_cleanup_state,:applied_spec_id,:applied_spec_version,:idle_since,:last_activity_at,:error_code,:fence_version,:row_version,:deleted_at,:created_at,:updated_at)", v)
+	r, e := t.named("INSERT INTO cloud_computer(`owner_user_id`,`workspace_user_id`,`allocation_kind`,`state`,`backend_generation`,`sandbox_instance_id`,`storage_generation`,`volume_id`,`volume_name`,`volume_state`,`volume_cleanup_state`,`applied_spec_id`,`applied_spec_version`,`idle_since`,`last_activity_at`,`error_code`,`fence_version`,`row_version`,`deleted_at`,`created_at`,`updated_at`) VALUES(:owner_user_id,:workspace_user_id,:allocation_kind,:state,:backend_generation,NULLIF(:sandbox_instance_id,0),:storage_generation,:volume_id,:volume_name,:volume_state,:volume_cleanup_state,:applied_spec_id,:applied_spec_version,:idle_since,:last_activity_at,:error_code,:fence_version,:row_version,:deleted_at,:created_at,:updated_at)", v)
 	return modelID(r, e, &v.ID)
 }
 func (t *agentsTx) SaveComputer(v *a.CloudComputerRow) error {
@@ -81,7 +81,7 @@ func (t *agentsTx) SaveComputer(v *a.CloudComputerRow) error {
 			return e
 		}
 	}
-	_, e := t.named("UPDATE cloud_computer SET `owner_user_id`=:owner_user_id,`pool_agent_id`=:pool_agent_id,`state`=:state,`backend_generation`=:backend_generation,`sandbox_instance_id`=NULLIF(:sandbox_instance_id,0),`storage_generation`=:storage_generation,`volume_id`=:volume_id,`volume_name`=:volume_name,`volume_state`=:volume_state,`volume_cleanup_state`=:volume_cleanup_state,`applied_spec_id`=:applied_spec_id,`applied_spec_version`=:applied_spec_version,`idle_since`=:idle_since,`last_activity_at`=:last_activity_at,`error_code`=:error_code,`fence_version`=:fence_version,`row_version`=:row_version,`deleted_at`=:deleted_at,`created_at`=:created_at,`updated_at`=:updated_at WHERE id=:id", v)
+	_, e := t.named("UPDATE cloud_computer SET `owner_user_id`=:owner_user_id,`allocation_kind`=:allocation_kind,`state`=:state,`backend_generation`=:backend_generation,`sandbox_instance_id`=NULLIF(:sandbox_instance_id,0),`storage_generation`=:storage_generation,`volume_id`=:volume_id,`volume_name`=:volume_name,`volume_state`=:volume_state,`volume_cleanup_state`=:volume_cleanup_state,`applied_spec_id`=:applied_spec_id,`applied_spec_version`=:applied_spec_version,`idle_since`=:idle_since,`last_activity_at`=:last_activity_at,`error_code`=:error_code,`fence_version`=:fence_version,`row_version`=:row_version,`deleted_at`=:deleted_at,`created_at`=:created_at,`updated_at`=:updated_at WHERE id=:id", v)
 	return e
 }
 

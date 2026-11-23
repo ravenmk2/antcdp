@@ -9,6 +9,7 @@ import (
 
 // These projections and index signatures are the deployed migration contract.
 var agentSchemaColumns = map[string]string{
+	"agent_use_grant":           "agent_id,subject_kind,subject_id,granted_by_user_id,created_at",
 	"agent_favorite":            "user_id,agent_id,created_at",
 	"agent_image_variant":       imageCacheColumns,
 	"agent_model_file":          imageCacheColumns,
@@ -16,7 +17,7 @@ var agentSchemaColumns = map[string]string{
 	"agent_skill_binding":       skillBindingColumns,
 	"agent_run_context":         "root_run_id,agent_id,executor_user_id,agent_config_version,schema_version,cloud_computer_id,cwd,system_prompt,model_snapshot,runtime_policy,builtin_tools,mcp_bindings,resource_grants,skill_manifest,mcp_surface,mcp_prepared_at,created_at",
 	"agent_mcp_binding":         "`id`,`agent_id`,`mcp_server_id`,`enabled`,`sort_order`,`created_at`,`updated_at`,`removed_at`",
-	"agent":                     "`id`,`code`,`name`,`description`,`greeting`,`agent_type`,`scope_kind`,`scope_id`,`scope_key`,`robot_user_id`,`enabled`,`system_prompt`,`config_schema_version`,`default_model_binding_id`,`runtime_policy`,`pool_capacity`,`config_version`,`row_version`,`created_by_user_id`,`created_at`,`updated_at`,`deleted_at`",
+	"agent":                     "`id`,`code`,`name`,`description`,`greeting`,`agent_type`,`executor_kind`,`use_policy`,`scope_kind`,`scope_id`,`scope_key`,`robot_user_id`,`enabled`,`system_prompt`,`config_schema_version`,`default_model_binding_id`,`runtime_policy`,`config_version`,`row_version`,`created_by_user_id`,`created_at`,`updated_at`,`deleted_at`",
 	"agent_model_binding":       "`id`,`agent_id`,`model_definition_id`,`thinking_options`,`default_thinking`,`generation_parameters`,`sort_order`,`created_at`,`updated_at`,`removed_at`",
 	"agent_tool_binding":        "`id`,`agent_id`,`tool_kind`,`tool_key`,`policy`,`parameter_constraints`,`config`,`config_schema_version`,`sort_order`,`created_at`,`updated_at`,`removed_at`",
 	"agent_papi_grant":          "agent_id,api_code,parameter_constraints,created_at,updated_at",
@@ -26,7 +27,7 @@ var agentSchemaColumns = map[string]string{
 	"web_access_setting":        "`id`,`search_routes`,`search_max_results`,`fetch_routes`,`fetch_max_bytes`,`fetch_timeout_seconds`,`fetch_max_redirects`,`fetch_allowed_internal_hosts`,`row_version`,`updated_by_user_id`,`created_at`,`updated_at`",
 	"agent_mcp_server":          "`id`,`code`,`name`,`description`,`url`,`auth_method`,`auth_header_name`,`identity_config`,`timeout_seconds`,`enabled`,`config`,`config_schema_version`,`secret_ciphertext`,`secret_format_version`,`secret_key_version`,`secret_revision`,`row_version`,`config_version`,`last_diagnostic`,`last_diagnostic_at`,`created_by_user_id`,`created_at`,`updated_at`",
 	"agent_operation":           "`id`,`command_receipt_id`,`kind`,`subject_kind`,`subject_id`,`content_domain`,`content_session_id`,`owner_user_id`,`agent_id`,`status`,`config_snapshot`,`result`,`staged_file_id`,`published_skill_version_id`,`error_code`,`actor_user_id`,`executor_epoch`,`fence_version`,`created_at`,`started_at`,`deadline_at`,`finished_at`,`expires_at`,`updated_at`",
-	"agent_session":             "`id`,`agent_id`,`agent_type`,`session_kind`,`root_session_id`,`parent_run_id`,`executor_user_id`,`title`,`title_source`,`title_source_event_seq`,`title_generation_status`,`title_model_call_id`,`cloud_computer_id`,`selected_model_binding_id`,`selected_thinking_option_key`,`locked_model_config`,`model_selection_hash`,`model_locked_at`,`queue_paused`,`next_input_order`,`last_seq`,`projection_seq`,`active_run_id`,`active_compaction_id`,`surface_revision`,`row_version`,`created_by_actor_kind`,`created_by_actor_id`,`created_at`,`updated_at`,`last_activity_at`,`archived_at`,`archived_by_user_id`",
+	"agent_session":             "`id`,`agent_id`,`agent_type`,`executor_kind`,`chat_user_id`,`session_kind`,`root_session_id`,`parent_run_id`,`executor_user_id`,`title`,`title_source`,`title_source_event_seq`,`title_generation_status`,`title_model_call_id`,`cloud_computer_id`,`selected_model_binding_id`,`selected_thinking_option_key`,`locked_model_config`,`model_selection_hash`,`model_locked_at`,`queue_paused`,`next_input_order`,`last_seq`,`projection_seq`,`active_run_id`,`active_compaction_id`,`surface_revision`,`row_version`,`created_by_actor_kind`,`created_by_actor_id`,`created_at`,`updated_at`,`last_activity_at`,`archived_at`,`archived_by_user_id`",
 	"agent_session_preference":  "`user_id`,`session_id`,`pinned`,`pinned_at`,`viewed_through_seq`,`viewed_at`,`row_version`,`created_at`,`updated_at`",
 	"agent_input":               "`id`,`session_id`,`command_receipt_id`,`input_kind`,`origin_kind`,`actor_kind`,`actor_id`,`source_kind`,`source_id`,`last_modified_by_kind`,`last_modified_by_id`,`status`,`queue_order`,`claimed_run_id`,`claimed_step_no`,`question_interaction_id`,`pending_question_slot`,`retry_of_run_id`,`continuation_seq`,`accepted_seq`,`current_content_seq`,`message_seq`,`content_revision`,`row_version`,`created_at`,`updated_at`,`queue_deadline_at`,`claimed_at`,`ended_at`,`end_reason`",
 	"agent_input_file":          "`input_id`,`ordinal`,`reference_kind`,`reference_id`,`file_id`,`content_session_id`,`source_sha256`,`created_at`",
@@ -53,6 +54,8 @@ type agentSchemaIndex struct {
 }
 
 var agentSchemaIndexes = []agentSchemaIndex{
+	{"agent_use_grant", "PRIMARY", 0, "agent_id,subject_kind,subject_id"},
+	{"agent_use_grant", "idx_agent_use_subject", 1, "subject_kind,subject_id,agent_id"},
 	{"agent_favorite", "PRIMARY", 0, "user_id,agent_id"},
 	{"agent_favorite", "idx_agent_favorite_order", 1, "user_id,created_at,agent_id"},
 	{"agent_favorite", "idx_agent_favorite_agent", 1, "agent_id,user_id"},
@@ -114,7 +117,7 @@ var agentSchemaIndexes = []agentSchemaIndex{
 	{"agent_operation", "idx_agent_operation_content", 1, "content_domain,owner_user_id,created_at,id"},
 	{"agent_operation", "idx_agent_operation_session", 1, "content_session_id,id"},
 	{"agent_session", "PRIMARY", 0, "id"},
-	{"agent_session", "idx_agent_session_personal", 1, "executor_user_id,session_kind,archived_at,last_activity_at,id"},
+	{"agent_session", "idx_agent_session_personal", 1, "chat_user_id,session_kind,archived_at,last_activity_at,id"},
 	{"agent_session", "idx_agent_session_service", 1, "agent_type,session_kind,archived_at,last_activity_at,id"},
 	{"agent_session", "idx_agent_session_agent", 1, "agent_id,created_at,id"},
 	{"agent_session", "idx_agent_session_children", 1, "root_session_id,parent_run_id,id"},

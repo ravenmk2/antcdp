@@ -117,13 +117,13 @@ func (f sandboxMemoryFactory) Open(context.Context, sb.Connection) (sb.Provider,
 	return f.provider, nil
 }
 
-func sandboxServiceAgent(t *testing.T, f *agentIntegrationFixture, mode string) *a.Definition {
+func sandboxRobotChatAgent(t *testing.T, f *agentIntegrationFixture, mode string) *a.Definition {
 	t.Helper()
 	binding, e := f.Agents.Sandboxes.GetBinding(f.Context, f.AdminToken, nil)
 	if e != nil {
 		t.Fatal(e)
 	}
-	created, e := f.Agents.CreateDefinition(f.Context, f.AdminToken, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: "Service computer " + mode, Mode: "service", RobotUserID: new(fmt.Sprint(createTestRobot(t, f).ID)), ScopeKind: "platform", SandboxSpecID: binding.Data.(*a.SpecBinding).SpecID})
+	created, e := f.Agents.CreateDefinition(f.Context, f.AdminToken, cryptox.ID(), a.DefinitionCreate{Code: cryptox.ID(), Name: "Robot computer " + mode, Mode: "chat", ExecutorKind: "robot", UsePolicy: "scope", RobotUserID: new(fmt.Sprint(createTestRobot(t, f).ID)), ScopeKind: "platform", SandboxSpecID: binding.Data.(*a.SpecBinding).SpecID})
 	if e != nil {
 		t.Fatal(e)
 	}

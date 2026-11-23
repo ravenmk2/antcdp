@@ -194,10 +194,16 @@ func validateDefinition(v *Definition) error {
 	if (v.ScopeKind == "platform") != (v.ScopeID == nil) || v.ScopeID != nil && *v.ScopeID == 0 {
 		return httpx.Invalid("scope_id", "invalid_scope")
 	}
-	if v.Mode == "chat" && (v.RobotUserID != nil || v.PoolCapacity != nil) {
-		return httpx.Invalid("pool_capacity", "service_agent_required")
+	if v.UsePolicy != "scope" && v.UsePolicy != "allowlist" {
+		return httpx.Invalid("use_policy", "unsupported")
 	}
-	if v.Mode == "service" && (v.PoolCapacity == nil || *v.PoolCapacity < 1 || *v.PoolCapacity > 100) {
+	if v.ExecutorKind != "robot" && v.ExecutorKind != "chat_user" || v.Mode == "service" && v.ExecutorKind != "robot" || (v.ExecutorKind == "robot") != (v.RobotUserID != nil) {
+		return httpx.Invalid("executor_kind", "invalid_identity")
+	}
+	if v.ExecutorKind == "chat_user" && v.PoolCapacity != nil {
+		return httpx.Invalid("pool_capacity", "robot_executor_required")
+	}
+	if v.ExecutorKind == "robot" && (v.PoolCapacity == nil || *v.PoolCapacity < 1 || *v.PoolCapacity > 100) {
 		return httpx.Invalid("pool_capacity", "invalid_range")
 	}
 	if e := validatePolicy(v.RuntimePolicy); e != nil {

@@ -54,7 +54,7 @@ func TestSandboxQueryRejectsDuplicateFiltersAndForeignSelectors(t *testing.T) {
 		query string
 		valid bool
 	}{
-		{"?page=2&page_size=50&owner_user_id=12&pool_agent_id=8&state=unavailable", true},
+		{"?page=2&page_size=50&owner_user_id=12&pool_robot_id=8&state=unavailable", true},
 		{"?page=1&page=2", false},
 		{"?owner_id=9", false},
 		{"?cloud_computer_id=1", false},

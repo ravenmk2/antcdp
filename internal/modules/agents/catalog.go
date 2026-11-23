@@ -29,6 +29,7 @@ type ModelOption struct {
 	Thinking        []ThinkingOption  `json:"thinking_options"`
 }
 type CatalogAgent struct {
+	ExecutorKind    string        `json:"executor_kind"`
 	Favorited       bool          `json:"favorited"`
 	ID              uint64        `json:"id,string"`
 	Name            string        `json:"name"`
@@ -135,7 +136,7 @@ func (s *Service) catalogAgent(tx identity.Tx, r Repository, v *Definition, hash
 	if e != nil {
 		return CatalogAgent{}, e
 	}
-	out := CatalogAgent{ID: v.ID, Name: v.Name, Description: v.Description, Models: []ModelOption{}, DefaultModelID: v.DefaultModelBindingID, ScopeKind: v.ScopeKind}
+	out := CatalogAgent{ExecutorKind: v.ExecutorKind, ID: v.ID, Name: v.Name, Description: v.Description, Models: []ModelOption{}, DefaultModelID: v.DefaultModelBindingID, ScopeKind: v.ScopeKind}
 bindings:
 	for _, b := range rows {
 		view := views[b.ModelID]

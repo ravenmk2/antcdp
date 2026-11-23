@@ -43,6 +43,57 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 			t.Fatal(err)
 		}
 	}
+	t.Run("project member delegates to lead robot", func(t *testing.T) {
+		member, token := favoriteTestUser(t, f, "lead_requester")
+		_, outsider := favoriteTestUser(t, f, "lead_outsider")
+		if _, err := f.Store.db.ExecContext(ctx, "INSERT INTO project_member(project_id,user_id,role,created_at,updated_at) VALUES(?,?,'member',UTC_TIMESTAMP(3),UTC_TIMESTAMP(3))", p.ID, member.ID); err != nil {
+			t.Fatal(err)
+		}
+		created, err := f.Agents.CreateDefinition(ctx, raw, cryptox.ID(), a.DefinitionCreate{Code: "lead_reviewer", Name: "Lead reviewer", Mode: "chat", ExecutorKind: "robot", RobotUserID: new(fmt.Sprint(robot.ID)), ScopeKind: "project", ScopeID: new(fmt.Sprint(p.ID)), UsePolicy: "scope"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		agent := created.Data.(*a.Definition)
+		enableChatTestAgent(t, f, agent)
+		create := a.SessionCreate{AgentID: fmt.Sprint(agent.ID)}
+		_, err = f.Agents.CreateSession(ctx, outsider, cryptox.ID(), create)
+		modelsExpectCode(t, err, "NOT_FOUND")
+		opened, err := f.Agents.CreateSession(ctx, token, cryptox.ID(), create)
+		if err != nil {
+			t.Fatal(err)
+		}
+		detail := opened.Data.(a.SessionDetail)
+		if detail.Configuration.ChatUserID == nil || *detail.Configuration.ChatUserID != member.ID || uint64(detail.Principal.ID) != robot.ID || !detail.Permissions.Submit {
+			t.Fatal("wrong requester or principal", detail.Configuration, detail.Principal)
+		}
+		_, err = f.Agents.GetSession(ctx, raw, detail.Configuration.ID)
+		modelsExpectCode(t, err, "NOT_FOUND")
+		accepted, err := f.Agents.SubmitInput(ctx, token, detail.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []agentcore.TextBlock{{Type: "text", Text: "Review MR !42"}}, ExpectedHash: detail.Selection.Hash})
+		if err != nil {
+			t.Fatal(err)
+		}
+		claim, err := f.Agents.ClaimRoot(ctx, agentcore.ClaimRequest{Candidate: agentcore.Candidate{SessionID: agentcore.ID(detail.Configuration.ID), InputID: agentcore.ID(accepted.Data.(a.InputAccepted).InputID)}, Epoch: "lead-review-test"})
+		if err != nil || !claim.Claimed {
+			t.Fatal("claim delegated review", err)
+		}
+		auth := claim.Execution.Authorization
+		if uint64(auth.AccountID) != robot.ID || auth.AccountType != "robot" || !auth.Allows("project", agentcore.ID(p.ID), "admin") {
+			t.Fatal("robot project role", auth)
+		}
+		if _, err = f.Agents.EndRoot(ctx, claim.Execution.Ref, agentcore.RunEnd{Status: agentcore.Succeeded}); err != nil {
+			t.Fatal(err)
+		}
+		config, err := f.Agents.GetDefinition(ctx, raw, agent.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = f.Agents.PatchDefinition(ctx, raw, agent.ID, config.Tag, a.DefinitionPatch{UsePolicy: a.Field[string]{Set: true, Value: "allowlist"}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = f.Agents.SubmitInput(ctx, token, detail.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []agentcore.TextBlock{{Type: "text", Text: "Try again"}}, ExpectedHash: detail.Selection.Hash})
+		modelsExpectCode(t, err, "AGENT_ACCESS_REVOKED")
+	})
 	jobService := &jobs.Service{Identity: f.Identity, Store: func() (identity.Store, error) { return f.Store, nil }, Executor: jobVM.Executor{}}
 	j, _, err := jobService.Save(ctx, raw, p.ID, 0, jobs.Write{Code: "build", Name: "Build", Enabled: true, MaxConcurrency: 1, BusyPolicy: "skip", TimeoutMS: 1000, Config: &jobs.Config{Script: `function main(){return 1}`}})
 	if err != nil {
@@ -107,6 +158,32 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	_, err = f.Agents.PatchDefinition(ctx, raw, agent.ID, current.Tag, a.DefinitionPatch{Enabled: a.Field[bool]{Set: true, Value: true}})
 	if err != nil {
 		t.Fatal(err)
+	}
+	_, err = f.Agents.CreateSession(ctx, raw, cryptox.ID(), a.SessionCreate{AgentID: fmt.Sprint(agent.ID)})
+	modelsExpectCode(t, err, "SERVICE_AUTOMATION_ONLY")
+	jobChat := a.AutomationChat{JobRun: true, ProjectID: p.ID, CallerID: *accepted.RunID, Path: resourcecode.Locator{ScopeKind: "platform", Code: agent.Code}, Message: "Review", RequestKey: "job-request"}
+	if _, err = f.Store.db.ExecContext(ctx, "UPDATE job_run SET status='running' WHERE id=?", *accepted.RunID); err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.Agents.ChatAutomation(ctx, jobChat)
+	modelsExpectCode(t, err, "NOT_FOUND")
+	current, err = f.Agents.GetDefinition(ctx, raw, agent.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.Agents.PatchDefinition(ctx, raw, agent.ID, current.Tag, a.DefinitionPatch{UseGrants: a.Field[[]a.UseGrant]{Set: true, Value: []a.UseGrant{{Kind: "job", ID: j.ID}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var jobReceipts [2]a.ChatReceipt
+	var jobErrors [2]error
+	var concurrent sync.WaitGroup
+	for i := range jobReceipts {
+		concurrent.Go(func() { jobReceipts[i], jobErrors[i] = f.Agents.ChatAutomation(ctx, jobChat) })
+	}
+	concurrent.Wait()
+	if jobErrors[0] != nil || jobErrors[1] != nil || jobReceipts[0].SessionID == 0 || jobReceipts[0].SessionID != jobReceipts[1].SessionID || jobReceipts[0].Replayed == jobReceipts[1].Replayed {
+		t.Fatal("concurrent job replay", jobReceipts, jobErrors)
 	}
 	chat := a.AutomationChat{ProjectID: p.ID, ActorID: robot.ID, CallerID: 991, ConsumptionID: 101, Path: resourcecode.Locator{ScopeKind: "platform", Code: agent.Code}, Message: "Review this MR", Title: "Review", RequestKey: "review:mr:42"}
 	results := make([]a.ChatReceipt, 2)

@@ -71,3 +71,17 @@ func TestToolProjectUsesActualTargetAndPrincipal(t *testing.T) {
 		t.Fatalf("authorized target rejected: %d %v", id, err)
 	}
 }
+
+func TestRobotPoolWorkspaceBelongsToOneRequester(t *testing.T) {
+	session := &SessionRow{ExecutorKind: "robot", ExecutorUserID: 8, ChatUserID: new(uint64(7))}
+	computer := &CloudComputerRow{OwnerUserID: 8, AllocationKind: "robot_pool", WorkspaceUserID: new(uint64(7))}
+	if !sessionMatchesComputer(session, computer) {
+		t.Fatal("requester's private workspace rejected")
+	}
+	for _, other := range []*uint64{new(uint64(9)), nil} {
+		session.ChatUserID = other
+		if sessionMatchesComputer(session, computer) {
+			t.Fatal("another requester reused private files")
+		}
+	}
+}

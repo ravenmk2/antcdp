@@ -18,6 +18,7 @@ vi.mock("@/app/auth", () => ({ useSession: () => ({ user: { id: "1" } }) }));
 const mock = vi.mocked(request);
 const response = (data: unknown) => ({ data, status: 200, etag: "v1" });
 const agent: CatalogAgent = {
+  executor_kind: "chat_user",
   id: "4",
   name: "研发助手",
   description: "",

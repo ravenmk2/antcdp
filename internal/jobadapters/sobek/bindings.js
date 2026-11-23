@@ -16,6 +16,13 @@
     state,
     log,
     sleep(ms) { return host.sleep(ms ?? null); },
+    agents: Object.freeze({
+      get(path) {
+        return Object.freeze({
+          chat(options) { return host.agentChat(path, options); },
+        });
+      },
+    }),
     resources: Object.freeze({ call(...args) { return host.resources(...args); } }),
     dingtalk: Object.freeze({ send(...args) { return host.dingtalk(...args); } }),
   });

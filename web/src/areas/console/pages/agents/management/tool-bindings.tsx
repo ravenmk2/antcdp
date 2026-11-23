@@ -140,6 +140,7 @@ function ToolBindingsForm({
   const visible = keys.filter((key) => {
     const item = bindings.get(key),
       tool = tools.get(key);
+    if (mode === "service" && key === "ask_question") return false;
     const active = !!item && item.policy !== "deny";
     return (
       (filter === "all" || (filter === "on") === active) &&

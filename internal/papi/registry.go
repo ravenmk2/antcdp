@@ -74,7 +74,7 @@ type GitOperations struct {
 }
 
 type GitLabMROperations struct {
-	Create, List, Get, Update, Merge OperationHandler
+	Create, List, Get, Diff, Update, Merge OperationHandler
 }
 
 func New() (*Registry, error) {
@@ -83,7 +83,7 @@ func New() (*Registry, error) {
 	}
 	return NewWithGit(GitOperations{
 		List: unavailable, Init: unavailable, Ensure: unavailable,
-		MergeRequests: GitLabMROperations{Create: unavailable, List: unavailable, Get: unavailable, Update: unavailable, Merge: unavailable},
+		MergeRequests: GitLabMROperations{Create: unavailable, List: unavailable, Get: unavailable, Diff: unavailable, Update: unavailable, Merge: unavailable},
 	})
 }
 
@@ -95,8 +95,9 @@ func NewWithGit(git GitOperations) (*Registry, error) {
 		"operations/gitlab_mr_create.json": {revision: "1", maxArgsBytes: 128 << 10, run: git.MergeRequests.Create},
 		"operations/gitlab_mr_list.json":   {revision: "1", maxArgsBytes: 16 << 10, run: git.MergeRequests.List},
 		"operations/gitlab_mr_get.json":    {revision: "1", maxArgsBytes: 256, run: git.MergeRequests.Get},
+		"operations/gitlab_mr_diff.json":   {revision: "1", maxArgsBytes: 256, run: git.MergeRequests.Diff},
 		"operations/gitlab_mr_update.json": {revision: "1", maxArgsBytes: 128 << 10, run: git.MergeRequests.Update},
-		"operations/gitlab_mr_merge.json":  {revision: "1", maxArgsBytes: 512, run: git.MergeRequests.Merge},
+		"operations/gitlab_mr_merge.json":  {revision: "2", maxArgsBytes: 512, run: git.MergeRequests.Merge},
 		"operations/echo.json": {revision: "1", maxArgsBytes: 8 << 10,
 			run: func(_ context.Context, _ agentcore.ExecutionContext, _ agentcore.ID, args json.RawMessage) (json.RawMessage, error) {
 				return args, nil

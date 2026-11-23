@@ -145,8 +145,8 @@ func cloudLifecycleIntegration(t *testing.T, f *agentIntegrationFixture) {
 			t.Fatal("rebuild may not substitute an empty volume")
 		}
 	})
-	t.Run("service_pool_and_session_affinity", func(t *testing.T) {
-		agent := sandboxServiceAgent(t, f, "pool")
+	t.Run("robot_pool_and_session_affinity", func(t *testing.T) {
+		agent := sandboxRobotChatAgent(t, f, "pool")
 		oneSession := runtimeSession(t, f, agent.ID).Configuration.ID
 		first := runtimeClaim(t, f, oneSession, "task one")
 		second := runtimeClaim(t, f, runtimeSession(t, f, agent.ID).Configuration.ID, "task two")
@@ -190,7 +190,7 @@ func cloudLifecycleIntegration(t *testing.T, f *agentIntegrationFixture) {
 		finish(resumed.Execution)
 	})
 	t.Run("unknown_create_is_observed_not_replayed", func(t *testing.T) {
-		agent := sandboxServiceAgent(t, f, "unknown")
+		agent := sandboxRobotChatAgent(t, f, "unknown")
 		session := runtimeSession(t, f, agent.ID)
 		input, err := host.SubmitInput(ctx, f.AdminToken, session.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []core.TextBlock{{Type: "text", Text: "unknown create"}}, ExpectedHash: session.Selection.Hash})
 		if err != nil {
@@ -230,7 +230,7 @@ func cloudLifecycleIntegration(t *testing.T, f *agentIntegrationFixture) {
 	})
 
 	t.Run("creation_diagnostic_before_run", func(t *testing.T) {
-		agent := sandboxServiceAgent(t, f, "diagnostic")
+		agent := sandboxRobotChatAgent(t, f, "diagnostic")
 		session := runtimeSession(t, f, agent.ID)
 		input, err := host.SubmitInput(ctx, f.AdminToken, session.Configuration.ID, cryptox.ID(), a.InputCreate{Content: []core.TextBlock{{Type: "text", Text: "creation rejected"}}, ExpectedHash: session.Selection.Hash})
 		if err != nil {

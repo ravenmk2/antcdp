@@ -47,13 +47,13 @@ export function CloudComputersPage() {
   const [terminal, setTerminal] = useState<string | null>(null);
   const { params, page, size, change } = useListParams();
   const state = params.get("state") ?? "all",
-    pool = params.get("pool_agent_id") ?? "",
+    pool = params.get("pool_robot_id") ?? "",
     owner = params.get("owner_user_id") ?? "";
   const queryString = agentQuery({
     page,
     page_size: size,
     state,
-    pool_agent_id: pool,
+    pool_robot_id: pool,
     owner_user_id: owner,
   });
   const query = useApiQuery<CloudComputer[]>(
@@ -82,7 +82,7 @@ export function CloudComputersPage() {
         onReset={() =>
           change({
             state: "",
-            pool_agent_id: "",
+            pool_robot_id: "",
             owner_user_id: "",
             page: "1",
           })
@@ -112,12 +112,12 @@ export function CloudComputersPage() {
           }
         />
         <StandaloneInput
-          aria-label="服务型助手 ID"
-          placeholder="服务型助手 ID"
+          aria-label="机器人账号 ID"
+          placeholder="机器人账号 ID"
           value={pool}
           onChange={(e) =>
             change({
-              pool_agent_id: e.target.value.replace(/\D/g, ""),
+              pool_robot_id: e.target.value.replace(/\D/g, ""),
               page: "1",
             })
           }
@@ -129,7 +129,7 @@ export function CloudComputersPage() {
         onRetry={() => query.refetch()}
         empty={query.data?.data.length === 0}
         emptyTitle="暂无匹配的云电脑"
-        emptyDescription="个人电脑和服务型云电脑池成员均在需要时创建。"
+        emptyDescription="个人电脑和机器人云电脑池成员均在需要时创建。"
       >
         <SimpleTable
           label="云电脑列表"
@@ -155,16 +155,9 @@ export function CloudComputersPage() {
               </td>
               <td>{v.owner_user_id}</td>
               <td>
-                {v.pool_agent_id ? (
-                  <Link
-                    className="text-primary"
-                    to={`/admin/agents/${v.pool_agent_id}?tab=computer`}
-                  >
-                    助手 {v.pool_agent_id}
-                  </Link>
-                ) : (
-                  "个人电脑"
-                )}
+                {v.allocation_kind === "robot_pool"
+                  ? `机器人 #${v.owner_user_id}`
+                  : "个人电脑"}
               </td>
               <td>
                 <CloudStatus state={v.state} />
@@ -325,7 +318,7 @@ export function CloudComputerDetailPage() {
                     {actionNames[kind]}
                   </Button>
                 ))}
-                {v.pool_agent_id && v.state === "ready" && (
+                {v.allocation_kind === "robot_pool" && v.state === "ready" && (
                   <Button variant="outline" onClick={() => setFiles(!files)}>
                     {files ? "收起文件" : "打开机器人文件"}
                   </Button>
@@ -342,7 +335,7 @@ export function CloudComputerDetailPage() {
                     当前后端不支持独立删除数据卷，无法永久删除这台云电脑。运行环境和数据卷会继续保留。
                   </Notice>
                 )}
-              {!v.pool_agent_id && (
+              {v.allocation_kind === "personal" && (
                 <p className="mt-4 text-sm text-muted">
                   文件浏览仅向个人电脑的归属用户开放。
                 </p>
@@ -369,7 +362,7 @@ export function CloudComputerDetailPage() {
                 </p>
               </div>
             </details>
-            {files && v.pool_agent_id && (
+            {files && v.allocation_kind === "robot_pool" && (
               <Panel bodyClassName="p-5">
                 <WorkspaceFiles computerId={v.id} />
               </Panel>

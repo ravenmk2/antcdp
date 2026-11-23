@@ -51,7 +51,7 @@ func (t *agentsTx) Sessions(user uint64, q a.SessionQuery) ([]a.SessionSummary, 
 	where := []string{"s.session_kind='root'", "s.agent_type=?"}
 	args := []any{user, q.Mode}
 	if q.Mode == "chat" {
-		where = append(where, "s.executor_user_id=?")
+		where = append(where, "s.chat_user_id=?")
 		args = append(args, user)
 	}
 	if q.Archived == "true" {

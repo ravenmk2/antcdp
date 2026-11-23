@@ -18,7 +18,7 @@ func TestGitAPIsUseGrantedOperationAndOriginalCall(t *testing.T) {
 	}
 	r, err := NewWithGit(GitOperations{
 		List: handler, Init: handler, Ensure: handler,
-		MergeRequests: GitLabMROperations{Create: handler, List: handler, Get: handler, Update: handler, Merge: handler},
+		MergeRequests: GitLabMROperations{Create: handler, List: handler, Get: handler, Diff: handler, Update: handler, Merge: handler},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -160,6 +160,14 @@ func boundedLog(message string, object map[string]json.RawMessage) (string, json
 	return message, safeJSON(kept)
 }
 func (h *runHost) Call(ctx context.Context, kind string, args []json.RawMessage) (any, error) {
+	if kind == "agentChat" {
+		var path string
+		var opts AgentChatOptions
+		if len(args) != 2 || decode(args[0], &path) != nil || decode(args[1], &opts) != nil || h.s.AgentChat == nil {
+			return nil, jobcore.Failure("INVALID_ARGUMENT", "助手调用参数无效")
+		}
+		return h.s.AgentChat(ctx, h.job.ProjectID, h.run.ID, path, opts)
+	}
 	if kind == "dingtalk" {
 		return h.send(ctx, args)
 	}

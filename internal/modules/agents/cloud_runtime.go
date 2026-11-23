@@ -151,7 +151,7 @@ func workspaceContentAccess(v *CloudComputerRow, a *identity.Auth) error {
 	if v == nil {
 		return missing()
 	}
-	if v.PoolAgentID == nil {
+	if v.AllocationKind == "personal" {
 		if v.OwnerUserID != a.User.ID {
 			return missing()
 		}

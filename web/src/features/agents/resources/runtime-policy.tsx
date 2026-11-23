@@ -101,7 +101,8 @@ export function AgentRuntimePolicy({
                     .filter(
                       ([key]) =>
                         initial.data.agent_type !== "service" ||
-                        key !== "approval_timeout_seconds",
+                        (key !== "approval_timeout_seconds" &&
+                          key !== "question_timeout_seconds"),
                     )
                     .map(([key, label, min, max]) =>
                       readOnly ? (
