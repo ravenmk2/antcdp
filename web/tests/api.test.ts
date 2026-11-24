@@ -1,5 +1,6 @@
 import { beforeEach, describe, it, vi, expect } from "vitest";
 import { ApiError, errorMessage, request, resetCSRF } from "@/api/client";
+import { uuid } from "@/lib/utils";
 
 function response(
   body: unknown,
@@ -72,7 +73,7 @@ describe("API protocol", () => {
       method: "DELETE",
       etag: '"project-1-v2"',
       collectionEtag: '"collection-1"',
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: uuid(),
       body: undefined,
     });
     const [, init] = fetchMock.mock.calls[1] ?? [];

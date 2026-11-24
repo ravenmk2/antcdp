@@ -13,6 +13,7 @@ import {
 } from "@/components/fields";
 import { PageHeader } from "@/components/layout";
 import { ConfirmDialog, Drawer, Modal } from "@/components/overlays";
+import { uuid } from "@/lib/utils";
 import {
   date,
   defaults,
@@ -130,7 +131,7 @@ export function StartForm({
       };
       const serialized = JSON.stringify(body);
       if (retry.current?.body !== serialized)
-        retry.current = { body: serialized, key: crypto.randomUUID() };
+        retry.current = { body: serialized, key: uuid() };
       const r = await request<Receipt>(`${base}/${debug ? "debug" : "runs"}`, {
         method: "POST",
         body: { ...body, request_key: retry.current!.key },

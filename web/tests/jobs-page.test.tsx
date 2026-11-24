@@ -231,7 +231,13 @@ it("explains draft creation before making a write from the new job editor", asyn
   expect(writes).toHaveLength(0);
 });
 
-it("validates required rerun inputs and drops choices that the current configuration removed", async () => {
+it("submits valid rerun inputs over HTTP", async ({ onTestFinished }) => {
+  vi.stubGlobal("crypto", {
+    getRandomValues: crypto.getRandomValues.bind(crypto),
+  });
+  onTestFinished(() => {
+    vi.unstubAllGlobals();
+  });
   const definition: Job = {
     ...job,
     can_run: true,
@@ -300,6 +306,9 @@ it("validates required rerun inputs and drops choices that the current configura
   expect(writes[0]?.body).toMatchObject({
     inputs: { env: "测试", regions: ["华东"] },
     rerun_of_run_id: "7",
+    request_key: expect.stringMatching(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    ),
   });
   expect(writes[0]?.body.inputs).not.toHaveProperty("removed");
 });
