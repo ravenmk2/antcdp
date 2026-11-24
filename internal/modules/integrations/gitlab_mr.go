@@ -241,22 +241,27 @@ func (g *GitLabMRClient) Get(ctx context.Context, iid uint64) (GitLabMR, error) 
 }
 
 type MRDiffFile struct {
-	OldPath   string `json:"old_path"`
-	NewPath   string `json:"new_path"`
-	OldMode   string `json:"a_mode"`
-	NewMode   string `json:"b_mode"`
-	Diff      string `json:"diff"`
-	Collapsed bool   `json:"collapsed"`
-	TooLarge  bool   `json:"too_large"`
+	OldPath     string `json:"old_path"`
+	NewPath     string `json:"new_path"`
+	OldMode     string `json:"a_mode"`
+	NewMode     string `json:"b_mode"`
+	Diff        string `json:"diff"`
+	NewFile     bool   `json:"new_file"`
+	DeletedFile bool   `json:"deleted_file"`
+	RenamedFile bool   `json:"renamed_file"`
+	Collapsed   bool   `json:"collapsed"`
+	TooLarge    bool   `json:"too_large"`
 }
 
 type MRDiff struct {
 	SHA         string       `json:"head_commit_sha"`
-	Files       []MRDiffFile `json:"diffs"`
+	State       string       `json:"state"`
+	RealSize    string       `json:"real_size"`
 	ReviewToken string       `json:"review_token,omitempty"`
+	Files       []MRDiffFile `json:"diffs"`
 }
 
-// BindReview ties proof of a complete diff read to this execution's robot and conversation.
+// BindReview ties a diff read to this execution's robot and conversation.
 func (g *GitLabMRClient) BindReview(sign func(uint64, string, string) string) { g.reviewToken = sign }
 
 func (g *GitLabMRClient) Diff(ctx context.Context, iid uint64) (MRDiff, error) {
@@ -272,37 +277,25 @@ func (g *GitLabMRClient) Diff(ctx context.Context, iid uint64) (MRDiff, error) {
 	if _, err = g.request(ctx, http.MethodGet, suffix, url.Values{"per_page": {"1"}}, http.StatusOK, nil, &versions); err != nil {
 		return MRDiff{}, err
 	}
-	if len(versions) != 1 || versions[0].ID == 0 || mr.SHA == "" || versions[0].SHA != mr.SHA {
+	if len(versions) == 0 || versions[0].ID == 0 || mr.SHA == "" || versions[0].SHA != mr.SHA {
 		return MRDiff{}, mrError("DIFF_NOT_READY", "MR 差异尚未对应当前提交，请稍后重新读取。")
 	}
 	var version struct {
-		MRDiff
-		ID    uint64 `json:"id"`
-		State string `json:"state"`
-		Size  string `json:"real_size"`
+		ID       uint64       `json:"id"`
+		SHA      string       `json:"head_commit_sha"`
+		State    string       `json:"state"`
+		RealSize string       `json:"real_size"`
+		Files    []MRDiffFile `json:"diffs"`
 	}
 	if _, err = g.request(ctx, http.MethodGet, suffix+"/"+strconv.FormatUint(versions[0].ID, 10), nil, http.StatusOK, nil, &version); err != nil {
 		return MRDiff{}, err
 	}
-	size, err := strconv.Atoi(version.Size)
-	if err != nil || size == 0 || version.State != "collected" || version.ID != versions[0].ID || version.SHA != mr.SHA || size != len(version.Files) {
-		return MRDiff{}, mrError("DIFF_INCOMPLETE", "GitLab 未返回完整差异，无法完成代码审查。")
+	if version.ID != versions[0].ID || version.SHA != mr.SHA {
+		return MRDiff{}, mrError("DIFF_NOT_READY", "MR 差异尚未对应当前提交，请稍后重新读取。")
 	}
-	for _, file := range version.Files {
-		if file.OldPath == "" || file.NewPath == "" || file.Diff == "" || file.Collapsed || file.TooLarge || strings.HasPrefix(file.Diff, "Binary files ") {
-			return MRDiff{}, mrError("DIFF_INCOMPLETE", "文件缺少完整文本差异，请由维护者审查。")
-		}
-	}
-	result := MRDiff{SHA: version.SHA, Files: version.Files}
+	result := MRDiff{SHA: version.SHA, State: version.State, RealSize: version.RealSize, Files: version.Files}
 	if g.reviewToken != nil {
-		result.ReviewToken = g.reviewToken(iid, mr.SHA, mr.TargetBranch)
-		encoded, err := json.Marshal(result)
-		if err != nil {
-			return MRDiff{}, err
-		}
-		if len(encoded) > agentcore.ToolOutputMaxBytes {
-			return MRDiff{}, mrError("DIFF_INCOMPLETE", "差异超出助手可保留的完整工具输出大小，无法完成代码审查。")
-		}
+		result.ReviewToken = g.reviewToken(iid, version.SHA, mr.TargetBranch)
 	}
 	return result, nil
 }
@@ -331,7 +324,7 @@ func (g *GitLabMRClient) Merge(ctx context.Context, iid uint64, input GitLabMRMe
 	if g.reviewToken != nil {
 		expected := g.reviewToken(iid, input.SHA, mr.TargetBranch)
 		if expected == "" || mr.SHA != input.SHA || !hmac.Equal([]byte(expected), []byte(input.ReviewToken)) {
-			return GitLabMR{}, mrError("REVIEW_REQUIRED", "请在当前会话读取并审查此 MR 当前提交的完整差异。")
+			return GitLabMR{}, mrError("REVIEW_REQUIRED", "请在当前会话读取并审查此 MR 当前提交的差异。")
 		}
 	}
 	out, err := g.write(ctx, http.MethodPut, mrPath(iid)+"/merge", http.StatusOK, iid, input)

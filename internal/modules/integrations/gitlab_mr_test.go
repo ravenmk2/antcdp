@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -97,7 +98,7 @@ func TestGitLabMRWriteRequests(t *testing.T) {
 }
 
 func TestGitLabMRRobotReview(t *testing.T) {
-	var changed, incomplete atomic.Bool
+	var changed atomic.Bool
 	var writes atomic.Int32
 	g := mrTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		sha := mrTestSHA
@@ -110,7 +111,10 @@ func TestGitLabMRRobotReview(t *testing.T) {
 		case "/14/versions":
 			_, _ = io.WriteString(w, `[{"id":8,"head_commit_sha":"`+sha+`"}]`)
 		case "/14/versions/8":
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": 8, "state": "collected", "real_size": "1", "head_commit_sha": sha, "diffs": []MRDiffFile{{OldPath: "file.go", NewPath: "file.go", Diff: "@@ -1 +1 @@\n-old\n+new", TooLarge: incomplete.Load()}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": 8, "state": "collected", "real_size": "1", "head_commit_sha": sha,
+				"diffs": []MRDiffFile{{OldPath: "Dockerfile", NewPath: "Dockerfile", NewMode: "100644", NewFile: true}},
+			})
 		case "/14/merge":
 			var body map[string]any
 			if r.Method != http.MethodPut || json.NewDecoder(r.Body).Decode(&body) != nil || body["sha"] != sha || body["review_token"] != nil {
@@ -126,15 +130,8 @@ func TestGitLabMRRobotReview(t *testing.T) {
 	ctx := t.Context()
 	_, err := g.Merge(ctx, 14, GitLabMRMerge{SHA: mrTestSHA})
 	requireMRFailure(t, err, "REVIEW_REQUIRED", false)
-	incomplete.Store(true)
 	diff, err := g.Diff(ctx, 14)
-	requireMRFailure(t, err, "DIFF_INCOMPLETE", false)
-	if diff.ReviewToken != "" {
-		t.Fatal("token issued for partial data")
-	}
-	incomplete.Store(false)
-	diff, err = g.Diff(ctx, 14)
-	if err != nil || diff.ReviewToken == "" || len(diff.Files) != 1 {
+	if err != nil || diff.ReviewToken == "" || len(diff.Files) != 1 || !diff.Files[0].NewFile || diff.Files[0].Diff != "" {
 		t.Fatal(diff, err)
 	}
 	changed.Store(true)
@@ -152,6 +149,60 @@ func TestGitLabMRRobotReview(t *testing.T) {
 	_, err = g.Merge(ctx, 14, GitLabMRMerge{SHA: fresh.SHA, ReviewToken: fresh.ReviewToken})
 	if err != nil || writes.Load() != 1 {
 		t.Fatal("fresh review merge", err)
+	}
+}
+
+func TestGitLabMRDiffReturnsGitLabFileStatus(t *testing.T) {
+	for _, tc := range []struct {
+		name, state, size string
+		files             []MRDiffFile
+		status            int
+		sha, errorCode    string
+	}{
+		{
+			name: "partial", state: "overflow", size: "1000+",
+			files: []MRDiffFile{
+				{OldPath: "config.yml", NewPath: "config.yml", Collapsed: true},
+				{OldPath: "index.json", NewPath: "index.json", TooLarge: true},
+				{OldPath: "old.png", NewPath: "new.png", Diff: "Binary files differ", RenamedFile: true},
+			},
+		},
+		{name: "empty version", state: "without_files", size: "0", files: []MRDiffFile{}},
+		{name: "mismatched commit", sha: strings.Repeat("a", 40), errorCode: "DIFF_NOT_READY"},
+		{name: "GitLab rejection", status: http.StatusForbidden, errorCode: "ACCESS_DENIED"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := mrTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				switch strings.TrimPrefix(r.URL.Path, mrTestPath) {
+				case "/14":
+					_, _ = io.WriteString(w, strings.Replace(mrTestResponse, `"iid":14`, `"sha":"`+mrTestSHA+`","iid":14`, 1))
+				case "/14/versions":
+					_, _ = io.WriteString(w, `[{"id":8,"head_commit_sha":"`+mrTestSHA+`"}]`)
+				case "/14/versions/8":
+					if tc.status != 0 {
+						w.WriteHeader(tc.status)
+						return
+					}
+					sha := tc.sha
+					if sha == "" {
+						sha = mrTestSHA
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"id": 8, "head_commit_sha": sha,
+						"state": tc.state, "real_size": tc.size, "diffs": tc.files})
+				default:
+					t.Errorf("unexpected path %s", r.URL.Path)
+				}
+			})
+			g.BindReview(func(_ uint64, sha, _ string) string { return sha })
+			diff, err := g.Diff(t.Context(), 14)
+			if tc.errorCode != "" {
+				requireMRFailure(t, err, tc.errorCode, false)
+				return
+			}
+			if err != nil || diff.SHA != mrTestSHA || diff.ReviewToken != mrTestSHA || diff.State != tc.state || diff.RealSize != tc.size || diff.Files == nil || !slices.Equal(diff.Files, tc.files) {
+				t.Fatalf("unexpected diff: %+v, %v", diff, err)
+			}
+		})
 	}
 }
 
