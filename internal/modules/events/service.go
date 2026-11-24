@@ -114,6 +114,22 @@ func (s *Service) ReceiveGitLab(_ context.Context, tx identity.Tx, connection ui
 	if err != nil {
 		return nil, err
 	}
+	return s.Receive(tx, e, func(r Repository) ([]Reference, error) {
+		targets, err := r.Targets(connection, e.RepositoryID)
+		if err != nil {
+			return nil, err
+		}
+		refs := make([]Reference, 0, len(targets))
+		for _, target := range targets {
+			refs = append(refs, Reference{ScopeKind: "project", ScopeID: target.ProjectID, Basis: safeJSON(map[string]any{"projectRepositoryId": fmt.Sprint(target.RepositoryID), "connectionId": fmt.Sprint(connection), "repositoryId": e.RepositoryID})})
+		}
+		return refs, nil
+	})
+}
+
+// Receive records a normalized message in the authenticated producer's transaction.
+// The producer supplies authorized project targets and their routing evidence.
+func (s *Service) Receive(tx identity.Tx, e *Record, targets func(Repository) ([]Reference, error)) (map[string]any, error) {
 	r, err := repository(tx)
 	if err != nil {
 		return nil, err
@@ -131,32 +147,42 @@ func (s *Service) ReceiveGitLab(_ context.Context, tx identity.Tx, connection ui
 			return map[string]any{"event_id": fmt.Sprint(prior.ID), "status": status}, nil
 		}
 	}
-	targets, err := r.Targets(connection, e.RepositoryID)
+	if e.Type != "" {
+		if err = s.validateRecord(r, e); err != nil {
+			return nil, err
+		}
+	} else if e.RoutingResult != "unsupported" {
+		return nil, httpx.Invalid("type", "required")
+	}
+	// Take the source's committed target snapshot without locking projects here.
+	// Repository management locks projects before connections.
+	refs, err := targets(r)
 	if err != nil {
 		return nil, err
 	}
-	// Targets is the committed repository/active-project snapshot at receipt.
-	// Do not lock projects while holding the source connection: repository
-	// management locks projects before connections. Subscription locks below
-	// serialize configuration changes and FIFO admission; execution separately
-	// rechecks project status and run account permissions.
-	active := targets
-	if e.Type != "" && len(active) > 0 {
-		e.RoutingResult = "routed"
+	if e.Type != "" {
+		e.RoutingResult = "unmatched"
+		if len(refs) > 0 {
+			e.RoutingResult = "routed"
+		}
 	}
 	if err = r.InsertRecord(e); err != nil {
 		return nil, err
 	}
 	queued := 0
-	for _, target := range active {
-		ref := &Reference{EventID: e.ID, ScopeKind: "project", ScopeID: target.ProjectID, Basis: safeJSON(map[string]any{"projectRepositoryId": fmt.Sprint(target.RepositoryID), "connectionId": fmt.Sprint(connection), "repositoryId": e.RepositoryID}), CreatedAt: e.ReceivedAt}
+	for i := range refs {
+		ref := &refs[i]
+		if ref.ScopeKind != "project" || ref.ScopeID == 0 {
+			return nil, integrity()
+		}
+		ref.EventID, ref.CreatedAt = e.ID, e.ReceivedAt
 		if err = r.InsertReference(ref); err != nil {
 			return nil, err
 		}
 		if e.Type == "" {
 			continue
 		}
-		subscriptions, err := r.Subscriptions(target.ProjectID, true)
+		subscriptions, err := r.Subscriptions(ref.ScopeID, true)
 		if err != nil {
 			return nil, err
 		}
@@ -185,7 +211,7 @@ func (s *Service) ReceiveGitLab(_ context.Context, tx identity.Tx, connection ui
 			queued++
 		}
 	}
-	return map[string]any{"event_id": fmt.Sprint(e.ID), "status": e.RoutingResult, "scope_count": len(active), "queued_count": queued}, nil
+	return map[string]any{"event_id": fmt.Sprint(e.ID), "status": e.RoutingResult, "scope_count": len(refs), "queued_count": queued}, nil
 }
 
 func enqueue(r Repository, sub *Subscription, revision, reference uint64, retryOf, actor *uint64) (*Consumption, error) {
@@ -201,6 +227,19 @@ func enqueue(r Repository, sub *Subscription, revision, reference uint64, retryO
 		return nil, err
 	}
 	return c, nil
+}
+
+func (s *Service) Catalog(ctx context.Context, raw string) ([]Group, *identity.Auth, error) {
+	var groups []Group
+	auth, err := s.Identity.BusinessAccess(ctx, raw, nil, func(tx identity.Tx, _ *identity.Auth) error {
+		r, err := repository(tx)
+		if err != nil {
+			return err
+		}
+		groups, err = r.Catalog()
+		return err
+	})
+	return groups, auth, err
 }
 
 func (s *Service) Events(ctx context.Context, raw string, pid uint64, f Filter) ([]Reference, *identity.Auth, error) {
@@ -319,17 +358,19 @@ func (s *Service) Save(ctx context.Context, raw string, pid, id uint64, w Write)
 	if len(w.EventTypes) == 0 {
 		return nil, nil, httpx.Invalid("event_types", "required")
 	}
-	for _, t := range w.EventTypes {
-		if !KnownType(t) {
-			return nil, nil, httpx.Invalid("event_types", "unsupported")
-		}
-	}
 	if w.RunAsUserID == 0 {
 		return nil, nil, httpx.Invalid("run_as_user_id", "required")
 	}
 	// Compilation errors are returned only after project administrator authorization.
 	var out *Subscription
 	a, err := s.access(ctx, raw, pid, true, true, func(identity.Tx) ([]uint64, error) { return []uint64{w.RunAsUserID}, nil }, func(tx identity.Tx, r Repository, a *identity.Auth, _ bool) error {
+		groups, err := r.Catalog()
+		if err != nil {
+			return err
+		}
+		if !containsTypes(groups, w.EventTypes) {
+			return httpx.Invalid("event_types", "unsupported")
+		}
 		if err := s.Executor.Validate(w.Script, "consumer.js", "main"); err != nil {
 			return httpx.E(422, "INVALID_SCRIPT", err.Error())
 		}

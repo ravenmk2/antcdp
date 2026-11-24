@@ -9,6 +9,9 @@ import (
 
 func (s *Store) eventsSchemaReady(ctx context.Context) error {
 	for table, columns := range map[string]string{
+		"event_group":                 "id,name,sort_order",
+		"event_type":                  "id,event_group,name,description,origin",
+		"event_type_version":          "event_type,schema_version,data_schema,created_at",
 		"event_record":                "id,source_kind,source_id,source_message_id,source_event_type,group_code,event_type,schema_version,source_repository_id,subject_kind,subject_id,occurred_at,received_at,data,raw_payload,payload_hash,source_metadata,routing_result",
 		"event_scope_ref":             "id,event_id,scope_kind,scope_id,routing_basis,created_at",
 		"event_subscription":          "id,scope_kind,scope_id,name,description,enabled,current_revision_id,next_enqueue_seq,next_consume_seq,row_version,created_by_user_id,updated_by_user_id,created_at,updated_at,deleted_at",
@@ -25,6 +28,9 @@ func (s *Store) eventsSchemaReady(ctx context.Context) error {
 		}
 	}
 	for _, expected := range []struct{ table, index, columns string }{
+		{"event_group", "PRIMARY", "id"},
+		{"event_type", "PRIMARY", "id"},
+		{"event_type_version", "PRIMARY", "event_type,schema_version"},
 		{"event_record", "uq_event_source_message", "source_kind,source_id,source_message_id"},
 		{"event_scope_ref", "uq_event_scope", "event_id,scope_kind,scope_id"},
 		{"event_consumption", "uq_event_consumption_queue", "subscription_id,queue_seq"},
@@ -38,6 +44,16 @@ func (s *Store) eventsSchemaReady(ctx context.Context) error {
 		if found != expected.columns {
 			return install.ErrIncompleteSchema
 		}
+	}
+	// The baseline publishes thirteen built-in GitLab v1 definitions.
+	var builtinVersions int
+	if err := s.db.GetContext(ctx, &builtinVersions, `SELECT COUNT(*) FROM event_type_version v
+ JOIN event_type t ON t.id=v.event_type JOIN event_group g ON g.id=t.event_group
+ WHERE t.origin='builtin' AND t.id LIKE 'gitlab.%' AND v.schema_version=1 AND JSON_TYPE(v.data_schema)='OBJECT' `); err != nil {
+		return err
+	}
+	if builtinVersions < 13 {
+		return install.ErrIncompleteSchema
 	}
 	return nil
 }

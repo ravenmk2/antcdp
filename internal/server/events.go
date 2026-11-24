@@ -43,8 +43,8 @@ func registerEvents(api *gin.RouterGroup, o Options) {
 		return
 	}
 	api.GET("/event-types", eventRoute(o, func(c *gin.Context, _ eventIDs) (any, *identity.Auth, error) {
-		a, err := o.Identity.BusinessAccess(c.Request.Context(), rawSession(c), nil, func(identity.Tx, *identity.Auth) error { return nil })
-		return gin.H{"groups": events.Catalog()}, a, err
+		groups, a, err := s.Catalog(c.Request.Context(), rawSession(c))
+		return gin.H{"groups": groups}, a, err
 	}))
 	base := "/projects/:id"
 	api.GET(base+"/events", eventRoute(o, func(c *gin.Context, id eventIDs) (any, *identity.Auth, error) {

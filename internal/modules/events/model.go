@@ -4,12 +4,29 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/scriptcore"
 	"github.com/ravenmk2/antcdp/internal/statestore"
 )
+
+type EventType struct {
+	Code        string `json:"code"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+type Group struct {
+	Code  string      `json:"code"`
+	Name  string      `json:"name"`
+	Types []EventType `json:"types"`
+}
+
+type TypeVersion struct {
+	EventGroup string          `db:"event_group"`
+	DataSchema json.RawMessage `db:"data_schema"`
+}
 
 type Record struct {
 	ID            uint64          `db:"id" json:"id,string"`
@@ -144,6 +161,8 @@ type Filter struct {
 }
 
 type Repository interface {
+	Catalog() ([]Group, error)
+	TypeVersion(string, uint32) (*TypeVersion, error)
 	Targets(uint64, string) ([]Target, error)
 	Record(uint64) (*Record, error)
 	RecordByMessage(string, uint64, string) (*Record, error)
@@ -183,6 +202,7 @@ type Action struct {
 }
 
 type Service struct {
+	schemas  sync.Map // compiled schemas keyed by immutable type and version
 	Identity *identity.Service
 	Store    func() (identity.Store, error)
 	State    func() (statestore.Backend, error)

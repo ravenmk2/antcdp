@@ -77,6 +77,7 @@ func eventSubscriptionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	}
 	_, _, err = s.Save(ctx, raw, p.ID, 0, events.Write{Name: "Member account", RunAsUserID: member.ID, EventTypes: []string{"gitlab.push"}, Script: "function main(){}"})
 	modelsExpectCode(t, err, "EXECUTOR_UNAVAILABLE")
+	t.Run("type_registry", func(t *testing.T) { eventRegistryIntegration(t, f, s, p.ID, robot.ID) })
 	w := events.Write{Name: "顺序消费", Enabled: true, RunAsUserID: robot.ID, EventTypes: []string{"gitlab.push", "gitlab.merge_request.created"}, MaxRetries: new(uint32(1)), Script: `async function main(ctx){ if(ctx.event.raw.fail) throw new Error("SECRET_SOURCE_LITERAL");const old=await ctx.state.get("count"); const value=(old?.value??0)+1; await ctx.state.put("count",value); ctx.log.info("processed",{value}); return "v1"; }`}
 	sub, _, err := s.Save(ctx, raw, p.ID, 0, w)
 	if err != nil {

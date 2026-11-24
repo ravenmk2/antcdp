@@ -22,6 +22,43 @@ func (t *eventTx) insert(q string, value any, id *uint64) error {
 	return err
 }
 
+// Only published types appear in the catalog and can be selected for subscriptions.
+func (t *eventTx) Catalog() ([]e.Group, error) {
+	rows, err := t.tx.QueryContext(t.ctx, `SELECT g.id,g.name,t.id,t.name,t.description
+ FROM event_group g JOIN event_type t ON t.event_group=g.id
+ WHERE EXISTS (SELECT 1 FROM event_type_version v WHERE v.event_type=t.id)
+ ORDER BY g.sort_order,g.id,t.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	groups := []e.Group{}
+	for rows.Next() {
+		var group e.Group
+		var item e.EventType
+		if err := rows.Scan(&group.Code, &group.Name, &item.Code, &item.Name, &item.Description); err != nil {
+			return nil, err
+		}
+		if len(groups) == 0 || groups[len(groups)-1].Code != group.Code {
+			groups = append(groups, group)
+		}
+		last := &groups[len(groups)-1]
+		last.Types = append(last.Types, item)
+	}
+	return groups, rows.Err()
+}
+
+func (t *eventTx) TypeVersion(code string, version uint32) (*e.TypeVersion, error) {
+	var v e.TypeVersion
+	err := t.tx.GetContext(t.ctx, &v, `SELECT g.id AS event_group,v.data_schema
+ FROM event_type_version v JOIN event_type t ON t.id=v.event_type JOIN event_group g ON g.id=t.event_group
+ WHERE v.event_type=? AND v.schema_version=?`, code, version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return &v, err
+}
+
 func (t *eventTx) Targets(connection uint64, repo string) ([]e.Target, error) {
 	rows := []e.Target{}
 	err := t.tx.SelectContext(t.ctx, &rows, `SELECT pr.id,pr.project_id FROM project_repository pr JOIN project p ON p.id=pr.project_id WHERE pr.connection_id=? AND pr.repo_id=? AND p.archived_at IS NULL ORDER BY pr.project_id,pr.id`, connection, repo)

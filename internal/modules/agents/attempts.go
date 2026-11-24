@@ -19,6 +19,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/papi"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
+	"github.com/ravenmk2/antcdp/internal/platform/jsonvalue"
 )
 
 type attemptImage struct {
@@ -223,7 +224,8 @@ func validateToolArguments(spec agentcore.ToolSpec, call modelcore.ToolCall) err
 		return invalidToolResponse("MODEL_TOOL_SCHEMA_INVALID")
 	}
 	if validationErr := resolved.Validate(object); validationErr != nil {
-		detail := toolValidationDetail(&schema, object, validationErr, "", 0)
+		detail := jsonvalue.SchemaMismatch(&schema, object, validationErr, "")
+		detail.Source, detail.Stage, detail.Code = "model", "response_validation", "MODEL_TOOL_ARGUMENTS_SCHEMA_MISMATCH"
 		detail.ToolName = spec.Definition.Name
 		return diagnostic.Attach(modelcore.ErrInvalidResponse, &detail)
 	}

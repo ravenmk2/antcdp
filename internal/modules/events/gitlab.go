@@ -13,46 +13,6 @@ import (
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
 
-type EventType struct {
-	Code        string `json:"code"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-type Group struct {
-	Code  string      `json:"code"`
-	Name  string      `json:"name"`
-	Types []EventType `json:"types"`
-}
-
-func Catalog() []Group {
-	return []Group{{Code: "gitlab", Name: "GitLab", Types: []EventType{
-		{"gitlab.merge_request.created", "合并请求创建", "创建合并请求"},
-		{"gitlab.merge_request.updated", "合并请求更新", "内容或源分支发生更新；不一定是代码变化"},
-		{"gitlab.merge_request.reopened", "合并请求重新打开", "重新打开已关闭的合并请求"},
-		{"gitlab.merge_request.closed", "合并请求关闭", "关闭但未合并"},
-		{"gitlab.merge_request.merged", "合并请求已合并", "合并请求已经合并"},
-		{"gitlab.push", "代码推送", "分支推送、创建或删除"},
-		{"gitlab.tag.created", "标签创建", "创建 Git 标签"},
-		{"gitlab.tag.deleted", "标签删除", "删除 Git 标签"},
-		{"gitlab.repository_update", "仓库更新", "System Hook 仓库引用更新"},
-		{"gitlab.pipeline.status_changed", "流水线状态变化", "GitLab 流水线状态通知"},
-		{"gitlab.ci_job.status_changed", "CI 作业状态变化", "GitLab CI Job 状态通知，与平台 Job 无关"},
-		{"gitlab.note.created", "评论创建", "提交、MR 等对象的新评论"},
-		{"gitlab.note.updated", "评论更新", "已有评论的修改"},
-	}}}
-}
-
-func KnownType(code string) bool {
-	for _, group := range Catalog() {
-		for _, t := range group.Types {
-			if t.Code == code {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func object(v any) map[string]any { m, _ := v.(map[string]any); return m }
 func text(v any) string {
 	switch value := v.(type) {
