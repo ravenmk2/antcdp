@@ -483,7 +483,7 @@ export function JobEditor({
               ],
               [
                 'await ctx.resources.call("platform/build", { target: "app", operation: "build" })',
-                "服务连接路径支持 platform/连接编码 和 project/当前项目编码/连接编码。",
+                "服务连接路径支持 platform/连接编码 和 project:当前项目编码/连接编码。",
               ],
               [
                 'await ctx.dingtalk.send("robot_code", { format: "text", body: "完成" })',

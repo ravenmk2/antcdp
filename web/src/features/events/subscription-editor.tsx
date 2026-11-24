@@ -219,7 +219,7 @@ ctx.log.info("处理完成", { eventId: ctx.event.id });
 await ctx.sleep(1000);`}</pre>
                 <p>
                   路径可省略开头的 /。单段编码指向当前项目；完整路径支持
-                  platform/code、team/team-code/code、project/project-code/code。只能启动当前项目的作业。
+                  platform/code、team:team-code/code、project:project-code/code。只能启动当前项目的作业。
                 </p>
                 <p>
                   requestKey
@@ -232,10 +232,10 @@ await ctx.sleep(1000);`}</pre>
                 </p>
                 {jobs.data?.data.items.map((job) => (
                   <div key={job.id} className="flex items-center gap-2">
-                    <code>{`project/${projectCode}/${job.code}`}</code>
+                    <code>{`project:${projectCode}/${job.code}`}</code>
                     <span className="text-muted">{job.name}</span>
                     <CopyButton
-                      value={`project/${projectCode}/${job.code}`}
+                      value={`project:${projectCode}/${job.code}`}
                       label={`复制 ${job.name} 路径`}
                     />
                   </div>

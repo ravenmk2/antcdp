@@ -13,24 +13,24 @@ type Locator struct {
 	Code      string `json:"code"`
 }
 
+var errInvalidPath = errors.New("资源路径应为 code、platform/code、team:team-code/code 或 project:project-code/code")
+
 func Parse(path string) (Locator, error) {
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
-	invalid := errors.New("资源路径应为 code、platform/code、team/team-code/code 或 project/project-code/code")
-	for _, part := range parts {
-		if !Valid(part) {
-			return Locator{}, invalid
-		}
+	scope, code, scoped := strings.Cut(strings.TrimPrefix(path, "/"), "/")
+	if !scoped && Valid(scope) {
+		return Locator{Code: scope}, nil
 	}
-	switch {
-	case len(parts) == 1:
-		return Locator{Code: parts[0]}, nil
-	case len(parts) == 2 && parts[0] == "platform":
-		return Locator{ScopeKind: "platform", Code: parts[1]}, nil
-	case len(parts) == 3 && (parts[0] == "team" || parts[0] == "project"):
-		return Locator{ScopeKind: parts[0], ScopeCode: parts[1], Code: parts[2]}, nil
-	default:
-		return Locator{}, invalid
+	if !Valid(code) {
+		return Locator{}, errInvalidPath
 	}
+	if scope == "platform" {
+		return Locator{ScopeKind: scope, Code: code}, nil
+	}
+	kind, owner, _ := strings.Cut(scope, ":")
+	if (kind == "project" || kind == "team") && Valid(owner) {
+		return Locator{ScopeKind: kind, ScopeCode: owner, Code: code}, nil
+	}
+	return Locator{}, errInvalidPath
 }
 
 func (l Locator) String() string {
@@ -40,5 +40,5 @@ func (l Locator) String() string {
 	if l.ScopeKind == "platform" {
 		return "platform/" + l.Code
 	}
-	return l.ScopeKind + "/" + l.ScopeCode + "/" + l.Code
+	return l.ScopeKind + ":" + l.ScopeCode + "/" + l.Code
 }

@@ -14,7 +14,7 @@ func TestConsumerSDKIsolationAndLazyReferences(t *testing.T) {
 	h := &consumerHost{attempt: attempt{Revision: Revision{Script: `async function main(ctx) {
  if(ctx.inputs !== undefined || ctx.resources !== undefined || ctx.dingtalk !== undefined) throw Error("Job SDK leaked");
  if(!Object.isFrozen(ctx.event) || !Object.isFrozen(ctx.event.data) || !Object.isFrozen(ctx.run)) throw Error("mutable context");
- const unused = ctx.jobs.get("/project/example/build");
+ const unused = ctx.jobs.get("/project:example/build");
  const job = ctx.jobs.get("build");
  const agent = ctx.agents.get("platform/reviewer");
  if(!Object.isFrozen(unused) || typeof unused.start !== "function" || agent.run !== undefined) throw Error("wrong references");

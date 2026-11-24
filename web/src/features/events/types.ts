@@ -97,7 +97,7 @@ export const exampleScript = `async function main(ctx) {
   // const result = await ctx.jobs.get("build").start({
   //   inputs: {}, requestKey: "build:" + ctx.event.id
   // });
-  // await ctx.agents.get("project/my-project/reviewer").chat({
+  // await ctx.agents.get("project:my-project/reviewer").chat({
   //   message: "请审查这个 MR：" + JSON.stringify(ctx.event.data),
   //   requestKey: "review:" + ctx.event.id
   // });

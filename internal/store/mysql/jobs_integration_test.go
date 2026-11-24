@@ -185,10 +185,10 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 		const request = {target:"example", operation:"build"};
 		const codes = [];
 		for (const args of [
-			["/project/job-tests/job-jenkins", request],
-			["project/other/job-jenkins", request],
+			["/project:job-tests/job-jenkins", request],
+			["project:other/job-jenkins", request],
 			["job-jenkins", request],
-			["team/other/job-jenkins", request],
+			["team:other/job-jenkins", request],
 			["job-jenkins", "build", request]
 		]) {
 			try { await ctx.resources.call(...args) } catch(e) { codes.push(e.code) }
@@ -200,7 +200,7 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 		t.Fatal("project path without a preferred credential, foreign scope or invalid signature", result)
 	}
 	var projectAudit int
-	if err := db.db.Get(&projectAudit, "SELECT COUNT(*) FROM job_resource_call WHERE job_run_id=? AND connection_id=? AND configured_credential_id IS NULL AND resource_snapshot->>'$.path'=?", pathRun, projectConn["id"], "project/job-tests/job-jenkins"); err != nil || projectAudit != 1 {
+	if err := db.db.Get(&projectAudit, "SELECT COUNT(*) FROM job_resource_call WHERE job_run_id=? AND connection_id=? AND configured_credential_id IS NULL AND resource_snapshot->>'$.path'=?", pathRun, projectConn["id"], "project:job-tests/job-jenkins"); err != nil || projectAudit != 1 {
 		t.Fatal("same-code project connection did not resolve independently", projectAudit, err)
 	}
 	// Revocation is checked at the call, including runs accepted before revocation.

@@ -226,7 +226,7 @@ func (h *runHost) resource(ctx context.Context, args []json.RawMessage) (any, er
 	}
 	locator, err := resourcecode.Parse(path)
 	if err != nil || (locator.ScopeKind != "platform" && locator.ScopeKind != "project") {
-		return nil, jobcore.Failure("INVALID_RESOURCE_PATH", "连接路径应为 platform/连接编码 或 project/项目编码/连接编码")
+		return nil, jobcore.Failure("INVALID_RESOURCE_PATH", "连接路径应为 platform/连接编码 或 project:项目编码/连接编码")
 	}
 	call := Call{RunID: h.run.ID, Kind: "service_connection", Authorization: "account", Target: request.Target, Operation: request.Operation, Outcome: "denied", ErrorCode: "RESOURCE_ACCESS_DENIED", Snapshot: safeJSON(map[string]string{"path": locator.String()}), CreatedAt: now(), FinishedAt: ptr(now())}
 	err = h.withResource(ctx, &call, func(tx identity.Tx, r Repository, v *Run, project *collaboration.Resource) error {
