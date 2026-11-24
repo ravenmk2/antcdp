@@ -33,7 +33,7 @@ func (t *identityTx) Connection(id uint64) (*i.ServiceConnection, error) {
 }
 func (t *identityTx) ConnectionByCode(ownership string, ownerID uint64, code string) (*i.ServiceConnection, error) {
 	var conn i.ServiceConnection
-	err := t.tx.GetContext(t.ctx, &conn, "SELECT "+connectionColumns+" FROM service_connection WHERE ownership_type=? AND owner_key=? AND code=? FOR UPDATE", ownership, ownerID, code)
+	err := t.tx.GetContext(t.ctx, &conn, "SELECT "+connectionColumns+",config,config_schema_version FROM service_connection WHERE ownership_type=? AND owner_key=? AND code=? FOR UPDATE", ownership, ownerID, code)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

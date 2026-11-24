@@ -12,23 +12,13 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	i "github.com/ravenmk2/antcdp/internal/modules/integrations"
 	"github.com/ravenmk2/antcdp/internal/platform/httpx"
+	"github.com/ravenmk2/antcdp/internal/platform/resourcecode"
 )
 
 func webhookRequest(r *http.Request) bool {
 	const prefix = "/api/v1/webhooks/gitlab/"
-	if r.Method != "POST" || !strings.HasPrefix(r.URL.Path, prefix) {
-		return false
-	}
-	id := strings.TrimPrefix(r.URL.Path, prefix)
-	if id == "" || id[0] == '0' {
-		return false
-	}
-	for _, c := range id {
-		if c < '0' || c > '9' {
-			return false
-		}
-	}
-	return true
+	code, ok := strings.CutPrefix(r.URL.Path, prefix)
+	return r.Method == http.MethodPost && ok && resourcecode.Valid(code)
 }
 func integrationInput(c *gin.Context, input any) (any, bool) {
 	if input == nil {
@@ -254,7 +244,7 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 				finish(c, r, a, err, 200)
 			})
 
-			if kind == "gitlab" {
+			if kind == "gitlab" && prefix == base {
 				webhook := "/:connection_id/webhook"
 				for _, route := range []struct{ method, path, op string }{
 					{"GET", "", "get"}, {"PATCH", "", "update"},
@@ -386,14 +376,15 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 
 	}
 	webhookLimiter := newLimiter(120, time.Minute)
-	api.POST("/webhooks/gitlab/:connection_id", func(c *gin.Context) {
+	api.POST("/webhooks/gitlab/:code", func(c *gin.Context) {
 		if !webhookLimiter.Allow(c.ClientIP()) {
 			c.Header("Retry-After", "60")
 			httpx.Write(c, httpx.E(429, "RATE_LIMITED", "Webhook 请求过于频繁"))
 			return
 		}
-		id, ok := collaborationID(c, "connection_id")
-		if !ok {
+		code := c.Param("code")
+		if !resourcecode.Valid(code) {
+			httpx.Write(c, httpx.E(404, "NOT_FOUND", "资源不存在"))
 			return
 		}
 		if c.ContentType() != "application/json" {
@@ -406,7 +397,7 @@ func registerIntegrations(api *gin.RouterGroup, o Options) {
 			httpx.Write(c, httpx.E(413, "PAYLOAD_TOO_LARGE", "请求内容过大"))
 			return
 		}
-		d, err := s.Receive(c.Request.Context(), id, c.Request.Header, body)
+		d, err := s.Receive(c.Request.Context(), code, c.Request.Header, body)
 		if err != nil {
 			httpx.Write(c, err)
 			return

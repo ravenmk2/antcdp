@@ -102,7 +102,7 @@ beforeEach(() => {
     }
     if (path.endsWith("/webhook/receiver"))
       return response({
-        receive_url: "https://app.example.test/api/v1/webhooks/gitlab/1",
+        receive_url: `https://app.example.test/api/v1/webhooks/gitlab/${connection.code}`,
       });
     if (path.endsWith("/webhook/diagnostics"))
       return response({ latest: null });
@@ -491,11 +491,11 @@ it("uses nested console project links without offering system connection creatio
 it("lets project administrators maintain owned connection configuration without platform grants", async () => {
   projectCanManage = true;
   setup(
-    "mysql",
+    "gitlab",
     "",
     "admin",
     true,
-    "/admin/projects/7/integrations/1",
+    "/admin/projects/7/integrations/1?tab=webhook",
     "project",
   );
   expect(await screen.findByRole("tab", { name: "连接配置" })).toBeVisible();
@@ -503,9 +503,13 @@ it("lets project administrators maintain owned connection configuration without 
     screen.queryByRole("tab", { name: "项目与团队授权" }),
   ).not.toBeInTheDocument();
   expect(await screen.findByRole("button", { name: "编辑配置" })).toBeEnabled();
+  expect(screen.queryByRole("tab", { name: "Webhook 接收设置" })).toBeNull();
+  expect(mocked.mock.calls.some(([path]) => path.includes("/webhook"))).toBe(
+    false,
+  );
   expect(
     mocked.mock.calls.some(
-      ([path]) => path === "/projects/7/service-connections/mysql/1",
+      ([path]) => path === "/projects/7/service-connections/gitlab/1",
     ),
   ).toBe(true);
   expect(mocked.mock.calls.some(([path]) => path.startsWith("/admin/"))).toBe(

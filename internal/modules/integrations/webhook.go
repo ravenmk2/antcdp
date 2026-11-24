@@ -32,10 +32,11 @@ func webhookFor(r Repository, id uint64) (*WebhookSettings, error) {
 func (s *Service) Webhook(ctx context.Context, raw string, id uint64, op, tag string, input any, meta identity.Metadata) (Result, *identity.Auth, error) {
 	out := Result{}
 	write := op != "get" && op != "receiver" && op != "diagnostics"
-	a, err := s.access(ctx, raw, routeScope(ctx), id, write, func(tx identity.Tx, r Repository, a *identity.Auth, v *ServiceConnection, _ CredentialOwnership) error {
-		if !managedConnection(v, routeScope(ctx)) {
-			return forbidden()
-		}
+	scope := routeScope(ctx)
+	if scope.Type != "platform" {
+		return out, nil, fail()
+	}
+	a, err := s.access(ctx, raw, scope, id, write, func(tx identity.Tx, r Repository, a *identity.Auth, v *ServiceConnection, _ CredentialOwnership) error {
 		w, err := webhookFor(r, id)
 		if err != nil {
 			return err
@@ -51,7 +52,7 @@ func (s *Service) Webhook(ctx context.Context, raw string, id uint64, op, tag st
 		case "get":
 			return nil
 		case "receiver":
-			out = Result{Data: map[string]string{"receive_url": fmt.Sprintf("%s/api/v1/webhooks/gitlab/%d", strings.TrimRight(s.PublicURL, "/"), id)}}
+			out = Result{Data: map[string]string{"receive_url": fmt.Sprintf("%s/api/v1/webhooks/gitlab/%s", strings.TrimRight(s.PublicURL, "/"), v.Code)}}
 			return nil
 		case "diagnostics":
 			raw, err := r.Diagnostics("webhook", id)

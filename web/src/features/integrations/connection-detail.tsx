@@ -93,6 +93,8 @@ export function ConnectionDetail({
   const capability = capabilities.find(
     (item) => item.service_type === connection.service_type,
   );
+  const platformWebhook =
+    connection.ownership_type === "platform" && capability?.webhook.supported;
   const tabs = [
     ...(canManage
       ? [
@@ -120,7 +122,7 @@ export function ConnectionDetail({
           },
         ]
       : []),
-    ...(canManage && capability?.webhook.supported
+    ...(admin && platformWebhook
       ? [
           {
             value: "webhook",
@@ -329,7 +331,9 @@ export function ConnectionDetail({
         )}
         {!connection.enabled && (
           <Notice tone="warning">
-            连接已停用，连接测试、凭证验证和 Webhook 接收暂停；配置仍可维护。
+            {platformWebhook
+              ? "连接已停用，连接测试、凭证验证和 Webhook 接收暂停；配置仍可维护。"
+              : "连接已停用，连接测试和凭证验证暂停；配置仍可维护。"}
           </Notice>
         )}
         {!remove && admin && recovery}
@@ -386,21 +390,19 @@ export function ConnectionDetail({
             />
           </div>
         )}
-        {canManage &&
-          capability?.webhook.supported &&
-          (tab === "webhook" || webhookVisited) && (
-            <div
-              hidden={tab !== "webhook"}
-              role="tabpanel"
-              aria-label="Webhook 接收设置"
-            >
-              <WebhookPanel
-                base={`${path}/webhook`}
-                connectionEnabled={connection.enabled}
-                methods={capability.webhook.verification_methods}
-              />
-            </div>
-          )}
+        {admin && platformWebhook && (tab === "webhook" || webhookVisited) && (
+          <div
+            hidden={tab !== "webhook"}
+            role="tabpanel"
+            aria-label="Webhook 接收设置"
+          >
+            <WebhookPanel
+              base={`${path}/webhook`}
+              connectionEnabled={connection.enabled}
+              methods={capability.webhook.verification_methods}
+            />
+          </div>
+        )}
         {!tabs.length && <Notice>此服务当前没有可管理的凭证或配置。</Notice>}
       </div>
       <OverlayPresence>
@@ -431,8 +433,9 @@ export function ConnectionDetail({
         <div className="grid gap-3">
           {recovery}
           <p className="text-sm text-muted">
-            请先解除仓库引用和有效授权。Webhook 设置和秘密一并删除，远端 Hook
-            需自行移除。
+            请先解除仓库引用和有效授权。
+            {platformWebhook &&
+              "Webhook 设置和秘密一并删除，远端 Hook 需自行移除。"}
           </p>
         </div>
       </ConfirmDialog>

@@ -229,9 +229,10 @@ func (s *Service) Verify(ctx context.Context, raw string, id, cid uint64, owner 
 	})
 	return out, a, err
 }
-func (s *Service) Receive(ctx context.Context, connection uint64, h http.Header, body []byte) (Diagnostic, error) {
+func (s *Service) Receive(ctx context.Context, code string, h http.Header, body []byte) (Diagnostic, error) {
 	started := time.Now().UTC()
 	snapshot := storedDiagnostic{}
+	var connection uint64
 	var settings *WebhookSettings
 	var secret string
 	st, err := s.Store()
@@ -243,7 +244,7 @@ func (s *Service) Receive(ctx context.Context, connection uint64, h http.Header,
 		if err != nil {
 			return err
 		}
-		v, err := r.Connection(connection)
+		v, err := r.ConnectionByCode("platform", 0, code)
 		if err != nil {
 			return err
 		}
@@ -253,6 +254,7 @@ func (s *Service) Receive(ctx context.Context, connection uint64, h http.Header,
 		if _, err = config(r, v); err != nil {
 			return err
 		}
+		connection = v.ID
 		settings, err = webhookFor(r, connection)
 		if err != nil {
 			return err

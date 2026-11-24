@@ -28,11 +28,12 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 		client.call(t, "GET", path, nil, 200, nil)
 		return map[string]string{"If-Match": client.last.Header().Get("ETag")}
 	}
-	createConnection := func(name string) string {
-		v := testData(admin.call(t, "POST", base, map[string]any{"name": name, "config": map[string]any{"base_url": "https://gitlab.example.com"}}, 201, nil))
+	createConnection := func(name, code string) string {
+		v := testData(admin.call(t, "POST", base, map[string]any{"name": name, "code": code, "config": map[string]any{"base_url": "https://gitlab.example.com"}}, 201, nil))
 		return v["id"].(string)
 	}
-	id := createConnection("GitLab 重构测试")
+	const code = "gitlab-main_1"
+	id := createConnection("GitLab 重构测试", code)
 	path := base + "/" + id
 	project := testData(admin.call(t, "POST", "/projects", map[string]any{"code": "service_project", "name": "服务权限测试", "admin_user_ids": []string{memberID}}, 201, nil))
 	pid := project["id"].(string)
@@ -78,7 +79,11 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	admin.call(t, "POST", base, map[string]any{"name": "gitlab 新连接", "config": map[string]any{"base_url": "https://other.example.com"}}, 409, nil)
 
 	webhook := path + "/webhook"
-	secondID := createConnection("第二条连接")
+	const secondCode = "00042"
+	projectBase := "/projects/" + pid + "/service-connections/gitlab"
+	projectConn := testData(member.call(t, "POST", projectBase, map[string]any{"name": "项目 GitLab", "code": secondCode, "config": map[string]any{"base_url": "https://gitlab.example.com"}}, 201, nil))
+	member.call(t, "GET", projectBase+"/"+projectConn["id"].(string)+"/webhook/receiver", nil, 404, nil)
+	secondID := createConnection("第二条连接", secondCode)
 	secondWebhook := base + "/" + secondID + "/webhook"
 	initial := testData(admin.call(t, "GET", webhook, nil, 200, nil))
 	if initial["connection_id"] != id || initial["enabled"] != false || initial["has_secret"] != false || initial["updated_at"] != nil {
@@ -119,7 +124,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	admin.call(t, "PATCH", webhook, map[string]any{"enabled": true}, 200, tag(admin, webhook))
 	admin.call(t, "PATCH", secondWebhook, map[string]any{"enabled": true}, 200, tag(admin, secondWebhook))
 	receiver := testData(admin.call(t, "GET", webhook+"/receiver", nil, 200, nil))["receive_url"].(string)
-	if receiver != "http://antcdp.test/api/v1/webhooks/gitlab/"+id {
+	if receiver != "http://antcdp.test/api/v1/webhooks/gitlab/"+code {
 		t.Fatal("untrusted receiver", receiver)
 	}
 	hookCall := func(target, token, body string, want int, status string, event ...string) {
@@ -144,38 +149,39 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	body := `{"object_kind":"push","ref":"refs/heads/main","project":{"id":42}}`
 	endpointBefore := tag(admin, webhook)["If-Match"]
 	listBefore := tag(admin, path)["If-Match"]
-	hookCall(id, "wrong-token", body, 401, "")
-	hookCall(id, secret, body, 200, "received_not_dispatched")
+	hookCall(id, secret, body, 404, "")
+	hookCall(code, "wrong-token", body, 401, "")
+	hookCall(code, secret, body, 200, "received_not_dispatched")
 	if tag(admin, webhook)["If-Match"] != endpointBefore || tag(admin, path)["If-Match"] != listBefore {
 		t.Fatal("receipt changed edit/collection version")
 	}
-	hookCall(id, secret, `{"object_kind":"push","ref":"refs/heads/main","project":{"id":99}}`, 200, "received_not_dispatched")
-	hookCall(id, secret, `{"object_kind":"merge_request","project":{"id":42}}`, 200, "received_not_dispatched")
-	hookCall(id, secret, `{}`, 200, "received_not_dispatched", "New GitLab Event")
-	hookCall(id, secret, `{"object_kind":"issue"}`, 200, "received_not_dispatched", "Issue Hook")
-	hookCall(id, secret, `[]`, 400, "")
-	hookCall(id, secret, `null`, 400, "")
-	hookCall(id, secret, `{`, 400, "")
-	hookCall(id, secret, `{}`, 400, "", "")
+	hookCall(code, secret, `{"object_kind":"push","ref":"refs/heads/main","project":{"id":99}}`, 200, "received_not_dispatched")
+	hookCall(code, secret, `{"object_kind":"merge_request","project":{"id":42}}`, 200, "received_not_dispatched")
+	hookCall(code, secret, `{}`, 200, "received_not_dispatched", "New GitLab Event")
+	hookCall(code, secret, `{"object_kind":"issue"}`, 200, "received_not_dispatched", "Issue Hook")
+	hookCall(code, secret, `[]`, 400, "")
+	hookCall(code, secret, `null`, 400, "")
+	hookCall(code, secret, `{`, 400, "")
+	hookCall(code, secret, `{}`, 400, "", "")
 	previousSecret := secret
 	secret = generate(webhook)
-	hookCall(id, previousSecret, body, 401, "")
-	hookCall(secondID, secret2, body, 200, "received_not_dispatched")
-	hookCall(id, secret2, body, 401, "")
+	hookCall(code, previousSecret, body, 401, "")
+	hookCall(secondCode, secret2, body, 200, "received_not_dispatched")
+	hookCall(code, secret2, body, 401, "")
 	admin.call(t, "PATCH", webhook, map[string]any{"enabled": false}, 200, tag(admin, webhook))
-	hookCall(id, secret, body, 404, "")
-	hookCall(secondID, secret2, body, 200, "received_not_dispatched")
+	hookCall(code, secret, body, 404, "")
+	hookCall(secondCode, secret2, body, 200, "received_not_dispatched")
 	admin.call(t, "PATCH", webhook, map[string]any{"enabled": true}, 200, tag(admin, webhook))
 	admin.call(t, "PATCH", path, map[string]any{"enabled": false}, 200, tag(admin, path))
-	hookCall(id, secret, body, 404, "")
-	hookCall(secondID, secret2, body, 200, "received_not_dispatched")
+	hookCall(code, secret, body, 404, "")
+	hookCall(secondCode, secret2, body, 200, "received_not_dispatched")
 	admin.call(t, "PATCH", path, map[string]any{"enabled": true}, 200, tag(admin, path))
-	hookCall(secondID, secret2, body, 200, "received_not_dispatched")
+	hookCall(secondCode, secret2, body, 200, "received_not_dispatched")
 	var encrypted string
 	if err := db.db.GetContext(context.Background(), &encrypted, "SELECT webhook_secret_ciphertext FROM service_connection_gitlab WHERE connection_id=?", id); err != nil || !strings.HasPrefix(encrypted, "enc:v1:") || strings.Contains(encrypted, secret) {
 		t.Fatal("webhook encryption", err)
 	}
-	otherID := createConnection("Other target")
+	otherID := createConnection("Other target", "other-target")
 	admin.call(t, "GET", base+"/"+otherID+"/webhook-endpoints/"+id, nil, 404, nil)
 	member.call(t, "GET", webhook, nil, 403, nil)
 
@@ -305,7 +311,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 	admin.call(t, "DELETE", path, nil, 409, tag(admin, path))
 	// Connection deletion removes its singleton settings, secret and receiver.
 	admin.call(t, "DELETE", base+"/"+secondID, nil, 204, tag(admin, base+"/"+secondID))
-	hookCall(secondID, secret2, body, 404, "")
+	hookCall(secondCode, secret2, body, 404, "")
 	var settingsCount int
 	if err := db.db.GetContext(context.Background(), &settingsCount, "SELECT COUNT(*) FROM service_connection_gitlab WHERE connection_id=?", secondID); err != nil || settingsCount != 0 {
 		t.Fatal("deleted connection retained webhook secret", err)
@@ -316,7 +322,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 		t.Fatal("unexpected physical constraints", err, constraints)
 	}
 	// A missing extension must be a controlled integrity error, not an empty config.
-	broken := createConnection("完整性检查")
+	broken := createConnection("完整性检查", "broken")
 	if _, err := db.db.ExecContext(context.Background(), "DELETE FROM service_connection_gitlab WHERE connection_id=?", broken); err != nil {
 		t.Fatal(err)
 	}
