@@ -412,7 +412,10 @@ it("shows confirmed changed paths when file maintenance partially fails", async 
     screen.getByText("文件状态已变化，请刷新目录后重新选择"),
   ).toBeInTheDocument();
 });
-it("does not allocate a sandbox when visiting an empty personal environment", async () => {
+it("opens an empty personal environment over HTTP without allocating a sandbox", async () => {
+  vi.stubGlobal("crypto", {
+    getRandomValues: crypto.getRandomValues.bind(crypto),
+  });
   mount("/computer");
   await screen.findByText("电脑将在首次使用时创建");
   expect(

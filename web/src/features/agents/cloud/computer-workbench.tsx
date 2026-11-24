@@ -23,6 +23,7 @@ import {
 import { ApiError, request } from "@/api/client";
 import { Button, IconButton } from "@/components/button";
 import { ErrorNotice, Notice } from "@/components/feedback";
+import { uuid } from "@/lib/utils";
 import type { CloudComputer, CloudFileEntry } from "@/types/cloud-computer";
 import { agentRoot } from "../data/agent-api";
 import { sandboxKeys, sandboxReason } from "../sandbox/shared";
@@ -63,7 +64,7 @@ export function ComputerWorkbench({
   });
   const current = workspace.data?.data || computer;
   const ready = current?.state === "ready";
-  const [visitKey] = useState(() => crypto.randomUUID());
+  const [visitKey] = useState(uuid);
   const home = useQuery({
     queryKey: ["cloud-home", id, visitKey],
     queryFn: async () => {
