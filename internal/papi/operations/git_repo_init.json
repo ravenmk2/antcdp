@@ -1,8 +1,8 @@
 {
-  "api_code": "git_repo_init",
+  "api_code": "git_repo.init",
   "title": "初始化沙箱 Git 仓库",
   "summary": "在指定目录准备工作树、HTTPS origin、仓库本地凭证和提交身份。",
-  "description": "Use project_repo_id returned by git_repo_list. Paths may be absolute or relative to the session CWD. Each call sets the repository-local Git name and email from the sandbox execution account. An unverified email is accepted. GIT_EMAIL_REQUIRED means the execution account needs an email. No network fetch or checkout occurs.",
+  "description": "Use project_repo_id returned by git_repo.list. Paths may be absolute or relative to the session CWD. Each call sets the repository-local Git name and email from the sandbox execution account. An unverified email is accepted. GIT_EMAIL_REQUIRED means the execution account needs an email. No network fetch or checkout occurs.",
   "effect": "write",
   "input_schema": {
     "type": "object",

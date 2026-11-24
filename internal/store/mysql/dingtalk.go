@@ -39,6 +39,9 @@ func dingtalkWhere(f e.Filter) (string, []any) {
 	}
 	where := "scope_kind=? AND scope_id=?"
 	args := []any{f.ScopeKind, f.ScopeID}
+	if f.UsableOnly {
+		where += " AND enabled=1 AND secret_ciphertext IS NOT NULL"
+	}
 	if f.Query != "" {
 		where += " AND (LOCATE(?,name)>0 OR LOCATE(?,code)>0)"
 		args = append(args, f.Query, f.Query)

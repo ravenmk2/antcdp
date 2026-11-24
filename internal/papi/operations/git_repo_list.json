@@ -1,5 +1,5 @@
 {
-  "api_code": "git_repo_list",
+  "api_code": "git_repo.list",
   "title": "列出项目仓库",
   "summary": "按项目编码列出已关联的 GitLab 仓库。",
   "description": "Use the immutable project_code from the prompt. Results are local project metadata; page starts at 1 and page_size defaults to 20.",

@@ -9,6 +9,15 @@ import (
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 )
 
+const ProjectAgentRequired = "PAPI_PROJECT_AGENT_REQUIRED"
+
+func (op *Operation) checkScope(auth agentcore.Authorization) error {
+	if op.binding.projectOnly && (auth.AgentScopeKind != "project" || auth.AgentScopeID == 0) {
+		return &Failure{Code: ProjectAgentRequired}
+	}
+	return nil
+}
+
 type Authorization struct {
 	Code        string `json:"api_code,omitempty"`
 	Fingerprint string `json:"definition_fingerprint,omitempty"`
@@ -25,6 +34,8 @@ func (f *Failure) Error() string { return f.Code }
 func (f *Failure) Content() string {
 	message := "The AntCDP Platform API operation is unavailable to this agent."
 	switch f.Code {
+	case ProjectAgentRequired:
+		message = "此操作仅支持项目范围的助手。"
 	case InvalidArguments:
 		message = "The AntCDP Platform API arguments did not pass validation."
 	case DefinitionChanged:
@@ -91,6 +102,9 @@ func (r *Registry) Prepare(ctx context.Context, execution agentcore.ExecutionCon
 		return Authorization{}, err
 	}
 	if key == CallTool {
+		if err := op.checkScope(execution.Authorization); err != nil {
+			return Authorization{}, err
+		}
 		_, restriction, err := grantSchema(grant)
 		if err != nil {
 			return Authorization{}, err
@@ -137,6 +151,9 @@ func (r *Registry) Dispatch(ctx context.Context, execution agentcore.ExecutionCo
 	}
 	if key == DescTool {
 		return op.describe(grant)
+	}
+	if err := op.checkScope(execution.Authorization); err != nil {
+		return nil, err
 	}
 	return op.binding.run(ctx, execution, callID, input.Args)
 }

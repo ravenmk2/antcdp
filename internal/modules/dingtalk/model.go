@@ -53,6 +53,7 @@ type TestInput struct {
 	Body   string `json:"body"`
 }
 type Filter struct {
+	UsableOnly     bool
 	ScopeKind      string
 	ScopeID        uint64
 	Page, PageSize int

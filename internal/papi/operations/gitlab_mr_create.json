@@ -2,7 +2,7 @@
   "api_code": "gitlab.mr.create",
   "title": "创建 GitLab 合并请求",
   "summary": "在一个 GitLab 项目内创建合并请求。",
-  "description": "Use project_repo_id returned by git_repo_list. Only merge requests whose source and target are in this GitLab project are supported. Use a Draft: prefix in title to create a draft. Description lines containing GitLab quick actions are rejected. If the result is unknown, list MRs by source and target branch before retrying.",
+  "description": "Use project_repo_id returned by git_repo.list. Only merge requests whose source and target are in this GitLab project are supported. Use a Draft: prefix in title to create a draft. Description lines containing GitLab quick actions are rejected. If the result is unknown, list MRs by source and target branch before retrying.",
   "effect": "write",
   "input_schema": {
     "type": "object",

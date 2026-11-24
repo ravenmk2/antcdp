@@ -2,7 +2,7 @@
   "api_code": "gitlab.mr.get",
   "title": "查看 GitLab 合并请求",
   "summary": "按项目内 IID 查看合并请求详情。",
-  "description": "Use project_repo_id returned by git_repo_list. Only merge requests whose source and target are in this GitLab project are supported. Use the MR iid from gitlab.mr.list or gitlab.mr.create.",
+  "description": "Use project_repo_id returned by git_repo.list. Only merge requests whose source and target are in this GitLab project are supported. Use the MR iid from gitlab.mr.list or gitlab.mr.create.",
   "effect": "read",
   "input_schema": {
     "type": "object",

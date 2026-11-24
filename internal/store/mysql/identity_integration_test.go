@@ -266,6 +266,7 @@ func TestHTTPIdentityLifecycle(t *testing.T) {
 		verifyServiceIntegrations(t, backend, installer, founder, member, visitor, founderID, userID)
 	})
 	t.Run("Jobs", func(t *testing.T) { verifyJobs(t, backend, jobService, founder, member, visitor, founderID, userID) })
+	t.Run("AgentDingTalk", func(t *testing.T) { verifyAgentDingTalk(t, backend, installer, founder, founderID) })
 	_, tag = founder.user(t, userID)
 	founder.call(t, "DELETE", "/admin/users/"+userID, nil, 204, map[string]string{"If-Match": tag, "X-Confirm-Username": "member"})
 	var personalCount int

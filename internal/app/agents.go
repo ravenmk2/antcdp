@@ -16,6 +16,7 @@ import (
 	"github.com/ravenmk2/antcdp/internal/modelcore"
 	"github.com/ravenmk2/antcdp/internal/modules/agentresources"
 	"github.com/ravenmk2/antcdp/internal/modules/agents"
+	"github.com/ravenmk2/antcdp/internal/modules/dingtalk"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
 	"github.com/ravenmk2/antcdp/internal/modules/install"
 	"github.com/ravenmk2/antcdp/internal/modules/integrations"
@@ -73,10 +74,11 @@ func newAgentApplication(dataDir string, installer *install.Service, accounts *i
 	sandboxes.ExecutionReconciler = sandboxes.ReconcileExecutions
 	service.Sandboxes = sandboxes
 	gitAPIs := &gitPlatformAPI{sandbox: sandboxes, integrations: &integrations.Service{Store: store, ETag: installer.IntegrationETag, CredentialCipher: installer.CredentialSecret, Cipher: installer.IntegrationSecret}}
-	service.PAPI, err = papi.NewWithGit(papi.GitOperations{
+	robotAPI := &agentDingTalk{service: &dingtalk.Service{Store: store, Cipher: installer.DingTalkSecret}}
+	service.PAPI, err = papi.NewWithOperations(papi.GitOperations{
 		List: gitAPIs.list, Init: gitAPIs.initRepo, Ensure: gitAPIs.ensure,
 		MergeRequests: gitLabMROperations(gitAPIs.integrations),
-	})
+	}, papi.DingTalkOperations{List: robotAPI.list, Send: robotAPI.send})
 	if err != nil {
 		return nil, err
 	}

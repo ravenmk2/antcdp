@@ -2,7 +2,7 @@
   "api_code": "gitlab.mr.list",
   "title": "列出 GitLab 合并请求",
   "summary": "按状态、分支或关键字查询单个 GitLab 项目中的合并请求。",
-  "description": "Use project_repo_id returned by git_repo_list. Only merge requests whose source and target are in this GitLab project are supported. The default is all states, page 1 and page_size 20. Continue when next_page is set, even if items is empty after filtering fork MRs.",
+  "description": "Use project_repo_id returned by git_repo.list. Only merge requests whose source and target are in this GitLab project are supported. The default is all states, page 1 and page_size 20. Continue when next_page is set, even if items is empty after filtering fork MRs.",
   "effect": "read",
   "input_schema": {
     "type": "object",

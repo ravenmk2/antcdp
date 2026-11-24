@@ -1,0 +1,30 @@
+{
+  "api_code": "dingtalk_robot.list",
+  "title": "列出项目钉钉机器人",
+  "summary": "列出助手所属项目内可发送消息的机器人。",
+  "description": "Only project-scoped assistants can call this operation. Page starts at 1 and page_size defaults to 20. Search by name or code.",
+  "effect": "read",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "maxLength": 128
+      },
+      "page": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 1000000
+      },
+      "page_size": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    },
+    "required": [],
+    "additionalProperties": false
+  },
+  "example_args": {},
+  "result_description": "items with code, name and description, plus page, page_size and total."
+}

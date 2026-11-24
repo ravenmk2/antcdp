@@ -10,16 +10,16 @@ import (
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 )
 
-func TestGitAPIsUseGrantedOperationAndOriginalCall(t *testing.T) {
+func TestPlatformAPIsUseGrantedOperationAndOriginalCall(t *testing.T) {
 	var received agentcore.ID
 	handler := func(_ context.Context, _ agentcore.ExecutionContext, id agentcore.ID, args json.RawMessage) (json.RawMessage, error) {
 		received = id
 		return args, nil
 	}
-	r, err := NewWithGit(GitOperations{
+	r, err := NewWithOperations(GitOperations{
 		List: handler, Init: handler, Ensure: handler,
 		MergeRequests: GitLabMROperations{Create: handler, List: handler, Get: handler, Diff: handler, Update: handler, Merge: handler},
-	})
+	}, DingTalkOperations{List: handler, Send: handler})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,9 +27,11 @@ func TestGitAPIsUseGrantedOperationAndOriginalCall(t *testing.T) {
 		code, args, effect string
 		sandbox            bool
 	}{
-		{"git_repo_list", `{"project_code":"123"}`, "read", false},
-		{"git_repo_init", `{"project_repo_id":"1","path":"repo one"}`, "write", true},
-		{"svc_cred_ensure", `{"conn_id":"1"}`, "write", true},
+		{"git_repo.list", `{"project_code":"123"}`, "read", false},
+		{"git_repo.init", `{"project_repo_id":"1","path":"repo one"}`, "write", true},
+		{"svc_cred.ensure", `{"conn_id":"1"}`, "write", true},
+		{"dingtalk_robot.list", `{}`, "read", false},
+		{"dingtalk_robot.send", `{"robot_code":"notify","format":"text","body":"完成"}`, "write", false},
 		{"gitlab.mr.create", `{"project_repo_id":"1","source_branch":"feature","target_branch":"main","title":"Test"}`, "write", false},
 		{"gitlab.mr.list", `{"project_repo_id":"1"}`, "read", false},
 		{"gitlab.mr.get", `{"project_repo_id":"1","iid":2}`, "read", false},
@@ -44,7 +46,7 @@ func TestGitAPIsUseGrantedOperationAndOriginalCall(t *testing.T) {
 		if !ok {
 			t.Fatal(test.code)
 		}
-		x := agentcore.ExecutionContext{PAPIGrants: []agentcore.PAPIGrant{grant}}
+		x := agentcore.ExecutionContext{PAPIGrants: []agentcore.PAPIGrant{grant}, Authorization: agentcore.Authorization{AgentScopeKind: "project", AgentScopeID: 7}}
 		raw := `{"api":"` + test.code + `","args":` + test.args + `}`
 		permit, err := r.Prepare(t.Context(), x, CallTool, raw)
 		if err != nil {
@@ -56,11 +58,55 @@ func TestGitAPIsUseGrantedOperationAndOriginalCall(t *testing.T) {
 			t.Fatalf("%s: dispatch returned %s, call %d, %v", test.code, out, received, err)
 		}
 	}
-	g, _ := r.Freeze("svc_cred_ensure", json.RawMessage(`{}`))
+	g, _ := r.Freeze("svc_cred.ensure", json.RawMessage(`{}`))
 	x := agentcore.ExecutionContext{PAPIGrants: []agentcore.PAPIGrant{g}}
 	for _, args := range []string{`{"conn_id":"1","credential_id":"2"}`, `{"conn_id":"1","user_id":"2"}`, `{"conn_id":"1","path":"/data"}`} {
-		if _, err := r.Prepare(t.Context(), x, CallTool, `{"api":"svc_cred_ensure","args":`+args+`}`); err == nil {
+		if _, err := r.Prepare(t.Context(), x, CallTool, `{"api":"svc_cred.ensure","args":`+args+`}`); err == nil {
 			t.Fatal("caller-controlled credential options accepted", args)
+		}
+	}
+}
+
+func TestDingTalkDiscoveryAndScope(t *testing.T) {
+	r, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, code := range []string{"dingtalk_robot.list", "dingtalk_robot.send"} {
+		op := r.Operation(code)
+		grant, ok := r.Freeze(code, json.RawMessage(`{}`))
+		if !ok || op.RequiresSandbox() || (op.Effect == "write") != (code == "dingtalk_robot.send") {
+			t.Fatal(code)
+		}
+		args := `{"api":"` + code + `","args":` + string(op.ExampleArgs) + `}`
+		for _, scope := range []string{"platform", "team", "", "project"} {
+			x := agentcore.ExecutionContext{PAPIGrants: []agentcore.PAPIGrant{grant}, Authorization: agentcore.Authorization{AgentScopeKind: scope, AgentScopeID: 7}}
+			list, err := r.Dispatch(t.Context(), x, ListTool, `{}`, Authorization{}, 1)
+			if err != nil || !strings.Contains(string(list), code) {
+				t.Fatalf("discovery %s: %s %v", scope, list, err)
+			}
+			permit, err := r.Prepare(t.Context(), x, DescTool, args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = r.Dispatch(t.Context(), x, DescTool, args, permit, 1); err != nil {
+				t.Fatal(err)
+			}
+			if scope == "project" {
+				if _, err = r.Prepare(t.Context(), x, CallTool, args); err != nil {
+					t.Fatal(err)
+				}
+				x.Authorization.AgentScopeID = 0
+			}
+			bad := `{"api":"` + code + `","args":{"project_id":"7"}}`
+			_, err = r.Prepare(t.Context(), x, CallTool, bad)
+			var failure *Failure
+			if !errors.As(err, &failure) || failure.Code != ProjectAgentRequired {
+				t.Fatalf("scope must precede argument validation: %s %v", scope, err)
+			}
+			if _, err = r.Dispatch(t.Context(), x, CallTool, args, permit, 1); !errors.As(err, &failure) || failure.Code != ProjectAgentRequired {
+				t.Fatalf("dispatch scope: %s %v", scope, err)
+			}
 		}
 	}
 }

@@ -163,6 +163,10 @@ func (d *agentToolDispatcher) dispatchPlatformAPI(ctx context.Context, ref agent
 	if errors.As(err, &failure) {
 		return toolObservation("failed", failure.Code, failure.Content(), &no), nil
 	}
+	var dingFailure *dingTalkFailure
+	if errors.As(err, &dingFailure) {
+		return dingFailure.observation, nil
+	}
 	var mrFailure *integrations.GitLabMRFailure
 	if errors.As(err, &mrFailure) {
 		executed := &no

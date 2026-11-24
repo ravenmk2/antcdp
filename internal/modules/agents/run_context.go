@@ -94,7 +94,10 @@ func (s *Service) freezeRunContext(ctx context.Context, tx identity.Tx, r Reposi
 	if agent.Mode == "chat" && agent.ExecutorKind == "robot" && agent.ScopeKind == "project" && agent.ScopeID != nil {
 		grants = slices.DeleteFunc(grants, func(g agentcore.ResourceGrant) bool { return g.Kind == "project" && uint64(g.ID) != *agent.ScopeID })
 	}
-	authorization := agentcore.Authorization{AccountID: agentcore.ID(owner.ID), AccountType: owner.AccountType, AccountVersion: agentcore.Version(owner.AuthVersion), Grants: grants}
+	authorization := agentcore.Authorization{AgentScopeKind: agent.ScopeKind, AccountID: agentcore.ID(owner.ID), AccountType: owner.AccountType, AccountVersion: agentcore.Version(owner.AuthVersion), Grants: grants}
+	if agent.ScopeID != nil {
+		authorization.AgentScopeID = agentcore.ID(*agent.ScopeID)
+	}
 	bindings, err := r.ToolBindings(agent.ID, false)
 	if err != nil {
 		return nil, err

@@ -10,6 +10,8 @@ type ResourceGrant struct {
 }
 
 type Authorization struct {
+	AgentScopeKind string          `json:"agent_scope_kind,omitempty"`
+	AgentScopeID   ID              `json:"agent_scope_id,omitempty"`
 	AccountID      ID              `json:"account_id"`
 	AccountType    string          `json:"account_type"`
 	AccountVersion Version         `json:"account_version"`

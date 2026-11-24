@@ -307,14 +307,12 @@ func (h *runHost) send(ctx context.Context, args []json.RawMessage) (any, error)
 			call.Snapshot = safeJSON(map[string]string{"id": fmt.Sprint(robot.ID), "scope_kind": robot.ScopeKind, "scope_id": fmt.Sprint(robot.ScopeID), "code": robot.Code, "name": robot.Name})
 			call.ErrorCode = "RESOURCE_DISABLED"
 			if robot.Enabled && robot.HasSecret {
-				sealed, err := source.DingTalk().Secret(robot.ID)
-				if err != nil {
-					return err
-				}
-				plain, err := h.s.Cipher(fmt.Sprintf("dingtalk/robot/%d/v1", robot.ID), sealed, false)
-				if err != nil || json.Unmarshal([]byte(plain), &auth) != nil {
+				auth, err = dingtalk.ReadAuthentication(source.DingTalk(), robot.ID, h.s.Cipher)
+				if errors.Is(err, dingtalk.ErrAuthenticationUnavailable) {
 					call.Outcome = "failed"
 					call.ErrorCode = "ROBOT_AUTHENTICATION_UNAVAILABLE"
+				} else if err != nil {
+					return err
 				} else {
 					call.RobotVersion = &robot.MaterialVersion
 					call.Outcome = "pending"

@@ -1,8 +1,8 @@
 {
-  "api_code": "svc_cred_ensure",
+  "api_code": "svc_cred.ensure",
   "title": "准备服务连接凭证",
   "summary": "为当前沙箱准备执行用户的首选 GitLab HTTPS 凭证。",
-  "description": "Use conn_id returned by git_repo_list before authenticated Git operations. One credential is shared by worktrees using that connection. Supports GitLab access tokens only.",
+  "description": "Use conn_id returned by git_repo.list before authenticated Git operations. One credential is shared by worktrees using that connection. Supports GitLab access tokens only.",
   "effect": "write",
   "input_schema": {
     "type": "object",

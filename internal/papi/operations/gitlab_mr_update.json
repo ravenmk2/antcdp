@@ -2,7 +2,7 @@
   "api_code": "gitlab.mr.update",
   "title": "更新 GitLab 合并请求",
   "summary": "修改合并请求字段，或关闭、重新打开合并请求。",
-  "description": "Use project_repo_id returned by git_repo_list. Only merge requests whose source and target are in this GitLab project are supported. Provide at least one update field. Omitted fields keep their values. An empty description or user list clears that field. Use a Draft: prefix in the supplied title to mark a draft. Description lines containing GitLab quick actions are rejected.",
+  "description": "Use project_repo_id returned by git_repo.list. Only merge requests whose source and target are in this GitLab project are supported. Provide at least one update field. Omitted fields keep their values. An empty description or user list clears that field. Use a Draft: prefix in the supplied title to mark a draft. Description lines containing GitLab quick actions are rejected.",
   "effect": "write",
   "input_schema": {
     "type": "object",

@@ -262,8 +262,8 @@ func (s *Service) allow(actor, id uint64) bool {
 var outbound = make(chan struct{}, 4)
 
 func (s *Service) Test(ctx context.Context, raw string, id uint64, tag string, w TestInput, meta identity.Metadata) (Result, *identity.Auth, error) {
-	if w.Format != "text" && w.Format != "markdown" || strings.TrimSpace(w.Body) == "" || len(w.Body) > 16<<10 || utf8.RuneCountInString(w.Title) > 100 || w.Format == "markdown" && strings.TrimSpace(w.Title) == "" {
-		return Result{}, nil, httpx.Invalid("body", "invalid_message")
+	if err := ValidateMessage(w); err != nil {
+		return Result{}, nil, err
 	}
 	select {
 	case outbound <- struct{}{}:
@@ -294,18 +294,8 @@ func (s *Service) Test(ctx context.Context, raw string, id uint64, tag string, w
 		if !s.allow(a.User.ID, id) {
 			return httpx.E(429, "RATE_LIMITED", "每分钟最多发送五次测试")
 		}
-		sealed, e := r.Secret(id)
+		credentials, e = ReadAuthentication(r, id, s.Cipher)
 		if e != nil {
-			return e
-		}
-		plain, e := s.Cipher(fmt.Sprintf("dingtalk/robot/%d/v1", id), sealed, false)
-		if e != nil {
-			return e
-		}
-		if e = json.Unmarshal([]byte(plain), &credentials); e != nil {
-			return e
-		}
-		if e = validateAuth(credentials); e != nil {
 			return e
 		}
 		p = *v

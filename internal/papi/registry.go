@@ -55,6 +55,7 @@ func (op *Operation) RequiresSandbox() bool { return op.binding.requiresSandbox 
 
 type binding struct {
 	requiresSandbox bool
+	projectOnly     bool
 	revision        string
 	maxArgsBytes    int
 	authorize       func(context.Context, agentcore.ExecutionContext, json.RawMessage) error
@@ -77,27 +78,33 @@ type GitLabMROperations struct {
 	Create, List, Get, Diff, Update, Merge OperationHandler
 }
 
+type DingTalkOperations struct {
+	List, Send OperationHandler
+}
+
 func New() (*Registry, error) {
 	unavailable := func(context.Context, agentcore.ExecutionContext, agentcore.ID, json.RawMessage) (json.RawMessage, error) {
 		return nil, &Failure{Code: Unavailable}
 	}
-	return NewWithGit(GitOperations{
+	return NewWithOperations(GitOperations{
 		List: unavailable, Init: unavailable, Ensure: unavailable,
 		MergeRequests: GitLabMROperations{Create: unavailable, List: unavailable, Get: unavailable, Diff: unavailable, Update: unavailable, Merge: unavailable},
-	})
+	}, DingTalkOperations{List: unavailable, Send: unavailable})
 }
 
-func NewWithGit(git GitOperations) (*Registry, error) {
+func NewWithOperations(git GitOperations, ding DingTalkOperations) (*Registry, error) {
 	return loadRegistry(definitions, map[string]binding{
-		"operations/git_repo_list.json":    {revision: "1", maxArgsBytes: 1024, run: git.List},
-		"operations/git_repo_init.json":    {revision: "2", maxArgsBytes: 32 << 10, requiresSandbox: true, run: git.Init},
-		"operations/svc_cred_ensure.json":  {revision: "1", maxArgsBytes: 128, requiresSandbox: true, run: git.Ensure},
-		"operations/gitlab_mr_create.json": {revision: "1", maxArgsBytes: 128 << 10, run: git.MergeRequests.Create},
-		"operations/gitlab_mr_list.json":   {revision: "1", maxArgsBytes: 16 << 10, run: git.MergeRequests.List},
-		"operations/gitlab_mr_get.json":    {revision: "1", maxArgsBytes: 256, run: git.MergeRequests.Get},
-		"operations/gitlab_mr_diff.json":   {revision: "2", maxArgsBytes: 256, run: git.MergeRequests.Diff},
-		"operations/gitlab_mr_update.json": {revision: "1", maxArgsBytes: 128 << 10, run: git.MergeRequests.Update},
-		"operations/gitlab_mr_merge.json":  {revision: "2", maxArgsBytes: 512, run: git.MergeRequests.Merge},
+		"operations/dingtalk_robot_list.json": {revision: "1", maxArgsBytes: 1024, projectOnly: true, run: ding.List},
+		"operations/dingtalk_robot_send.json": {revision: "1", maxArgsBytes: 128 << 10, projectOnly: true, run: ding.Send},
+		"operations/git_repo_list.json":       {revision: "1", maxArgsBytes: 1024, run: git.List},
+		"operations/git_repo_init.json":       {revision: "2", maxArgsBytes: 32 << 10, requiresSandbox: true, run: git.Init},
+		"operations/svc_cred_ensure.json":     {revision: "1", maxArgsBytes: 128, requiresSandbox: true, run: git.Ensure},
+		"operations/gitlab_mr_create.json":    {revision: "1", maxArgsBytes: 128 << 10, run: git.MergeRequests.Create},
+		"operations/gitlab_mr_list.json":      {revision: "1", maxArgsBytes: 16 << 10, run: git.MergeRequests.List},
+		"operations/gitlab_mr_get.json":       {revision: "1", maxArgsBytes: 256, run: git.MergeRequests.Get},
+		"operations/gitlab_mr_diff.json":      {revision: "2", maxArgsBytes: 256, run: git.MergeRequests.Diff},
+		"operations/gitlab_mr_update.json":    {revision: "1", maxArgsBytes: 128 << 10, run: git.MergeRequests.Update},
+		"operations/gitlab_mr_merge.json":     {revision: "2", maxArgsBytes: 512, run: git.MergeRequests.Merge},
 		"operations/echo.json": {revision: "1", maxArgsBytes: 8 << 10,
 			run: func(_ context.Context, _ agentcore.ExecutionContext, _ agentcore.ID, args json.RawMessage) (json.RawMessage, error) {
 				return args, nil

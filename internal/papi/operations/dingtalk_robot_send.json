@@ -1,0 +1,45 @@
+{
+  "api_code": "dingtalk_robot.send",
+  "title": "发送钉钉消息",
+  "summary": "通过助手所属项目内的机器人发送文本或 Markdown 消息。",
+  "description": "Only project-scoped assistants can call this operation. Use a robot_code from this project. Markdown requires a nonblank title. Body limit is 16 KiB in UTF-8. An unknown outcome may already have sent the message. Do not automatically resend.",
+  "effect": "write",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "robot_code": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "format": {
+        "type": "string",
+        "enum": [
+          "text",
+          "markdown"
+        ]
+      },
+      "title": {
+        "type": "string",
+        "maxLength": 100
+      },
+      "body": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 16384
+      }
+    },
+    "required": [
+      "robot_code",
+      "format",
+      "body"
+    ],
+    "additionalProperties": false
+  },
+  "example_args": {
+    "robot_code": "release",
+    "format": "text",
+    "body": "构建已完成。"
+  },
+  "result_description": "robot_code and status=accepted mean the provider accepted the message."
+}
