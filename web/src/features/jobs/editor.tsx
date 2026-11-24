@@ -474,6 +474,14 @@ export function JobEditor({
               ['ctx.state.put("key", value, { ifMatch: etag })', "更新状态"],
               ['ctx.state.delete("key", { ifMatch: etag })', "删除状态"],
               [
+                'const reply = await ctx.agents.get("platform/reviewer").chat({ message, requestKey });',
+                "等待助手完成。reply.text 是最终正文，结果还包含 sessionId、inputId、runId、status 和 replayed。",
+              ],
+              [
+                'const receipt = await ctx.agents.get("platform/reviewer").submit({ message, requestKey });',
+                "提交消息并返回受理回执，包含 sessionId、inputId、status 和 replayed。",
+              ],
+              [
                 'await ctx.resources.call("platform/build", { target: "app", operation: "build" })',
                 "服务连接路径支持 platform/连接编码 和 project/当前项目编码/连接编码。",
               ],

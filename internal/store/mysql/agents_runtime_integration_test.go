@@ -23,12 +23,8 @@ func init() {
 	}{"runtime_transactions", agentRuntimeTransactions})
 }
 
-func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
-	svc := f.Agents
-	oldCatalog, oldEpoch := svc.Catalog, svc.Epoch
-	t.Cleanup(func() { svc.Catalog, svc.Epoch = oldCatalog, oldEpoch })
-	svc.Epoch = "runtime-integration-epoch"
-	svc.Catalog = a.ResourceCatalog{Tool: func(_ context.Context, _ identity.Tx, key string) (*a.ToolDescriptor, error) {
+func runtimeTestCatalog() a.ResourceCatalog {
+	return a.ResourceCatalog{Tool: func(_ context.Context, _ identity.Tx, key string) (*a.ToolDescriptor, error) {
 		class := "backend"
 		if key == "read_tool_output" {
 			class = "read_only"
@@ -47,6 +43,14 @@ func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
 	}, AuthorizeTool: func(context.Context, identity.Tx, core.ExecutionContext, a.ToolDescriptor, json.RawMessage, json.RawMessage) (json.RawMessage, error) {
 		return json.RawMessage(`{"authorized":true}`), nil
 	}}
+}
+
+func agentRuntimeTransactions(t *testing.T, f *agentIntegrationFixture) {
+	svc := f.Agents
+	oldCatalog, oldEpoch := svc.Catalog, svc.Epoch
+	t.Cleanup(func() { svc.Catalog, svc.Epoch = oldCatalog, oldEpoch })
+	svc.Epoch = "runtime-integration-epoch"
+	svc.Catalog = runtimeTestCatalog()
 	agent := runtimeTestAgent(t, f)
 	t.Run("thinking_selection", func(t *testing.T) { runtimeThinkingSelection(t, f) })
 	t.Run("execution_lookup_race", func(t *testing.T) { runtimeExecutionRace(t, f, agent.ID) })

@@ -13,9 +13,10 @@ import (
 )
 
 type AgentChatOptions struct {
-	Message    string `json:"message"`
-	Title      string `json:"title"`
-	RequestKey string `json:"requestKey"`
+	WaitForReply bool   `json:"-"`
+	Message      string `json:"message"`
+	Title        string `json:"title"`
+	RequestKey   string `json:"requestKey"`
 }
 type Job struct {
 	Code           string     `db:"code" json:"code"`

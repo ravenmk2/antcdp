@@ -163,6 +163,14 @@ func (t *agentsTx) Events(id, after, through uint64, limit int, desc bool) ([]a.
 	e := t.tx.SelectContext(t.ctx, &rows, "SELECT "+agentEventColumns+" FROM agent_event FORCE INDEX (uq_agent_event_seq) WHERE session_id=? AND seq>? AND seq<=? ORDER BY seq "+order+" LIMIT ?", id, after, through, limit)
 	return rows, e
 }
+func (t *agentsTx) LastAssistantMessage(runID uint64) (*a.EventRow, error) {
+	v := &a.EventRow{}
+	err := t.tx.GetContext(t.ctx, v, "SELECT "+agentEventColumns+" FROM agent_event WHERE run_id=? AND event_type='assistant/message' ORDER BY seq DESC LIMIT 1", runID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return v, err
+}
 func (t *agentsTx) EventAt(id, seq uint64) (*a.EventRow, error) {
 	v := &a.EventRow{}
 	e := t.tx.GetContext(t.ctx, v, "SELECT "+agentEventColumns+" FROM agent_event WHERE session_id=? AND seq=?", id, seq)

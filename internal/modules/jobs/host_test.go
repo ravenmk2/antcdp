@@ -1,11 +1,37 @@
 package jobs
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/ravenmk2/antcdp/internal/jobadapters/sobek"
+	"github.com/ravenmk2/antcdp/internal/jobcore"
+	"github.com/ravenmk2/antcdp/internal/platform/httpx"
 )
+
+func TestAgentScriptMethods(t *testing.T) {
+	host := &runHost{s: &Service{AgentChat: func(_ context.Context, _, _, _ uint64, path string, opts AgentChatOptions) (any, error) {
+		if path != "platform/review" || opts.Message != "review" || opts.RequestKey != "request" {
+			return nil, httpx.Invalid("args", "invalid")
+		}
+		if opts.WaitForReply {
+			return nil, httpx.E(409, "AGENT_RUN_FAILED", "助手调用失败")
+		}
+		return map[string]string{"status": "accepted"}, nil
+	}}}
+	result, err := (sobek.Executor{}).Execute(t.Context(), jobcore.Input{Script: `async function main(ctx) {
+		const agent = ctx.agents.get("platform/review");
+		const opts = {message:"review", requestKey:"request"};
+		const receipt = await agent.submit(opts);
+		try { await agent.chat(opts); } catch (err) { return [receipt.status, err.code, err.message]; }
+	}`}, host)
+	if err != nil || string(result.Value) != `["accepted","AGENT_RUN_FAILED","助手调用失败"]` {
+		t.Fatalf("agent SDK result %s, error %v", result.Value, err)
+	}
+}
 
 func TestLogTruncationUsesEncodedBytes(t *testing.T) {
 	message := strings.Repeat("\x00中", 10000)

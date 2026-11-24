@@ -19,7 +19,11 @@ func newJobService(installer *install.Service, accounts *identity.Service, agent
 		if err != nil {
 			return nil, httpx.Invalid("path", "invalid")
 		}
-		return agentService.ChatAutomation(ctx, agents.AutomationChat{JobRun: true, ActorID: account, ProjectID: project, CallerID: run, Path: locator, Message: opts.Message, Title: opts.Title, RequestKey: opts.RequestKey})
+		request := agents.AutomationChat{JobRun: true, ActorID: account, ProjectID: project, CallerID: run, Path: locator, Message: opts.Message, Title: opts.Title, RequestKey: opts.RequestKey}
+		if opts.WaitForReply {
+			return agentService.ChatJob(ctx, request)
+		}
+		return agentService.ChatAutomation(ctx, request)
 	}, Executor: sobek.Executor{}, Cipher: installer.DingTalkSecret, Store: func() (identity.Store, error) {
 		if store, ok := installer.Backend().(identity.Store); ok {
 			return store, nil

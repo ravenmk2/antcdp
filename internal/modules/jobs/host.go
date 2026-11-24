@@ -186,13 +186,19 @@ func boundedLog(message string, object map[string]json.RawMessage) (string, json
 	return message, safeJSON(kept)
 }
 func (h *runHost) Call(ctx context.Context, kind string, args []json.RawMessage) (any, error) {
-	if kind == "agentChat" {
+	if kind == "agentChat" || kind == "agentSubmit" {
 		var path string
 		var opts AgentChatOptions
 		if len(args) != 2 || decode(args[0], &path) != nil || decode(args[1], &opts) != nil || h.s.AgentChat == nil {
 			return nil, jobcore.Failure("INVALID_ARGUMENT", "助手调用参数无效")
 		}
-		return h.s.AgentChat(ctx, h.job.ProjectID, h.run.ID, h.run.RunAsUserID, path, opts)
+		opts.WaitForReply = kind == "agentChat"
+		result, err := h.s.AgentChat(ctx, h.job.ProjectID, h.run.ID, h.run.RunAsUserID, path, opts)
+		var failure *httpx.Error
+		if errors.As(err, &failure) {
+			return nil, jobcore.Failure(failure.Code, failure.Message)
+		}
+		return result, err
 	}
 	if kind == "dingtalk" {
 		return h.send(ctx, args)

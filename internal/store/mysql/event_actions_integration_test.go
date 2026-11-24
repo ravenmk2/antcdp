@@ -3,14 +3,17 @@ package mysql
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	driver "github.com/go-sql-driver/mysql"
 	"github.com/ravenmk2/antcdp/internal/agentcore"
 	jobVM "github.com/ravenmk2/antcdp/internal/jobadapters/sobek"
+	"github.com/ravenmk2/antcdp/internal/modelcore"
 	a "github.com/ravenmk2/antcdp/internal/modules/agents"
 	"github.com/ravenmk2/antcdp/internal/modules/collaboration"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
@@ -188,6 +191,9 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 	if jobErrors[0] != nil || jobErrors[1] != nil || jobReceipts[0].SessionID == 0 || jobReceipts[0].SessionID != jobReceipts[1].SessionID || jobReceipts[0].Replayed == jobReceipts[1].Replayed {
 		t.Fatal("concurrent job replay", jobReceipts, jobErrors)
 	}
+	t.Run("job chat waits for its final message", func(t *testing.T) {
+		verifyJobChat(t, f, agent.ID, jobChat)
+	})
 	chat := a.AutomationChat{ProjectID: p.ID, ActorID: robot.ID, CallerID: 991, ConsumptionID: 101, Path: resourcecode.Locator{ScopeKind: "platform", Code: agent.Code}, Message: "Review this MR", Title: "Review", RequestKey: "review:mr:42"}
 	results := make([]a.ChatReceipt, 2)
 	errs := make([]error, 2)
@@ -244,6 +250,90 @@ func eventActionsIntegration(t *testing.T, f *agentIntegrationFixture) {
 }
 
 type retryAdmissionStore struct{ identity.Store }
+
+func verifyJobChat(t *testing.T, f *agentIntegrationFixture, agentID uint64, request a.AutomationChat) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	oldCatalog := f.Agents.Catalog
+	t.Cleanup(func() { f.Agents.Catalog = oldCatalog })
+	f.Agents.Catalog = runtimeTestCatalog()
+	bindings, err := f.Agents.GetToolBindings(ctx, f.AdminToken, agentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = f.Agents.PutToolBindings(ctx, f.AdminToken, agentID, bindings.Tag, a.ToolBindingsWrite{Items: []a.ToolBindingWrite{{ToolKey: "echo", Policy: "allow", Constraints: json.RawMessage(`{}`)}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.RequestKey = "wait-for-reply"
+	admitted := make(chan struct{})
+	service := &a.Service{Identity: f.Identity, Store: f.Agents.Store, Models: f.Models, Files: f.Agents.Files, ETag: f.Agents.ETag,
+		Committed: func(context.Context, agentcore.CommitReceipt) { close(admitted) },
+	}
+	var reply *a.JobChatReply
+	var chatErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		reply, chatErr = service.ChatJob(ctx, request)
+	}()
+	select {
+	case <-admitted:
+	case <-done:
+		t.Fatalf("chat ended before admission: %v", chatErr)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	receipt, err := f.Agents.ChatAutomation(ctx, request)
+	if err != nil || !receipt.Replayed || receipt.Status != "accepted" {
+		t.Fatal("submit while waiting", receipt, err)
+	}
+	claim, err := f.Agents.ClaimRoot(ctx, agentcore.ClaimRequest{Candidate: agentcore.Candidate{SessionID: agentcore.ID(receipt.SessionID), InputID: agentcore.ID(receipt.InputID)}, Epoch: "job-chat-test"})
+	if err != nil || !claim.Claimed {
+		t.Fatal("claim", err)
+	}
+	const final = "审查完成。\n\n**通过**"
+	step := runtimeAttempt(t, f, claim.Execution, 1, modelcore.Message{Role: "assistant", Content: "检查中", ToolCalls: []modelcore.ToolCall{{ID: "check", Name: "echo", Arguments: `{}`}}})
+	dispatch, err := f.Agents.PrepareDispatch(ctx, claim.Execution.Ref, step.Calls[0].ID)
+	if err != nil || dispatch.Kind != "execute" {
+		t.Fatal("dispatch", err, dispatch.Kind)
+	}
+	_, err = f.Agents.CompleteTool(ctx, claim.Execution.Ref, agentcore.ToolResult{Call: step.Calls[0], Observation: agentcore.DispatchObservation{Status: "succeeded", Executed: new(true), Content: "工具结果"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimeAttempt(t, f, claim.Execution, 2, modelcore.Message{Role: "assistant", Content: final, Reasoning: "private"})
+	// A committed model response is still provisional until run/ended.
+	wait, stop := context.WithTimeout(ctx, 100*time.Millisecond)
+	_, err = f.Agents.ChatJob(wait, request)
+	stop()
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatal("job deadline while assistant still running", err)
+	}
+	select {
+	case <-done:
+		t.Fatal("chat returned before run/ended", reply, chatErr)
+	default:
+	}
+	runtimeEnd(t, f, claim.Execution)
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	if chatErr != nil || reply == nil || reply.SessionID != receipt.SessionID || reply.InputID != receipt.InputID || reply.RunID != uint64(claim.Execution.Ref.RunID) || reply.Status != "succeeded" || reply.Text != final || reply.Replayed {
+		t.Fatal("completed chat", reply, chatErr)
+	}
+	again, err := f.Agents.ChatJob(ctx, request)
+	if err != nil || again == nil || !again.Replayed {
+		t.Fatal("replay completed chat", again, err)
+	}
+	again.Replayed = false
+	if *again != *reply {
+		t.Fatal("replay lost original result", again, reply)
+	}
+}
 
 func (s retryAdmissionStore) Transact(ctx context.Context, fn func(identity.Tx) error) error {
 	first := true

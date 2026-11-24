@@ -431,6 +431,7 @@ type StateRepository interface {
 	SessionInteractions(uint64) ([]InteractionRow, error)
 	Events(uint64, uint64, uint64, int, bool) ([]EventRow, error)
 	EventAt(uint64, uint64) (*EventRow, error)
+	LastAssistantMessage(runID uint64) (*EventRow, error)
 	Session(uint64, bool) (*SessionRow, error)
 	InsertSession(*SessionRow) error
 	SaveSession(*SessionRow) error

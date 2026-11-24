@@ -20,6 +20,7 @@
       get(path) {
         return Object.freeze({
           chat(options) { return host.agentChat(path, options); },
+          submit(options) { return host.agentSubmit(path, options); },
         });
       },
     }),
