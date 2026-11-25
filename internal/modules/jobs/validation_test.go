@@ -21,12 +21,12 @@ func TestInputsAndCron(t *testing.T) {
 		}
 	}
 	after := time.Date(2026, 11, 16, 0, 0, 0, 0, time.UTC)
-	next, err := nextTime(Schedule{Cron: "0 9 * * 1-5", Timezone: "Asia/Shanghai"}, after)
+	next, err := NextCronTime("0 9 * * 1-5", "Asia/Shanghai", after)
 	if err != nil || !next.Equal(after.Add(time.Hour)) {
 		t.Fatal(next, err)
 	}
-	for _, s := range []Schedule{{Cron: "@every 1m", Timezone: "UTC"}, {Cron: "0 0 0 * * *", Timezone: "UTC"}, {Cron: "* * * * *", Timezone: "bad-zone"}, {Cron: "0 0 31 2 *", Timezone: "UTC"}} {
-		if _, err := nextTime(s, after); err == nil {
+	for _, s := range []struct{ Cron, Timezone string }{{Cron: "@every 1m", Timezone: "UTC"}, {Cron: "0 0 0 * * *", Timezone: "UTC"}, {Cron: "* * * * *", Timezone: "bad-zone"}, {Cron: "0 0 31 2 *", Timezone: "UTC"}} {
+		if _, err := NextCronTime(s.Cron, s.Timezone, after); err == nil {
 			t.Fatal("invalid schedule accepted", s)
 		}
 	}
@@ -43,11 +43,11 @@ func (r *delayedScheduleRepo) SaveFire(f *Fire) error         { r.fire = *f; ret
 func TestDelayedSchedulerAdvancesToFuture(t *testing.T) {
 	at := time.Date(2026, 11, 16, 9, 30, 15, 0, time.UTC)
 	due := at.Add(-2 * time.Hour).Truncate(time.Minute)
-	plan := Schedule{ID: 1, Enabled: true, Cron: "* * * * *", Timezone: "UTC", Next: &due}
+	plan := Schedule{ID: 1, Enabled: true, Cron: "* * * * *", Next: &due}
 	repo := &delayedScheduleRepo{}
 	// Even an invalid configuration records one decision, then skips accumulated
 	// clock ticks rather than repeatedly firing old due times on subsequent scans.
-	if err := (&Service{}).fire(repo, &Job{ID: 1, Enabled: true}, &plan, at); err != nil {
+	if err := (&Service{}).fire(repo, &Job{ID: 1, Enabled: true}, &plan, "UTC", at); err != nil {
 		t.Fatal(err)
 	}
 	if !repo.fire.ScheduledAt.Equal(due) || repo.fire.Outcome != "rejected" {
@@ -60,10 +60,10 @@ func TestDelayedSchedulerAdvancesToFuture(t *testing.T) {
 
 func TestCappedCronAndMissedOnce(t *testing.T) {
 	at := time.Now().UTC().Truncate(time.Minute)
-	p := Schedule{Kind: "cron", Cron: "* * * * *", Timezone: "UTC", Enabled: true, Next: &at, MaxFires: ptr(uint32(2)), Version: 3}
+	p := Schedule{Kind: "cron", Cron: "* * * * *", Enabled: true, Next: &at, MaxFires: ptr(uint32(2)), Version: 3}
 	r := &delayedScheduleRepo{}
 	for i := 1; i <= 2; i++ {
-		if err := (&Service{}).fire(r, &Job{Enabled: true}, &p, *p.Next); err != nil {
+		if err := (&Service{}).fire(r, &Job{Enabled: true}, &p, "UTC", *p.Next); err != nil {
 			t.Fatal(err)
 		}
 		if p.FireCount != uint64(i) || p.Enabled != (i == 1) {
@@ -74,10 +74,17 @@ func TestCappedCronAndMissedOnce(t *testing.T) {
 		t.Fatal(p)
 	}
 	p = Schedule{Kind: "once", Enabled: true, RunAt: &at, MaxFires: ptr(uint32(1)), Version: 5}
-	if err := resumePlan(r, &p, at.Add(time.Minute)); err != nil {
+	if err := resumePlan(r, &p, "UTC", at.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if p.FireCount != 0 || p.Enabled || p.Next != nil || p.Version != 6 || r.fire.Outcome != "missed" {
 		t.Fatal(p, r.fire)
+	}
+}
+
+func TestScheduleReceiptSurvivesTimezoneRemoval(t *testing.T) {
+	got, err := (ScheduleUpdate{ExpectedVersion: 1, RequestKey: "enable", Enabled: ptr(true)}).receiptHash()
+	if err != nil || got != "257a01e174bf2cd48417fb9f1f57487bd3146af4149ec9adbe89213138966bd6" {
+		t.Fatal("persisted request digest changed", got, err)
 	}
 }

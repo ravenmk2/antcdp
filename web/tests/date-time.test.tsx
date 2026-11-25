@@ -3,6 +3,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
+  zonedDateTimeCandidates,
+  zonedDateTimeInput,
   dayBoundary,
   parseZonedInput,
   presetRange,
@@ -171,10 +173,9 @@ describe("filter controls", () => {
     await user.click(screen.getByRole("button", { name: "提交" }));
     expect(submit).toHaveBeenLastCalledWith("");
     await user.click(screen.getByRole("combobox", { name: "状态" }));
-    expect(await screen.findByRole("option", { name: "不可选" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    expect(
+      await screen.findByRole("option", { name: "不可选" }),
+    ).toHaveAttribute("aria-disabled", "true");
     await user.click(screen.getByRole("option", { name: "正常" }));
     await user.click(screen.getByRole("button", { name: "提交" }));
     expect(submit).toHaveBeenLastCalledWith("active");
@@ -214,4 +215,19 @@ describe("filter controls", () => {
     expect(screen.getByLabelText("关键词")).toHaveValue("");
     expect(screen.getByLabelText("配置 ID")).toHaveValue("");
   });
+});
+
+it("resolves site-local appointments to precise instants across DST transitions", () => {
+  expect(
+    zonedDateTimeCandidates("2026-03-08T02:30", "America/New_York"),
+  ).toEqual([]);
+  expect(
+    zonedDateTimeCandidates("2026-11-01T01:30", "America/New_York"),
+  ).toEqual(["2026-11-01T05:30:00.000Z", "2026-11-01T06:30:00.000Z"]);
+  const original = "2026-11-25T01:00:15.123Z";
+  for (const zone of ["Asia/Shanghai", "Asia/Tokyo", "Asia/Kathmandu"]) {
+    expect(
+      zonedDateTimeCandidates(zonedDateTimeInput(original, zone), zone),
+    ).toEqual([original]);
+  }
 });

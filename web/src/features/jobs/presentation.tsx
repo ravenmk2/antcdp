@@ -4,8 +4,10 @@ import { Field, Input, Select } from "@/components/fields";
 import { StatusBadge } from "@/components/feedback";
 import { statusLabel, type Job, type Parameter, type Run } from "./types";
 
-export const date = (value?: string | null) =>
-  value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
+export const date = (value?: string | null, timeZone?: string) =>
+  value
+    ? new Date(value).toLocaleString("zh-CN", { hour12: false, timeZone })
+    : "—";
 
 export function duration(run: Run) {
   if (!run.started_at || !run.finished_at) return "—";

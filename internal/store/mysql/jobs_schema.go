@@ -32,7 +32,7 @@ func (s *Store) jobsSchemaReady(ctx context.Context) error {
 	if count != 10 {
 		return install.ErrIncompleteSchema
 	}
-	if err := s.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='job_revision' AND COLUMN_NAME='resource_bindings') OR (TABLE_NAME='job_resource_call' AND COLUMN_NAME IN ('binding_name','grant_id')))`); err != nil {
+	if err := s.db.GetContext(ctx, &count, `SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND ((TABLE_NAME='job_schedule' AND COLUMN_NAME='timezone') OR (TABLE_NAME='job_revision' AND COLUMN_NAME='resource_bindings') OR (TABLE_NAME='job_resource_call' AND COLUMN_NAME IN ('binding_name','grant_id')))`); err != nil {
 		return err
 	}
 	if count != 0 {

@@ -27,7 +27,10 @@ func (s *Service) SaveSchedule(ctx context.Context, raw string, project, job, id
 	var out Schedule
 	a, err := s.access(ctx, raw, project, job, true, func(tx identity.Tx, r Repository, a *identity.Auth, j *Job, _ *collaboration.Resource) error {
 		var old *Schedule
-		var err error
+		zone, err := r.ScheduleTimezone()
+		if err != nil {
+			return err
+		}
 		if id != 0 {
 			old, err = r.Schedule(id)
 			if err != nil {
@@ -41,7 +44,7 @@ func (s *Service) SaveSchedule(ctx context.Context, raw string, project, job, id
 			}
 		}
 		out = w
-		return savePlan(tx, r, a, j, old, &out, true)
+		return savePlan(tx, r, a, j, old, &out, zone, true)
 	})
 	return out, a, err
 }
@@ -65,7 +68,7 @@ func validatePlanInputs(r Repository, j *Job, raw json.RawMessage) error {
 	return err
 }
 
-func savePlan(tx identity.Tx, r Repository, a *identity.Auth, j *Job, old, plan *Schedule, checkInputs bool) error {
+func savePlan(tx identity.Tx, r Repository, a *identity.Auth, j *Job, old, plan *Schedule, zone string, checkInputs bool) error {
 	if strings.TrimSpace(plan.Name) == "" || utf8.RuneCountInString(plan.Name) > 100 {
 		return httpx.Invalid("name", "required")
 	}
@@ -93,7 +96,7 @@ func savePlan(tx identity.Tx, r Repository, a *identity.Auth, j *Job, old, plan 
 		return httpx.Invalid("code", "invalid_format")
 	}
 	plan.UpdatedAt = at
-	if err := configureTiming(plan, old, j.Enabled, at); err != nil {
+	if err := configureTiming(plan, old, j.Enabled, zone, at); err != nil {
 		return err
 	}
 	if err := r.SaveSchedule(plan); err != nil {
@@ -102,12 +105,9 @@ func savePlan(tx identity.Tx, r Repository, a *identity.Auth, j *Job, old, plan 
 	return audit(tx, a, j, "schedule_saved")
 }
 
-func configureTiming(p, old *Schedule, jobEnabled bool, at time.Time) error {
+func configureTiming(p, old *Schedule, jobEnabled bool, zone string, at time.Time) error {
 	if p.Kind == "" {
 		p.Kind = "cron"
-	}
-	if p.Timezone == "" {
-		p.Timezone = "UTC"
 	}
 	unchanged := old != nil && old.Enabled == p.Enabled && old.Kind == p.Kind
 	switch p.Kind {
@@ -120,7 +120,6 @@ func configureTiming(p, old *Schedule, jobEnabled bool, at time.Time) error {
 		}
 		p.MaxFires = ptr(uint32(1))
 		p.RunAt = ptr(p.RunAt.UTC().Truncate(time.Millisecond))
-		p.Timezone = "UTC"
 		unchanged = unchanged && old.RunAt != nil && p.RunAt.Equal(*old.RunAt)
 		if p.RunAt.Year() < 1000 || p.RunAt.Year() > 9999 || (p.Enabled && !unchanged && !p.RunAt.After(at)) {
 			return httpx.Invalid("run_at", "future_time_required")
@@ -133,12 +132,12 @@ func configureTiming(p, old *Schedule, jobEnabled bool, at time.Time) error {
 		if p.MaxFires != nil && *p.MaxFires == 0 {
 			return httpx.Invalid("max_fires", "positive_required")
 		}
-		next, err := nextTime(*p, at)
+		next, err := NextCronTime(p.Cron, zone, at)
 		if err != nil {
 			return err
 		}
 		p.Next = next
-		unchanged = unchanged && old.Cron == p.Cron && old.Timezone == p.Timezone
+		unchanged = unchanged && old.Cron == p.Cron
 	default:
 		return httpx.Invalid("schedule_kind", "invalid")
 	}
@@ -155,7 +154,7 @@ func configureTiming(p, old *Schedule, jobEnabled bool, at time.Time) error {
 }
 
 // resumePlan skips offline occurrences. A missed one-time appointment has no successor.
-func resumePlan(r Repository, p *Schedule, at time.Time) error {
+func resumePlan(r Repository, p *Schedule, zone string, at time.Time) error {
 	if p.Kind == "once" {
 		if p.RunAt.After(at) {
 			p.Next = p.RunAt
@@ -165,23 +164,31 @@ func resumePlan(r Repository, p *Schedule, at time.Time) error {
 		p.Version++
 		return r.SaveFire(&Fire{ScheduleID: p.ID, ScheduledAt: *p.RunAt, ProcessedAt: at, Outcome: "missed", Reason: "SCHEDULE_MISSED"})
 	}
-	next, err := nextTime(*p, at)
+	next, err := NextCronTime(p.Cron, zone, at)
 	p.Next = next
 	return err
 }
 
-func Preview(cron, zone string) ([]time.Time, error) {
-	out := []time.Time{}
-	after := now()
-	for range 5 {
-		next, err := nextTime(Schedule{Cron: cron, Timezone: zone}, after)
+func (s *Service) Preview(ctx context.Context, raw string, project, job uint64, cron string) ([]time.Time, *identity.Auth, error) {
+	var out []time.Time
+	a, err := s.access(ctx, raw, project, job, false, func(_ identity.Tx, r Repository, _ *identity.Auth, _ *Job, _ *collaboration.Resource) error {
+		zone, err := r.ScheduleTimezone()
 		if err != nil {
-			return nil, err
+			return err
 		}
-		out = append(out, *next)
-		after = *next
-	}
-	return out, nil
+		after := now()
+		out = nil
+		for range 5 {
+			next, err := NextCronTime(cron, zone, after)
+			if err != nil {
+				return err
+			}
+			out = append(out, *next)
+			after = *next
+		}
+		return nil
+	})
+	return out, a, err
 }
 func (s *Service) Fires(ctx context.Context, raw string, project, job, schedule, before uint64) ([]Fire, *identity.Auth, error) {
 	var out []Fire
@@ -199,7 +206,7 @@ func (s *Service) Fires(ctx context.Context, raw string, project, job, schedule,
 	return out, a, err
 }
 
-func (s *Service) fire(r Repository, j *Job, plan *Schedule, at time.Time) error {
+func (s *Service) fire(r Repository, j *Job, plan *Schedule, zone string, at time.Time) error {
 	fire := Fire{ScheduleID: plan.ID, ScheduledAt: *plan.Next, ProcessedAt: at, Outcome: "rejected", Reason: "NO_CONFIGURATION"}
 	if !j.Enabled {
 		plan.Next = nil
@@ -248,7 +255,7 @@ func (s *Service) fire(r Repository, j *Job, plan *Schedule, at time.Time) error
 	}
 	// A delayed scheduler processes at most one due decision. Advance from
 	// observation time so a database outage cannot create a catch-up burst.
-	next, err := nextTime(*plan, at)
+	next, err := NextCronTime(plan.Cron, zone, at)
 	if err != nil {
 		return err
 	}

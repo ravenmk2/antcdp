@@ -2,6 +2,8 @@ import { useRef, useState } from "react";
 import { Link } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, Plus } from "lucide-react";
+import { useAuth } from "@/app/auth";
+import { zonedDateTimeInput, zonedDateTimeCandidates } from "@/lib/date-time";
 import { request } from "@/api/client";
 import { Button } from "@/components/button";
 import { AsyncBoundary, ErrorNotice, StatusBadge } from "@/components/feedback";
@@ -17,8 +19,11 @@ import type { Job, Schedule } from "./types";
 import { date, defaults, Inputs, reasonLabel, Status } from "./presentation";
 
 export function Schedules({ job, base }: { job: Job; base: string }) {
+  const {
+    settings: { timezone },
+  } = useAuth();
   const q = useApiQuery<{ items: Schedule[] }>(
-    ["job-schedules", base],
+    ["job-schedules", base, timezone],
     `${base}/schedules`,
   );
   const [edit, setEdit] = useState<Schedule | null>();
@@ -63,10 +68,10 @@ export function Schedules({ job, base }: { job: Job; base: string }) {
             label="定时计划"
             headers={[
               "计划",
-              "触发时间",
+              `触发时间（${timezone}）`,
               "已触发 / 上限",
               "状态",
-              "下次运行",
+              `下次运行（${timezone}）`,
               "操作",
             ]}
           >
@@ -76,7 +81,7 @@ export function Schedules({ job, base }: { job: Job; base: string }) {
                   <div>{schedule.name}</div>
                   <code className="text-xs text-muted">{schedule.code}</code>
                 </td>
-                <td>{scheduleTiming(schedule)}</td>
+                <td>{scheduleTiming(schedule, timezone)}</td>
                 <td>
                   {schedule.fire_count} / {schedule.max_fires ?? "不限"}
                 </td>
@@ -86,7 +91,7 @@ export function Schedules({ job, base }: { job: Job; base: string }) {
                   </StatusBadge>
                 </td>
                 <td className="tabular-nums whitespace-nowrap">
-                  {date(schedule.next_fire_at)}
+                  {date(schedule.next_fire_at, timezone)}
                 </td>
                 <td>
                   <div className="flex justify-end gap-2">
@@ -133,10 +138,10 @@ export function Schedules({ job, base }: { job: Job; base: string }) {
     </div>
   );
 }
-function scheduleTiming(schedule: Schedule) {
+function scheduleTiming(schedule: Schedule, timezone: string) {
   return schedule.schedule_kind === "once"
-    ? `一次 · ${date(schedule.run_at)}`
-    : `${schedule.cron} · ${schedule.timezone}`;
+    ? `一次 · ${date(schedule.run_at, timezone)}`
+    : schedule.cron;
 }
 
 function ScheduleForm({
@@ -152,22 +157,39 @@ function ScheduleForm({
   close: () => void;
   saved: () => Promise<void>;
 }) {
+  const {
+    settings: { timezone },
+  } = useAuth();
   const [form, setForm] = useState({
     name: schedule?.name ?? "",
     code: schedule?.code ?? "",
     kind: schedule?.schedule_kind ?? "cron",
     runAt: schedule?.run_at
-      ? new Date(schedule.run_at).toISOString().slice(0, -1)
+      ? zonedDateTimeInput(schedule.run_at, timezone)
       : "",
     limit: schedule?.max_fires?.toString() ?? "",
     cron: schedule?.cron ?? "0 9 * * 1-5",
-    timezone: schedule?.timezone ?? "UTC",
+    enteredZone: timezone,
+    occurrence: schedule?.run_at ? new Date(schedule.run_at).toISOString() : "",
     enabled: schedule?.enabled ?? true,
     inputs: schedule?.inputs ?? defaults(job.parameters),
   });
-  const [times, setTimes] = useState<string[]>([]);
+  const [preview, setPreview] = useState<{ times: string[]; zone: string }>();
+  const times = preview?.zone === timezone ? preview.times : [];
   const [error, setError] = useState<unknown>();
   const [pending, setPending] = useState<"preview" | "save">();
+  const runAt =
+    form.enteredZone === timezone
+      ? form.runAt
+      : form.occurrence
+        ? zonedDateTimeInput(form.occurrence, timezone)
+        : "";
+  const candidates =
+    form.kind === "once" ? zonedDateTimeCandidates(runAt, timezone) : [];
+  const instant =
+    candidates.length === 1
+      ? candidates[0]
+      : candidates.find((v) => v === form.occurrence);
   const changes = JSON.stringify(form);
   const initial = useRef(changes);
   async function submit(preview: boolean) {
@@ -180,15 +202,20 @@ function ScheduleForm({
           `${base}/schedule-preview`,
           {
             method: "POST",
-            body: { cron: form.cron, timezone: form.timezone },
+            body: { cron: form.cron },
           },
         );
-        setTimes(r.data.times);
+        setPreview({ times: r.data.times, zone: timezone });
       } else {
         const code = resourceCodeSchema.safeParse(form.code);
         if (!code.success) throw new Error(code.error.issues[0].message);
-        if (form.kind === "once" && !form.runAt)
-          throw new Error("请选择执行时间。");
+        if (form.kind === "once" && runAt && !instant)
+          throw new Error(
+            candidates.length
+              ? "请选择执行时刻。"
+              : "该时间在系统时区中不存在，请重新选择。",
+          );
+        if (form.kind === "once" && !runAt) throw new Error("请选择执行时间。");
         if (
           form.kind === "cron" &&
           form.limit &&
@@ -208,11 +235,7 @@ function ScheduleForm({
             inputs: form.inputs,
             version: schedule?.version ?? "0",
             cron: form.kind === "cron" ? form.cron : "",
-            timezone: form.kind === "cron" ? form.timezone : "UTC",
-            run_at:
-              form.kind === "once" && form.runAt
-                ? new Date(form.runAt + "Z").toISOString()
-                : null,
+            run_at: form.kind === "once" ? instant : null,
             max_fires:
               form.kind === "once" ? 1 : form.limit ? Number(form.limit) : null,
           },
@@ -223,18 +246,6 @@ function ScheduleForm({
       setError(e);
     } finally {
       setPending(undefined);
-    }
-  }
-  let formatter: Intl.DateTimeFormat | undefined;
-  if (times.length) {
-    try {
-      formatter = new Intl.DateTimeFormat("zh-CN", {
-        dateStyle: "medium",
-        timeStyle: "short",
-        timeZone: form.timezone.trim(),
-      });
-    } catch {
-      formatter = undefined;
     }
   }
   return (
@@ -285,7 +296,7 @@ function ScheduleForm({
               value={form.kind}
               onValueChange={(value) => {
                 setForm({ ...form, kind: value === "once" ? "once" : "cron" });
-                setTimes([]);
+                setPreview(undefined);
               }}
             >
               <option value="cron">Cron 周期运行</option>
@@ -293,42 +304,58 @@ function ScheduleForm({
             </Select>
           </Field>
           {form.kind === "once" ? (
-            <Field label="执行时间（UTC）" required>
+            <Field label={`执行时间（${timezone}）`} required>
               <Input
                 type="datetime-local"
                 step="0.001"
-                value={form.runAt}
-                onChange={(e) => setForm({ ...form, runAt: e.target.value })}
+                value={runAt}
+                onChange={(e) => {
+                  const text = e.target.value;
+                  const options = zonedDateTimeCandidates(text, timezone);
+                  setForm({
+                    ...form,
+                    runAt: text,
+                    enteredZone: timezone,
+                    occurrence: options.length === 1 ? options[0]! : "",
+                  });
+                }}
               />
             </Field>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
-              <Field
-                label="Cron 表达式"
-                hint="分钟 · 小时 · 日 · 月 · 星期"
-                required
+            <Field
+              label="Cron 表达式"
+              hint={`分钟 · 小时 · 日 · 月 · 星期，系统时区 ${timezone}`}
+              required
+            >
+              <Input
+                value={form.cron}
+                className="font-mono"
+                onChange={(e) => {
+                  setForm({ ...form, cron: e.target.value });
+                  setPreview(undefined);
+                }}
+              />
+            </Field>
+          )}
+          {candidates.length > 1 && (
+            <Field
+              label="执行时刻"
+              required
+              hint="系统时区在这一天出现两次相同的本地时间。"
+            >
+              <Select
+                value={instant ?? ""}
+                onValueChange={(occurrence) =>
+                  setForm({ ...form, runAt, enteredZone: timezone, occurrence })
+                }
               >
-                <Input
-                  value={form.cron}
-                  className="font-mono"
-                  onChange={(e) => {
-                    setForm({ ...form, cron: e.target.value });
-                    setTimes([]);
-                  }}
-                />
-              </Field>
-              <Field label="时区" required hint="计算触发时间所用的时区">
-                <Input
-                  value={form.timezone}
-                  className="font-mono"
-                  placeholder="UTC 或 Asia/Shanghai"
-                  onChange={(e) => {
-                    setForm({ ...form, timezone: e.target.value });
-                    setTimes([]);
-                  }}
-                />
-              </Field>
-            </div>
+                {candidates.map((v) => (
+                  <option key={v} value={v}>
+                    {v.replace("T", " ").replace("Z", " UTC")}
+                  </option>
+                ))}
+              </Select>
+            </Field>
           )}
           <Field
             label="最多触发次数"
@@ -372,18 +399,14 @@ function ScheduleForm({
               <ol className="space-y-1 text-sm tabular-nums" aria-live="polite">
                 {times.map((t) => (
                   <li key={t}>
-                    <time dateTime={t}>
-                      {formatter?.format(new Date(t)) ?? date(t)}
-                    </time>
+                    <time dateTime={t}>{date(t, timezone)}</time>
                   </li>
                 ))}
-                <li className="text-xs text-muted">
-                  {formatter ? form.timezone : "浏览器时区"}
-                </li>
+                <li className="text-xs text-muted">{timezone}</li>
               </ol>
             ) : (
               <p className="text-xs text-muted">
-                预览按上方 Cron 表达式和时区计算。
+                预览按系统时区 {timezone} 计算。
               </p>
             )}
           </section>
@@ -416,6 +439,9 @@ function Fires({
   schedule: Schedule;
   close: () => void;
 }) {
+  const {
+    settings: { timezone },
+  } = useAuth();
   const [before, setBefore] = useState("");
   const q = useApiQuery<{
     items: {
@@ -443,7 +469,9 @@ function Fires({
           onRefresh={() => void q.refetch()}
           refreshing={q.isFetching}
         >
-          <span className="text-xs text-muted">{scheduleTiming(schedule)}</span>
+          <span className="text-xs text-muted">
+            {scheduleTiming(schedule, timezone)}
+          </span>
         </TableToolbar>
         <AsyncBoundary
           loading={q.isPending}
@@ -454,12 +482,12 @@ function Fires({
         >
           <SimpleTable
             label="计划触发记录"
-            headers={["计划时间", "状态", "原因", "运行"]}
+            headers={[`计划时间（${timezone}）`, "状态", "原因", "运行"]}
           >
             {rows.map((fire) => (
               <tr key={fire.id}>
                 <td className="tabular-nums whitespace-nowrap">
-                  {date(fire.scheduled_at)}
+                  {date(fire.scheduled_at, timezone)}
                 </td>
                 <td>
                   <Status value={fire.outcome} />

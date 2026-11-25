@@ -1,4 +1,4 @@
-import { TZDate } from "@date-fns/tz";
+import { TZDate, tzOffset } from "@date-fns/tz";
 
 export type TimeRange = { from: string; to: string; preset?: string };
 export function zonedInput(value: string | null | undefined, timezone: string) {
@@ -20,6 +20,30 @@ export function parseZonedInput(value: string, timezone: string): string {
     throw new Error("日期或时间无效，或该时间因夏令时跳转而不存在。");
   return iso;
 }
+// Native datetime-local inputs omit the offset and may omit seconds. Retain
+// milliseconds and offer both instants when a DST rollback repeats a time.
+export function zonedDateTimeInput(instant: string, zone: string) {
+  return new TZDate(instant, zone).toISOString().slice(0, -6);
+}
+
+export function zonedDateTimeCandidates(value: string, zone: string): string[] {
+  if (!value) return [];
+  const wall = Date.parse(value + "Z");
+  if (!Number.isFinite(wall)) return [];
+  const day = 86400000;
+  const offsets = new Set([
+    tzOffset(zone, new Date(wall - day)),
+    tzOffset(zone, new Date(wall)),
+    tzOffset(zone, new Date(wall + day)),
+  ]);
+  const expected = new Date(wall).toISOString().slice(0, -1);
+  return Array.from(offsets, (minutes) =>
+    new Date(wall - minutes * 60000).toISOString(),
+  )
+    .filter((instant) => zonedDateTimeInput(instant, zone) === expected)
+    .sort();
+}
+
 export function dayBoundary(date: Date, timezone: string, offset = 0) {
   const zoned = new TZDate(date, timezone);
   return new Date(

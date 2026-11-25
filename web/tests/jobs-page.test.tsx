@@ -9,7 +9,10 @@ import { resetCSRF } from "@/api/client";
 import type { Job } from "@/features/jobs/types";
 import type { Resource } from "@/types/collaboration";
 
-vi.mock("@/app/auth", () => ({ useSession: () => ({ user: { id: "1" } }) }));
+vi.mock("@/app/auth", () => ({
+  useAuth: () => ({ settings: { timezone: "Asia/Shanghai" } }),
+  useSession: () => ({ user: { id: "1" } }),
+}));
 vi.mock("@/features/jobs/script-editor", () => ({
   ScriptEditor: ({
     value,
@@ -74,7 +77,6 @@ function mount(
             fire_count: 0,
             max_fires: null,
             cron: "0 9 * * *",
-            timezone: "UTC",
             enabled: true,
             next_fire_at: null,
             inputs: {},

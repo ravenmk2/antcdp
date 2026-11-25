@@ -406,6 +406,11 @@ func (s *Service) UpdateSettings(ctx context.Context, raw, etag string, p Settin
 				}
 			}
 		}
+		if before.Values.Timezone != after.Values.Timezone {
+			if e = tx.RescheduleCron(after.Values.Timezone, s.now()); e != nil {
+				return e
+			}
+		}
 		return s.audit(tx, a.User, "settings.updated", "settings", "system", "系统设置", meta, map[string]any{"changes": changes})
 	})
 	return result, a, err

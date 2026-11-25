@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Play, Plus, Settings2, Terminal } from "lucide-react";
 import { request } from "@/api/client";
-import { useSession } from "@/app/auth";
+import { useAuth, useSession } from "@/app/auth";
 import { Button } from "@/components/button";
 import { AsyncBoundary, Notice } from "@/components/feedback";
 import { StandaloneInput, StandaloneSelect } from "@/components/fields";
@@ -77,6 +77,7 @@ function JobList({ project, base }: { project: Resource; base: string }) {
   const [before, setBefore] = useState("");
   const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
+  const { settings } = useAuth();
   const session = useSession();
   const navigate = useNavigate();
   const query = useQuery({
@@ -200,7 +201,7 @@ function JobList({ project, base }: { project: Resource; base: string }) {
                     )}
                   </td>
                   <td className="tabular-nums whitespace-nowrap">
-                    {date(job.next_fire_at)}
+                    {date(job.next_fire_at, settings.timezone)}
                   </td>
                   <td className="tabular-nums">
                     {job.queued_count} / {job.active_count}

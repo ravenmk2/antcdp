@@ -286,8 +286,8 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 		t.Fatal("recovery", recovered)
 	}
 	// Schedule preview and durable misfire handling.
-	schedule := testData(admin.call(t, "POST", path+"/schedules", map[string]any{"code": "every-minute", "name": "每分钟", "cron": "* * * * *", "timezone": "UTC", "enabled": true, "inputs": map[string]any{}}, 200, nil))
-	admin.call(t, "POST", path+"/schedule-preview", map[string]string{"cron": "* * * * *", "timezone": "Asia/Shanghai"}, 200, nil)
+	schedule := testData(admin.call(t, "POST", path+"/schedules", map[string]any{"code": "every-minute", "name": "每分钟", "cron": "* * * * *", "enabled": true, "inputs": map[string]any{}}, 200, nil))
+	admin.call(t, "POST", path+"/schedule-preview", map[string]string{"cron": "* * * * *"}, 200, nil)
 	if _, err := db.db.Exec("UPDATE job_schedule SET next_fire_at=UTC_TIMESTAMP(3)-INTERVAL 1 SECOND WHERE id=?", schedule["id"]); err != nil {
 		t.Fatal(err)
 	}
@@ -307,7 +307,7 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	}
 	member.call(t, "GET", path+"/schedules", nil, 200, nil)
 	member.call(t, "GET", path+"/schedules/"+schedule["id"].(string)+"/fires", nil, 200, nil)
-	member.call(t, "POST", path+"/schedules", map[string]any{"name": "forbidden", "cron": "* * * * *", "timezone": "UTC", "inputs": map[string]any{}}, 403, nil)
+	member.call(t, "POST", path+"/schedules", map[string]any{"name": "forbidden", "cron": "* * * * *", "inputs": map[string]any{}}, 403, nil)
 	verifyScheduleCommands(t, db, service, admin, path, p, adminID, memberID, config("function main(){}"))
 	// Freeze the dispatcher to make admission/disable/revocation ordering exact.
 	cancel2()
@@ -392,7 +392,8 @@ func verifyScheduleCommands(t *testing.T, db *Store, service *jobs.Service, admi
 	targetCron := peerTarget
 	targetCron.ScheduleCode = "daily"
 	admin.call(t, "POST", base+"/"+peer["id"].(string)+"/schedules", map[string]any{"code": "daily", "name": "Daily", "cron": expr, "inputs": map[string]any{}, "max_fires": 2}, 200, nil)
-	expr = "0 8 * * *"
+	// Keep the daily occurrence clear of the test window in both site zones.
+	expr = fmt.Sprintf("%d 8 * * *", (time.Now().UTC().Minute()+30)%60)
 	_, err = service.UpdateScheduleByCode(ctx, targetCron, jobs.ScheduleUpdate{ExpectedVersion: 1, RequestKey: "cron-patch", Cron: &expr, Inputs: map[string]json.RawMessage{"target": json.RawMessage(`"release"`)}})
 	if err != nil {
 		t.Fatal(err)
@@ -491,6 +492,44 @@ func verifyScheduleCommands(t *testing.T, db *Store, service *jobs.Service, admi
 	p = read()
 	if !p.Enabled || p.FireCount != 0 || p.Next == nil || !p.Next.Equal(future) {
 		t.Fatal("rearm", p)
+	}
+	// Changing the global clock retimes armed cron plans in the settings
+	// transaction while a pending once and its command version stay intact.
+	enabledCron, err := service.UpdateScheduleByCode(ctx, targetCron, jobs.ScheduleUpdate{ExpectedVersion: updated.Version, RequestKey: "arm-daily", Enabled: &enabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.db.Exec("UPDATE job_schedule SET fire_count=1 WHERE id=?", updated.ID); err != nil {
+		t.Fatal(err)
+	}
+	setZone := func(zone string) {
+		t.Helper()
+		admin.call(t, "GET", "/admin/settings", nil, 200, nil)
+		admin.call(t, "PATCH", "/admin/settings", map[string]string{"timezone": zone}, 200, map[string]string{"If-Match": admin.last.Header().Get("ETag")})
+	}
+	settings := testData(admin.call(t, "GET", "/admin/settings", nil, 200, nil))
+	defer setZone(settings["timezone"].(string))
+	for _, zone := range []string{"Asia/Tokyo", "America/New_York"} {
+		setZone(zone)
+		cronPlan, err := service.ScheduleByCode(ctx, targetCron)
+		if err != nil {
+			t.Fatal(err)
+		}
+		preview, _, err := service.Preview(ctx, admin.cookies["antcdp_session"].Value, id(projectID), cronPlan.JobID, cronPlan.Cron)
+		if err != nil {
+			t.Fatal(err)
+		}
+		location, err := time.LoadLocation(zone)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(preview) != 5 || cronPlan.Next == nil || !cronPlan.Next.Equal(preview[0]) || preview[0].In(location).Hour() != 8 || cronPlan.FireCount != 1 || cronPlan.Version != enabledCron.Version {
+			t.Fatal("cron did not follow site timezone", zone, cronPlan, preview)
+		}
+		once := read()
+		if once.Version != p.Version || once.Next == nil || !once.Next.Equal(future) || !once.RunAt.Equal(future) {
+			t.Fatal("timezone change moved once", once)
+		}
 	}
 	disabled := false
 	_, err = service.UpdateScheduleByCode(ctx, target, jobs.ScheduleUpdate{ExpectedVersion: p.Version, RequestKey: "disable", Enabled: &disabled})

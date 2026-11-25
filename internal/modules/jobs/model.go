@@ -173,7 +173,6 @@ type Schedule struct {
 	JobID     uint64          `db:"job_id" json:"job_id,string"`
 	Name      string          `db:"name" json:"name"`
 	Cron      string          `db:"cron" json:"cron"`
-	Timezone  string          `db:"timezone" json:"timezone"`
 	Inputs    json.RawMessage `db:"inputs" json:"inputs"`
 	Enabled   bool            `db:"enabled" json:"enabled"`
 	Next      *time.Time      `db:"next_fire_at" json:"next_fire_at"`
@@ -233,6 +232,7 @@ type Repository interface {
 	AutomationReceipt(uint64, uint64, string) (*Receipt, error)
 	SaveReceipt(*Receipt) error
 	Receipts(uint64, uint64) ([]Receipt, error)
+	ScheduleTimezone() (string, error)
 	Schedule(uint64) (*Schedule, error)
 	Schedules(uint64) ([]Schedule, error)
 	ScheduleByCode(job uint64, code string) (*Schedule, error)

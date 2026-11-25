@@ -132,7 +132,6 @@ CREATE TABLE job_schedule (
  fire_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
  name VARCHAR(100) NOT NULL,
  cron VARCHAR(255) NOT NULL,
- timezone VARCHAR(64) NOT NULL,
  inputs JSON NOT NULL,
  enabled BOOLEAN NOT NULL,
  next_fire_at DATETIME(3) NULL,

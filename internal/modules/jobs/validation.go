@@ -121,18 +121,20 @@ func inputs(c Config, provided map[string]json.RawMessage) (json.RawMessage, err
 	}
 	return raw, nil
 }
-func nextTime(s Schedule, after time.Time) (*time.Time, error) {
-	if len(s.Cron) > 128 || len(s.Timezone) > 64 {
+
+// NextCronTime returns the first cron occurrence after the given instant in the site timezone.
+func NextCronTime(expression, zone string, after time.Time) (*time.Time, error) {
+	if len(expression) > 128 || len(zone) > 64 {
 		return nil, httpx.Invalid("cron", "invalid_length")
 	}
-	if len(strings.Fields(s.Cron)) != 5 {
+	if len(strings.Fields(expression)) != 5 {
 		return nil, httpx.Invalid("cron", "five_fields_required")
 	}
-	if _, err := time.LoadLocation(s.Timezone); err != nil {
+	if _, err := time.LoadLocation(zone); err != nil {
 		return nil, httpx.Invalid("timezone", "invalid_timezone")
 	}
 	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
-	schedule, err := parser.Parse("CRON_TZ=" + s.Timezone + " " + s.Cron)
+	schedule, err := parser.Parse("CRON_TZ=" + zone + " " + expression)
 	if err != nil {
 		return nil, httpx.Invalid("cron", "invalid_cron")
 	}

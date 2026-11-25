@@ -171,6 +171,7 @@ type Tx interface {
 	RevokeSessions(uint64, time.Time) error
 	RevokeSession(uint64, time.Time) error
 	UpdateLogin(uint64, time.Time) error
+	RescheduleCron(zone string, at time.Time) error
 	SaveSetting(string, json.RawMessage, time.Time) error
 	OrphanAvatar(uint64, time.Time) error
 	Avatars([]uint64, bool) (map[uint64]*Avatar, error)

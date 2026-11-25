@@ -26,7 +26,7 @@ type ScheduleUpdate struct {
 	RequestKey      string
 	Enabled         *bool
 	RunAt           *time.Time
-	Cron, Timezone  *string
+	Cron            *string
 	Inputs          map[string]json.RawMessage
 }
 
@@ -35,7 +35,7 @@ type ScheduleCommandReceipt struct {
 	Version uint64 `db:"result_version" json:"version,string"`
 }
 
-func (s *Service) accessScheduleCode(ctx context.Context, target ScheduleTarget, fn func(identity.Tx, Repository, *identity.User, *Job, *Schedule) error) error {
+func (s *Service) accessScheduleCode(ctx context.Context, target ScheduleTarget, fn func(identity.Tx, Repository, *identity.User, *Job, *Schedule, string) error) error {
 	if !resourcecode.Valid(target.JobCode) {
 		return httpx.Invalid("job_code", "invalid_format")
 	}
@@ -71,6 +71,10 @@ func (s *Service) accessScheduleCode(ctx context.Context, target ScheduleTarget,
 		if j == nil {
 			return missing()
 		}
+		zone, err := r.ScheduleTimezone()
+		if err != nil {
+			return err
+		}
 		p, err := r.ScheduleByCode(j.ID, target.ScheduleCode)
 		if err != nil {
 			return err
@@ -78,14 +82,14 @@ func (s *Service) accessScheduleCode(ctx context.Context, target ScheduleTarget,
 		if p == nil {
 			return missing()
 		}
-		return fn(tx, r, user, j, p)
+		return fn(tx, r, user, j, p, zone)
 	})
 }
 
 // ScheduleByCode reads the current configuration and version for a management command.
 func (s *Service) ScheduleByCode(ctx context.Context, target ScheduleTarget) (Schedule, error) {
 	var out Schedule
-	err := s.accessScheduleCode(ctx, target, func(_ identity.Tx, _ Repository, _ *identity.User, _ *Job, p *Schedule) error {
+	err := s.accessScheduleCode(ctx, target, func(_ identity.Tx, _ Repository, _ *identity.User, _ *Job, p *Schedule, _ string) error {
 		out = *p
 		return nil
 	})
@@ -99,17 +103,17 @@ func (s *Service) UpdateScheduleByCode(ctx context.Context, target ScheduleTarge
 	if !automationRequestKey.MatchString(w.RequestKey) {
 		return out, httpx.Invalid("request_key", "invalid")
 	}
-	if w.Enabled == nil && w.Cron == nil && w.Timezone == nil && w.RunAt == nil && w.Inputs == nil {
+	if w.Enabled == nil && w.Cron == nil && w.RunAt == nil && w.Inputs == nil {
 		return out, httpx.Invalid("schedule", "empty_update")
 	}
 	if w.RunAt != nil {
 		w.RunAt = ptr(w.RunAt.UTC().Truncate(time.Millisecond))
 	}
-	digest, err := hash(w)
+	digest, err := w.receiptHash()
 	if err != nil {
 		return out, httpx.Invalid("inputs", "invalid")
 	}
-	err = s.accessScheduleCode(ctx, target, func(tx identity.Tx, r Repository, user *identity.User, j *Job, p *Schedule) error {
+	err = s.accessScheduleCode(ctx, target, func(tx identity.Tx, r Repository, user *identity.User, j *Job, p *Schedule, zone string) error {
 		prior, err := r.ScheduleCommand(p.ID, user.ID, w.RequestKey)
 		if err != nil {
 			return err
@@ -140,7 +144,7 @@ func (s *Service) UpdateScheduleByCode(ctx context.Context, target ScheduleTarge
 		if err := w.apply(&next); err != nil {
 			return err
 		}
-		if err := savePlan(tx, r, &identity.Auth{User: user}, j, p, &next, w.Inputs != nil || (!p.Enabled && next.Enabled)); err != nil {
+		if err := savePlan(tx, r, &identity.Auth{User: user}, j, p, &next, zone, w.Inputs != nil || (!p.Enabled && next.Enabled)); err != nil {
 			return err
 		}
 		out = ScheduleCommandReceipt{Hash: digest, Version: next.Version}
@@ -152,6 +156,19 @@ func (s *Service) UpdateScheduleByCode(ctx context.Context, target ScheduleTarge
 	return out, nil
 }
 
+// The persisted receipt hash uses the original field order and a null slot for
+// the retired timezone override, so an accepted command can still be replayed.
+func (w ScheduleUpdate) receiptHash() (string, error) {
+	return hash(struct {
+		ExpectedVersion uint64
+		RequestKey      string
+		Enabled         *bool
+		RunAt           *time.Time
+		Cron, Timezone  *string
+		Inputs          map[string]json.RawMessage
+	}{w.ExpectedVersion, w.RequestKey, w.Enabled, w.RunAt, w.Cron, nil, w.Inputs})
+}
+
 func (w ScheduleUpdate) apply(p *Schedule) error {
 	if w.RunAt != nil {
 		if p.Kind != "once" {
@@ -159,16 +176,11 @@ func (w ScheduleUpdate) apply(p *Schedule) error {
 		}
 		p.RunAt = w.RunAt
 	}
-	if w.Cron != nil || w.Timezone != nil {
+	if w.Cron != nil {
 		if p.Kind != "cron" {
 			return httpx.Invalid("cron", "cron_required")
 		}
-		if w.Cron != nil {
-			p.Cron = *w.Cron
-		}
-		if w.Timezone != nil {
-			p.Timezone = *w.Timezone
-		}
+		p.Cron = *w.Cron
 	}
 	if w.Enabled != nil {
 		p.Enabled = *w.Enabled

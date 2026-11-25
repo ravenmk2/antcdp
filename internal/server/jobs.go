@@ -146,18 +146,13 @@ func registerJobs(api *gin.RouterGroup, o Options) {
 		return gin.H{"items": items}, a, err
 	}))
 	api.POST(base+"/:jobID/schedule-preview", jobRoute(o, 200, func(c *gin.Context, id jobIDs) (any, *identity.Auth, error) {
-		_, a, err := s.Get(c.Request.Context(), rawSession(c), id.Project, id.Job)
-		if err != nil {
-			return nil, a, err
-		}
 		var w struct {
-			Cron     string `json:"cron"`
-			Timezone string `json:"timezone"`
+			Cron string `json:"cron"`
 		}
 		if !httpx.Decode(c, &w) {
-			return nil, a, nil
+			return nil, nil, nil
 		}
-		times, err := jobs.Preview(w.Cron, w.Timezone)
+		times, a, err := s.Preview(c.Request.Context(), rawSession(c), id.Project, id.Job, w.Cron)
 		return gin.H{"times": times}, a, err
 	}))
 	api.POST(base+"/:jobID/clear-debug-state", jobRoute(o, 200, func(c *gin.Context, id jobIDs) (any, *identity.Auth, error) {

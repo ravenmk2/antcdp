@@ -98,7 +98,6 @@ export interface Schedule {
   id: string;
   name: string;
   cron: string;
-  timezone: string;
   inputs: Record<string, string | string[]>;
   enabled: boolean;
   next_fire_at: string | null;

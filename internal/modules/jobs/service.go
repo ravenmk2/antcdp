@@ -246,6 +246,10 @@ func (s *Service) Save(ctx context.Context, raw string, project, job uint64, w W
 			}
 		}
 		if wasEnabled != j.Enabled {
+			zone, err := r.ScheduleTimezone()
+			if err != nil {
+				return err
+			}
 			plans, err := r.Schedules(j.ID)
 			if err != nil {
 				return err
@@ -254,7 +258,7 @@ func (s *Service) Save(ctx context.Context, raw string, project, job uint64, w W
 				plan := &plans[i]
 				plan.Next = nil
 				if j.Enabled && plan.Enabled {
-					err = resumePlan(r, plan, now())
+					err = resumePlan(r, plan, zone, now())
 					if err != nil {
 						return err
 					}

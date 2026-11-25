@@ -122,6 +122,10 @@ func (s *Service) Work(ctx context.Context, logger *slog.Logger) {
 				if e != nil {
 					return e
 				}
+				zone, e := r.ScheduleTimezone()
+				if e != nil {
+					return e
+				}
 				plans, e := r.Schedules(id)
 				if e != nil {
 					return e
@@ -137,7 +141,7 @@ func (s *Service) Work(ctx context.Context, logger *slog.Logger) {
 							}
 							continue
 						}
-						if e = s.fire(r, j, plan, at); e != nil {
+						if e = s.fire(r, j, plan, zone, at); e != nil {
 							return e
 						}
 					}
@@ -283,6 +287,10 @@ func (s *Service) recover(ctx context.Context) error {
 					}
 				}
 			}
+			zone, err := r.ScheduleTimezone()
+			if err != nil {
+				return err
+			}
 			plans, err := r.Schedules(id)
 			if err != nil {
 				return err
@@ -295,7 +303,7 @@ func (s *Service) recover(ctx context.Context) error {
 				old := p.Next
 				p.Next = nil
 				if j.Enabled {
-					err = resumePlan(r, p, baseline)
+					err = resumePlan(r, p, zone, baseline)
 					if err != nil {
 						return err
 					}

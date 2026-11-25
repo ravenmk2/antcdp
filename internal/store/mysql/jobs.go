@@ -244,6 +244,35 @@ func (t *jobTx) Receipts(job, before uint64) ([]jobs.Receipt, error) {
 	err := t.tx.SelectContext(t.ctx, &out, "SELECT * FROM job_trigger_request WHERE job_id=? AND (?=0 OR id<?) ORDER BY id DESC LIMIT 100", job, before, before)
 	return out, err
 }
+
+// The shared setting lock precedes schedule reads and writes. A timezone update
+// holds its exclusive counterpart through recalculation of all armed cron plans.
+func (t *jobTx) ScheduleTimezone() (string, error) {
+	var zone string
+	err := t.tx.GetContext(t.ctx, &zone, "SELECT JSON_UNQUOTE(value) FROM system_setting WHERE name='site.timezone' FOR SHARE")
+	return zone, err
+}
+
+func (t *identityTx) RescheduleCron(zone string, at time.Time) error {
+	var plans []struct {
+		ID   uint64 `db:"id"`
+		Cron string `db:"cron"`
+	}
+	if err := t.tx.SelectContext(t.ctx, &plans, "SELECT id,cron FROM job_schedule WHERE enabled=TRUE AND schedule_kind='cron' AND next_fire_at IS NOT NULL ORDER BY id FOR UPDATE"); err != nil {
+		return err
+	}
+	for _, plan := range plans {
+		next, err := jobs.NextCronTime(plan.Cron, zone, at)
+		if err != nil {
+			return err
+		}
+		if _, err = t.tx.ExecContext(t.ctx, "UPDATE job_schedule SET next_fire_at=? WHERE id=?", next, plan.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (t *jobTx) Schedule(id uint64) (*jobs.Schedule, error) {
 	var v jobs.Schedule
 	err := t.tx.GetContext(t.ctx, &v, "SELECT * FROM job_schedule WHERE id=? FOR UPDATE", id)
@@ -279,7 +308,7 @@ func (t *jobTx) Schedules(job uint64) ([]jobs.Schedule, error) {
 }
 func (t *jobTx) SaveSchedule(v *jobs.Schedule) error {
 	if v.ID == 0 {
-		result, err := t.tx.NamedExecContext(t.ctx, `INSERT INTO job_schedule(code,schedule_kind,run_at,max_fires,fire_count,job_id,name,cron,timezone,inputs,enabled,next_fire_at,row_version,created_by_user_id,created_at,updated_at) VALUES(:code,:schedule_kind,:run_at,:max_fires,:fire_count,:job_id,:name,:cron,:timezone,:inputs,:enabled,:next_fire_at,:row_version,:created_by_user_id,:created_at,:updated_at)`, v)
+		result, err := t.tx.NamedExecContext(t.ctx, `INSERT INTO job_schedule(code,schedule_kind,run_at,max_fires,fire_count,job_id,name,cron,inputs,enabled,next_fire_at,row_version,created_by_user_id,created_at,updated_at) VALUES(:code,:schedule_kind,:run_at,:max_fires,:fire_count,:job_id,:name,:cron,:inputs,:enabled,:next_fire_at,:row_version,:created_by_user_id,:created_at,:updated_at)`, v)
 		if err != nil {
 			var duplicate *driver.MySQLError
 			if errors.As(err, &duplicate) && duplicate.Number == 1062 {
@@ -291,7 +320,7 @@ func (t *jobTx) SaveSchedule(v *jobs.Schedule) error {
 		v.ID = uint64(id)
 		return err
 	}
-	_, err := t.tx.NamedExecContext(t.ctx, `UPDATE job_schedule SET schedule_kind=:schedule_kind,run_at=:run_at,max_fires=:max_fires,fire_count=:fire_count,name=:name,cron=:cron,timezone=:timezone,inputs=:inputs,enabled=:enabled,next_fire_at=:next_fire_at,row_version=:row_version,updated_at=:updated_at WHERE id=:id`, v)
+	_, err := t.tx.NamedExecContext(t.ctx, `UPDATE job_schedule SET schedule_kind=:schedule_kind,run_at=:run_at,max_fires=:max_fires,fire_count=:fire_count,name=:name,cron=:cron,inputs=:inputs,enabled=:enabled,next_fire_at=:next_fire_at,row_version=:row_version,updated_at=:updated_at WHERE id=:id`, v)
 	return err
 }
 func (t *jobTx) SaveFire(v *jobs.Fire) error {
