@@ -69,6 +69,10 @@ function mount(
           {
             id: "9",
             name: "每日检查",
+            code: "daily",
+            schedule_kind: "cron",
+            fire_count: 0,
+            max_fires: null,
             cron: "0 9 * * *",
             timezone: "UTC",
             enabled: true,

@@ -28,6 +28,7 @@ const triggerLabels: Record<string, string> = {
 };
 
 const reasonLabels: Record<string, string> = {
+  SCHEDULE_MISSED: "计划时间已错过",
   JOB_DISABLED: "作业已停用",
   NO_CONFIGURATION: "作业尚无已保存的脚本配置",
   INVALID_INPUTS: "参数与作业配置不匹配",

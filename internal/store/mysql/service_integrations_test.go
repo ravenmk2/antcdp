@@ -317,10 +317,7 @@ func verifyServiceIntegrations(t *testing.T, db *Store, installer *install.Servi
 		t.Fatal("deleted connection retained webhook secret", err)
 	}
 	admin.call(t, "DELETE", base+"/"+otherID, nil, 204, tag(admin, base+"/"+otherID))
-	var constraints int
-	if err := db.db.GetContext(context.Background(), &constraints, "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_TYPE IN ('FOREIGN KEY','CHECK')"); err != nil || constraints != 0 {
-		t.Fatal("unexpected physical constraints", err, constraints)
-	}
+	verifyPhysicalConstraints(t, db)
 	// A missing extension must be a controlled integrity error, not an empty config.
 	broken := createConnection("完整性检查", "broken")
 	if _, err := db.db.ExecContext(context.Background(), "DELETE FROM service_connection_gitlab WHERE connection_id=?", broken); err != nil {

@@ -172,7 +172,7 @@ func TestInitialMigration(t *testing.T) {
 		t.Fatal("unexpected baseline migration history", versions, err)
 	}
 	var tables int
-	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 106 {
+	if err = s.db.GetContext(ctx, &tables, "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE()"); err != nil || tables != 107 {
 		t.Fatal("expected baseline tables and goose history", tables, err)
 	}
 	t.Run("state store", func(t *testing.T) { stateStoreIntegration(t, ctx, s) })
@@ -194,10 +194,7 @@ func TestInitialMigration(t *testing.T) {
 	if _, err = s.db.ExecContext(ctx, "ALTER TABLE `state_store` ADD UNIQUE KEY `uq_state_store_namespace_name` (`namespace`,`name`)"); err != nil {
 		t.Fatal(err)
 	}
-	var constraints int
-	if err = s.db.GetContext(ctx, &constraints, "SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_TYPE IN ('FOREIGN KEY','CHECK')"); err != nil || constraints != 0 {
-		t.Fatal("unexpected physical constraints", err)
-	}
+	verifyPhysicalConstraints(t, s)
 	if _, err = s.db.ExecContext(ctx, "INSERT INTO user_sidebar_preference(user_id,updated_at) VALUES (41,UTC_TIMESTAMP(3))"); err != nil {
 		t.Fatal(err)
 	}
@@ -362,5 +359,21 @@ func verifyUserEmailSchema(t *testing.T, ctx context.Context, s *Store) {
 	}
 	if conflicts != 1 {
 		t.Fatal("expected only one verification to succeed", conflicts)
+	}
+}
+
+func verifyPhysicalConstraints(t *testing.T, store *Store) {
+	t.Helper()
+	var constraints []struct {
+		Table string `db:"TABLE_NAME"`
+		Kind  string `db:"CONSTRAINT_TYPE"`
+		Name  string `db:"CONSTRAINT_NAME"`
+	}
+	err := store.db.Select(&constraints, "SELECT TABLE_NAME,CONSTRAINT_TYPE,CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA=DATABASE() AND CONSTRAINT_TYPE IN ('FOREIGN KEY','CHECK')")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(constraints) != 1 || constraints[0].Table != "job_schedule" || constraints[0].Kind != "CHECK" || constraints[0].Name != "chk_job_schedule_mode" {
+		t.Fatalf("unexpected schema constraints: %+v", constraints)
 	}
 }

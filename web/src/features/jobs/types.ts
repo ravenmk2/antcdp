@@ -90,6 +90,11 @@ export interface Receipt {
   actor_user_id: string;
 }
 export interface Schedule {
+  code: string;
+  schedule_kind: "cron" | "once";
+  run_at: string | null;
+  max_fires: number | null;
+  fire_count: number;
   id: string;
   name: string;
   cron: string;
@@ -122,6 +127,7 @@ export const statusLabel: Record<string, string> = {
   cancelled: "已取消",
   timed_out: "超时",
   accepted: "已受理",
+  missed: "已错过",
   skipped: "已跳过",
   rejected: "已拒绝",
   pending: "调用中",

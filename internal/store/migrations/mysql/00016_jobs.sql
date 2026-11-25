@@ -125,6 +125,11 @@ CREATE TABLE job_trigger_request (
 CREATE TABLE job_schedule (
  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
  job_id BIGINT UNSIGNED NOT NULL,
+ code VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ schedule_kind VARCHAR(8) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'cron',
+ run_at DATETIME(3) NULL,
+ max_fires INT UNSIGNED NULL,
+ fire_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
  name VARCHAR(100) NOT NULL,
  cron VARCHAR(255) NOT NULL,
  timezone VARCHAR(64) NOT NULL,
@@ -135,7 +140,20 @@ CREATE TABLE job_schedule (
  created_by_user_id BIGINT UNSIGNED NOT NULL,
  created_at DATETIME(3) NOT NULL,
  updated_at DATETIME(3) NOT NULL,
- PRIMARY KEY(id), KEY idx_job_schedule_due(enabled,next_fire_at,id), KEY idx_job_schedule_job(job_id,id)
+ CONSTRAINT chk_job_schedule_mode CHECK (
+   (schedule_kind='once' AND run_at IS NOT NULL AND cron='' AND max_fires IS NOT NULL AND max_fires=1)
+   OR (schedule_kind='cron' AND run_at IS NULL AND cron<>'' AND (max_fires IS NULL OR max_fires>0))
+ ),
+ PRIMARY KEY(id), UNIQUE KEY uq_job_schedule_job_code(job_id,code), KEY idx_job_schedule_due(enabled,next_fire_at,id), KEY idx_job_schedule_job(job_id,id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE job_schedule_command (
+ schedule_id BIGINT UNSIGNED NOT NULL,
+ actor_user_id BIGINT UNSIGNED NOT NULL,
+ request_key VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ payload_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+ result_version BIGINT UNSIGNED NOT NULL,
+ PRIMARY KEY(schedule_id,actor_user_id,request_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE job_schedule_fire (

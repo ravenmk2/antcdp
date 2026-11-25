@@ -252,6 +252,26 @@ func (t *jobTx) Schedule(id uint64) (*jobs.Schedule, error) {
 	}
 	return &v, nil
 }
+func (t *jobTx) ScheduleByCode(job uint64, code string) (*jobs.Schedule, error) {
+	var plan jobs.Schedule
+	err := t.tx.GetContext(t.ctx, &plan, "SELECT * FROM job_schedule WHERE job_id=? AND code=? FOR UPDATE", job, code)
+	if err != nil {
+		return nil, jobMissing(err)
+	}
+	return &plan, nil
+}
+func (t *jobTx) ScheduleCommand(schedule, actor uint64, key string) (*jobs.ScheduleCommandReceipt, error) {
+	var receipt jobs.ScheduleCommandReceipt
+	err := t.tx.GetContext(t.ctx, &receipt, "SELECT payload_hash,result_version FROM job_schedule_command WHERE schedule_id=? AND actor_user_id=? AND request_key=?", schedule, actor, key)
+	if err != nil {
+		return nil, jobMissing(err)
+	}
+	return &receipt, nil
+}
+func (t *jobTx) SaveScheduleCommand(schedule, actor uint64, key string, receipt jobs.ScheduleCommandReceipt) error {
+	_, err := t.tx.ExecContext(t.ctx, "INSERT INTO job_schedule_command(schedule_id,actor_user_id,request_key,payload_hash,result_version) VALUES(?,?,?,?,?)", schedule, actor, key, receipt.Hash, receipt.Version)
+	return err
+}
 func (t *jobTx) Schedules(job uint64) ([]jobs.Schedule, error) {
 	out := []jobs.Schedule{}
 	err := t.tx.SelectContext(t.ctx, &out, "SELECT * FROM job_schedule WHERE job_id=? ORDER BY id", job)
@@ -259,15 +279,19 @@ func (t *jobTx) Schedules(job uint64) ([]jobs.Schedule, error) {
 }
 func (t *jobTx) SaveSchedule(v *jobs.Schedule) error {
 	if v.ID == 0 {
-		result, err := t.tx.NamedExecContext(t.ctx, `INSERT INTO job_schedule(job_id,name,cron,timezone,inputs,enabled,next_fire_at,row_version,created_by_user_id,created_at,updated_at) VALUES(:job_id,:name,:cron,:timezone,:inputs,:enabled,:next_fire_at,:row_version,:created_by_user_id,:created_at,:updated_at)`, v)
+		result, err := t.tx.NamedExecContext(t.ctx, `INSERT INTO job_schedule(code,schedule_kind,run_at,max_fires,fire_count,job_id,name,cron,timezone,inputs,enabled,next_fire_at,row_version,created_by_user_id,created_at,updated_at) VALUES(:code,:schedule_kind,:run_at,:max_fires,:fire_count,:job_id,:name,:cron,:timezone,:inputs,:enabled,:next_fire_at,:row_version,:created_by_user_id,:created_at,:updated_at)`, v)
 		if err != nil {
+			var duplicate *driver.MySQLError
+			if errors.As(err, &duplicate) && duplicate.Number == 1062 {
+				return httpx.E(409, "CODE_CONFLICT", "作业中已存在此计划编码")
+			}
 			return err
 		}
 		id, err := result.LastInsertId()
 		v.ID = uint64(id)
 		return err
 	}
-	_, err := t.tx.NamedExecContext(t.ctx, `UPDATE job_schedule SET name=:name,cron=:cron,timezone=:timezone,inputs=:inputs,enabled=:enabled,next_fire_at=:next_fire_at,row_version=:row_version,updated_at=:updated_at WHERE id=:id`, v)
+	_, err := t.tx.NamedExecContext(t.ctx, `UPDATE job_schedule SET schedule_kind=:schedule_kind,run_at=:run_at,max_fires=:max_fires,fire_count=:fire_count,name=:name,cron=:cron,timezone=:timezone,inputs=:inputs,enabled=:enabled,next_fire_at=:next_fire_at,row_version=:row_version,updated_at=:updated_at WHERE id=:id`, v)
 	return err
 }
 func (t *jobTx) SaveFire(v *jobs.Fire) error {

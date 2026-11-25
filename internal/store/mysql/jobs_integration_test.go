@@ -3,14 +3,17 @@ package mysql
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	driver "github.com/go-sql-driver/mysql"
 	"github.com/ravenmk2/antcdp/internal/jobadapters/sobek"
 	"github.com/ravenmk2/antcdp/internal/modules/dingtalk"
 	"github.com/ravenmk2/antcdp/internal/modules/identity"
@@ -283,7 +286,7 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 		t.Fatal("recovery", recovered)
 	}
 	// Schedule preview and durable misfire handling.
-	schedule := testData(admin.call(t, "POST", path+"/schedules", map[string]any{"name": "每分钟", "cron": "* * * * *", "timezone": "UTC", "enabled": true, "inputs": map[string]any{}}, 200, nil))
+	schedule := testData(admin.call(t, "POST", path+"/schedules", map[string]any{"code": "every-minute", "name": "每分钟", "cron": "* * * * *", "timezone": "UTC", "enabled": true, "inputs": map[string]any{}}, 200, nil))
 	admin.call(t, "POST", path+"/schedule-preview", map[string]string{"cron": "* * * * *", "timezone": "Asia/Shanghai"}, 200, nil)
 	if _, err := db.db.Exec("UPDATE job_schedule SET next_fire_at=UTC_TIMESTAMP(3)-INTERVAL 1 SECOND WHERE id=?", schedule["id"]); err != nil {
 		t.Fatal(err)
@@ -305,6 +308,7 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	member.call(t, "GET", path+"/schedules", nil, 200, nil)
 	member.call(t, "GET", path+"/schedules/"+schedule["id"].(string)+"/fires", nil, 200, nil)
 	member.call(t, "POST", path+"/schedules", map[string]any{"name": "forbidden", "cron": "* * * * *", "timezone": "UTC", "inputs": map[string]any{}}, 403, nil)
+	verifyScheduleCommands(t, db, service, admin, path, p, adminID, memberID, config("function main(){}"))
 	// Freeze the dispatcher to make admission/disable/revocation ordering exact.
 	cancel2()
 	<-done2
@@ -356,5 +360,141 @@ func verifyJobs(t *testing.T, db *Store, service *jobs.Service, admin, member, o
 	}
 	if len(testData(member.call(t, "GET", base+"?status=disabled", nil, 200, nil))["items"].([]any)) != 0 {
 		t.Fatal("enabled job appeared in disabled filter")
+	}
+}
+
+func verifyScheduleCommands(t *testing.T, db *Store, service *jobs.Service, admin *apiClient, path, projectID, adminID, memberID string, config map[string]any) {
+	t.Helper()
+	ctx := t.Context()
+	id := func(raw string) uint64 {
+		n, err := strconv.ParseUint(raw, 10, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	target := jobs.ScheduleTarget{ProjectID: id(projectID), ActorID: id(adminID), JobCode: "parallel", ScheduleCode: "notify"}
+	future := time.Now().UTC().Add(time.Hour).Truncate(time.Millisecond)
+	body := map[string]any{"code": "notify", "name": "Notify", "schedule_kind": "once", "run_at": future, "enabled": false, "inputs": map[string]any{}}
+	admin.call(t, "POST", path+"/schedules", body, 200, nil)
+	admin.call(t, "POST", path+"/schedules", body, 409, nil)
+	config["parameters"] = []jobs.Parameter{{Name: "target", Label: "Target", Type: "text"}}
+	base := "/projects/" + projectID + "/jobs"
+	peer := testData(admin.call(t, "POST", base, map[string]any{"code": "peer-job", "name": "Peer", "enabled": true, "max_concurrency": 1, "busy_policy": "queue", "timeout_ms": 3000, "config": config}, 200, nil))
+	peerPlan := testData(admin.call(t, "POST", base+"/"+peer["id"].(string)+"/schedules", body, 200, nil))
+	peerTarget := target
+	peerTarget.JobCode = "peer-job"
+	resolved, err := service.ScheduleByCode(ctx, peerTarget)
+	if err != nil || resolved.ID != id(peerPlan["id"].(string)) {
+		t.Fatal("job-local code lookup", resolved, err)
+	}
+	expr := "0 9 * * *"
+	targetCron := peerTarget
+	targetCron.ScheduleCode = "daily"
+	admin.call(t, "POST", base+"/"+peer["id"].(string)+"/schedules", map[string]any{"code": "daily", "name": "Daily", "cron": expr, "inputs": map[string]any{}, "max_fires": 2}, 200, nil)
+	expr = "0 8 * * *"
+	_, err = service.UpdateScheduleByCode(ctx, targetCron, jobs.ScheduleUpdate{ExpectedVersion: 1, RequestKey: "cron-patch", Cron: &expr, Inputs: map[string]json.RawMessage{"target": json.RawMessage(`"release"`)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated, err := service.ScheduleByCode(ctx, targetCron)
+	var values map[string]string
+	if err != nil || updated.Kind != "cron" || updated.Cron != expr || updated.MaxFires == nil || *updated.MaxFires != 2 || json.Unmarshal(updated.Inputs, &values) != nil || values["target"] != "release" {
+		t.Fatal("cron update", updated, err)
+	}
+	read := func() jobs.Schedule {
+		p, err := service.ScheduleByCode(ctx, target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	wantStatus := func(err error, status int) {
+		t.Helper()
+		var e *httpx.Error
+		if !errors.As(err, &e) || e.Status != status {
+			t.Fatalf("expected %d, got %v", status, err)
+		}
+	}
+	p := read()
+	for _, invalid := range []string{"max_fires=NULL", "max_fires=2", "run_at=NULL", "cron='* * * * *'", "schedule_kind='cron'", "schedule_kind='other'"} {
+		_, err := db.db.Exec("UPDATE job_schedule SET "+invalid+" WHERE id=?", p.ID)
+		var rejected *driver.MySQLError
+		if !errors.As(err, &rejected) || rejected.Number != 3819 {
+			t.Fatal("expected mode constraint violation", invalid, err)
+		}
+	}
+	other := target
+	other.ActorID = id(memberID)
+	_, err = service.ScheduleByCode(ctx, other)
+	wantStatus(err, 403)
+	other = target
+	other.JobCode = "unknown"
+	_, err = service.ScheduleByCode(ctx, other)
+	wantStatus(err, 404)
+	enabled := true
+	expr = "* * * * *"
+	_, err = service.UpdateScheduleByCode(ctx, target, jobs.ScheduleUpdate{ExpectedVersion: p.Version, RequestKey: "wrong-mode", Cron: &expr})
+	wantStatus(err, 422)
+	_, err = service.UpdateScheduleByCode(ctx, target, jobs.ScheduleUpdate{ExpectedVersion: p.Version, RequestKey: "bad-input", Inputs: map[string]json.RawMessage{"unknown": json.RawMessage("1")}})
+	wantStatus(err, 422)
+	// Start at a distant time, then move the appointment while armed.
+	start := jobs.ScheduleUpdate{ExpectedVersion: p.Version, RequestKey: "enable", Enabled: &enabled}
+	result, err := service.UpdateScheduleByCode(ctx, target, start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	due := time.Now().UTC().Add(time.Second).Truncate(time.Millisecond)
+	move := jobs.ScheduleUpdate{ExpectedVersion: result.Version, RequestKey: "retime", RunAt: &due, Inputs: map[string]json.RawMessage{}}
+	type reply struct {
+		receipt jobs.ScheduleCommandReceipt
+		err     error
+	}
+	replies := make(chan reply, 2)
+	for range 2 {
+		go func() {
+			receipt, err := service.UpdateScheduleByCode(ctx, target, move)
+			replies <- reply{receipt, err}
+		}()
+	}
+	first, second := <-replies, <-replies
+	if first.err != nil || second.err != nil || first.receipt != second.receipt {
+		t.Fatal(first, second)
+	}
+	deadline := time.Now().Add(6 * time.Second)
+	for p = read(); p.Enabled && time.Now().Before(deadline); p = read() {
+		time.Sleep(30 * time.Millisecond)
+	}
+	if p.Enabled || p.Next != nil || p.FireCount != 1 || !p.RunAt.Equal(due) || p.MaxFires == nil || *p.MaxFires != 1 {
+		t.Fatal("once did not finish", p)
+	}
+	replay, err := service.UpdateScheduleByCode(ctx, target, move)
+	if err != nil || replay != first.receipt {
+		t.Fatal("replay", replay, err)
+	}
+	conflict := move
+	conflict.RunAt = &future
+	_, err = service.UpdateScheduleByCode(ctx, target, conflict)
+	wantStatus(err, 409)
+	conflict.RequestKey = "stale-retime"
+	_, err = service.UpdateScheduleByCode(ctx, target, conflict)
+	wantStatus(err, 412)
+	var runs int
+	if err = db.db.Get(&runs, "SELECT COUNT(*) FROM job_schedule_fire WHERE schedule_id=? AND scheduled_at=? AND job_run_id IS NOT NULL", p.ID, due); err != nil || runs != 1 {
+		t.Fatal("once runs", runs, err)
+	}
+	start.ExpectedVersion, start.RequestKey, start.RunAt = p.Version, "rearm", &future
+	_, err = service.UpdateScheduleByCode(ctx, target, start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p = read()
+	if !p.Enabled || p.FireCount != 0 || p.Next == nil || !p.Next.Equal(future) {
+		t.Fatal("rearm", p)
+	}
+	disabled := false
+	_, err = service.UpdateScheduleByCode(ctx, target, jobs.ScheduleUpdate{ExpectedVersion: p.Version, RequestKey: "disable", Enabled: &disabled})
+	if err != nil || read().Next != nil {
+		t.Fatal("disable", err)
 	}
 }

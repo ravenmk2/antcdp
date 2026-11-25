@@ -57,3 +57,27 @@ func TestDelayedSchedulerAdvancesToFuture(t *testing.T) {
 		t.Fatal("schedule replayed missed ticks", repo.saved.Next)
 	}
 }
+
+func TestCappedCronAndMissedOnce(t *testing.T) {
+	at := time.Now().UTC().Truncate(time.Minute)
+	p := Schedule{Kind: "cron", Cron: "* * * * *", Timezone: "UTC", Enabled: true, Next: &at, MaxFires: ptr(uint32(2)), Version: 3}
+	r := &delayedScheduleRepo{}
+	for i := 1; i <= 2; i++ {
+		if err := (&Service{}).fire(r, &Job{Enabled: true}, &p, *p.Next); err != nil {
+			t.Fatal(err)
+		}
+		if p.FireCount != uint64(i) || p.Enabled != (i == 1) {
+			t.Fatal(p)
+		}
+	}
+	if p.Next != nil || p.Version != 4 {
+		t.Fatal(p)
+	}
+	p = Schedule{Kind: "once", Enabled: true, RunAt: &at, MaxFires: ptr(uint32(1)), Version: 5}
+	if err := resumePlan(r, &p, at.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if p.FireCount != 0 || p.Enabled || p.Next != nil || p.Version != 6 || r.fire.Outcome != "missed" {
+		t.Fatal(p, r.fire)
+	}
+}

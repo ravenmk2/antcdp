@@ -295,7 +295,7 @@ func (s *Service) recover(ctx context.Context) error {
 				old := p.Next
 				p.Next = nil
 				if j.Enabled {
-					p.Next, err = nextTime(*p, baseline)
+					err = resumePlan(r, p, baseline)
 					if err != nil {
 						return err
 					}

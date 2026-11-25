@@ -164,6 +164,11 @@ type Start struct {
 	RerunOf    *uint64                    `json:"rerun_of_run_id,string,omitempty"`
 }
 type Schedule struct {
+	Code      string          `db:"code" json:"code"`
+	Kind      string          `db:"schedule_kind" json:"schedule_kind"`
+	RunAt     *time.Time      `db:"run_at" json:"run_at"`
+	MaxFires  *uint32         `db:"max_fires" json:"max_fires"`
+	FireCount uint64          `db:"fire_count" json:"fire_count"`
 	ID        uint64          `db:"id" json:"id,string"`
 	JobID     uint64          `db:"job_id" json:"job_id,string"`
 	Name      string          `db:"name" json:"name"`
@@ -230,6 +235,9 @@ type Repository interface {
 	Receipts(uint64, uint64) ([]Receipt, error)
 	Schedule(uint64) (*Schedule, error)
 	Schedules(uint64) ([]Schedule, error)
+	ScheduleByCode(job uint64, code string) (*Schedule, error)
+	ScheduleCommand(schedule, actor uint64, key string) (*ScheduleCommandReceipt, error)
+	SaveScheduleCommand(schedule, actor uint64, key string, receipt ScheduleCommandReceipt) error
 	SaveSchedule(*Schedule) error
 	SaveFire(*Fire) error
 	Fires(uint64, uint64) ([]Fire, error)

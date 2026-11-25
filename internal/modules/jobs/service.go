@@ -254,7 +254,7 @@ func (s *Service) Save(ctx context.Context, raw string, project, job uint64, w W
 				plan := &plans[i]
 				plan.Next = nil
 				if j.Enabled && plan.Enabled {
-					plan.Next, err = nextTime(*plan, now())
+					err = resumePlan(r, plan, now())
 					if err != nil {
 						return err
 					}
